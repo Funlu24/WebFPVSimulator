@@ -58614,3 +58614,103 @@ small stops that flick back on a radio whose feel report reads a pad under
 about 190 Hz (that part is the input path, measured and put to the owner
 above), or the quad settling off attitude after a quick bank and back by
 more than a degree. Personal bests on the default tune start again.
+
+## 2026-09-28 | ui | Pitch has a heading of its own on the Rates screen, and a loaded preset can no longer hide it (board report)
+
+### The report
+
+Filed from the Rates screen itself, at 2560 by 1287 with a radio: "Can't
+find how can I configure pitch/roll separatelly", expected "Roll and Pitch
+separated". The report's rates line read "Actual, 670 roll and pitch, 670
+yaw deg/s".
+
+### What was wrong
+
+The setting was there. Separate pitch sat above the Roll and pitch heading,
+fourth row, on screen at the reporter's window. But it sat among the rows
+about the whole profile (Stick path, Preset, Rates type), and the headings
+a pilot scans read Roll and pitch, Yaw, Throttle, Presets. Configurator
+lays rates out as a Roll, a Pitch and a Yaw row, so a pilot who knows it
+looks for a Pitch heading, finds none, and reads Roll and pitch as welded.
+
+Found while reproducing it, and worse: with Separate pitch off, loading a
+saved preset whose pitch differs from its roll left `ratesSplitPitch`
+false. The list showed one Roll and pitch block and the switch Off, the
+graph drew the preset's own pitch curve beside it, and one arrow on the
+Max rate row wrote roll's 680 over the preset's pitch of 500. loadSettings
+already holds the rule on a reload ("a profile whose pitch differs from
+its roll has to show three axes"); the Preset row did not, mid session.
+The flight controller's Save has the same shape, since onFcSave in
+src/main.js replaces the profile without touching the flag; that one is
+read from the code and was not reproduced.
+
+### What changed
+
+- `src/ui/ui.js`, the Rates screen: `split` is `ratesSplitPitch ||
+  !pitchMatchesRoll(r)`, worked out as the Preset row's value already is,
+  so a pitch that differs is always shown, the switch reads On over it,
+  and roll edits stop writing pitch. The stored flag now only decides
+  whether the pitch rows stay open while their numbers happen to match
+  roll's.
+- The same screen: a Pitch heading is always in the list, after the roll
+  rows, and Separate pitch is its first row. Joined it reads Roll and
+  pitch, three rows, Pitch, Separate pitch Off, Yaw. Split it reads Roll,
+  three rows, Pitch, Separate pitch On, three rows, Yaw. The switch is in
+  the same place in both, so flipping it adds or removes rows below it and
+  never moves it from under the cursor or the pointer: the cursor was on
+  item 8 before the flip and after it.
+- The switch's On note said pitch had "its own curve on the graph", which
+  is not true at once: ratespanel.js draws the third curve only when
+  pitch's numbers differ from roll's. It says that now.
+- `tests/shell-baseline.json`: rates overflow 440 to 475 px, one heading,
+  by hand, the same argument as the Settings rows before it: the file is
+  today's overflow and not a target, the heading is deliberate, and
+  lint:devices reaching every row is the condition, run below. fc and
+  tricks still print their improvement notes, as they do on main; not
+  re-recorded, because re-recording bakes this container's numbers into
+  screens this change did not touch.
+
+The switch keeps its name on purpose. The landing page's wiki was updated
+the same day to say "roll and pitch share one value there unless you turn
+on Separate pitch" on every rate page and the rates article, and a rename
+here would make that wrong.
+
+### What went wrong
+
+The change was drafted against main at 3d3d79a, and main had moved three
+commits by the time it was committed (the frame pacing row, among them a
+Settings row and its own baseline edit). It was moved onto bab410d, applied
+without a conflict, and lint:shell was run again there: 475 px on both.
+
+### Checks
+
+    npm run lint:shell           PASS on bab410d with this change: rates
+                                 475 px against the new baseline, every
+                                 other screen within its recorded baseline
+    npm run lint:devices         PASS on bab410d with this change, every
+                                 row and every note reachable on every
+                                 device, the condition for the baseline
+    npm run lint:input           160 of 160, on this diff against 3d3d79a,
+                                 including the rates hover walk at 1358 by
+                                 602; not re-run after the move to bab410d
+    npm run lint:responsive      PASS, on this diff against 3d3d79a; not
+                                 re-run after the move
+    node scripts/shots.js        2560x1287 joined and split, 1600x900, and
+                                 390x844; the preset reproduction above,
+                                 before (pitch overwritten) and after (the
+                                 pitch rows shown, pitch kept at 500, and
+                                 the switch turned off copying roll back)
+    npm run verify               not run: nothing in the plant, the module
+                                 ABI, the input path or the build moved;
+                                 this is a menu's rows and one baseline
+
+### For the owner
+
+Settings, Rates. Under the roll rows there is a PITCH heading with Separate
+pitch under it, Off. Turn it on: three pitch rows appear under the switch
+and the switch stays where it was. Set pitch's Max rate below roll's and a
+third curve appears on the graph. Save that as a preset, turn Separate
+pitch off, then load the preset back: the pitch rows should come back with
+the switch On and the preset's pitch numbers in them. Wrong would be the
+switch reading Off over a graph with a separate pitch curve, or a roll edit
+changing a pitch number while the switch is On.

@@ -7765,7 +7765,18 @@ export class Ui {
        * actually be given rather than shown back as a rate nothing flies.
        */
       const r = s.rates;
-      const split = Boolean(s.ratesSplitPitch);
+      /*
+       * SPLIT IS WORKED OUT AS WELL AS REMEMBERED. ratesSplitPitch is the
+       * pilot's switch, and a profile whose pitch differs from its roll is
+       * split whatever the switch says. loadSettings enforces that on the way
+       * in; this enforces it for the two ways such a profile arrives mid
+       * session, a preset loaded on the Preset row and a Save from the flight
+       * controller. Without it the list showed one Roll and pitch block over
+       * a pitch it could not see, the graph drew the pitch curve the list
+       * denied, and the next arrow on a roll row wrote roll's number over
+       * pitch's.
+       */
+      const split = Boolean(s.ratesSplitPitch) || !pitchMatchesRoll(r);
       const hover = hoverStickPercent(r.throttleCap, this.settings.airframe);
       const tilt = Math.sin(cameraTiltRad(s.cameraAngle));
       const noteFor = (axis, key) => {
@@ -7850,11 +7861,29 @@ export class Ui {
           (t) => RATE_TYPE_LABEL[t],
           (t) => { s.rates = profileForType(t, r); },
         ),
+        { label: split ? 'Roll' : 'Roll and pitch', section: true },
+        ...axisRows('roll'),
+        /*
+         * PITCH HAS A HEADING OF ITS OWN WHILE IT FOLLOWS ROLL, because the
+         * heading is where a pilot looks for it. Configurator lays rates out
+         * as a Roll, a Pitch and a Yaw row, and a pilot who knows it scans
+         * this list for Pitch. The switch used to sit above the Roll and
+         * pitch heading, among the rows about the whole profile, and a board
+         * report of 28 September 2026 was filed from this screen, with the
+         * switch on it, by a pilot who could not find how to set pitch apart
+         * from roll. Under its own heading the switch is the answer to that
+         * search.
+         *
+         * It is the heading's first row in both states, so flipping it never
+         * moves it: pitch's rows arrive below the switch rather than the
+         * switch jumping away from the cursor or the pointer that flipped it.
+         */
+        { label: 'Pitch', section: true },
         toggle(
           'Separate pitch',
           split
-            ? 'On. Pitch has its own three numbers and its own curve on the graph. Turning this off copies roll onto pitch.'
-            : 'Off. Roll and pitch share one set of numbers, which is how most quads are set up and what Betaflight ships. Turn it on to give pitch its own.',
+            ? 'On. Pitch has its own three numbers below, and the graph draws it as a curve of its own once they differ from roll. Turning this off copies roll onto pitch.'
+            : 'Off. Pitch flies the Roll and pitch numbers above, which is how most quads are set up and what Betaflight ships. Turn it on to give pitch its own.',
           split,
           (on) => {
             s.ratesSplitPitch = on;
@@ -7865,9 +7894,7 @@ export class Ui {
             }
           },
         ),
-        { label: split ? 'Roll' : 'Roll and pitch', section: true },
-        ...axisRows('roll'),
-        ...(split ? [{ label: 'Pitch', section: true }, ...axisRows('pitch')] : []),
+        ...(split ? axisRows('pitch') : []),
         { label: 'Yaw', section: true },
         ...axisRows('yaw'),
         { label: 'Throttle', section: true },
