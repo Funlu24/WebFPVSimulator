@@ -59216,3 +59216,87 @@ flight, on top of the checks above. Nothing was changed after it. Still
 open, and still the owner's: whether Save share card goes with the switch
 off, and the results list running under the menu after a scored run, which
 Clean FPV shares (Found, not fixed, above).
+
+## 2026-09-29 | docs | Patch notes drafted for webfpv.org/notes, and the landing repository refused
+
+The owner asked for every change since the last patch notes post to be
+reviewed, the public patch notes page to be found, and the notes updated to
+today. The page is https://webfpv.org/notes/, linked from the front door as
+"Patch notes". It is served from `landingpage-WebFPVSimulator-` through the
+Worker, so it is not in this repository. Its newest entry was 22 September,
+"16 to 22 September".
+
+### What changed
+
+`PATCH-NOTES-2026-09-29.md` at the root: the 29 September entry, "23 to 29
+September", in the page's own sections and voice, 54 bullets over 326
+commits, with the header change the page needs, what was checked and where,
+what was taken from this file without a check, and what was left out. It
+sits at the root for the reason `WIKI-REWRITE.md` does: the landing
+repository was out of reach. No code changed, and nothing on the page was
+touched. The window is `9ed8b9c..513e40d`, and the boundary is the last
+commit the 22 September entry already covers.
+
+### What went wrong
+
+- The landing repository was not attached. `add_repo` with push access was
+  denied by the auto mode classifier as a permission grant. It was not
+  retried in any form and the repository was not reached another way, so the
+  page is not updated. To finish: attach `landingpage-WebFPVSimulator-` with
+  push access and say so, or apply the file by hand. The file says where.
+- The first fetch printed `forced update` on origin/main, and `git
+  merge-base` between the old local main (9ed8b9c) and origin/main came back
+  empty, with a merge commit as the only root. The clone was `--depth 50`.
+  After `git fetch --unshallow origin main`, 9ed8b9c is an ancestor of
+  origin/main, 388 commits behind and 0 missing, with one true root
+  (45325de, 2026-08-11). Nothing was rewritten. This is the second session to
+  hit it (see 2026-09-28, "The history scare, for the next session"), and it
+  will come back with every fresh clone. The tell is a merge commit as the
+  only root.
+- The first dash check on the draft did not run: `grep -P` rejected
+  `\x{2014}` in a locale that is not UTF-8, and the empty output read as
+  clean. Redone on the raw bytes with a planted dash as the control.
+- Two claims in the first draft were wrong and were caught by reading them
+  against the entries: the half metre rule (a pass depth of flying after a
+  credit, 0.5 m on the field and less in a room, not what a lap needs) and
+  the flick timing (3 to 5 ms across pad rates, not 5).
+- The first draft said "every menu label" and "wired in" were checked when
+  only some had been. They were checked before the file was finished, and
+  the file now lists what was.
+- One read only shell command got a transient "no verdict" from the
+  classifier. It was retried through the Read tool, which does not use it.
+
+### Found, for the owner
+
+- The Patreon prices disagree. The sim's Support note on main says $3, $8
+  and $20 with no GST (b5450ea, from a Cursor commit that says they were
+  "confirmed on the Patreon dashboard"). The live front door says $5, $12
+  and $25 plus GST, which the 22 September notes quoted. Patreon's own page
+  returned 403. One of them is wrong.
+- Firefox could not start the sim from 25 to 27 September. The loader
+  change of the 25th (be563ec) wrote the import map after Cloudflare's
+  module beacon, and it was fixed on the 27th (2a4c65d). The draft says so.
+- The front door, the wiki and the board's rows are not readable from here.
+  The wiki rewrite, the board's weight labels and three lap ranking, and
+  Hibari Yard Tandem being on the board rest on the entries that record
+  them.
+
+### RUN LOG
+
+    git fetch --unshallow origin main   940 commits, one root 45325de
+    git merge-base main origin/main     9ed8b9c; 388 ahead, 0 behind
+    WebFetch webfpv.org                 Patch notes link (notes/), three
+                                        partners, the old Patreon prices
+    WebFetch webfpv.org/notes/          five entries, newest 22 September
+    WebFetch webfpv.org/board/          Freestyle maps section, Partners
+                                        link, rows not rendered
+    WebFetch webfpv.org/wiki/           navigation only, articles not
+                                        rendered
+    WebFetch patreon.com/cw/webfpv      403, not pursued
+    curl, crawler user agent            share link returns og:title and
+                                        og:image, so share cards are live
+    dash check on the draft             0 em, 0 en, and the control caught
+                                        a planted one
+    npm run verify                      not run: no code changed
+    node scripts/shots.js               not run: nothing on screen changed
+    lint checks                         not run: no code changed
