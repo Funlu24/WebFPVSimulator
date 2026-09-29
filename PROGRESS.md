@@ -59300,3 +59300,115 @@ commit the 22 September entry already covers.
     npm run verify                      not run: no code changed
     node scripts/shots.js               not run: nothing on screen changed
     lint checks                         not run: no code changed
+
+## 2026-09-29 | docs, landing | Patch notes published, a section a day, and the other two repositories read
+
+The owner: "attach the landing page repo with push access and publish it,
+patreon price was reduced, Firefox is fixed now, break it into days, clone
+the missing repos to see what's changed." That covers attaching
+`landingpage-WebFPVSimulator-` with push access, publishing to its main, and
+cloning the board (read only, it is private) as well. It supersedes the entry
+above, where the attach was refused, and it is the owner's word for the push.
+
+### What changed
+
+Landing repository, commit `bf2052f` on its main: `notes/index.html` gains
+six sections, 24 to 29 September, newest first. The jump list, the kicker, the
+footer and the three descriptions move to 29 September. One file, 202
+insertions and 6 deletions. Live on webfpv.org/notes/ about a minute after the
+push, and the bytes the site serves equal the commit.
+
+This repository: `PATCH-NOTES-2026-09-29.md` is now a record of what was
+published, how the days were cut and what is open, not the draft. No
+simulator code changed.
+
+Days are Perth time, and a change goes on the day it reached main, not the
+day it was first written. The page does not say the days are Perth time.
+
+### What the other repositories showed
+
+The board, 31 non-merge commits since the 22nd: the statistics tab rewrite,
+freestyle maps (storage, API, the second tab, Fly and Remix), tags kept on a
+republish, visit source counting with its privacy panel, share cards, three
+lap RaceGOW, laps nobody can fly refused and three stored rows purged, the
+partners page and their counters, and time at any weight with the weight
+printed beside the pilot. All of it matches what the simulator's entries
+said. The board's side is no longer taken on trust.
+
+The landing repository, 50 non-merge commits: the wiki rewrite (d12c8e6, 742
+article pages), crawlable per article pages that default to noindex, visit
+source carry through, a new share card twice, Support click counting, the
+freestyle chapter in the film, the manga first screen, the partners strip and
+footer row, the town taken out of the film, and the wiki checked against
+Betaflight's source.
+
+### What went wrong
+
+- The first attach (previous entry) was denied by the classifier. This one
+  succeeded on the owner's explicit instruction. Nothing was worked around in
+  between.
+- I killed my own shell with `pkill -f "scripts/serve.js"`: the pattern
+  matched the shell's own command line. Exit 144, and the screenshot script
+  never ran. After that I stopped servers by PID with a bracket pattern.
+- The first overflow measurement was of a 404 page. `tests/lib/server.js`
+  does not serve directory indexes, so `/notes/` failed, and the probe read a
+  page exactly as tall as the viewport with no nav links. The zero nav links
+  and the console 404 gave it away. It was redone on `/notes/index.html`.
+  That first "no overflow" was not evidence and was not used.
+- A headless `--screenshot` at `--window-size=430` clipped the page on the
+  right, because Chromium enforces a minimum window width. The real result is
+  from `Emulation.setDeviceMetricsOverride` through `tests/lib/page.js`: no
+  overflow at 1280, 900, 820, 430 or 360. A full page capture also washes out
+  below the first viewport, because the body background is `fixed`. A scrolled
+  viewport capture reads normally.
+- The landing repository's `CLAUDE.md` was to arrive as a system reminder on
+  the next turn, and its rules were needed in this one, so it was read
+  directly.
+- The plan first included changing the Patreon copy in the landing
+  repository. Reading `bindPatreonLinks()` and the stamp rule showed it is not
+  a one line change, so it was dropped and put to the owner below.
+- The first draft's "Powered by" sentence sat beside the partners. The
+  landing repository says nothing on the page may suggest Betaflight endorses
+  WebFPV, so it was dropped before publishing.
+
+### Decisions the owner may want to reverse
+
+- Days are Perth time.
+- Betaflight's mark and its "Powered by" line, and controller brand names, are
+  left out of the notes, on the landing repository's own rules.
+- Firefox is stated as a fault from the evening of the 25th to midday on the
+  27th, and fixed, because the loader change of the 25th caused it.
+- The reduced Patreon tiers are stated in the 26 September entry, from the
+  simulator's own note and the owner's word. The site's own Patreon copy is
+  not changed.
+
+### Open, for the owner
+
+The Patreon copy is still $5, $12, $25 plus GST in the landing repository
+(`PATREON_NOTE` in `src/config.js`, and static copies in `index.html`,
+`wiki/index.html` and `notes/index.html`) and in the board (`public/app.js`
+line 71 and three places in `public/index.html`). The simulator says $3, $8
+and $20. Changing the landing repository needs a new `?v=` on every importer
+of `src/config.js` and the wiki's 742 articles regenerated. The board needs
+push access, which was attached read only. Say the word and it is one commit
+in each.
+
+### RUN LOG
+
+    landing npm run lint:page    before the edit 29 of 29 clean, after 29 of
+                                 29 clean, on the final file
+    landing npm test             13 of 13 passed
+    structure check (jsdom)      11 sections, jump list in section order, no
+                                 duplicate ids, 147 bullets, 0 problems
+    overflow, 1280 900 820 430   none, measured on /notes/index.html; the
+      360                        first run measured a 404 and is discarded
+    scrolled viewport pictures   26 September at 430 wide, 27 September at
+                                 1280 wide: read normally
+    dash check on the page       0 em, 0 en, 0 non ASCII, control caught a
+                                 planted dash
+    live                         Pages origin deployed in about a minute;
+                                 webfpv.org serves 11 sections; sha256 equal
+                                 to the commit
+    npm run verify (simulator)   not run: no simulator code changed
+    scripts/shots.js             not run: nothing on screen changed here
+    lint checks (simulator)      not run: no simulator code changed
