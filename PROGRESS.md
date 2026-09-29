@@ -59432,3 +59432,151 @@ checked against their sources in the same pass and held.
     landing npm run lint:page    29 of 29 clean, after the fix
     landing npm test             13 of 13 passed, after the fix
     live                         sha256 of the served page equals the commit
+
+## 2026-09-29 | landing, docs | A velocity graph at the foot of the patch notes, measured from git
+
+The owner: "At the bottom of the patch notes creat and maintain a velocity
+graph showing the growth of the code based". The message ends at "based", so
+what the code is based on was never said. I read it as growth of the source in
+lines, and velocity as commits a day, both from the three repositories' git
+history, and the graph says so in its own caption. If the owner meant another
+measure, the caption and `scripts/velocity.js` in the landing repository are
+where it changes. The push to the landing main was taken from the owner's word
+earlier in the day ("attach the landing page repo with push access and publish
+it"), which covered the notes page, and the graph is part of that page. Say so
+if it should have waited for a look. Nothing in this repository's code changed.
+
+### What changed
+
+Landing repository, five commits on its main:
+
+- `b564bbc` the graph: `scripts/velocity.js` (measures and draws),
+  `notes/velocity.json` (the numbers), `notes/velocity.js` (hover, touch and
+  the arrow keys), the block and its styles in `notes/index.html`, a Velocity
+  link in the jump list, three checks in `npm run lint:page`, a test file, the
+  rule in the landing `CLAUDE.md`, four rows in its README.
+- `916577f` and `ce9ee15` regenerate the graph so it counts its own code.
+- `514466b` fixes the tests, see below.
+- `f56dd0b` says in `CLAUDE.md` how the script is cache busted.
+
+What it shows, as of the recorded heads (simulator `40258cda`, board
+`75ae0495`, this site `514466b6`): 282,165 lines of source after 50 days, from
+11 August to 29 September, and 1,031 commits. Simulator 228,838 lines and 840
+commits, board 23,405 and 71, the site 29,922 and 120. The busiest day was 26
+September, 150 commits, and it added 29,421 lines. The last seven days added
+100,384, over a third of everything.
+
+"Code" is hand written `.js`, `.mjs`, `.c`, `.h`, `.html` and `.css`. Not
+counted, each listed with its reason in the JSON: the vendored town, the
+generated modules, `vendor/`, the simulator's copies in the board and the site,
+records, pictures, the wiki's 742 generated pages, and the notes page, which
+would count its own graph. This is the choice that matters most. Counting
+`PROGRESS.md` and the wiki would have made the code look four times as big.
+
+The measure is exact and checks itself: each repository's first parent chain,
+summed by day, equals a direct count of its files at the head, and the script
+stops if they differ. Adding every non merge commit instead drifts by dozens of
+lines. It also refused the shallow clone this session started with. The
+generator's own numbers agree with themselves: the first commit added 1,018
+counted lines, and the site's line on the graph moved by 1,018 when it was
+regenerated.
+
+Every word on the graph is HTML at a fixed size and only the marks scale.
+Colours are the dataviz palette's dark steps for aqua, yellow and magenta,
+which the validator passes on both the darkest and lightest point of the page's
+gradient: worst adjacent colour vision difference 8.4, worst normal vision 19.3.
+The order is fixed, simulator, board, site, and amber sits between mint and
+sakura because to deuteranopia those two are one colour. Forced colours gets a
+hatch texture at 45 and 135 degrees, in the graph and in the key.
+
+### How it is kept current
+
+Not by hand. A patch notes entry regenerates it: fetch the simulator and the
+board, then `node scripts/velocity.js ../WebFPVSimulator
+../WebFPVSimulator-LeaderBoard`. `npm run lint:page` fails if the block is not
+what the JSON says, if the JSON is not whole, or if the graph stops before the
+newest entry above it. `npm test` runs the generator on 400 days, across New
+Year and on one day, and the hover layer against the page. A regeneration lags
+by its own commit and no more, because it holds no counted source: the two
+commits after the recorded site head, `ce9ee15` and `f56dd0b`, are not in the
+1,031.
+
+### What went wrong
+
+- **The first drawing put the words inside the SVG.** At 430 px wide they
+  rendered 7.6 px tall. Caught from the arithmetic before the first picture,
+  and rebuilt with HTML labels and uniform scaling. Measured after: 12 px at
+  1280, 430, 360 and 320.
+- **An open table view widened the whole page on a phone.** The grid column
+  took the table's width and the page sat 60 px off centre. My overflow
+  measurement had been taken with the table closed, and only a picture with it
+  open showed it. Fixed with `main { min-width: 0 }`; `scrollWidth` now equals
+  the viewport at 430, 360, 320 and 1280 with the table open.
+- **Three smaller ones from looking at the pictures.** The focus ring sat over
+  the key and the caption. The peak's label ran to the viewport edge at 320 px
+  and now hangs inward. In forced colours the gridlines and the key's swatches
+  vanished, and are drawn explicitly.
+- **Two of my first four test breakages passed.** jsdom reports an exception in
+  an event listener to the window and not to the caller, so a hover layer that
+  crashed looked the same as one that declined. The tests now collect those
+  errors. All five deliberate breakages of the hover layer and the generator
+  fail a test.
+- **A commit went out with two failing tests.** The tests pinned the newest
+  day's numbers as literals, the regeneration in the same push moved the data,
+  and I chained the test run to the commit through `tail`, whose exit status
+  hid the failure. `916577f` is on the landing main with a red `npm test` until
+  `514466b`, a few minutes later. The page was never affected and
+  `npm run lint:page` was clean on both. The tests now work out what a day
+  should say from the JSON, a 51st day appended to a scratch copy leaves them
+  green, and I gate commits on the checks' own exit status.
+- The landing `CLAUDE.md` still says "There is no test suite here". There are
+  three test files now. I left that sentence, which was already wrong.
+
+### Decisions the owner may want to reverse
+
+- Lines of source as the growth measure, and commits a day as velocity. Net
+  lines a week would show the same growth with more noise from moves and
+  rewrites.
+- Publishing straight to the landing main, see the top. Reverting is `git
+  revert` of `b564bbc` and its follow-ups. Nothing else on the page depends on
+  the block, apart from the jump list link and `main { min-width: 0 }`.
+- The graph counts this site's code at its own main, so it counts itself.
+
+### Open, for the owner
+
+Regeneration is a rule and a lint, not a timer. A scheduled routine could
+fetch, regenerate, run the checks and push on its own. I have not made one,
+because it would publish to the public page unattended. Say the word.
+
+### RUN LOG
+
+    landing npm run lint:page    32 of 32 clean (29 before, three new), on the
+                                 final generated page
+    landing npm test             attribution passed, support 10 of 10, velocity
+                                 14 of 14, exit status 0
+    lint negative controls       stale block, a newer entry than the graph, a
+                                 series a day short, an en dash in the hover
+                                 script: each failed the right check, files
+                                 restored byte for byte
+    test breakages               five, each fails a test; two needed the error
+                                 collection above
+    regeneration property        a 51st day appended in a scratch copy, block
+                                 regenerated: 14 of 14
+    dataviz validator            dark palette, surfaces #141c16 and #1e2a20: all
+                                 five checks pass
+    headless render              1280, 430, 360, 320: no overflow, no label off
+                                 screen or on another, smallest 12 px; hover at
+                                 the peak, newest and oldest days, arrow keys,
+                                 pointer leave, table open, forced colours
+                                 emulated
+    dash check                   0 em, 0 en in every changed file
+    live                         webfpv.org/notes/, velocity.js, velocity.json
+                                 and boot.js byte identical to the repository
+                                 at ce9ee15; no CSP header on the page
+    NOT RUN                      Firefox and Safari (Chromium only here); the
+                                 live URL in a browser (this Chromium cannot
+                                 reach it, so the bytes were compared instead);
+                                 npm run verify and scripts/shots.js (no
+                                 simulator code changed, and shots.js does not
+                                 open the landing repository); npm test after
+                                 f56dd0b, which is documentation only
