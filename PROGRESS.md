@@ -59580,3 +59580,97 @@ because it would publish to the public page unattended. Say the word.
                                  simulator code changed, and shots.js does not
                                  open the landing repository); npm test after
                                  f56dd0b, which is documentation only
+
+## 2026-09-29 | landing, docs | The velocity graph moved to the top of the patch notes
+
+The owner: "move the velocity charts to the top of the path notes please".
+That is the patch notes page, and the graph is one section holding two charts,
+lines of source and commits a day. Both moved. Nothing in this repository's
+code changed, and the numbers did not change.
+
+### What changed
+
+Landing repository, commit `900d045` on its main:
+
+- The graph sits directly under the jump list and above the first day's entry.
+  The jump list opens with a Velocity link and otherwise runs as before, so
+  the links are in the page's order. It is the same generated block, moved
+  between its own markers.
+- The rule that set the section off from the entries above it is now a rule
+  below it, between the graph and the 29 September entry.
+- `scripts/velocity.js` puts a graph under the jump list when a page has none,
+  which is where this one now is. A test takes the graph out of the real page
+  and lets the generator put it back, and the result equals the page to the
+  byte.
+- `notes/velocity.js` had a header comment that said the graph was at the foot.
+  Correcting it changed the file, so its script tag now carries `?v=1`, as the
+  landing `CLAUDE.md` asks of any script that changes in a deploy. Nothing it
+  does changed.
+- Tests hold the position: the graph is the first section, the jump list opens
+  with its link, and the jump list names the page's sections in the page's
+  order. Four wrong pages each fail one of them: the graph back at the foot,
+  two links swapped, the link missing, a stray section above the graph.
+- `CLAUDE.md`, the README row and the lint's comments say top.
+
+Live on webfpv.org/notes/ about a minute after the push. The page, `velocity.js`
+with its stamp, `velocity.json` and `boot.js` are byte identical to the
+repository. The sections come in the order velocity, 29 September, down to 22
+August.
+
+### What it costs, for the owner
+
+The graph is 827 to 851 px tall, so the newest entry is no longer on the first
+screen: below the fold by 266 px at 1280 by 900, by 297 px at 430 by 932 and by
+463 px at 360 by 800. The jump list is above the graph, so any entry is one tap
+away, but a visitor who does not scroll now sees the graph and not the notes.
+If the notes should still lead, the lines panel alone is about 300 px and the
+commits panel could go under it. Say the word and it is a change to the
+generator, not to the page.
+
+### What went wrong
+
+- **My last run log said "0 em, 0 en in every changed file", and one was not
+  clean.** `tests/velocity.test.js` held a literal en dash and a literal em
+  dash inside a regex, from the first version of the file, and the byte check
+  I ran did not open it. The lint's dash check has a list of files and the test
+  file was not on it. Found this turn when I byte checked every changed file.
+  The regex now spells them as escapes, the lint watches the file, and a dash
+  planted in it fails the lint. The earlier log line is left as it was written,
+  and this is the correction to it.
+- The scratch structure check flagged the graph as a mismatch, because it was
+  written for entries and the graph has a legend list and no headings. Not a
+  fault in the page, and the check was not changed.
+
+### Decisions the owner may want to reverse
+
+- The graph before the jump list's first entry, and not above the page title or
+  before the jump list. A graph above the jump list would have put the page's
+  own contents below a screen of chart.
+- Velocity as the first link in the jump list, in the page's order.
+
+### RUN LOG
+
+    landing npm run lint:page    32 of 32 clean, on the committed files
+    landing npm test             attribution passed, support 10 of 10, velocity
+                                 16 of 16, exit status 0, each command's own
+                                 status, not through a pipe
+    position tests              four wrong pages each fail one; the dash test
+                                 fails when the generator emits a dash
+    dash check                   0 em, 0 en in all eight changed files, by
+                                 bytes this time; a planted dash in the test
+                                 file fails the lint
+    jump list and sections       12 links, 12 sections, same order, no
+                                 duplicate ids, no orphan, no dead link
+    headless render              1280, 430, 360: no overflow, no page error,
+                                 first screen read, the seam between the graph
+                                 and 29 September read; both jump links land
+                                 with the section at 18 px; hover at 26
+                                 September opens inside the plot
+    live                         byte identical, see above
+    NOT RUN                      Firefox and Safari (Chromium only here); the
+                                 live URL in a browser; the graph was not
+                                 regenerated, so its numbers are as of site head
+                                 `514466b6` and three later site commits are
+                                 not in them; npm run verify and scripts/shots.js
+                                 (no simulator code changed, and shots.js does
+                                 not open the landing repository)
