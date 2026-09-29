@@ -2,7 +2,7 @@
 
 ## Status
 
-Published on 2026-09-29 to https://webfpv.org/notes/, in the landing repository `landingpage-WebFPVSimulator-` as commit `bf2052f`, as one section a day: 24, 25, 26, 27, 28 and 29 September, newest first. The served page is byte identical to the committed `notes/index.html`. That file is the copy of record for the wording, so this one no longer carries the entry.
+Published on 2026-09-29 to https://webfpv.org/notes/, in the landing repository `landingpage-WebFPVSimulator-` as commit `bf2052f`, with four claims corrected in `fd645f2`, as one section a day: 24, 25, 26, 27, 28 and 29 September, newest first. The served page is byte identical to the committed `notes/index.html`. That file is the copy of record for the wording, so this one no longer carries the entry.
 
 This file began as a single 23 to 29 September draft, written while the landing repository could not be attached (the auto mode classifier had denied it). The owner then asked for the repository to be attached with push access and the notes published, said the Patreon price was reduced and that Firefox is fixed, asked for the entry to be broken into days, and asked for the missing repositories to be cloned to see what had changed. All of that is done, and the draft's text was replaced by the published sections. The draft is still in this branch's history.
 

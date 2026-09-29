@@ -59412,3 +59412,23 @@ in each.
     npm run verify (simulator)   not run: no simulator code changed
     scripts/shots.js             not run: nothing on screen changed here
     lint checks (simulator)      not run: no simulator code changed
+
+### Addendum, after publishing: four claims corrected
+
+A second read of the published text against its sources found four claims that
+went past them, and all four were live. Hibari Yard's "7.5 m loop" is the
+road's width (`starter.js`: "the road's 7.5 m", two 3.75 m lanes), not a loop
+length. "Never under a car" and "never blinds the lens" were absolutes the
+sources do not make: the set down is on the verge with the traffic going past,
+and the smoke thins to white and not to ink. The loader sentence said a cached
+script cannot run against a newer page, where the change only makes a page and
+its scripts come from one deploy. Fixed as landing commit `fd645f2`. The Pages
+origin and webfpv.org serve the corrected file, byte identical to the commit.
+
+The wrong number came from a commit title that said "a 7.5 m loop", carried
+over without opening the map's data. The other figures in the six sections were
+checked against their sources in the same pass and held.
+
+    landing npm run lint:page    29 of 29 clean, after the fix
+    landing npm test             13 of 13 passed, after the fix
+    live                         sha256 of the served page equals the commit
