@@ -163,9 +163,31 @@ export const PARTNERS = Object.freeze([
   }),
 ]);
 
-export const PARTNER_SLUGS = Object.freeze(PARTNERS.map((p) => p.slug));
+/*
+ * Maps-only partners: shown on freestyle maps (painted walls and find-the-logo
+ * stamps) but NOT on the front page, leaderboard or partners page. These
+ * partners are listed separately so the other repositories' vendored roster.js
+ * consumers (which copy PARTNERS byte for byte) need no changes.
+ */
+export const MAP_ONLY_PARTNERS = Object.freeze([
+  partner({
+    slug: 'mattsflooring',
+    name: "Matt's Flooring Pty Ltd",
+    short: "Matt's Flooring",
+    about: 'Flooring company.',
+    links: [
+      { kind: 'site', label: "Visit Matt's Flooring", href: 'https://www.mattsflooring.com.au/' },
+    ],
+    logo: { colour: 'mattsflooring/colour.png', mono: 'mattsflooring/mono.png', aspect: 499 / 111 },
+    mark: { field: '#f3ead4' },
+  }),
+]);
 
-const BY_SLUG = new Map(PARTNERS.map((p) => [p.slug, p]));
+export const PARTNER_SLUGS = Object.freeze(PARTNERS.map((p) => p.slug));
+export const MAP_ONLY_PARTNER_SLUGS = Object.freeze(MAP_ONLY_PARTNERS.map((p) => p.slug));
+export const ALL_PARTNER_SLUGS = Object.freeze([...PARTNER_SLUGS, ...MAP_ONLY_PARTNER_SLUGS]);
+
+const BY_SLUG = new Map([...PARTNERS, ...MAP_ONLY_PARTNERS].map((p) => [p.slug, p]));
 
 /* A partner by slug, or null for anything that is not one. */
 export function partnerBySlug(slug) {
