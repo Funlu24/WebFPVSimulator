@@ -3508,6 +3508,22 @@
        * src/ui/ui.js counts them. On the title the dock stood on the
        * wordmark, so a phone hears its music from Settings instead.
        */
+      /* A PHONE ON ITS SIDE SHOWED ONE TITLE ROW: Fly, and Track half under
+         the command bar, while the field above them was empty. The plan's
+         measure was four (MENUS-PLAN.md, How done is measured). The list
+         takes the column under the wordmark, clear of the bar, and scrolls
+         inside it; the help line, which had no room above it and was drawn
+         over the wordmark, steps aside, as every row's note is also one
+         press away in the room the row opens. */
+      @media (max-height: 520px) and (min-width: 600px) {
+        .screen-title:not(.is-gate) { padding-bottom: calc(1.4vh + var(--bar-bot)); }
+        .screen-title:not(.is-gate) .title-foot { flex: 1 1 auto; margin-top: 8px; }
+        .screen-title:not(.is-gate) .title-foot .menu-stage {
+          display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+        }
+        .screen-title:not(.is-gate) .title-foot .menu-scroll { max-height: none; flex: 1 1 auto; min-height: 0; }
+        .screen-title:not(.is-gate) .title-foot .menu-help { display: none; }
+      }
       /* A phone held upright has the height the title's 32vh cap was written
          against a landscape phone to save: it showed Fly, Track and half of
          Quad under 350 px of empty field. Five rows there, and the field
