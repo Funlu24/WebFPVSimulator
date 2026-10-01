@@ -41,14 +41,18 @@ import {
   SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from './model.js';
 import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElements } from './sequence.js';
-import { labelOf, WHOOP_TOOLS } from './elements.js';
+import { labelOf, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
 import { replacementsFor } from './snap.js';
+import {
+  canFlag, flagsOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
+} from './parts.js';
+import { scaleOf, say as sayLength } from './scale.js';
 import { passList, reuseOf } from './passes.js';
 import { standsOnGround } from './seat.js';
 import { figuresFor, matchingFigure, figureBlurb, levelName } from './figures.js';
 import { elevationProfile } from './path.js';
 import { drawProfile } from './profile.js';
-import { DEG, RAD } from './geometry.js';
+import { DEG, RAD, wrapAngle } from './geometry.js';
 import { localBoundsOf, turnsOf } from './view2d.js';
 import {
   PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf,
@@ -90,6 +94,18 @@ const WHOOP_WORDS = {
   'Re-derive': 'Let the tool decide again',
   'How it is flown': 'Path through the stack',
   set: 'Turned by hand',
+};
+
+/*
+ * THE WORDS OF A FIVE INCH TRACK, which is built in the room too. The same people-words as the whoop's, with the
+ * floor a ground, and a stack's spacing said as the gap between its levels because a stack here is one gate with
+ * levels and not two gates a hand apart.
+ */
+const FIELD_WORDS = {
+  ...WHOOP_WORDS,
+  'Sill height': 'Height off ground',
+  'Level spacing': 'Gap between levels',
+  Base: 'Height off ground',
 };
 
 /* Inches, because the rules and the pipe are in them, with the millimetres
@@ -383,6 +399,15 @@ export class Panels {
     const extra = el('div', 'tb-group');
     extra.append(el('h3', null, 'Extra'));
 
+    const toolButton = (t) => {
+      const b = el('button', 'tb-tool');
+      b.type = 'button';
+      b.title = t.note;
+      b.append(el('span', t.key ? 'tb-tool-key' : 'tb-tool-key none', t.key || ''), el('span', 'tb-tool-label', t.label));
+      b.addEventListener('click', () => this.host.arm(t.id));
+      this.paletteButtons.set(t.id, b);
+      return b;
+    };
     for (const def of paletteItems(cls)) {
       const b = el('button', 'tb-tool');
       b.type = 'button';
@@ -393,21 +418,21 @@ export class Panels {
       b.addEventListener('click', () => this.host.arm(def.id));
       this.paletteButtons.set(def.id, b);
       (def.group === 'track' ? track : extra).append(b);
+      /* A five inch track's wall, up gate and hurdle stand among the pieces, each after the one it is made from. */
+      if (cls !== 'micro' && def.group === 'track') {
+        for (const part of FIVE_INCH_PIECES.filter((p) => p.after === def.id)) {
+          track.append(toolButton(part));
+        }
+      }
     }
 
-    /* A whoop canvas's tools that are not pieces: a row of gates, and the ruler. */
+    /* A track's tools that are not pieces: a row of whoop gates, and the ruler; on a field, Fly order and the ruler. */
     let tools = null;
-    if (cls === 'micro') {
+    {
       tools = el('div', 'tb-group');
       tools.append(el('h3', null, 'Tools'));
-      for (const t of WHOOP_TOOLS) {
-        const b = el('button', 'tb-tool');
-        b.type = 'button';
-        b.title = t.note;
-        b.append(el('span', 'tb-tool-key', t.key), el('span', 'tb-tool-label', t.label));
-        b.addEventListener('click', () => this.host.arm(t.id));
-        this.paletteButtons.set(t.id, b);
-        tools.append(b);
+      for (const t of cls === 'micro' ? WHOOP_TOOLS : FIVE_INCH_TOOLS) {
+        tools.append(toolButton(t));
       }
     }
 
@@ -420,7 +445,9 @@ export class Panels {
     extra.append(pathBtn);
 
     host.append(...(tools ? [track, tools, extra] : [track, extra]));
-    host.append(el('p', 'tb-help', 'Press a key or click a tool, then click the field. The tool stays armed, so ten gates are ten clicks. Escape or right click puts it away.'));
+    host.append(el('p', 'tb-help', cls === 'micro'
+      ? 'Press a key or click a tool, then click the field. The tool stays armed, so ten gates are ten clicks. Escape or right click puts it away.'
+      : 'Press a key or click a tool, then click the ground. A gate stays armed, so ten gates are ten clicks; a wall, a hurdle and an up gate are one at a time. Escape or right click puts it away.'));
   }
 
   /*
@@ -533,7 +560,10 @@ export class Panels {
 
   /* A word, in the whoop canvas's own where it has one. */
   say(word) {
-    return this.host.isWhoopRace() ? (WHOOP_WORDS[word] ?? word) : word;
+    if (this.host.isWhoopRace()) {
+      return WHOOP_WORDS[word] ?? word;
+    }
+    return this.host.buildsIn3D() ? (FIELD_WORDS[word] ?? word) : word;
   }
 
   field(key, label, value, onCommit, opts = {}) {
@@ -657,6 +687,12 @@ export class Panels {
     host.append(this.field(`name-${element.id}`, 'Name', element.name, (val) => {
       this.host.edit('rename', (d) => { elementById(d, element.id).name = val; });
     }, { text: true }));
+
+    /* The flags of a five inch gate or a hurdle are the first thing asked about it, not the last: they were at the
+     * foot of a column that is a screen and a half tall. The same choice is on the card in the room. */
+    if (!freestyle && !this.host.isWhoopRace() && canFlag(element)) {
+      this.renderFlagSidePicker(host, element);
+    }
 
     if (def.kind === KIND.STRUCTURE) {
       this.renderStructureInspector(host, element, def);
@@ -788,7 +824,8 @@ export class Panels {
       this.renderDecalLogoPicker(host, doc, element);
     }
 
-    if (def.flagSide) {
+    /* A map's flagged gates keep the picker where it was. */
+    if (def.flagSide && freestyle) {
       this.renderFlagSidePicker(host, element);
     }
 
@@ -1452,17 +1489,30 @@ export class Panels {
   }
 
   renderFlagSidePicker(host, element) {
-    const current = flagSideOf(element);
-    host.append(el('h3', null, 'Header flag'));
-    host.append(el('p', 'tb-help', 'Where the pennant stands on the header, as seen facing the gate. On top puts one mast in the middle of the board, directly over the opening. Mast height is the flag height in the dimensions above, and the mast is solid: a pilot diving onto the top rail can hit it.'));
+    const doc = this.host.doc;
+    /* A track's piece that can carry flags has a choice that includes none, and is changed by type where it must
+     * be (parts.js setFlags). A map's flagged gate has only the sides it always had. */
+    const choosing = docModeOf(doc) !== 'freestyle' && canFlag(element);
+    const current = choosing ? flagsOf(element) : flagSideOf(element);
+    host.append(el('h3', null, choosing ? 'Flags' : 'Header flag'));
+    host.append(el('p', 'tb-help', element.type === 'barrier'
+      ? 'Where the pennants stand on a hurdle: at its ends. Mast height is the flag height in the dimensions below, and the mast is solid.'
+      : 'Where the pennant stands on the header, as seen facing the gate. On top puts one mast in the middle of the board, directly over the opening. Mast height is the flag height in the dimensions below, and the mast is solid: a pilot diving onto the top rail can hit it.'));
     const grid = el('div', 'tb-side-grid');
-    for (const side of FLAG_SIDES) {
+    const choices = choosing
+      ? (element.type === 'barrier' ? ['none', 'left', 'right', 'both'] : ['none', ...FLAG_SIDES])
+      : FLAG_SIDES;
+    for (const side of choices) {
       const b = el('button', current === side ? 'tb-fig-card on' : 'tb-fig-card');
       b.type = 'button';
       b.append(flagSideIcon(side));
-      b.append(el('strong', null, FLAG_SIDE_LABEL[side]));
+      b.append(el('strong', null, side === 'none' ? 'None' : FLAG_SIDE_LABEL[side]));
       grid.append(b);
       b.addEventListener('click', () => {
+        if (choosing) {
+          this.host.setPieceFlags(element.id, side);
+          return;
+        }
         this.host.edit('flag side', (d) => {
           const e2 = elementById(d, element.id);
           if (e2) {
@@ -1705,7 +1755,7 @@ export class Panels {
       }
       /* Two buttons with a letter and a dash on them, on every row, said in words
        * on a whoop canvas. */
-      const whoopRows = this.host.isWhoopRace();
+      const whoopRows = this.host.buildsIn3D();
       li.append(button(whoopRows ? 'Reverse' : 'X', 'tb-mini', (e) => { e.stopPropagation(); this.host.flipFace(seq.id); }, 'Flip the face or the pass side'));
       li.append(button(whoopRows ? 'Remove' : '-', 'tb-mini tb-danger', (e) => { e.stopPropagation(); this.host.removeSequenceEntry(seq.id); }, 'Take it out of the order'));
 
@@ -1776,16 +1826,25 @@ export class Panels {
   }
 
   /*
-   * THE CARD BY THE SELECTED PIECE: six fields and three buttons, in inches
-   * with the millimetres beside them, because a pilot standing in a hall with a
-   * tape measure thinks in one and reads the rules in the other. Everything
-   * else, the frame's sides, the stack's figure, the flag's side, is in the
-   * drawer under More. X and Y are measured from the middle of the room, which
-   * is where the game puts a track, so they are numbers a track that is about
-   * the size of an envelope can have. It floats beside the piece in the room
-   * (placeCard) and docks to the foot where there is no room for that.
+   * THE CARD BY THE SELECTED PIECE: a few fields and a few buttons, in inches
+   * with the millimetres beside them in a hall and in metres on a field,
+   * because a pilot standing in a hall with a tape measure thinks in one and
+   * reads the rules in the other, and a course designer dimensions a plan in
+   * the other. Everything else, the frame's sides, the stack's figure, is in
+   * the drawer under More. X and Y are measured from the middle of a hall,
+   * which is where the game puts a track, so they are numbers a track that is
+   * about the size of an envelope can have; on a field they are the plan's own,
+   * from its south west corner, because that is where a designer's dimensions
+   * start. It floats beside the piece in the room (placeCard) and docks to the
+   * foot where there is no room for that.
    *
-   * ON A SCREEN THAT IS TOUCHED the six fields are left to the drawer (More),
+   * WHAT IS ON IT FOR A FIVE INCH PIECE that a hall's has none of: the flags,
+   * as one choice, which was a header flag in the drawer's second screen; a
+   * wall's own controls (how it is flown, which way, how wide a bay, which
+   * ends carry a pennant); a loop after a pass; and a hurdle's way over. They
+   * are the things the plan this was made for needed and could not reach.
+   *
+   * ON A SCREEN THAT IS TOUCHED the fields are left to the drawer (More),
    * where the inspector has them all: typing a length on a glass keyboard is not
    * how a track is built on a tablet, and six fields at finger size were a card
    * taller than half the room, covering the very track it was for. What is left is
@@ -1800,11 +1859,13 @@ export class Panels {
     const ids = [...this.host.selection].filter((id) => elementById(doc, id));
     /* Not while a tool is armed: the pointer is for placing then, and a card
      * beside the piece just placed sits exactly where the next one goes. */
-    if (!this.host.isWhoopRace() || !ids.length || this.host.armed) {
+    if (!this.host.buildsIn3D() || !ids.length || this.host.armed) {
       card.hidden = true;
       card.textContent = '';
       return;
     }
+    const cls = trackClassOf(doc);
+    const metric = scaleOf(doc).metric;
     card.textContent = '';
     card.hidden = false;
     card.classList.toggle('docked', this.host.mode !== '3d');
@@ -1814,17 +1875,30 @@ export class Panels {
     /* A quarter turn, for a screen with no Q and E. Only for what turns. */
     const turns = ids.some((id) => [KIND.APERTURE, KIND.START, KIND.OBSTACLE].includes(kindOf(elementById(doc, id))));
     if (turns) {
-      actions.append(button('Turn', 'tb-btn', () => this.host.nudgeYaw(-15), 'Turn it a quarter. E turns it one way and Q the other'));
+      actions.append(button('Turn', 'tb-btn', () => this.host.nudgeYaw(metric ? -90 : -15), metric
+        ? 'Turn it a quarter. E turns it fifteen degrees one way and Q the other; Shift with either is a quarter'
+        : 'Turn it a quarter. E turns it one way and Q the other'));
     }
-    const copyBtn = button('Copy', 'tb-btn', () => this.host.copySelection(), 'A copy beside it, 30 in on. Control D');
+    const copyBtn = button('Copy', 'tb-btn', () => this.host.copySelection(), metric
+      ? 'A copy beside it. Control D'
+      : 'A copy beside it, 30 in on. Control D');
     const removeBtn = button('Remove', 'tb-btn tb-danger', () => this.host.deleteSelection(), 'Delete');
     actions.append(
       copyBtn,
       removeBtn,
-      button('More', 'tb-btn', () => this.host.toggleDrawer(true), 'Everything else about it: the frame, the flag, how a stack is flown'),
+      button('More', 'tb-btn', () => this.host.toggleDrawer(true), metric
+        ? 'Everything else about it: the frame, its size, how a stack is flown'
+        : 'Everything else about it: the frame, the flag, how a stack is flown'),
     );
-    const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
+    const close = button('×', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
     close.setAttribute('aria-label', 'Let go of it');
+
+    /* A WALL, as the whole piece it is. */
+    const wall = ids.length > 1 && this.wholeGroup(doc, ids) ? wallOf(doc, ids[0]) : null;
+    if (wall) {
+      this.renderWallCard(card, head, close, actions, copyBtn, wall, ids[0]);
+      return;
+    }
 
     if (ids.length > 1) {
       /* A whole cube says what it is: it is one piece, and the two faces it is flown through are the passes. */
@@ -1854,7 +1928,7 @@ export class Panels {
     const at = entries.find((q) => q.id === focusId) ?? entries[0] ?? null;
     const number = at ? numbers.get(at.id) : null;
     const flown = entries.length;
-    const called = element.name || labelOf(element.type, 'micro');
+    const called = element.name || labelOf(element.type, cls);
     if (flown > 1 && touched) {
       /* On a touched screen the strip along the foot is the way to another pass (a chip
        * is a finger there, and the passes of this piece are ringed on it): a row of
@@ -1876,6 +1950,11 @@ export class Panels {
       actions.insertBefore(button(flown ? 'Fly again' : 'Fly it', 'tb-btn', () => this.host.flyPieceAgain(element.id, at ? at.apertureIndex ?? 0 : 0),
         'Another pass through it, at the end of the lap'), copyBtn);
     }
+    /* A hurdle is not a gate: the lap goes over it, and this is what puts the lap there. */
+    if (element.type === 'barrier' && !this.host.isWhoopRace()) {
+      actions.insertBefore(button('Fly over', 'tb-btn', () => this.host.routeTo(element.id),
+        'Add a pass over the middle of it, a metre above the board, at the end of the lap'), copyBtn);
+    }
     if (flown > 1) {
       removeBtn.textContent = 'Remove piece';
       removeBtn.title = `Takes the piece and its ${flown} passes out of the track. Delete`;
@@ -1885,6 +1964,12 @@ export class Panels {
           'Takes this one pass out of the lap and leaves the piece where it stands'), removeBtn);
       }
     }
+
+    /* THE FIVE INCH PIECE'S OWN CHOICES: which way it faces, its flags, and a loop after the pass the card is about. */
+    this.cardFacing(card, element);
+    this.cardPassOn(card, element, at);
+    this.cardFlags(card, element);
+    this.cardLoop(card, element, at);
 
     if (touched) {
       /* The small bar: what a keyboard's Q, E and X did, as buttons. */
@@ -1903,39 +1988,22 @@ export class Panels {
 
     const grid = el('div', 'tb-card-grid');
     const id = element.id;
-    const mid = { x: doc.field.width / 2, y: doc.field.depth / 2 };
-    const mm = (m) => `${Math.round(m * 1000)} mm`;
     if (number != null) {
       grid.append(this.field(`card-order-${id}`, 'Place in order', number, (val) => this.host.renumber(at.id, val),
         { step: 1, places: 0, min: 1 }));
     }
-    const dx = element.position.x - mid.x;
-    const dy = element.position.y - mid.y;
-    grid.append(
-      this.field(`card-x-${id}`, 'X (in)', dx / IN, (val) => {
-        this.host.edit('move', (d) => { elementById(d, id).position.x = round6(mid.x + val * IN); });
-      }, { step: 1, places: 1, suffix: mm(dx) }),
-      this.field(`card-y-${id}`, 'Y (in)', dy / IN, (val) => {
-        this.host.edit('move', (d) => { elementById(d, id).position.y = round6(mid.y + val * IN); });
-      }, { step: 1, places: 1, suffix: mm(dy) }),
-    );
-    /* Height off the floor: the sill of a gate, which is what lifts one on its
-     * legs; the base of a pole laid across a room; nothing for what stands on
-     * the ground. */
-    if (def.kind === KIND.APERTURE) {
-      grid.append(this.field(`card-h-${id}`, 'Height off floor (in)', (element.dims.sillH ?? 0) / IN, (val) => {
-        this.host.edit('resize', (d) => { elementById(d, id).dims.sillH = round6(Math.max(0, val * IN)); });
-      }, { step: 1, places: 1, min: 0, suffix: mm(element.dims.sillH ?? 0) }));
-    } else if (!standsOnGround(doc, element) && def.kind !== KIND.DECAL) {
-      grid.append(this.field(`card-h-${id}`, 'Height off floor (in)', element.position.z / IN, (val) => {
-        this.host.edit('height', (d) => { elementById(d, id).position.z = round6(Math.max(0, val * IN)); });
-      }, { step: 1, places: 1, min: 0, suffix: mm(element.position.z) }));
-    }
-    if (def.kind === KIND.APERTURE || def.kind === KIND.START || def.kind === KIND.OBSTACLE) {
-      const yaw = this.host.shownYaw ? this.host.shownYaw(element) : element.yaw;
-      grid.append(this.field(`card-turn-${id}`, 'Turn (degrees)', yaw * DEG, (val) => {
-        this.host.setElementYaw(id, val * RAD);
-      }, { step: 90, places: 0 }));
+    this.cardPlaceFields(grid, element);
+    /* How far outside a flag the line goes round it, which is how wide the turn is: a turn flag a pilot swings wide
+     * round is the same flag with a bigger number. Only a field's markers, where a turn round one is a design choice. */
+    if (at && def.kind === KIND.MARKER && !this.host.isWhoopRace()) {
+      grid.append(this.field(`card-clr-${at.id}`, 'Turn clearance (m)', at.clearance ?? 0, (val) => {
+        this.host.edit('clearance', (d) => {
+          const s2 = d.sequence.find((x) => x.id === at.id);
+          if (s2) {
+            s2.clearance = Math.max(0, val);
+          }
+        });
+      }, { step: 0.5, places: 2, min: 0 }));
     }
     if (at && (def.kind === KIND.APERTURE || def.kind === KIND.MARKER)) {
       const fig = el('div', 'tb-card-fig');
@@ -1952,6 +2020,218 @@ export class Panels {
     /* After the buttons, so a sentence appearing or going after a press moves
      * nothing that is under the finger. */
     this.cardWarnings(card, element, entries);
+  }
+
+  /*
+   * X, Y, the height and the turn of a piece, in the units the canvas speaks: inches with the millimetres beside
+   * them, from the middle of a hall; metres, from the corner of a field. A barrier has a width and a board height
+   * of its own that a field's designer sets, and a tilted gate its tilt.
+   */
+  cardPlaceFields(grid, element) {
+    const doc = this.host.doc;
+    const def = ELEMENTS[element.type];
+    const id = element.id;
+    const metric = scaleOf(doc).metric;
+    if (metric) {
+      grid.append(
+        this.field(`card-x-${id}`, 'X (m)', element.position.x, (val) => {
+          this.host.edit('move', (d) => { elementById(d, id).position.x = round6(val); });
+        }, { step: 1, places: 2 }),
+        this.field(`card-y-${id}`, 'Y (m)', element.position.y, (val) => {
+          this.host.edit('move', (d) => { elementById(d, id).position.y = round6(val); });
+        }, { step: 1, places: 2 }),
+      );
+      if (def.kind === KIND.APERTURE) {
+        grid.append(this.field(`card-h-${id}`, 'Height off ground (m)', element.dims.sillH ?? 0, (val) => {
+          this.host.edit('resize', (d) => { elementById(d, id).dims.sillH = round6(Math.max(0, val)); });
+        }, { step: 0.25, places: 2, min: 0 }));
+        if (Math.abs(element.pitch ?? 0) > 1e-6 || element.type === 'diveGate') {
+          grid.append(this.field(`card-tilt-${id}`, 'Tilt (degrees)', element.pitch * DEG, (val) => {
+            this.host.edit('tilt', (d) => { elementById(d, id).pitch = Math.max(-90, Math.min(90, val)) * RAD; });
+          }, { step: 5, places: 0, min: -90, max: 90 }));
+        }
+      } else if (element.type === 'barrier') {
+        grid.append(
+          this.field(`card-w-${id}`, 'Length (m)', element.dims.width, (val) => {
+            this.host.edit('resize', (d) => { elementById(d, id).dims.width = round6(Math.max(0.5, val)); });
+          }, { step: 0.5, places: 2, min: 0.5 }),
+          this.field(`card-bh-${id}`, 'Height (m)', element.dims.height, (val) => {
+            this.host.edit('resize', (d) => { elementById(d, id).dims.height = round6(Math.max(0.1, val)); });
+          }, { step: 0.25, places: 2, min: 0.1 }),
+        );
+      } else if (!standsOnGround(doc, element) && def.kind !== KIND.DECAL) {
+        grid.append(this.field(`card-h-${id}`, 'Height off ground (m)', element.position.z, (val) => {
+          this.host.edit('height', (d) => { elementById(d, id).position.z = round6(Math.max(0, val)); });
+        }, { step: 0.25, places: 2, min: 0 }));
+      }
+    } else {
+      const mid = { x: doc.field.width / 2, y: doc.field.depth / 2 };
+      const mm = (m) => `${Math.round(m * 1000)} mm`;
+      const dx = element.position.x - mid.x;
+      const dy = element.position.y - mid.y;
+      grid.append(
+        this.field(`card-x-${id}`, 'X (in)', dx / IN, (val) => {
+          this.host.edit('move', (d) => { elementById(d, id).position.x = round6(mid.x + val * IN); });
+        }, { step: 1, places: 1, suffix: mm(dx) }),
+        this.field(`card-y-${id}`, 'Y (in)', dy / IN, (val) => {
+          this.host.edit('move', (d) => { elementById(d, id).position.y = round6(mid.y + val * IN); });
+        }, { step: 1, places: 1, suffix: mm(dy) }),
+      );
+      /* Height off the floor: the sill of a gate, which is what lifts one on its
+       * legs; the base of a pole laid across a room; nothing for what stands on
+       * the ground. */
+      if (def.kind === KIND.APERTURE) {
+        grid.append(this.field(`card-h-${id}`, 'Height off floor (in)', (element.dims.sillH ?? 0) / IN, (val) => {
+          this.host.edit('resize', (d) => { elementById(d, id).dims.sillH = round6(Math.max(0, val * IN)); });
+        }, { step: 1, places: 1, min: 0, suffix: mm(element.dims.sillH ?? 0) }));
+      } else if (!standsOnGround(doc, element) && def.kind !== KIND.DECAL) {
+        grid.append(this.field(`card-h-${id}`, 'Height off floor (in)', element.position.z / IN, (val) => {
+          this.host.edit('height', (d) => { elementById(d, id).position.z = round6(Math.max(0, val * IN)); });
+        }, { step: 1, places: 1, min: 0, suffix: mm(element.position.z) }));
+      }
+    }
+    if (def.kind === KIND.APERTURE || def.kind === KIND.START || def.kind === KIND.OBSTACLE) {
+      const yaw = this.host.shownYaw ? this.host.shownYaw(element) : element.yaw;
+      grid.append(this.field(`card-turn-${id}`, 'Turn (degrees)', yaw * DEG, (val) => {
+        this.host.setElementYaw(id, val * RAD);
+      }, { step: metric ? 15 : 90, places: 0 }));
+    }
+  }
+
+  /* A row of a few words, one of them lit: the card's way of offering a choice. */
+  cardChoice(label, items, title) {
+    const row = el('div', 'tb-card-choice');
+    row.append(el('span', 'tb-card-choice-label', label));
+    const seg = el('div', 'tb-seg tb-seg-card');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', label);
+    for (const it of items) {
+      const b = button(it.label, it.on ? 'tb-seg-btn on' : 'tb-seg-btn', () => {
+        /* The lit one of a choice is already chosen; a toggle is pressed to turn it off as well as on. */
+        if (it.toggle || !it.on) {
+          it.run();
+        }
+      }, it.title ?? title);
+      b.setAttribute('aria-pressed', it.on ? 'true' : 'false');
+      seg.append(b);
+    }
+    row.append(seg);
+    return row;
+  }
+
+  /*
+   * WHICH WAY A GATE FACES, as the compass the plan is drawn on: north is the far side of the room, east is right
+   * of it. One press is the heading, where a quarter turn from wherever it is was one press for each of the three
+   * it might need. The way a lap is flown through it is the pass's and is Reverse. A heading between two of them
+   * lights none. Only a five inch gate: a hall's are on quarter turns and have Turn.
+   */
+  cardFacing(card, element) {
+    if (this.host.isWhoopRace() || kindOf(element) !== KIND.APERTURE) {
+      return;
+    }
+    const yaw = this.host.shownYaw ? this.host.shownYaw(element) : element.yaw;
+    const at = (deg) => Math.abs(wrapAngle(yaw - deg * RAD)) < 0.02;
+    card.append(this.cardChoice('Faces', [
+      ['North', 90], ['East', 0], ['South', -90], ['West', 180],
+    ].map(([label, deg]) => ({
+      label, on: at(deg), run: () => this.host.setElementYaw(element.id, deg * RAD),
+    })), 'Which way the gate faces. North is the far side of the room. Reverse flies it the other way through.'));
+  }
+
+  /*
+   * WHICH SIDE OF A FLAG THE LINE GOES ROUND, as the compass: the line passes on the north side of it, or the south,
+   * or either of the others, and the pass is turned to face that way and kept there. That is what a turn flag at
+   * the end of a long oval is, a pass on its far side, and it was a round handle on the plan that had to be dragged
+   * to it. Auto hands it back to the rule, which is the outside of the turn. Only a five inch marker: a waypoint
+   * has no side, and a hall's poles are not turned round.
+   */
+  cardPassOn(card, element, at) {
+    if (this.host.isWhoopRace() || !at || kindOf(element) !== KIND.MARKER || element.type === 'waypoint') {
+      return;
+    }
+    const set = element.yawOverridden === true;
+    const lit = (deg) => set && Math.abs(wrapAngle(element.yaw - deg * RAD)) < 0.02;
+    card.append(this.cardChoice('Line passes on its', [
+      ...[['North', 90], ['East', 0], ['South', -90], ['West', 180]].map(([label, deg]) => ({
+        label, on: lit(deg), run: () => this.host.setElementYaw(element.id, deg * RAD),
+      })),
+      { label: 'Auto', on: !set, run: () => this.host.clearOverride(at.id), title: 'The outside of the turn, worked out from the line' },
+    ], 'Which side of the flag the line goes round'));
+  }
+
+  /*
+   * THE FLAGS ON A PIECE, as one choice: none, left, right, both, on top. A gate with flags and one without are
+   * two types and the card does not make anybody know that: choosing is what changes it. Left and right are as
+   * seen facing the gate. A hurdle has no top, because its flags are at its ends. Only on a five inch track.
+   */
+  cardFlags(card, element) {
+    if (this.host.isWhoopRace() || !canFlag(element)) {
+      return;
+    }
+    const now = flagsOf(element);
+    const choices = element.type === 'barrier' ? ['none', 'left', 'right', 'both'] : ['none', 'left', 'right', 'both', 'top'];
+    const word = { none: 'None', left: 'Left', right: 'Right', both: 'Both', top: 'On top' };
+    card.append(this.cardChoice('Flags', choices.map((c) => ({
+      label: word[c], on: now === c, run: () => this.host.setPieceFlags(element.id, c),
+    })), 'Where the pennants stand, as seen facing the gate'));
+  }
+
+  /*
+   * A LOOP AFTER THE PASS THE CARD IS ABOUT: out of the gate, round one of its uprights, and back through it. It is
+   * three waypoints and a second pass, and Undo takes it away as one step. The line goes round the right hand
+   * upright for a right turn, the left for a left, as flown.
+   */
+  cardLoop(card, element, at) {
+    if (this.host.isWhoopRace() || !at || kindOf(element) !== KIND.APERTURE) {
+      return;
+    }
+    const back = this.host.loopBack;
+    const then = back ? ', and back through the gate' : ', and on to the next piece';
+    const row = this.cardChoice('Loop round a post', [
+      { label: 'Right', on: false, run: () => this.host.loopAfter(at.id, 'right'), title: `After this pass: round the right hand upright, clockwise${then}` },
+      { label: 'Left', on: false, run: () => this.host.loopAfter(at.id, 'left'), title: `After this pass: round the left hand upright, anticlockwise${then}` },
+      {
+        label: 'Back through',
+        toggle: true,
+        on: back,
+        /* A choice that stays: on, the loop comes back through the gate it went round (a second pass, which is a
+         * gate flown twice); off, it is a hook in the line and the lap goes on from it. */
+        run: () => this.host.setLoopBack(!back),
+        title: 'On: the loop ends with a second pass through the same gate. Off: the line just goes round the post and on.',
+      },
+    ]);
+    card.append(row);
+  }
+
+  /* A wall's card: one piece of N bays, how it is flown, how wide a bay is, and which ends carry a pennant. */
+  renderWallCard(card, head, close, actions, copyBtn, wall, id) {
+    const doc = this.host.doc;
+    const n = wall.ids.length;
+    head.append(el('strong', null, `Wall, ${n} bays`), close);
+    card.append(head);
+    const woven = wallIsWoven(doc, id);
+    card.append(this.cardChoice('Flown', [
+      { label: 'Weave', on: woven, run: () => this.host.setWeave(id, true), title: 'A slalom: each bay the other way to the one before' },
+      { label: 'Straight', on: !woven, run: () => this.host.setWeave(id, false), title: 'Every bay the same way' },
+    ]));
+    const size = wallSizeOf(doc, id);
+    card.append(this.cardChoice('Bay', [
+      ['standard', 'Standard'], ['wide', 'Wide'], ['championship', 'Championship'],
+    ].map(([key, label]) => ({
+      label, on: size === key, run: () => this.host.setWallBay(id, key),
+      title: GATE_PRESETS.find((p) => p.id === key)?.hint || `${label}: the gate size`,
+    })), 'How wide a bay is'));
+    const ends = wallFlagsOf(doc, id);
+    card.append(this.cardChoice('Flags', [
+      ['none', 'None'], ['first', 'First end'], ['last', 'Last end'], ['both', 'Both'],
+    ].map(([key, label]) => ({
+      label, on: ends === key, run: () => this.host.setPieceFlags(id, key),
+      title: 'The first end is where the wall was dragged from, which is the bay flown first',
+    })), 'Which ends carry a pennant, on their outer upright'));
+    actions.insertBefore(button('Reverse', 'tb-btn', () => this.host.reverseWallOf(id), 'Fly the wall the other way. Every pass turns round'), copyBtn);
+    card.append(actions);
+    const doneWall = new Set(wall.ids);
+    this.cardWarnings(card, { id: wall.ids[0] }, doc.sequence.filter((q) => doneWall.has(q.elementId)));
   }
 
   /*
@@ -2006,6 +2286,10 @@ export class Panels {
    * no field, when what is selected has no such answer.
    */
   replaceField(ids) {
+    /* The swaps are RaceGOW's palette; a five inch track keeps the flag choice on the card instead. */
+    if (!this.host.isWhoopRace()) {
+      return null;
+    }
     const types = replacementsFor(this.host.doc, ids);
     if (!types.length) {
       return null;
@@ -2198,7 +2482,7 @@ export class Panels {
     const add = el('button', armed ? 'tb-chip tb-chip-add on' : 'tb-chip tb-chip-add', '+');
     add.type = 'button';
     add.setAttribute('aria-label', 'Fly order: click the pieces in the order you fly them');
-    add.title = 'Fly order (O). Click the pieces in the order you fly them: a click on a piece again is another pass through it.';
+    add.title = `Fly order (${this.host.isWhoopRace() ? 'O' : 'N'}). Click the pieces in the order you fly them: a click on a piece again is another pass through it.`;
     add.tabIndex = stop === 'add' ? 0 : -1;
     add.addEventListener('focus', () => takeStop(add));
     add.addEventListener('keydown', (e) => { walk(e, add); });
@@ -2253,7 +2537,7 @@ export class Panels {
     const held = bar.contains(document.activeElement) ? document.activeElement : null;
     const heldAs = held && held.classList.contains('tb-chip') ? (held.dataset.seq ?? 'add') : null;
     bar.textContent = '';
-    if (!this.host.isWhoopRace()) {
+    if (!this.host.buildsIn3D()) {
       this.stripNode = null;
       this.stripSig = '';
       return;
@@ -2273,7 +2557,9 @@ export class Panels {
     const anything = doc.sequence.length > 0 || doc.elements.some((e) => isSequenceable(e));
     bar.append(
       ...(anything ? [this.lapStrip()] : []),
-      fig('Length', path ? `${path.length.toFixed(1)} m, ${(path.length / 0.3048).toFixed(0)} ft` : '0 m'),
+      fig('Length', path
+        ? (this.host.isWhoopRace() ? `${path.length.toFixed(1)} m, ${(path.length / 0.3048).toFixed(0)} ft` : `${path.length.toFixed(0)} m`)
+        : '0 m'),
       /* Passes are not gates: Track 8 is 14 pieces flown 29 times, and "Gates 29" was wrong about
        * the room it stood in. Said as it is once a piece is flown more than once. */
       reuse.passes > reuse.pieces ? fig('Passes', `${reuse.passes} on ${reuse.pieces} pieces`) : fig('Gates', String(gates)),
@@ -2283,7 +2569,10 @@ export class Panels {
       ...(this.host.armed === 'route' && doc.sequence.length
         ? [button('Start over', 'tb-btn', () => this.host.startOrderOver(), 'Empty the flying order and begin it again, waypoints included. One undo brings it back')]
         : []),
-      button('Build sheet', 'tb-btn', () => this.host.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy'),
+      ...(this.host.isWhoopRace()
+        ? [button('Build sheet', 'tb-btn', () => this.host.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy')]
+        : [button(`Field ${sayLength(doc, doc.field.width).replace(' m', '')} \u00d7 ${sayLength(doc, doc.field.depth)}`, 'tb-btn', () => this.host.openFieldSettings(),
+          'How big the field is, and the grid. A track has to stay inside it')]),
       button('Flying order', 'tb-btn', () => this.host.toggleDrawer(), 'The order the gates are flown in, every warning, and the elevation profile'),
     );
     this.renderPassFocus();
@@ -2309,32 +2598,48 @@ export class Panels {
     const gates = doc.elements.filter((e) => kindOf(e) === KIND.APERTURE).length;
     let text = '';
     const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    if (this.host.isWhoopRace() && this.host.armed === 'route') {
+    const room = this.host.buildsIn3D();
+    const whoop = this.host.isWhoopRace();
+    const armed = this.host.armed;
+    const ground = whoop ? 'floor' : 'ground';
+    if (room && armed === 'route') {
       /* Words only: a button floating over the room would take the tap meant for the
        * piece beside it, and Start over is not a thing to be pressed by accident. It is
        * on the lap bar. */
+      const hurdle = whoop ? '' : ' A hurdle is flown over.';
       text = touched
         ? (doc.sequence.length
-          ? 'Fly order: tap the next piece. A piece again is another pass. Tap the plus again to put the tool away.'
-          : 'Fly order: tap the first piece the lap goes through, then the next. A piece again is another pass.')
+          ? `Fly order: tap the next piece. A piece again is another pass.${hurdle} Tap the plus again to put the tool away.`
+          : `Fly order: tap the first piece the lap goes through, then the next. A piece again is another pass.${hurdle}`)
         : (doc.sequence.length
-          ? 'Fly order: click the next piece. A piece again is another pass. Backspace takes the last pass off. Esc puts the tool away.'
-          : 'Fly order: click the first piece the lap goes through, then the next. A piece again is another pass. Esc puts the tool away.');
-    } else if (this.host.isWhoopRace() && this.host.armed === 'cube') {
+          ? `Fly order: click the next piece. A piece again is another pass.${hurdle} Backspace takes the last pass off. Esc puts the tool away.`
+          : `Fly order: click the first piece the lap goes through, then the next. A piece again is another pass.${hurdle} Esc puts the tool away.`);
+    } else if (whoop && armed === 'cube') {
       text = touched
         ? 'Tap the floor to put a cube down: five gates in one piece, flown straight through along the way it faces. The tool stays armed. Tap Cube again to put it away.'
         : 'Click the floor to put a cube down: five gates in one piece, flown straight through along the way it faces. The tool stays armed. Right click or Esc puts it away.';
-    } else if (this.host.isWhoopRace() && (this.host.armed === 'row' || this.host.armed === 'ruler')) {
-      text = this.host.armed === 'row'
+    } else if (whoop && (armed === 'row' || armed === 'ruler')) {
+      text = armed === 'row'
         ? 'Drag along the floor to lay a row of two or three gates, 30 in apart. One click lays a pair. Right click or Esc puts the tool away.'
         : 'Click two points to measure between them. A click near a gate or a pole takes its middle. Right click or Esc puts the ruler away.';
-    } else if (this.host.isWhoopRace() && (doc.elements.length || this.host.armed) && gates < 3) {
-      if (this.host.armed) {
-        text = 'Click the floor to place it. The tool stays armed, so a second click places another. Right click or Esc puts it away.';
+    } else if (room && armed === 'ruler') {
+      text = 'Click two points to measure between them, in metres. A click near a piece takes its middle. Right click or Esc puts the ruler away.';
+    } else if (room && !whoop && armed === 'wall') {
+      text = touched
+        ? 'Drag along the ground, from the bay that is flown first, to lay a wall. A tap lays three. One wall, then the tool is put away.'
+        : 'Drag along the ground, from the bay that is flown first, to lay a wall of gates that share their uprights, two to six. A click lays three. One wall, then the tool is put away. Alt turns it freely.';
+    } else if (room && !whoop && armed === 'hurdle') {
+      text = 'Click where the hurdle goes: a board 4 m long and 1 m high with a flag at each end, turned across the course, with the lap passing over it. One hurdle, then the tool is put away.';
+    } else if (room && !whoop && armed === 'upGate') {
+      text = 'Click where the up gate goes: leaning 45 degrees with its lower edge 1.5 m up, flown up through. One gate, then the tool is put away.';
+    } else if (room && (doc.elements.length || armed) && gates < 3) {
+      if (armed) {
+        text = `Click the ${ground} to place it. The tool stays armed, so a second click places another. Right click or Esc puts it away.`;
       } else if (this.host.selection.size) {
-        text = 'Drag it to move it. Drag the ring at its foot to turn it. The arrow keys nudge it.';
+        /* The card is on the screen with its own buttons, and on a field it is tall enough to sit over this line. */
+        text = whoop ? 'Drag it to move it. Drag the ring at its foot to turn it. The arrow keys nudge it.' : '';
       } else {
-        text = 'Click a gate to select it. Drag empty floor to look round. Pick a tool on the left to place more.';
+        text = `Click a gate to select it. Drag empty ${ground} to look round. Pick a tool on the left to place more.`;
       }
     }
     coach.hidden = !text;
@@ -2350,16 +2655,24 @@ export class Panels {
       return;
     }
     /* Not once a tool is armed: the coach line says what to do then. */
-    const show = this.host.isWhoopRace() && this.host.doc.elements.length === 0 && !this.host.armed;
+    const show = this.host.buildsIn3D() && this.host.doc.elements.length === 0 && !this.host.armed;
     box.hidden = !show;
     box.textContent = '';
     if (!show) {
       return;
     }
+    if (this.host.isWhoopRace()) {
+      box.append(
+        el('p', null, 'Pick a gate on the left, then click the floor.'),
+        el('p', 'tb-help', 'Or start from a finished RaceGOW track and move a gate.'),
+        button('Start from a RaceGOW track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The eight tracks of RaceGOW5, to open and change'),
+      );
+      return;
+    }
     box.append(
-      el('p', null, 'Pick a gate on the left, then click the floor.'),
-      el('p', 'tb-help', 'Or start from a finished RaceGOW track and move a gate.'),
-      button('Start from a RaceGOW track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The eight tracks of RaceGOW5, to open and change'),
+      el('p', null, 'Pick a gate on the left, then click the ground.'),
+      el('p', 'tb-help', 'Or start from a finished track and change it.'),
+      button('Start from a track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The tracks that ship with the simulator, to open and change'),
     );
   }
 

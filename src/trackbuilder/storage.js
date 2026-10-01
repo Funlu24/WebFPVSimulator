@@ -98,6 +98,23 @@ function shippedMap(id) {
   return shippedMaps.find((d) => d.id === id) ?? null;
 }
 
+/*
+ * THE SHIPPED FIVE INCH TRACKS, handed in by the builder for the same reason the maps are: they are builder
+ * content (src/trackbuilder/presets5.js), and this file is on the simulator's boot graph. They list under the
+ * canvas of their class beside the RaceGOW set, open as a copy under a fresh id, and cannot be deleted. Returned as
+ * a deep copy, because the caller edits what it is given.
+ */
+let shippedTracks = [];
+
+export function shipTracks(docs) {
+  shippedTracks = Array.isArray(docs) ? docs : [];
+}
+
+function shippedTrack(id) {
+  const found = shippedTracks.find((d) => d.id === id);
+  return found ? JSON.parse(JSON.stringify(found)) : null;
+}
+
 /* ------------------------------------------------------------------ */
 /* The library                                                         */
 /* ------------------------------------------------------------------ */
@@ -148,7 +165,7 @@ export function listTracks(cls = activeTrackClass(), mode = 'race') {
    * the builder could not open. The showpiece is the yard with a drift
    * course and a tandem, the map the front door flies.
    */
-  const stock = (mode === 'freestyle' ? shippedMaps : presetsForClass(cls))
+  const stock = (mode === 'freestyle' ? shippedMaps : [...presetsForClass(cls), ...shippedTracks.filter((d) => d.trackClass === cls)])
     .map((d) => summarise(d, true));
   return [...mine, ...stock];
 }
@@ -172,7 +189,7 @@ export function loadTrack(id) {
      * by running the board's own validate.js over all six. The copy keeps
      * the credit, because saving a layout does not make it yours.
      */
-    const stock = presetById(id) ?? shippedMap(id);
+    const stock = presetById(id) ?? shippedMap(id) ?? shippedTrack(id);
     return stock ? normalize(duplicateTrack(stock, stock.name)) : null;
   }
   return normalize(lib[id]);
@@ -190,7 +207,7 @@ export function deleteTrack(id) {
 }
 
 export function trackExists(id) {
-  return Boolean(readLibrary()[id]) || isPresetId(id) || Boolean(shippedMap(id));
+  return Boolean(readLibrary()[id]) || isPresetId(id) || Boolean(shippedMap(id)) || Boolean(shippedTrack(id));
 }
 
 /*
@@ -215,7 +232,7 @@ export function keepDisplaced(doc) {
   }
   const lib = readLibrary();
   if (!lib[doc.id]) {
-    if (isPresetId(doc.id) || shippedMap(doc.id)) {
+    if (isPresetId(doc.id) || shippedMap(doc.id) || shippedTrack(doc.id)) {
       return { ok: true, saved: null };
     }
     return saveTrack(doc) ? { ok: true, saved: doc } : { ok: false, saved: null };

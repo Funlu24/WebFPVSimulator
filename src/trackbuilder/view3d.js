@@ -79,6 +79,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { scaleOf } from './scale.js';
 import { ELEMENTS, KIND, FRAME_TUBE_OD, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD, GATE_OPENING_DEFAULT, envelopeFor } from './racegow.js';
 import {
@@ -152,6 +153,9 @@ const COL = {
   envelope: 0x1f3345,
   envelopeLine: 0x5f86a8,
   arrow: 0xf7e8cd,
+  /* A field's gates are not coloured by what they are, as RaceGOW's are: the pane in an opening is pale, and
+   * the gate the lap starts on is green on every canvas. */
+  pane: 0xcfe3f5,
   measure: { legal: 0x7dffb4, close: 0xffb347, near: 0xffb347, plain: 0xdfe9f2 },
 };
 
@@ -424,14 +428,10 @@ const MICRO_LABEL_K = 0.14;
 /* The camera's vertical field of view, named once because framing a track needs it. */
 const FOV_DEG = 52;
 
-/* The camera a whoop room opens at, three quarters from the front left, and the
- * one Plan looks down from (as near straight down as applyCamera allows). */
-const ROOM_ANGLE = { theta: (3 * Math.PI) / 4, phi: 0.85 };
+/* The camera Plan looks down from, as near straight down as applyCamera allows. The angle a room opens at is
+ * scale.js's, because a hall and a field are not looked at the same way. */
 const PLAN_PHI = Math.PI / 2 - 0.02;
 
-/* How much fatter than the pipe the stand-in a whoop gate is picked by is, in
- * metres across: 26.7 mm of PVC becomes about 8 cm to hit. */
-const PICK_PIPE = 0.055;
 const LINE_GRAB_PX = 9;
 
 /* How far from a finger's contact point, in pixels, a press still takes a thing: the
@@ -1005,13 +1005,14 @@ export class View3D {
   frameTrack() {
     const doc = this.host.doc;
     const f = doc.field;
-    if (trackClassOf(doc) !== 'micro' || docModeOf(doc) === 'freestyle') {
+    if (docModeOf(doc) === 'freestyle') {
       this.focusDoc({ x: f.width / 2, y: f.depth / 2, z: 0 }, Math.max(f.width, f.depth) * 1.15);
       return;
     }
     if (!this.angled) {
-      this.orbit.theta = ROOM_ANGLE.theta;
-      this.orbit.phi = ROOM_ANGLE.phi;
+      const angle = scaleOf(this.host.doc).angle;
+      this.orbit.theta = angle.theta;
+      this.orbit.phi = angle.phi;
       this.angled = true;
     }
     const rect = this.canvas.getBoundingClientRect();
@@ -1068,7 +1069,8 @@ export class View3D {
       });
     };
     let lo = this.nearestRadius(0.6);
-    let hi = 60;
+    /* Sixty metres is further than a hall's camera ever needs to be; a field's track is as big as it is. */
+    let hi = scaleOf(this.host.doc).metric ? 600 : 60;
     for (let i = 0; i < 28; i += 1) {
       const mid = (lo + hi) / 2;
       if (fits(mid)) {
@@ -1166,7 +1168,7 @@ export class View3D {
    * of an orbit would take a number that is being typed into out from under
    * the typing. */
   cameraMoved() {
-    if (!this.host.isWhoopRace()) {
+    if (!this.host.buildsIn3D()) {
       this.dirty = true;
     }
     this.host.requestDraw();
@@ -1250,7 +1252,7 @@ export class View3D {
       o.theta = Math.PI / 2;
       o.phi = PLAN_PHI;
     } else if (this.isPlan()) {
-      const back = this.roomAngle ?? ROOM_ANGLE;
+      const back = this.roomAngle ?? scaleOf(this.host.doc).angle;
       o.theta = back.theta;
       o.phi = back.phi;
     }
@@ -1789,16 +1791,17 @@ export class View3D {
     this.groups = new Map();
     this.panes = new Map();
     this.bubbleSpecs = [];
-    const whoop = this.host.isWhoopRace();
-    this.startGateId = whoop ? this.startGateOf(doc) : null;
+    /* A track, of either class, is built in the room; RaceGOW's envelope is the whoop's own. */
+    const room = this.host.buildsIn3D();
+    this.startGateId = room ? this.startGateOf(doc) : null;
     /* The one pass in focus (passes.js), which is what the arrows, the
      * squares round a pole, the racing line and the tags are quiet about. */
-    this.focusSeq = whoop ? (this.host.focusedPass?.() ?? null) : null;
+    this.focusSeq = room ? (this.host.focusedPass?.() ?? null) : null;
     this.drawnSquares = new Set();
 
     g.add(this.fieldGround(doc));
     g.add(this.gridLines(doc));
-    if (whoop) {
+    if (this.host.isWhoopRace()) {
       g.add(this.buildEnvelope(doc));
     }
 
@@ -1814,7 +1817,7 @@ export class View3D {
         this.groups.set(el.id, node);
       }
     }
-    if (whoop) {
+    if (room) {
       this.buildTagSpecs(doc);
     }
     /* The ring at the foot of the one piece that is selected, or of a whole group that is: a cube has it at
@@ -1823,7 +1826,7 @@ export class View3D {
     const ringFor = picked.length === 1
       ? elementById(doc, picked[0])
       : (picked.length > 1 ? this.wholeGroupAnchor(doc, picked) : null);
-    if (whoop && ringFor && kindOf(ringFor) === KIND.APERTURE) {
+    if (room && ringFor && kindOf(ringFor) === KIND.APERTURE) {
       this.buildRing(this.groups.get(ringFor.id), ringFor);
     }
 
@@ -1844,7 +1847,7 @@ export class View3D {
     this.root.add(g);
     this.faceSig = this.signature();
     this.applyHover();
-    if (whoop) {
+    if (room) {
       this.syncBubbles();
     }
   }
@@ -1862,22 +1865,36 @@ export class View3D {
 
   gridLines(doc) {
     const pts = [];
+    const major = [];
     const s = gridStep(doc.field);
-    for (let x = 0; x <= doc.field.width + 1e-6; x += s) {
-      pts.push(x, 0, 0, x, doc.field.depth, 0);
+    /* A field's major lines are every five metres, as a plan is ruled, and are the brighter ones: a metre grid is
+     * a wash from the height that shows a whole track, and the fives are what a pilot counts off. */
+    const every = scaleOf(doc).metric && s === doc.field.gridSize ? 5 : 0;
+    const isMajor = (i) => every > 0 && i % every === 0;
+    for (let i = 0, x = 0; x <= doc.field.width + 1e-6; i += 1, x = i * s) {
+      (isMajor(i) ? major : pts).push(x, 0, 0, x, doc.field.depth, 0);
     }
-    for (let y = 0; y <= doc.field.depth + 1e-6; y += s) {
-      pts.push(0, y, 0, doc.field.width, y, 0);
+    for (let i = 0, y = 0; y <= doc.field.depth + 1e-6; i += 1, y = i * s) {
+      (isMajor(i) ? major : pts).push(0, y, 0, doc.field.width, y, 0);
     }
     /* The field boundary, brighter than the grid, so the edge of the legal
      * ground is visible in the preview as well as on the plan. */
     const w = doc.field.width;
     const d = doc.field.depth;
-    pts.push(0, 0, 0.01, w, 0, 0.01, w, 0, 0.01, w, d, 0.01,
-      w, d, 0.01, 0, d, 0.01, 0, d, 0.01, 0, 0, 0.01);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: COL.grid }));
+    const edge = [0, 0, 0.01, w, 0, 0.01, w, 0, 0.01, w, d, 0.01,
+      w, d, 0.01, 0, d, 0.01, 0, d, 0.01, 0, 0, 0.01];
+    const group = new THREE.Group();
+    const lines = (list, color) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(list, 3));
+      group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color })));
+    };
+    lines(pts, COL.grid);
+    if (major.length) {
+      lines(major, COL.gridMajor);
+    }
+    lines(edge, major.length ? COL.frame : COL.grid);
+    return group;
   }
 
   /*
@@ -2018,7 +2035,7 @@ export class View3D {
     /* Same switch as the plan. Off, the opening is bare and the line
      * through it can be read. The sequence list still has the numbers. */
     const showLabels = this.host.labelsVisible !== false;
-    const whoop = this.host.isWhoopRace();
+    const room = this.host.buildsIn3D();
     for (const n of showLabels ? numbers : []) {
       /* A waypoint has no number: see gateNumbers in sequence.js. */
       if (n.number == null) {
@@ -2026,8 +2043,8 @@ export class View3D {
       }
       /* On a whoop canvas the numbers are HTML over the canvas, one tag for each
        * opening that is flown and not one for each pass: see buildTagSpecs. A
-       * ghost, which has no numbers, and every other canvas keep the sprite. */
-      if (whoop && el.id !== '__ghost') {
+       * ghost, which has no numbers, and a map keep the sprite. */
+      if (room && el.id !== '__ghost') {
         continue;
       }
       let label = String(n.number);
@@ -2144,14 +2161,15 @@ export class View3D {
         frame.add(bar);
         drawn += 1;
         /*
-         * A FATTER PIPE, NEVER DRAWN, on a whoop canvas. 26.7 mm of PVC is two or
+         * A FATTER PIPE, NEVER DRAWN, on a track. 26.7 mm of PVC is two or
          * three pixels from any distance that shows a whole track, and from the
          * plan camera a standing gate is nothing but that top pipe: without a
          * stand-in a gate can hardly be hit there at all. It answers for the same
          * side, and is not weak, so it beats the racing line.
          */
-        if (this.host.isWhoopRace()) {
-          const grab = new THREE.Mesh(new THREE.BoxGeometry(w + PICK_PIPE, h + PICK_PIPE, tube + PICK_PIPE), this.grabMaterial());
+        if (this.host.buildsIn3D()) {
+          const fat = scaleOf(this.host.doc).pickPipe;
+          const grab = new THREE.Mesh(new THREE.BoxGeometry(w + fat, h + fat, tube + fat), this.grabMaterial());
           grab.position.set(x, y, 0);
           grab.rotation.z = angle ?? 0;
           grab.visible = false;
@@ -2169,24 +2187,29 @@ export class View3D {
        * same pane. It is WEAK: the racing line runs through the middle of
        * it, and a grab on the line there is a grab on the line.
        *
-       * ON A WHOOP CANVAS EVERY OPENING GETS ONE, not only the gaps. The pipe
-       * of a RaceGOW gate is 26.7 mm, which from any distance that shows a
-       * whole track is three or four pixels to hit, so a gate could hardly be
-       * picked in the room; with a pane, the middle of a gate picks it. Only
-       * there: on a 60 m field the panes are 1.5 m squares that would take the
-       * click from a flag or a pole seen through a gate.
+       * ON A TRACK EVERY OPENING GETS ONE, not only the gaps. The pipe of a
+       * RaceGOW gate is 26.7 mm and of a MultiGP one 33, which from any distance
+       * that shows a whole track is three or four pixels to hit, so a gate could
+       * hardly be picked in the room; with a pane, the middle of a gate picks it.
+       * It is weak, so a flag or a pole seen through a gate takes the click, as the
+       * line does.
        */
-      if (!drawn || trackClassOf(this.host.doc) === 'micro') {
+      if (!drawn || this.host.buildsIn3D()) {
         /*
-         * And on a whoop canvas that pane is SEEN: a translucent one in
-         * RaceGOW's own colour for the kind of gate it is, so a gate reads
-         * from across the hall and its middle is something to hit. Lit a
-         * little more under the pointer and more again when selected.
+         * And that pane is SEEN: a translucent one, in RaceGOW's own colour
+         * for the kind of gate it is in a hall, and in a pale one on a field,
+         * where the gates are not coloured by what they are. A gate reads from
+         * across the course and its middle is something to hit. Lit a little
+         * more under the pointer and more again when selected. A field's is
+         * fainter, because its gates are bigger and the pane is more of the
+         * picture.
          */
-        const seen = this.host.isWhoopRace();
+        const seen = this.host.buildsIn3D();
+        const field = !this.host.isWhoopRace();
+        const base = selected ? (field ? 0.2 : 0.42) : (field ? 0.09 : 0.28);
         const pane = new THREE.MeshBasicMaterial(seen
           ? {
-            color: this.paneColour(el), transparent: true, opacity: selected ? 0.42 : 0.28, side: THREE.DoubleSide, depthWrite: false,
+            color: this.paneColour(el), transparent: true, opacity: base, side: THREE.DoubleSide, depthWrite: false,
           }
           : { transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
         const pick = new THREE.Mesh(shaped ? this.paneGeometry(shape, ap.clearW, ap.clearH) : new THREE.PlaneGeometry(ap.clearW, ap.clearH), pane);
@@ -2195,7 +2218,7 @@ export class View3D {
         frame.add(pick);
         if (seen && el.id !== '__ghost') {
           const list = this.panes.get(el.id) ?? [];
-          list.push({ mat: pane, base: selected ? 0.42 : 0.28 });
+          list.push({ mat: pane, base });
           this.panes.set(el.id, list);
         }
       }
@@ -2303,12 +2326,12 @@ export class View3D {
      * either side of the opening, so which way the gate is flown is legible
      * from any angle without reading a number.
      *
-     * ON A WHOOP CANVAS a piece flown more than once is drawn once for each way
+     * ON A TRACK a piece flown more than once is drawn once for each way
      * it is flown, not once for each pass (buildLanes), and the panes belong to
-     * the one pass in focus. Every other canvas draws the panes of every pass,
+     * the one pass in focus. A map's furniture draws the panes of every pass,
      * exactly as it always did.
      */
-    if (this.host.isWhoopRace()) {
+    if (this.host.buildsIn3D()) {
       this.buildLanes(group, el, levels, numbers, f, quat, selected);
     } else {
       for (const n of numbers) {
@@ -2724,12 +2747,12 @@ export class View3D {
         dims.clearW / 2, dims.clearH / 2, 0, -dims.clearW / 2, dims.clearH / 2, 0,
       ];
       /*
-       * ON A WHOOP CANVAS a pole flown six times was six squares of coloured glass
+       * ON A TRACK a pole flown six times was six squares of coloured glass
        * round one pipe. A square is an outline, drawn once where two passes share
        * one, and the glass (green in, red out) belongs to the pass in focus. Every
        * other canvas draws the glass of every pass, as it always did.
        */
-      const whoop = this.host.isWhoopRace();
+      const whoop = this.host.buildsIn3D();
       const inFocus = whoop && this.focusSeq === seq.id;
       if (whoop) {
         const at = `${Math.round((el.position.x + cx) * 100)},${Math.round((el.position.y + cy) * 100)},${Math.round(f.normal.x * 10)},${Math.round(f.normal.y * 10)}`;
@@ -2815,7 +2838,7 @@ export class View3D {
      * distance and six turns round one pole are six hairlines on the same spot;
      * a thick bright stretch is the one that is being looked at.
      */
-    const stretch = this.focusSeq != null && this.host.isWhoopRace() ? stretchOf(path, this.focusSeq) : null;
+    const stretch = this.focusSeq != null && this.host.buildsIn3D() ? stretchOf(path, this.focusSeq) : null;
     if (!stretch) {
       return new THREE.Line(geo, new THREE.LineBasicMaterial({ color: COL.path }));
     }
@@ -2844,7 +2867,7 @@ export class View3D {
     }
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const tube = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, Math.max(12, points.length * 2), 0.015, 6, false),
+      new THREE.TubeGeometry(curve, Math.max(12, points.length * 2), scaleOf(this.host.doc).metric ? 0.06 : 0.015, 6, false),
       new THREE.MeshBasicMaterial({ color: 0xfff1b8 }),
     );
     tube.renderOrder = 10;
@@ -2920,7 +2943,7 @@ export class View3D {
     if (el.id === this.startGateId || (el.id === '__ghost' && !this.startGateOf(this.host.doc))) {
       return RACEGOW_HEX.green;
     }
-    return RACEGOW_HEX[RACEGOW_TYPE_COLOUR[el.type] ?? 'yellow'];
+    return this.host.isWhoopRace() ? RACEGOW_HEX[RACEGOW_TYPE_COLOUR[el.type] ?? 'yellow'] : COL.pane;
   }
 
   /*
@@ -2976,15 +2999,16 @@ export class View3D {
     if (!group) {
       return;
     }
-    const r = aperturesOf(el)[0].clearW / 2 + 0.32;
+    const ring = scaleOf(this.host.doc).ring;
+    const r = aperturesOf(el)[0].clearW / 2 + ring.pad;
     const line = new THREE.Mesh(
-      new THREE.RingGeometry(r - 0.012, r + 0.012, 64),
+      new THREE.RingGeometry(r - ring.line, r + ring.line, 64),
       new THREE.MeshBasicMaterial({ color: COL.frameSel, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }),
     );
     line.position.z = 0.006;
     group.add(line);
     const grab = new THREE.Mesh(
-      new THREE.RingGeometry(r - 0.07, r + 0.07, 64),
+      new THREE.RingGeometry(r - ring.grab, r + ring.grab, 64),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }),
     );
     grab.position.z = 0.008;
@@ -2992,10 +3016,10 @@ export class View3D {
     this.register(grab, el);
     group.add(grab);
     const knob = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05, 14, 10),
+      new THREE.SphereGeometry(ring.knob, 14, 10),
       new THREE.MeshBasicMaterial({ color: COL.frameSel }),
     );
-    knob.position.set(Math.cos(el.yaw) * r, Math.sin(el.yaw) * r, 0.05);
+    knob.position.set(Math.cos(el.yaw) * r, Math.sin(el.yaw) * r, ring.knob);
     knob.userData.ring = true;
     this.register(knob, el);
     group.add(knob);
@@ -3247,9 +3271,11 @@ export class View3D {
       const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: COL.frameSel, depthTest: false }));
       line.renderOrder = 12;
       group.add(line);
+      /* A dot is a hall's size in a hall and a field's on a field: three times as big. */
+      const dotR = scaleOf(this.host.doc).metric ? 0.12 : 0.035;
       for (const end of [r.a, r.b]) {
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), new THREE.MeshBasicMaterial({ color: COL.frameSel, depthTest: false }));
-        dot.position.set(end.x, end.y, 0.035);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(dotR, 10, 8), new THREE.MeshBasicMaterial({ color: COL.frameSel, depthTest: false }));
+        dot.position.set(end.x, end.y, dotR);
         dot.renderOrder = 12;
         group.add(dot);
       }
@@ -3283,14 +3309,15 @@ export class View3D {
     }
     if (list.length && this.root) {
       const group = new THREE.Group();
+      const guideR = scaleOf(this.host.doc).metric ? 0.1 : 0.03;
       for (const g of list) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute([g.a.x, g.a.y, 0.012, g.b.x, g.b.y, 0.012], 3));
         const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: COL.measure.legal, transparent: true, opacity: 0.85, depthTest: false }));
         line.renderOrder = 12;
         group.add(line);
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), new THREE.MeshBasicMaterial({ color: COL.measure.legal, depthTest: false }));
-        dot.position.set(g.b.x, g.b.y, 0.03);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(guideR, 10, 8), new THREE.MeshBasicMaterial({ color: COL.measure.legal, depthTest: false }));
+        dot.position.set(g.b.x, g.b.y, guideR);
         dot.renderOrder = 12;
         group.add(dot);
       }
@@ -3606,8 +3633,8 @@ export class View3D {
   /* Put every piece of HTML where the frame just drawn says it goes. One
    * projection set up once, then one point at a time. */
   placeOverlay() {
-    const whoop = this.host.isWhoopRace();
-    this.overlay.hidden = !whoop || !this.enabled;
+    const room = this.host.buildsIn3D();
+    this.overlay.hidden = !room || !this.enabled;
     if (this.overlay.hidden) {
       return;
     }

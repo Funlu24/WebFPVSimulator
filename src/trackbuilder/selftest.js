@@ -63,8 +63,10 @@ import {
 import { CUBE_FACES, cubeFaces } from './cube.js';
 import {
   canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addLoop,
+  wallOf, wallFlagsOf, setWallFlags, wallIsWoven, setWallWeave, reverseWall, flyOver,
   WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE,
 } from './parts.js';
+import { scaleOf, say } from './scale.js';
 import { envelopeFor, GATE_OPENING_DEFAULT, PIPE_OD as CUBE_PIPE_OD, inches } from './racegow.js';
 import {
   RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE,
@@ -9870,6 +9872,122 @@ function suiteFiveInchParts() {
       && near(w2[1].position.y, 30 + 2 * r));
     check('a pass that is not an aperture, or not there, is not looped',
       addLoop(left, 'sq-nope', 'right') === null && addLoop(left, m2.waypoints[0] && left.sequence[1].id, 'right') === null);
+  }
+
+  /* ---- editing a wall once it is laid ---- */
+  {
+    const doc = createTrack('wall edit');
+    const lead = place(doc, 'gate', 28, 38);
+    addToSequence(doc, lead.id, 0);
+    const ids = placeWall(doc, { x: 19, y: 38 }, { x: 13, y: 38 }, { flags: 'first', dims: wideDims() });
+    const wall = wallOf(doc, ids[1]);
+    check('a gate of a wall knows the wall: the bays in the order they were dragged, and the way they run',
+      wall && wall.ids.join() === ids.join() && near(wall.dir.x, -1) && near(wall.dir.y, 0));
+    check('a gate on its own, and a group that is not a row of plain bays, are no wall',
+      wallOf(doc, lead.id) === null && wallOf(doc, 'el-nope') === null
+      && (() => { const d = createTrack('c'); const a = place(d, 'gate', 5, 5); const b = place(d, 'gate', 7, 5); a.group = b.group = 'grp-9'; return wallOf(d, a.id) === null; })());
+    check('the flag a wall was laid with is on its first end, and is read back as that', wallFlagsOf(doc, ids[0]) === 'first');
+    check('flags can be moved to the last end, to both and to neither, each change one that leaves the bays where they are',
+      setWallFlags(doc, ids[0], 'last') && wallFlagsOf(doc, ids[0]) === 'last'
+      && elementById(doc, ids[0]).type === 'gate' && elementById(doc, ids[2]).type === 'flaggedGate'
+      && setWallFlags(doc, ids[0], 'both') && wallFlagsOf(doc, ids[0]) === 'both'
+      && setWallFlags(doc, ids[0], 'none') && wallFlagsOf(doc, ids[0]) === 'none'
+      && !setWallFlags(doc, ids[0], 'none') && !setWallFlags(doc, ids[0], 'sideways'));
+    const outerOf = (id) => elementById(doc, id).flagSide;
+    setWallFlags(doc, ids[0], 'both');
+    const w0 = apertureFrame(elementById(doc, ids[0]).yaw, 0).widthAxis;
+    const side0 = outerOf(ids[0]);
+    const flagX = (side0 === 'right' ? 1 : -1) * w0.x;
+    check('the pennant is on the upright that is away from the rest of the wall, at the first end',
+      flagX < 0 === (wall.dir.x < 0 ? false : true) || Math.abs(flagX) > 0.99, `${side0} ${flagX}`);
+    check('a wall laid as a weave is read as one, and can be flown straight through and back again',
+      wallIsWoven(doc, ids[0]) && setWallWeave(doc, ids[0], false) && !wallIsWoven(doc, ids[0])
+      && wallOf(doc, ids[0]) && doc.sequence.filter((q) => ids.includes(q.elementId)).every((q) => q.entry === doc.sequence.find((r) => r.elementId === ids[0]).entry)
+      && setWallWeave(doc, ids[0], true) && wallIsWoven(doc, ids[0]) && !setWallWeave(doc, ids[0], true));
+    const before = doc.sequence.filter((q) => ids.includes(q.elementId)).map((q) => q.entry);
+    check('reversing a wall turns every pass round and twice is as it was',
+      reverseWall(doc, ids[0]) && doc.sequence.filter((q) => ids.includes(q.elementId)).every((q, i) => q.entry === -before[i])
+      && reverseWall(doc, ids[0]) && doc.sequence.filter((q) => ids.includes(q.elementId)).every((q, i) => q.entry === before[i]));
+    check('and what is set by hand is not turned back by the auto rule: the passes are overridden',
+      doc.sequence.filter((q) => ids.includes(q.elementId)).every((q) => q.overridden));
+  }
+
+  /* ---- flying over a hurdle that has no waypoint ---- */
+  {
+    const doc = createTrack('over');
+    const start = place(doc, 'gate', 15, 14);
+    addToSequence(doc, start.id, 0);
+    const { id } = placeHurdle(doc, { x: 22, y: 23 }, { join: false });
+    const n = doc.elements.length;
+    const r = flyOver(doc, id);
+    const wp = elementById(doc, r.waypointId);
+    check('flying over a hurdle adds a waypoint a metre over its top, in the order, and takes nothing from the board',
+      doc.elements.length === n + 1 && near(wp.position.z, 2) && near(wp.position.x, 22) && doc.sequence.at(-1).elementId === wp.id
+      && elementById(doc, id).type === 'barrier');
+    check('and what is not a barrier is not flown over', flyOver(doc, start.id) === null && flyOver(doc, 'el-nope') === null);
+  }
+
+  /* ---- the room's numbers, and a field's magnets, ruler and frame ---- */
+  {
+    const field = createTrack('field');
+    const hall = createTrack('hall', 'micro');
+    check('a hall has its numbers and a field has its own, and a field is metric',
+      scaleOf(hall).metric === false && scaleOf(field).metric === true && near(scaleOf(hall).magnet, 3 * 0.0254)
+      && scaleOf(field).magnet > scaleOf(hall).magnet * 3);
+    check('a length is said in metres on a field, trimmed, and in inches with millimetres in a hall',
+      say(field, 2.5) === '2.5 m' && say(field, 100) === '100 m' && say(field, 12.34) === '12.3 m' && say(field, 3) === '3 m'
+      && /^30 in \(762 mm\)$/.test(say(hall, 0.762)));
+    /* The frame. */
+    const empty = frameRectFor(field);
+    check('an empty five inch canvas frames the whole field, as it always did',
+      empty.minX === 0 && empty.maxX === field.field.width && empty.minY === 0 && empty.maxY === field.field.depth);
+    place(field, 'gate', 10, 10);
+    place(field, 'gate', 30, 20);
+    const framed = frameRectFor(field);
+    check('a five inch track is framed by its own extent and a margin, not by the field',
+      framed.maxX - framed.minX < field.field.width && framed.minX < 10 && framed.maxX > 30 && framed.minY < 10 && framed.maxY > 20);
+    check('and a whoop canvas is framed as it was', (() => {
+      const w = createTrack('w', 'micro');
+      place(w, 'gate', 4, 5);
+      const r = frameRectFor(w);
+      return r.maxX - r.minX >= 1.6 - 1e-9 && r.maxX - r.minX < 3;
+    })());
+
+    /* Magnets: a gate beside a gate. */
+    const doc = createTrack('magnets');
+    const a = place(doc, 'gate', 20, 20, { yaw: Math.PI / 2 });
+    a.yawOverridden = true;
+    const pitch = wallPitchFor(a.dims, 'full');
+    const near1 = magnetFor(doc, { x: 20 + pitch + 0.2, y: 20.1 }, { type: 'gate' });
+    check('a gate put near a bay\'s width along another is taken to exactly there, with a line to show what it landed beside',
+      near1.snapped && near(near1.x, 20 + pitch, 1e-5) && near(near1.y, 20, 1e-5) && near1.guides[0].kind === 'pair'
+      && near1.guides[0].text === say(doc, pitch), JSON.stringify(near1));
+    check('the other side of it is a slot too', (() => { const m = magnetFor(doc, { x: 20 - pitch, y: 20.05 }, { type: 'gate' }); return m.snapped && near(m.x, 20 - pitch, 1e-5); })());
+    check('a flag has no slot beside a gate: only a gate is a bay',
+      magnetFor(doc, { x: 20 + pitch + 0.05, y: 20.4 }, { type: 'flag' }).guides.every((g) => g.kind !== 'pair'));
+    check('far from everything it is left where it was, and Alt turns it all off',
+      !magnetFor(doc, { x: 40, y: 5 }, { type: 'gate' }).snapped && !magnetFor(doc, { x: 20 + pitch + 0.1, y: 20.1 }, { type: 'gate', off: true }).snapped);
+    const inLine = magnetFor(doc, { x: 9, y: 20.2 }, { type: 'gate' });
+    check('and in line with another piece on one axis it is squared up to it, with a guide for the line',
+      inLine.snapped && near(inLine.y, 20) && near(inLine.x, 9) && inLine.guides[0].kind === 'align-y');
+    check('a piece being moved is not a thing to land beside', !magnetFor(doc, { x: 20 + pitch + 0.1, y: 20.1 }, { type: 'gate', ignore: [a.id] }).snapped);
+    check('a spot outside the field is never offered', !magnetFor(doc, { x: -0.1, y: 20.1 }, { type: 'flag' }).snapped || magnetFor(doc, { x: -0.1, y: 20.1 }, { type: 'flag' }).x >= 0);
+    /* A gate put exactly there faces the way its neighbour faces and keeps it. */
+    const plan = placementFor(doc, { x: 20 + pitch, y: 20 }, 'gate');
+    check('a gate put exactly beside another faces the way that one does and is pinned there',
+      near(plan.yaw, a.yaw) && plan.pin === true);
+    check('a gate put anywhere else is placed as it always was: unpinned, along the line',
+      placementFor(doc, { x: 33, y: 5 }, 'gate').pin === false);
+    /* The distances and the ruler, in metres. */
+    const m = measuresFor(doc, { x: 20 + pitch, y: 20, z: 1 }, null);
+    check('the distances beside a gate on a field are in metres and toned as a plain distance',
+      m.length > 0 && m.every((x) => /\sm$/.test(x.text) && x.tone === 'plain'), JSON.stringify(m.map((x) => x.text)));
+    const rp = rulerPoint(doc, { x: 20.3, y: 20.2 });
+    check('the ruler takes the middle of a piece within its reach, and a metre grid point otherwise',
+      rp.on === a.id && near(rp.x, 20) && rulerPoint(doc, { x: 33.3, y: 7.4 }).on === null && near(rulerPoint(doc, { x: 33.3, y: 7.4 }).x, 33));
+    check('and reads a length in metres on a field and in inches in a hall',
+      rulerReading({ x: 0, y: 0 }, { x: 3, y: 4 }, doc).text === '5 m' && /in \(/.test(rulerReading({ x: 0, y: 0 }, { x: 0.762, y: 0 }, hall).text)
+      && /in \(/.test(rulerReading({ x: 0, y: 0 }, { x: 0.762, y: 0 }).text));
   }
 
   /* ---- publishing, and what existed before ---- */

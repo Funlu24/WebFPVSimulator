@@ -1853,6 +1853,11 @@
       .tb-card-warn { margin: 0; padding: var(--s2) var(--s3); border-left: 3px solid var(--bad); background: var(--lift); font-size: var(--t-small); line-height: 1.45; }
       .tb-card-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
       .tb-card-actions .tb-btn { flex: 1 1 22%; padding: 5px 6px; }
+      /* A card's choices: the flags, how a wall is flown, how wide a bay is. A label, and a row of words one of which is lit. */
+      .tb-card-choice { display: flex; flex-direction: column; gap: 3px; margin: 0 0 var(--s3); }
+      .tb-card-choice-label { font-size: var(--t-micro); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+      .tb-seg.tb-seg-card { margin: 0; gap: 3px; flex-wrap: nowrap; }
+      .tb-seg-card .tb-seg-btn { min-width: 0; min-height: 24px; padding: 2px 6px; white-space: nowrap; }
       .tb-card-fig { display: flex; flex-direction: column; gap: 3px; }
       .tb-card-fig > span { font-size: var(--t-micro); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
 

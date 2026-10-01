@@ -24,8 +24,9 @@
 
 import {
   ELEMENTS, KIND, MICRO_PALETTE_ORDER, trackClassOf, docModeOf, defaultDims, defaultPitch, defaultZ, apertureShapeOf,
-  FRAME_TUBE_OD,
+  FRAME_TUBE_OD, wallPitchFor,
 } from './elements.js';
+import { say, scaleOf } from './scale.js';
 import {
   envelopeFor, GATE_OPENING_DEFAULT, GATE_SPACING_MIN, GATE_SPACING_MAX, GATE_SPACING_NOMINAL, inches,
   POLE_FROM_GATE_MIN, POLE_FROM_POLE_MIN, PIPE_OD,
@@ -45,11 +46,6 @@ import { HEX_HEIGHT_RATIO } from '../props/aperture.js';
 /* ------------------------------------------------------------------ */
 /* What is in frame                                                    */
 /* ------------------------------------------------------------------ */
-
-/* Metres of floor round a whoop track, and the least it is ever framed
- * across, so a single gate is a gate and not a wall filling the screen. */
-const FRAME_MARGIN = 0.45;
-const FRAME_LEAST = 1.6;
 
 /*
  * How far an element reaches from its own middle across the floor: half its
@@ -87,26 +83,37 @@ export function trackBounds(doc) {
  * frame is the track's own extent and a margin; on an empty one it is the
  * RaceGOW envelope at the default gate, centred on the middle of the room
  * because that is where the game puts a track (trackdoc.js maps a position to
- * the world from the field's middle). Every other canvas still frames its
- * whole field, as it always did: a sixty metre course is not a room.
+ * the world from the field's middle).
+ *
+ * A five inch track is the same story at a larger size: a forty metre course
+ * on a sixty metre field is two thirds of it, and the pilot is working on the
+ * course. So it is framed the same way, by its own extent and a margin (the
+ * margins are scale.js's), and an empty canvas, which has no extent, frames the
+ * whole field as it always did. A map frames its plot.
  */
 export function frameRectFor(doc) {
   const f = doc.field;
-  if (trackClassOf(doc) !== 'micro' || docModeOf(doc) === 'freestyle') {
-    return { minX: 0, minY: 0, maxX: f.width, maxY: f.depth };
+  const whole = { minX: 0, minY: 0, maxX: f.width, maxY: f.depth };
+  if (docModeOf(doc) === 'freestyle') {
+    return whole;
   }
+  const micro = trackClassOf(doc) === 'micro';
   let box = trackBounds(doc);
   if (!box) {
+    if (!micro) {
+      return whole;
+    }
     const env = envelopeFor(GATE_OPENING_DEFAULT);
     box = {
       minX: f.width / 2 - env.width / 2, maxX: f.width / 2 + env.width / 2,
       minY: f.depth / 2 - env.depth / 2, maxY: f.depth / 2 + env.depth / 2,
     };
   }
+  const { margin, least } = scaleOf(doc).frame;
   const cx = (box.minX + box.maxX) / 2;
   const cy = (box.minY + box.maxY) / 2;
-  const halfX = Math.max((box.maxX - box.minX) / 2 + FRAME_MARGIN, FRAME_LEAST / 2);
-  const halfY = Math.max((box.maxY - box.minY) / 2 + FRAME_MARGIN, FRAME_LEAST / 2);
+  const halfX = Math.max((box.maxX - box.minX) / 2 + margin, least / 2);
+  const halfY = Math.max((box.maxY - box.minY) / 2 + margin, least / 2);
   return { minX: cx - halfX, maxX: cx + halfX, minY: cy - halfY, maxY: cy + halfY };
 }
 
@@ -181,7 +188,7 @@ export function snapTurn(doc, el, raw, free) {
  * gate turns along the line at any angle. Nothing here reads or writes the
  * document, so it can be asked where a gate WOULD go, for a ghost.
  */
-export function placementFor(doc, position, type) {
+export function placementFor(doc, position, type, opts = {}) {
   const plain = { yaw: defaultYawFor(doc, position), pin: false, pinPrevious: null };
   const def = ELEMENTS[type];
   /* A table, a chair or a banner stands at a quarter turn: the one nearest the
@@ -189,13 +196,26 @@ export function placementFor(doc, position, type) {
   if (isRoomType(type)) {
     return { ...plain, yaw: nearestQuarter(plain.yaw) };
   }
-  if (!def || def.kind !== KIND.APERTURE || trackClassOf(doc) !== 'micro' || docModeOf(doc) === 'freestyle') {
+  const field = def && def.kind === KIND.APERTURE && trackClassOf(doc) !== 'micro' && docModeOf(doc) !== 'freestyle';
+  if (field) {
+    /* On a field a gate put exactly where the magnet takes it, a bay's width along another's, is a bay of a row: it
+     * faces the way that one faces, and keeps it. Anywhere else it turns along the line at any angle, as it always
+     * did, unless the author asked for square gates (opts.square): then it takes the quarter turn nearest the line,
+     * and keeps it, which is what a plan is drawn with and what the whoop's rule below is. */
+    const beside = fieldBesideYaw(doc, position, type);
+    if (beside != null) {
+      return { yaw: beside, pin: true, pinPrevious: null };
+    }
+    if (!opts.square) {
+      return plain;
+    }
+  } else if (!def || def.kind !== KIND.APERTURE || trackClassOf(doc) !== 'micro' || docModeOf(doc) === 'freestyle') {
     return plain;
   }
   /* A gate put exactly where a side by side pair goes faces the way the gate it
    * stands beside faces, and keeps it: a pair is two gates in one plane, and the
    * line from the last gate has nothing to say about that. */
-  const beside = sideBySideYaw(doc, position);
+  const beside = field ? null : sideBySideYaw(doc, position);
   if (beside != null) {
     const lastGate = lastAnchorOf(doc);
     const prev0 = lastGate && lastGate.seq ? elementById(doc, lastGate.seq.elementId) : null;
@@ -210,13 +230,15 @@ export function placementFor(doc, position, type) {
     };
   }
   const last = lastAnchorOf(doc);
+  /* The first gate faces east. On a hall it is left to take its heading from the second; on a field that keeps gates
+   * square it is kept east, which is where a plan's first gate faces, and turning it is one press of Turn. */
   if (!last) {
-    return { yaw: 0, pin: false, pinPrevious: null };
+    return { yaw: 0, pin: Boolean(field), pinPrevious: null };
   }
   const dx = position.x - last.pos.x;
   const dy = position.y - last.pos.y;
   if (Math.abs(dx) + Math.abs(dy) < 1e-6) {
-    return { yaw: 0, pin: false, pinPrevious: null };
+    return { yaw: 0, pin: Boolean(field), pinPrevious: null };
   }
   const yaw = nearestQuarter(Math.atan2(dy, dx));
   let pinPrevious = null;
@@ -237,9 +259,9 @@ export function placementFor(doc, position, type) {
  * and the sequence it feeds are one function the self test can run in Node.
  * Returns the element, already in the document.
  */
-export function placeOnTrack(doc, type, position) {
+export function placeOnTrack(doc, type, position, opts = {}) {
   const def = ELEMENTS[type];
-  const plan = placementFor(doc, position, type);
+  const plan = placementFor(doc, position, type, opts);
   const el = createElement(doc, type, position, def.kind === KIND.ANNOTATION ? 0 : plan.yaw);
   if (plan.pin) {
     el.yawOverridden = true;
@@ -536,6 +558,10 @@ export function moveToPlace(doc, seqId, place) {
 export function measuresFor(doc, centre, id = null) {
   const out = [];
   const seen = new Set();
+  const room = scaleOf(doc);
+  /* A hall has a rule about how far apart two gates are, and a distance is toned by it. A field has none, so a
+   * distance there is only a distance, and is shown for the pieces a pilot is likely to be reading it off. */
+  const toned = (d) => (room.metric ? 'plain' : spacingTone(d));
   const add = (at) => {
     if (!at) {
       return;
@@ -546,7 +572,7 @@ export function measuresFor(doc, centre, id = null) {
       return;
     }
     seen.add(key);
-    out.push({ from: { x: at.x, y: at.y, z: at.z }, to: { ...centre }, d, tone: spacingTone(d), text: inches(d) });
+    out.push({ from: { x: at.x, y: at.y, z: at.z }, to: { ...centre }, d, tone: toned(d), text: say(doc, d) });
   };
   if (id == null) {
     const last = lastAnchorOf(doc);
@@ -564,7 +590,9 @@ export function measuresFor(doc, centre, id = null) {
       }
     });
   }
-  const reach = GATE_SPACING_MAX * 1.25;
+  /* Beside it too: what is near enough to be nearly a pair on a hall, and near enough to be its neighbour in a
+   * wall on a field. */
+  const reach = room.metric ? NEIGHBOUR_REACH : GATE_SPACING_MAX * 1.25;
   for (const el of doc.elements) {
     if (el.id === id || kindOf(el) !== KIND.APERTURE) {
       continue;
@@ -578,6 +606,10 @@ export function measuresFor(doc, centre, id = null) {
   }
   return out;
 }
+
+/* How near another gate is to be listed beside the one being placed, on a field, in metres: a wall's bay and its
+ * neighbour are about this far apart, and a gate further off is not a neighbour. */
+const NEIGHBOUR_REACH = 4;
 
 /* ------------------------------------------------------------------ */
 /* Magnets                                                             */
@@ -613,6 +645,32 @@ export function sideBySideYaw(doc, at, ignore = []) {
     for (const sign of [-1, 1]) {
       const cx = g.position.x + sign * w.x * GATE_SPACING_NOMINAL;
       const cy = g.position.y + sign * w.y * GATE_SPACING_NOMINAL;
+      if (Math.hypot(cx - at.x, cy - at.y) < 0.002) {
+        return g.yaw;
+      }
+    }
+  }
+  return null;
+}
+
+/*
+ * THE FACING OF A GATE PUT EXACTLY BESIDE ANOTHER ON A FIELD, or null: a bay's
+ * width along the other's width, either side, which is where fieldMagnetFor takes
+ * a gate to. A millimetre is the width of "exactly".
+ */
+function fieldBesideYaw(doc, at, type, ignore = []) {
+  const skip = new Set(ignore);
+  const cls = trackClassOf(doc);
+  const mine = defaultDims(type, cls);
+  for (const g of doc.elements) {
+    if (skip.has(g.id) || kindOf(g) !== KIND.APERTURE) {
+      continue;
+    }
+    const w = widthAxisOf(g);
+    const reach = (wallPitchFor(g.dims, cls) + wallPitchFor(mine, cls)) / 2;
+    for (const sign of [-1, 1]) {
+      const cx = g.position.x + sign * w.x * reach;
+      const cy = g.position.y + sign * w.y * reach;
       if (Math.hypot(cx - at.x, cy - at.y) < 0.002) {
         return g.yaw;
       }
@@ -680,6 +738,9 @@ export function magnetFor(doc, at, opts = {}) {
   const none = { x: at.x, y: at.y, snapped: false, guides: [] };
   if (opts.off) {
     return none;
+  }
+  if (trackClassOf(doc) !== 'micro') {
+    return fieldMagnetFor(doc, at, opts);
   }
   const radius = opts.radius ?? MAGNET_RADIUS;
   const skip = new Set(opts.ignore ?? []);
@@ -749,6 +810,93 @@ export function magnetFor(doc, at, opts = {}) {
     }
     const c = { x: ax ? ax.e.position.x : at.x, y: ay ? ay.e.position.y : at.y };
     if (!legalSpot(doc, kind, c, skip)) {
+      continue;
+    }
+    const guides = [];
+    if (ax) {
+      guides.push({ kind: 'align-x', a: { x: ax.e.position.x, y: ax.e.position.y }, b: { x: c.x, y: c.y }, text: '' });
+    }
+    if (ay) {
+      guides.push({ kind: 'align-y', a: { x: ay.e.position.x, y: ay.e.position.y }, b: { x: c.x, y: c.y }, text: '' });
+    }
+    return { x: c.x, y: c.y, snapped: true, guides };
+  }
+  return none;
+}
+
+/*
+ * THE MAGNETS ON A FIVE INCH FIELD. Two, because a field has two things a hand
+ * cannot place by eye: a gate beside another, and a piece in line with another.
+ *
+ *   beside   a gate lands a bay's width from another gate along that gate's
+ *            width, either side, which is where a wall's uprights meet (the
+ *            world's pitch, wallPitchFor: the document draws the pair with a
+ *            hand's breadth between them and the game builds them touching);
+ *   in line  the same x, or the same y, as another piece, which is how a
+ *            course is squared up, and how the three flagged gates down one
+ *            side of a plan are put on one line.
+ *
+ * A slot beats a line, the nearest wins. A field has no rule about how far
+ * apart two gates are (that is a hall's, racegow.js), so the only spot refused
+ * is one outside the field. The answer has the shape the hall's has, so both
+ * views and both classes call one function.
+ */
+function fieldMagnetFor(doc, at, opts) {
+  const none = { x: at.x, y: at.y, snapped: false, guides: [] };
+  const radius = opts.radius ?? scaleOf(doc).magnet;
+  const skip = new Set(opts.ignore ?? []);
+  const cls = trackClassOf(doc);
+  const mover = ELEMENTS[opts.type];
+  const f = doc.field;
+  const inside = (c) => c.x >= 0 && c.y >= 0 && c.x <= f.width && c.y <= f.depth;
+  const others = doc.elements.filter((e) => !skip.has(e.id));
+
+  let best = null;
+  if (mover && mover.kind === KIND.APERTURE) {
+    const mine = opts.dims ?? defaultDims(opts.type, cls);
+    for (const g of others) {
+      if (kindOf(g) !== KIND.APERTURE) {
+        continue;
+      }
+      const w = widthAxisOf(g);
+      /* Half of each bay, so two bays of different widths still meet on one upright. */
+      const reach = (wallPitchFor(g.dims, cls) + wallPitchFor(mine, cls)) / 2;
+      for (const sign of [-1, 1]) {
+        const c = { x: g.position.x + sign * w.x * reach, y: g.position.y + sign * w.y * reach };
+        const d = Math.hypot(c.x - at.x, c.y - at.y);
+        if (d <= radius && inside(c) && (!best || d < best.d)) {
+          best = { d, from: g.position, c, text: say(doc, reach) };
+        }
+      }
+    }
+  }
+  if (best) {
+    return {
+      x: best.c.x,
+      y: best.c.y,
+      snapped: true,
+      guides: [{ kind: 'pair', a: { x: best.from.x, y: best.from.y }, b: { x: best.c.x, y: best.c.y }, text: best.text }],
+    };
+  }
+
+  let bx = null;
+  let by = null;
+  for (const e of others) {
+    const dx = Math.abs(e.position.x - at.x);
+    const dy = Math.abs(e.position.y - at.y);
+    if (dx <= radius && (!bx || dx < bx.d)) {
+      bx = { d: dx, e };
+    }
+    if (dy <= radius && (!by || dy < by.d)) {
+      by = { d: dy, e };
+    }
+  }
+  for (const [ax, ay] of [[bx, by], [bx, null], [null, by]]) {
+    if (!ax && !ay) {
+      continue;
+    }
+    const c = { x: ax ? ax.e.position.x : at.x, y: ay ? ay.e.position.y : at.y };
+    if (!inside(c)) {
       continue;
     }
     const guides = [];
@@ -867,6 +1015,7 @@ export function rulerPoint(doc, at, opts = {}) {
   if (opts.off) {
     return { x: at.x, y: at.y, on: null };
   }
+  const reachOfRuler = scaleOf(doc).rulerReach;
   let best = null;
   for (const el of doc.elements) {
     const kind = kindOf(el);
@@ -874,7 +1023,7 @@ export function rulerPoint(doc, at, opts = {}) {
       continue;
     }
     const d = Math.hypot(el.position.x - at.x, el.position.y - at.y);
-    if (d <= RULER_REACH && (!best || d < best.d)) {
+    if (d <= reachOfRuler && (!best || d < best.d)) {
       best = { d, el };
     }
   }
@@ -886,10 +1035,11 @@ export function rulerPoint(doc, at, opts = {}) {
 }
 
 /* What the ruler says between two floor points: the distance and its words, in
- * inches with the millimetres beside them. */
-export function rulerReading(a, b) {
+ * inches with the millimetres beside them on a hall, in metres on a field (the
+ * document says which). */
+export function rulerReading(a, b, doc = null) {
   const d = Math.hypot(b.x - a.x, b.y - a.y);
-  return { d, text: inches(d) };
+  return { d, text: doc ? say(doc, d) : inches(d) };
 }
 
 /* ------------------------------------------------------------------ */

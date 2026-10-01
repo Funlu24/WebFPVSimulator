@@ -251,11 +251,34 @@ export function collectWarnings(doc, path) {
 
   const limit = doc.settings.minCurveRadius;
   let worst = null;
+  /*
+   * THE LINE BETWEEN TWO BAYS OF ONE WALL is supposed to be tight too: the bays are a gate's width apart, and
+   * a lap that goes through one and then another turns round between them, in the room the quad has on the far
+   * side of the wall, which the line does not model. A pilot flies a slalom of bays 2 m apart, and calling it
+   * something nothing flies is the warning being wrong. The line before the wall and after it is still held to
+   * the radius.
+   */
+  const field = trackClassOf(doc) !== 'micro';
+  const sameWall = (seg) => {
+    if (!field) {
+      return false;
+    }
+    const a = seg.a.elementId ? elementById(doc, seg.a.elementId) : null;
+    const b = seg.b.elementId ? elementById(doc, seg.b.elementId) : null;
+    return Boolean(a && b && a.group && a.group === b.group && a.id !== b.id);
+  };
+  /*
+   * AND A LOOP ROUND A POST. It is three waypoints a quarter turn apart on a circle about a metre across (parts.js
+   * addLoop), which is what the author asked for by asking for a loop, and a circle that size is tighter than the
+   * 2.5 m the line between obstacles is held to. They are found by the name addLoop gives them, so a loop an author
+   * has renamed is held to the radius again, which is the safe way for a name to be wrong.
+   */
+  const loopKnot = (k) => k.elementId && /^Loop (left|right)$/.test(elementById(doc, k.elementId)?.name ?? '');
   for (const smp of path.samples) {
     const seg = path.segments[smp.segment];
     /* A wrap around a stacked gate is supposed to be tight. The warning is
      * for the lap between obstacles, not for the figure itself. */
-    if (seg && (seg.a.role === 'wrap' || seg.b.role === 'wrap')) {
+    if (seg && (seg.a.role === 'wrap' || seg.b.role === 'wrap' || sameWall(seg) || (field && (loopKnot(seg.a) || loopKnot(seg.b))))) {
       continue;
     }
     if (smp.radius < limit && (worst == null || smp.radius < worst.radius)) {

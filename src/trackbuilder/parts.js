@@ -30,13 +30,14 @@
  */
 
 import {
-  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, defaultDims, trackClassOf, wallPitchFor,
+  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, isPlain,
+  trackClassOf, wallPitchFor,
 } from './elements.js';
 import {
-  apertureCenter, aperturesOf, createElement, elementById, kindOf, newGroupId, setSideBuilt,
+  apertureCenter, aperturesOf, createElement, elementById, elementNormal, kindOf, newGroupId, setSideBuilt,
 } from './model.js';
 import { addToSequence } from './sequence.js';
-import { applyAutoFaces, lastAnchorOf } from './faces.js';
+import { applyAutoFaces, defaultYawFor, lastAnchorOf } from './faces.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
 
 /* ------------------------------------------------------------------ */
@@ -154,9 +155,10 @@ const unit = (v) => {
  * the gates that are placed are one answer.
  *
  * THE COUNT is the drag's length over the pitch, two at the least and six at the
- * most, and three for a click, which is the wall a person means by clicking. The
- * bays start AT the first point and run towards the second, so a wall is dragged
- * from its first post to its last, which is how a plan dimensions it.
+ * most, and three for a click, which is the wall a person means by clicking, laid
+ * east and west across the spot. A dragged wall starts AT the first point and runs
+ * towards the second, so a wall is dragged from its first post to its last, which
+ * is how a plan dimensions it.
  *
  * THE DIRECTION is the drag's, put on the nearest fifteen degrees, so a wall is
  * square to the compass when the drag is nearly so.
@@ -177,16 +179,21 @@ export function wallPlan(doc, a, b, opts = {}) {
   const len = Math.hypot(dx, dy);
   let dir = { x: 1, y: 0 };
   if (len > 1e-6) {
-    const step = Math.PI / 12;
+    const step = opts.square ? Math.PI / 2 : Math.PI / 12;
     const snapped = Math.round(Math.atan2(dy, dx) / step) * step;
     dir = opts.free ? unit({ x: dx, y: dy }) : { x: Math.cos(snapped), y: Math.sin(snapped) };
   }
-  const count = len < pitch * 0.5
+  const click = len < pitch * 0.5;
+  const count = click
     ? WALL_DEFAULT
     : Math.max(WALL_MIN, Math.min(WALL_MAX, Math.round(len / pitch)));
+  /* A click is the middle of the wall; a drag is where it begins. */
+  const start = click
+    ? { x: a.x - dir.x * pitch * count * 0.5, y: a.y - dir.y * pitch * count * 0.5 }
+    : { x: a.x, y: a.y };
   const centre = {
-    x: a.x + dir.x * pitch * count * 0.5,
-    y: a.y + dir.y * pitch * count * 0.5,
+    x: start.x + dir.x * pitch * count * 0.5,
+    y: start.y + dir.y * pitch * count * 0.5,
   };
   const n1 = { x: -dir.y, y: dir.x };
   const n2 = { x: dir.y, y: -dir.x };
@@ -198,20 +205,42 @@ export function wallPlan(doc, a, b, opts = {}) {
     const d2 = n2.x * h.x + n2.y * h.y;
     if (Math.abs(d1 - d2) > 1e-9) {
       across = d1 > d2 ? n1 : n2;
+    } else {
+      /* The wall is straight on from the last place the course was, so the line to it says nothing about which way
+       * to go through it. The way the course LEFT that place does: it went round, and comes at the wall from the side
+       * it left towards, so the first bay is flown the other way. */
+      const out = exitOf(doc, last);
+      const side = out ? out.x * n1.x + out.y * n1.y : 0;
+      if (Math.abs(side) > 0.2) {
+        across = side > 0 ? n2 : n1;
+      }
     }
   }
   const yaw = wrapAngle(Math.atan2(across.y, across.x));
   const items = [];
   for (let i = 0; i < count; i += 1) {
     items.push({
-      x: a.x + dir.x * pitch * (i + 0.5),
-      y: a.y + dir.y * pitch * (i + 0.5),
+      x: start.x + dir.x * pitch * (i + 0.5),
+      y: start.y + dir.y * pitch * (i + 0.5),
       yaw,
     });
   }
   return {
     count, dir, pitch, yaw, items,
   };
+}
+
+/* The way the course leaves an anchor on the ground, as a unit vector, or null when it leaves it no way in particular
+ * (a marker, a waypoint, the start pads): a gate leaves the way it is flown. */
+function exitOf(doc, anchor) {
+  const seq = anchor && anchor.seq;
+  const el = seq ? elementById(doc, seq.elementId) : null;
+  if (!el || kindOf(el) !== KIND.APERTURE || !seq.entry) {
+    return null;
+  }
+  const n = elementNormal(el);
+  const d = unit({ x: n.x * seq.entry, y: n.y * seq.entry });
+  return Math.hypot(n.x, n.y) > 1e-6 ? d : null;
 }
 
 /* The width axis of a gate, the way apertureFrame says it: the way its uprights are apart. */
@@ -298,6 +327,172 @@ export function wallBays(doc, id) {
   return [...bays].sort((p, q) => (p.position.x * w.x + p.position.y * w.y) - (q.position.x * w.x + q.position.y * w.y));
 }
 
+/*
+ * WHAT A GATE IS A BAY OF. A wall is gates in one group in the plain dress, laid
+ * by placeWall, so a group of two or more is one: { ids, dir } with the bays in the
+ * order they were dragged out (which is the order of the document, and the order
+ * they were first flown in), and `dir` the unit step from one to the next. Null for
+ * a gate that is on its own, for anything that is not a gate, and for a group that
+ * is not a row of plain bays (a cube is a group too, and is not a wall).
+ */
+export function wallOf(doc, id) {
+  const el = elementById(doc, id);
+  if (!el || !el.group) {
+    return null;
+  }
+  const bays = doc.elements.filter((e) => e.group === el.group);
+  if (bays.length < 2 || !bays.every((b) => kindOf(b) === KIND.APERTURE && isPlain(b))) {
+    return null;
+  }
+  const dir = unit({
+    x: bays[bays.length - 1].position.x - bays[0].position.x,
+    y: bays[bays.length - 1].position.y - bays[0].position.y,
+  });
+  return { ids: bays.map((b) => b.id), dir };
+}
+
+/* The side an end bay's outer upright is on, as the bay's own left or right: away from the rest of the wall. */
+function outerSide(doc, wall, end) {
+  const el = elementById(doc, wall.ids[end === 'first' ? 0 : wall.ids.length - 1]);
+  const w = widthOf(el);
+  const out = end === 'first' ? -1 : 1;
+  return w.x * wall.dir.x * out + w.y * wall.dir.y * out > 0 ? 'right' : 'left';
+}
+
+/* Which ends of a wall carry a pennant on their outer upright: 'none', 'first', 'last' or 'both', the first being the
+ * bay it was dragged from. */
+export function wallFlagsOf(doc, id) {
+  const wall = wallOf(doc, id);
+  if (!wall) {
+    return 'none';
+  }
+  const has = (end) => {
+    const el = elementById(doc, wall.ids[end === 'first' ? 0 : wall.ids.length - 1]);
+    return canFlag(el) && flagsOf(el) === outerSide(doc, wall, end) && el.type !== 'gate';
+  };
+  const a = has('first');
+  const b = has('last');
+  return a && b ? 'both' : (a ? 'first' : (b ? 'last' : 'none'));
+}
+
+/* Put the pennants on a wall's ends as chosen. Returns true when the document changed. */
+export function setWallFlags(doc, id, which) {
+  const wall = wallOf(doc, id);
+  if (!wall || !['none', 'first', 'last', 'both'].includes(which)) {
+    return false;
+  }
+  let changed = false;
+  for (const end of ['first', 'last']) {
+    const bay = elementById(doc, wall.ids[end === 'first' ? 0 : wall.ids.length - 1]);
+    const wanted = which === 'both' || which === end;
+    changed = setFlags(doc, bay.id, wanted ? outerSide(doc, wall, end) : 'none') || changed;
+  }
+  return changed;
+}
+
+/*
+ * THE SIZE OF A WALL'S BAYS, as a gate preset (Standard, Wide, Championship, Trainer): every bay takes the
+ * preset's opening, and the bays are laid again at the new pitch from where the first bay's outer upright
+ * stood, so the wall grows or shrinks along itself and its first post does not move. Returns true when it
+ * changed. A preset this canvas does not offer is refused.
+ */
+export function setWallSize(doc, id, presetId) {
+  const wall = wallOf(doc, id);
+  const preset = GATE_PRESETS.find((p) => p.id === presetId && p.id !== 'whoop');
+  if (!wall || !preset) {
+    return false;
+  }
+  const bays = wall.ids.map((bay) => elementById(doc, bay));
+  const before = wallPitchFor(bays[0].dims, trackClassOf(doc));
+  const next = { ...bays[0].dims };
+  applyGatePreset(next, preset);
+  if (Math.abs(next.clearW - bays[0].dims.clearW) < 1e-9 && Math.abs(next.clearH - bays[0].dims.clearH) < 1e-9) {
+    return false;
+  }
+  const pitch = wallPitchFor(next, trackClassOf(doc));
+  const start = {
+    x: bays[0].position.x - wall.dir.x * before * 0.5,
+    y: bays[0].position.y - wall.dir.y * before * 0.5,
+  };
+  bays.forEach((bay, i) => {
+    Object.assign(bay.dims, { clearW: next.clearW, clearH: next.clearH, levelPitch: next.levelPitch });
+    bay.position.x = Math.round((start.x + wall.dir.x * pitch * (i + 0.5)) * 1e6) / 1e6;
+    bay.position.y = Math.round((start.y + wall.dir.y * pitch * (i + 0.5)) * 1e6) / 1e6;
+  });
+  applyAutoFaces(doc);
+  return true;
+}
+
+/* Which preset a wall's bays are, or '' when they are a size of their own. */
+export function wallSizeOf(doc, id) {
+  const wall = wallOf(doc, id);
+  if (!wall) {
+    return '';
+  }
+  const d = elementById(doc, wall.ids[0]).dims;
+  const hit = GATE_PRESETS.find((p) => p.id !== 'whoop' && Math.abs(p.clearW - d.clearW) < 1e-6);
+  return hit ? hit.id : '';
+}
+
+/* The passes of a wall's bays, in the order they are flown. */
+function wallPasses(doc, wall) {
+  const own = new Set(wall.ids);
+  return doc.sequence.filter((q) => own.has(q.elementId));
+}
+
+/* Whether a wall is flown as a slalom: the passes alternate, every bay the other way to the one before. */
+export function wallIsWoven(doc, id) {
+  const wall = wallOf(doc, id);
+  if (!wall) {
+    return false;
+  }
+  const flown = wallPasses(doc, wall);
+  return flown.length > 1 && flown.every((q, i) => i === 0 || q.entry !== flown[i - 1].entry);
+}
+
+/* A wall flown as a slalom or straight through, the first bay flown the way it was. Returns true when it changed. */
+export function setWallWeave(doc, id, woven) {
+  const wall = wallOf(doc, id);
+  if (!wall) {
+    return false;
+  }
+  const flown = wallPasses(doc, wall);
+  if (!flown.length) {
+    return false;
+  }
+  const first = flown[0].entry === -1 ? -1 : 1;
+  let changed = false;
+  flown.forEach((q, i) => {
+    const wanted = woven && i % 2 === 1 ? -first : first;
+    if (q.entry !== wanted || !q.overridden) {
+      q.entry = wanted;
+      q.overridden = true;
+      changed = true;
+    }
+  });
+  if (changed) {
+    applyAutoFaces(doc);
+  }
+  return changed;
+}
+
+/* Fly a wall the other way: every pass through its bays turned round. */
+export function reverseWall(doc, id) {
+  const wall = wallOf(doc, id);
+  if (!wall) {
+    return false;
+  }
+  const flown = wallPasses(doc, wall);
+  for (const q of flown) {
+    q.entry = q.entry === -1 ? 1 : -1;
+    q.overridden = true;
+  }
+  if (flown.length) {
+    applyAutoFaces(doc);
+  }
+  return flown.length > 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* The hurdle                                                          */
 /* ------------------------------------------------------------------ */
@@ -314,6 +509,17 @@ export const HURDLE = {
 };
 export const HURDLE_LINE_OVER = 1;
 
+/* The way a hurdle is turned at a spot: the board runs across the course, a quarter turn from the way it goes,
+ * on the nearest fifteen degrees. */
+function hurdleYaw(doc, at, square = false) {
+  const last = lastAnchorOf(doc);
+  const course = last
+    ? Math.atan2(at.y - last.pos.y, at.x - last.pos.x)
+    : 0;
+  const step = square ? Math.PI / 2 : Math.PI / 12;
+  return wrapAngle(Math.round((course + Math.PI / 2) / step) * step);
+}
+
 /*
  * PUT A HURDLE DOWN: the board, turned square to the line the course is on, with a
  * flag at each end, and a waypoint over the middle of it in the flying order, which
@@ -323,13 +529,7 @@ export const HURDLE_LINE_OVER = 1;
  * joined to the order (opts.join false).
  */
 export function placeHurdle(doc, at, opts = {}) {
-  const last = lastAnchorOf(doc);
-  const course = last
-    ? Math.atan2(at.y - last.pos.y, at.x - last.pos.x)
-    : 0;
-  const step = Math.PI / 12;
-  /* The board runs across the course: a quarter turn from the way it goes. */
-  const yaw = wrapAngle(Math.round((course + Math.PI / 2) / step) * step);
+  const yaw = hurdleYaw(doc, at, opts.square);
   const el = createElement(doc, 'barrier', { x: at.x, y: at.y, z: 0 }, yaw);
   Object.assign(el.dims, { width: HURDLE.width, depth: HURDLE.depth, height: HURDLE.height });
   el.flagSide = opts.flags ?? 'both';
@@ -347,6 +547,27 @@ export function placeHurdle(doc, at, opts = {}) {
     applyAutoFaces(doc);
   }
   return { id: el.id, waypointId };
+}
+
+/*
+ * FLY OVER A HURDLE: a waypoint a metre above the middle of its board, added to the end of the flying
+ * order, which is what makes a lap go over a hurdle that was put down without one (or that was put down
+ * and then had its waypoint taken out of the order). Returns { id, waypointId }, or null when the piece
+ * is not a barrier. A hurdle that is already flown over at its middle is flown over again, as a gate
+ * flown twice is.
+ */
+export function flyOver(doc, id) {
+  const el = elementById(doc, id);
+  if (!el || el.type !== 'barrier') {
+    return null;
+  }
+  const top = (el.dims.height ?? HURDLE.height) + HURDLE_LINE_OVER;
+  const wp = createElement(doc, 'waypoint', { x: el.position.x, y: el.position.y, z: top }, 0);
+  wp.name = 'Over the hurdle';
+  doc.elements.push(wp);
+  addToSequence(doc, wp.id, 0);
+  applyAutoFaces(doc);
+  return { id: el.id, waypointId: wp.id };
 }
 
 /* ------------------------------------------------------------------ */
@@ -368,10 +589,15 @@ export const UP_GATE = { pitch: Math.PI / 4, sillH: 1.5 };
  * that is followed by a loop over the top and a descent would be turned into a dive gate. The
  * heading is the course's. Returns the element.
  */
-export function placeUpGate(doc, at) {
+export function placeUpGate(doc, at, opts = {}) {
   const el = createElement(doc, 'diveGate', { x: at.x, y: at.y, z: 0 }, 0);
   el.pitch = UP_GATE.pitch;
   el.dims.sillH = UP_GATE.sillH;
+  if (opts.square) {
+    /* Square to the field, and kept so: the face rule would turn it along the line again at the next edit. */
+    el.yaw = Math.round(wrapAngle(Math.round(defaultYawFor(doc, at) / (Math.PI / 2)) * (Math.PI / 2)) * 1e6) / 1e6;
+    el.yawOverridden = true;
+  }
   doc.elements.push(el);
   const seq = addToSequence(doc, el.id, 0);
   if (seq) {
@@ -449,4 +675,65 @@ export function addLoop(doc, seqId, side, opts = {}) {
   }
   applyAutoFaces(doc);
   return { waypoints: ids, pass };
+}
+
+/* ------------------------------------------------------------------ */
+/* What a tool would put down                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * THE GHOST OF A PIECE MADE OF PIECES: the elements the tool would write if it were
+ * pressed now, as the room draws a ghost, each { type, position, yaw, props }, where
+ * `props` are the fields the placed element carries beyond what its type gives it.
+ * A wall's `a` and `b` are its two ends as for wallPlan; the others stand at `a`.
+ * Pure, and built from the same functions the pieces are placed with, so what is
+ * shown is what is laid.
+ */
+export function partGhosts(doc, type, a, b = a, opts = {}) {
+  const cls = trackClassOf(doc);
+  if (type === 'wall') {
+    const dims = { ...(opts.dims ?? defaultDims('gate', cls)), levels: 1 };
+    const plan = wallPlan(doc, a, b, { ...opts, dims });
+    return {
+      plan,
+      items: plan.items.map((it, i) => {
+        const wide = Math.hypot(plan.dir.x, plan.dir.y) > 0 ? plan.dir : { x: 1, y: 0 };
+        /* The upright a bay shares with the one before it is built once, so the ghost leaves it out too. */
+        const f = apertureFrame(it.yaw, 0);
+        const toward = f.widthAxis.x * -wide.x + f.widthAxis.y * -wide.y > 0 ? 'right' : 'left';
+        return {
+          type: 'gate',
+          position: { x: it.x, y: it.y, z: 0 },
+          yaw: it.yaw,
+          props: { dims, pitch: 0, style: 'plain', unbuiltSides: i > 0 ? [toward] : [] },
+        };
+      }),
+    };
+  }
+  if (type === 'hurdle') {
+    return {
+      plan: null,
+      items: [{
+        type: 'barrier',
+        position: { x: a.x, y: a.y, z: 0 },
+        yaw: hurdleYaw(doc, a, opts.square),
+        props: {
+          dims: { ...defaultDims('barrier', cls), width: HURDLE.width, depth: HURDLE.depth, height: HURDLE.height, flagH: HURDLE.flagH },
+          flagSide: 'both',
+        },
+      }],
+    };
+  }
+  if (type === 'upGate') {
+    return {
+      plan: null,
+      items: [{
+        type: 'diveGate',
+        position: { x: a.x, y: a.y, z: 0 },
+        yaw: opts.square ? wrapAngle(Math.round(defaultYawFor(doc, a) / (Math.PI / 2)) * (Math.PI / 2)) : defaultYawFor(doc, a),
+        props: { dims: { ...defaultDims('diveGate', cls), sillH: UP_GATE.sillH }, pitch: UP_GATE.pitch },
+      }],
+    };
+  }
+  return { plan: null, items: [] };
 }

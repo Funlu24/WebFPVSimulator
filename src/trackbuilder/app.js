@@ -30,7 +30,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, elementByKey, labelOf, toolByKey, trackClassOf, docModeOf } from './elements.js';
+import { ELEMENTS, KIND, elementByKey, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf } from './elements.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
@@ -48,6 +48,10 @@ import {
   QUARTER, copyElements, magnetFor, moveToPlace, nearestQuarter, placeCube, placementFor, placeOnTrack, placeRow as layRow,
   replaceWith, rowPlan, turnGroups, turnStepFor,
 } from './snap.js';
+import {
+  addLoop, flyOver, placeHurdle, placeUpGate, placeWall, reverseWall, setFlags, setWallFlags, setWallSize, setWallWeave, wallOf,
+} from './parts.js';
+import { scaleOf } from './scale.js';
 import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
 /* Nothing built stands in the air: see seat.js. A map is seated with what is
@@ -66,8 +70,11 @@ import {
 } from './roadtool.js';
 import {
   animationFilename, deleteTrack, downloadBlob, downloadTrack, keepDisplaced, listTracks, pictureFilename,
-  loadTrack, makeAutosaver, readAutosave, readFileText, saveTrack, shipMaps, trackExists, writeAutosave,
+  loadTrack, makeAutosaver, readAutosave, readFileText, saveTrack, shipMaps, shipTracks, trackExists, writeAutosave,
 } from './storage.js';
+/* The five inch tracks that ship with the builder (scripts/mission-preset.js writes them): handed to storage.js
+ * from here for the same reason the maps are. */
+import { FIVE_INCH_PRESETS } from './presets5.js';
 /* The yard Your map flies while the map seat is empty, and the showpiece
  * built on it, the yard with a drift course and a tandem, listed in Load
  * as the maps' shipped rows. Plain documents with no imports but each
@@ -116,6 +123,7 @@ import {
 } from '../share/listing.js';
 
 shipMaps([starterMap(), showpieceMap()]);
+shipTracks(FIVE_INCH_PRESETS);
 
 /*
  * WHICH KIND OF TRACK A NEW ONE IS.
@@ -198,6 +206,29 @@ function rememberCanvas(canvas) {
     localStorage.setItem(CANVAS_KEY, canvas);
   } catch (e) {
     /* Private mode. The builder opens on the seated aircraft's canvas. */
+  }
+}
+
+/*
+ * SQUARE: whether a new gate on a five inch track faces along the nearest axis and stays there, which is how a plan
+ * is drawn, or along the line at any angle, which is how the builder always laid them. A way of working and not a
+ * fact about the track, so it is the author's own and is kept in the builder's key, not in the document.
+ */
+export const SQUARE_KEY = 'webfpv.trackbuilder.square.v1';
+
+function readSquare() {
+  try {
+    return localStorage.getItem(SQUARE_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function rememberSquare(on) {
+  try {
+    localStorage.setItem(SQUARE_KEY, on ? '1' : '0');
+  } catch (e) {
+    /* Private mode. It is as it was for this visit. */
   }
 }
 
@@ -429,6 +460,10 @@ export class App {
     this.armedLogoId = '';
     this.mode = '2d';
     this.pathVisible = false;
+    /* FIVE INCH TRACK ONLY. New gates square to the field: see SQUARE_KEY. */
+    this.square = readSquare();
+    /* FIVE INCH TRACK ONLY. Whether the card's loop comes back through its gate. */
+    this.loopBack = true;
     /* WHOOP CANVAS ONLY. Whether a drag that starts on the racing line bends
      * it into a waypoint. Off by default: the line runs through the middle of
      * every gate, so with it able to take a press, a click in a gate's opening
@@ -479,7 +514,7 @@ export class App {
      * uses it to point at the switch in the bar. See closeModal. */
     this.afterModal = null;
     this.restore();
-    this.pathVisible = this.isWhoopRace();
+    this.pathVisible = this.buildsIn3D();
     /* The palette is the RESTORED document's class, not the default. Panels
      * builds one in its constructor because it must have something before a
      * document exists, and restore() runs after that, so a reopened RaceGOW
@@ -936,7 +971,7 @@ export class App {
    * chosen, and a pass only looked at in passing must not swap what its fields say.
    */
   focusedPass(withHover = true) {
-    if (!this.isWhoopRace()) {
+    if (!this.buildsIn3D()) {
       return null;
     }
     return focusFor(this.doc, {
@@ -987,7 +1022,7 @@ export class App {
    * long as one goes.
    */
   flyPieceAgain(elementId, apertureIndex = 0) {
-    if (!this.isWhoopRace()) {
+    if (!this.buildsIn3D()) {
       return null;
     }
     const el = elementById(this.doc, elementId);
@@ -1016,6 +1051,19 @@ export class App {
     const el = elementById(this.doc, elementId);
     if (!el) {
       return null;
+    }
+    /* A hurdle is not a gate, and nothing scores on it: the lap goes OVER it, which is a waypoint above its middle. */
+    if (el.type === 'barrier' && !this.isWhoopRace()) {
+      if (this.doc.sequence.length >= MAX_PASSES) {
+        this.toast(`A lap of ${MAX_PASSES} passes is as long as this builder will make one.`);
+        return null;
+      }
+      let made = null;
+      this.edit('fly over it', (d) => { made = flyOver(d, elementId); });
+      if (made) {
+        this.setSelection([made.waypointId]);
+      }
+      return made;
     }
     const opening = kindOf(el) === KIND.APERTURE ? apertureAt(this.doc, elementId, point ? point.z : 0) : 0;
     return this.flyPieceAgain(elementId, opening);
@@ -1572,9 +1620,9 @@ export class App {
   }
 
   /*
-   * WHERE A POINT LANDS: on the grid, and on a whoop canvas near what the rules
-   * say a piece should be beside, which `ctx` says what is being put down or
-   * pulled ({ type, ignore }): see magnetFor in snap.js. Alt (`offGrid`) is off
+   * WHERE A POINT LANDS: on the grid, and on a canvas that is built in the room near
+   * what the rules say a piece should be beside, which `ctx` says what is being put
+   * down or pulled ({ type, ignore, dims }): see magnetFor in snap.js. Alt (`offGrid`) is off
    * grid and off magnets. What the magnets found, to be drawn as guides, is
    * `this.guides`, and it is what the last call with a `ctx` found.
    */
@@ -1587,10 +1635,12 @@ export class App {
       const g = this.doc.field.gridSize;
       base = { x: Math.round(world.x / g) * g, y: Math.round(world.y / g) * g, z: 0 };
     }
-    if (!ctx || !this.isWhoopRace()) {
+    if (!ctx || !this.buildsIn3D()) {
       return base;
     }
-    const m = magnetFor(this.doc, base, { type: ctx.type, ignore: ctx.ignore, off: offGrid });
+    const m = magnetFor(this.doc, base, {
+      type: ctx.type, ignore: ctx.ignore, dims: ctx.dims, off: offGrid,
+    });
     this.guides = m.guides;
     return { x: m.x, y: m.y, z: 0 };
   }
@@ -1611,6 +1661,11 @@ export class App {
     }
     if (type === 'cube') {
       this.placeCubeAt(world);
+      return;
+    }
+    /* The five inch canvas's pieces that are made of pieces: each writes ordinary elements (parts.js). */
+    if (isFiveInchPiece(type)) {
+      this.placePart(type, world);
       return;
     }
     const def = ELEMENTS[type];
@@ -1664,7 +1719,7 @@ export class App {
       /* The rule for where it faces, the flying order it joins and the figure
        * a stack is flown in are one function in snap.js, so the self test
        * runs the same code this does. */
-      const element = placeOnTrack(d, type, world);
+      const element = placeOnTrack(d, type, world, { square: this.square && !this.isWhoopRace() });
       /* The logo the Sponsor logos dialog armed this with, if it armed it.
        * createElement has already put the course's first logo on a decal, so
        * this only overrides, and only for a logo that is still on the
@@ -1833,10 +1888,100 @@ export class App {
 
   /* ---------------- the whoop canvas, in the room ---------------- */
 
-  /* A RaceGOW track, as opposed to a five inch one or a map. What the room
-   * builds with, and what the numbers, the ring and the quarter turns are for. */
+  /* A RaceGOW track, as opposed to a five inch one or a map. What the RaceGOW rules, the inches, the build
+   * sheet and the share link are for. */
   isWhoopRace(doc = this.doc) {
     return trackClassOf(doc) === 'micro' && docModeOf(doc) !== 'freestyle';
+  }
+
+  /*
+   * A TRACK, OF EITHER CLASS: the canvases that are built in the room. The room's gestures, its card, its
+   * strip along the foot and the Fly order tool were written for the whoop and are the same for a five inch
+   * track, whose gates are bigger and whose lengths are metres (scale.js); a map is a plot of assets with no
+   * lap in it and keeps the plan and the orbiting preview it has. What is RaceGOW's own, the rule book, the
+   * inches, the build sheet, the link and the picture, stays on isWhoopRace.
+   */
+  buildsIn3D(doc = this.doc) {
+    return docModeOf(doc) !== 'freestyle';
+  }
+
+  /*
+   * A WALL, A HURDLE OR AN UP GATE, from the tool: ordinary elements written by parts.js in one undo step,
+   * and what is selected after is the whole piece (a wall, as a group is). `world` is where the click
+   * landed; a wall dragged out has its own path, placeWallAt.
+   */
+  placePart(type, world) {
+    if (type === 'wall') {
+      this.placeWallAt(world, world);
+      return;
+    }
+    let made = null;
+    if (type === 'hurdle') {
+      this.edit('place a hurdle', (d) => { made = placeHurdle(d, world, { square: this.square }); });
+    } else if (type === 'upGate') {
+      this.edit('place an up gate', (d) => { made = placeUpGate(d, world, { square: this.square }); });
+    }
+    if (made) {
+      this.setSelection([made.id]);
+      /* One of these is what a person lays at a time, and what they do next is read its card: the tool is put
+       * away, which is what shows the card. A gate stays armed, because ten gates are ten clicks. */
+      this.disarm();
+    }
+  }
+
+  /* A wall dragged out from `a` to `b`, or a click, which is a wall of three on the spot. */
+  placeWallAt(a, b, flags = 'none', free = false) {
+    let ids = [];
+    this.edit('place a wall', (d) => { ids = placeWall(d, a, b, { flags, free, square: this.square && !free }); });
+    if (ids.length) {
+      this.setSelection(ids);
+      this.disarm();
+      this.sayOnce('wall flown', 'A wall is gates that share their uprights, in one piece. Each bay is a pass of its own, flown as a weave: the card says which way, and changes it.');
+    }
+  }
+
+  /* The pennants on a piece, as one choice: none, left, right, both or top (a wall: none, first, last, both). */
+  setPieceFlags(id, choice) {
+    const wall = wallOf(this.doc, id);
+    this.edit('set the flags', (d) => {
+      if (wall) {
+        setWallFlags(d, id, choice);
+      } else {
+        setFlags(d, id, choice);
+      }
+    });
+  }
+
+  /* How wide a wall's bays are, as a gate preset: they are laid again at the new pitch from the first post. */
+  setWallBay(id, presetId) {
+    this.edit('resize the wall', (d) => { setWallSize(d, id, presetId); });
+  }
+
+  setWeave(id, woven) {
+    this.edit(woven ? 'weave the wall' : 'fly the wall straight', (d) => { setWallWeave(d, id, woven); });
+  }
+
+  reverseWallOf(id) {
+    this.edit('reverse the wall', (d) => { reverseWall(d, id); });
+  }
+
+  /* Whether a loop comes back through the gate it went round: a way of working, not a fact about the track. */
+  setLoopBack(on) {
+    this.loopBack = Boolean(on);
+    this.panels.renderCard();
+  }
+
+  /* A loop round a post after a pass through a gate: three waypoints, and the second pass when the loop comes
+   * back through (parts.js addLoop). */
+  loopAfter(seqId, side) {
+    let made = null;
+    this.edit(`loop ${side}`, (d) => { made = addLoop(d, seqId, side, { again: this.loopBack }); });
+    if (!made) {
+      this.toast('A loop goes round a post of a gate, after a pass through it.');
+      return null;
+    }
+    this.setSelection(made.waypoints.slice(0, 1));
+    return made;
   }
 
   /*
@@ -1845,7 +1990,7 @@ export class App {
    * one gate further on.
    */
   copySelection() {
-    if (!this.selection.size || !this.isWhoopRace()) {
+    if (!this.selection.size || !this.buildsIn3D()) {
       return;
     }
     let made = [];
@@ -1879,7 +2024,7 @@ export class App {
     return name === 'right' ? right : { x: -right.x, y: -right.y };
   }
 
-  /* A step of an arrow key: one grid square, or six inches with Shift. One
+  /* A step of an arrow key: one grid square, or a small step with Shift (six inches in a hall). One
    * undo step for each press, which is how many presses it was. */
   nudgeSelection(name, big = false) {
     const ids = [...this.selection].filter((id) => {
@@ -1890,7 +2035,7 @@ export class App {
       return;
     }
     const dir = this.arrowAxis(name);
-    const step = big ? 6 * 0.0254 : this.doc.field.gridSize;
+    const step = big ? scaleOf(this.doc).nudgeBig : this.doc.field.gridSize;
     const round6 = (v) => Math.round(v * 1e6) / 1e6;
     this.edit('nudge', (d) => {
       for (const id of ids) {
@@ -2121,6 +2266,25 @@ export class App {
    * the gates and the sequence list stay. The list is where the order is
    * read while the canvas is clear.
    */
+  /* The field's size and grid, which are the inspector's when nothing is selected: it is in the drawer on a track,
+   * so this lets go of the selection and opens the drawer. */
+  openFieldSettings() {
+    this.setSelection([]);
+    this.toggleDrawer(true);
+  }
+
+  /* Square gates, for a five inch track. */
+  toggleSquare() {
+    this.square = !this.square;
+    rememberSquare(this.square);
+    this.updateTopBar();
+    this.clearGhost();
+    this.requestDraw();
+    this.toast(this.square
+      ? 'Square on: new gates, walls, hurdles and up gates face along the nearest axis and stay there. Turn one with Q, E or the Turn field. Alt places one off the grid and unsquared.'
+      : 'Square off: a new gate faces along the line from the one before it, at any angle, and the tool works the heading out again as the track grows.');
+  }
+
   toggleLabels() {
     this.labelsVisible = !this.labelsVisible;
     this.updateTopBar();
@@ -2192,9 +2356,9 @@ export class App {
     this.setMode('2d');
   }
 
-  /* V: on the whoop canvas, room and plan; elsewhere, 2D and 3D as ever. */
+  /* V: on a track, room and plan; on a map, 2D and 3D as ever. */
   toggleView() {
-    if (!this.isWhoopRace()) {
+    if (!this.buildsIn3D()) {
       this.setMode(this.mode === '2d' ? '3d' : '2d');
       return;
     }
@@ -2206,7 +2370,7 @@ export class App {
   }
 
   /*
-   * A WHOOP CANVAS OPENS IN THE ROOM, once the room is ready. Three.js is
+   * A TRACK OPENS IN THE ROOM, of either class, once the room is ready. Three.js is
    * fetched the moment the canvas opens and the plan is what shows until it
    * arrives, so a slow or blocked CDN leaves the tool on the plan it always
    * had (view3d.js says why the preview must never be load bearing). The
@@ -2214,12 +2378,12 @@ export class App {
    * canvas puts back what that canvas has always opened on.
    */
   syncViewToCanvas() {
-    if (this.isWhoopRace()) {
+    if (this.buildsIn3D()) {
       if (this.mode === '2d' && !this.viewChosen && !this.roomPending) {
         this.roomPending = true;
         this.view3d.preload().then((ok) => {
           this.roomPending = false;
-          if (ok && this.isWhoopRace() && this.mode === '2d' && !this.viewChosen) {
+          if (ok && this.buildsIn3D() && this.mode === '2d' && !this.viewChosen) {
             this.autoRoom = true;
             this.setMode('3d');
           }
@@ -2396,7 +2560,7 @@ export class App {
     this.history.reset();
     this.path = null;
     this.warnings = [];
-    this.pathVisible = this.isWhoopRace();
+    this.pathVisible = this.buildsIn3D();
     this.bendLine = false;
     writeAutosave(this.doc);
     this.view2d.frameTrack();
@@ -3844,6 +4008,7 @@ export class App {
     /* The line is derived on every edit now, so this only paints it. */
     this.pathBtn = btn('Show line', () => this.togglePath(), 'Draw the racing line on the canvas');
     this.labelsBtn = btn('Labels', () => this.toggleLabels(), 'Flying-order numbers on the gates. Turn them off to see the racing line.');
+    this.squareBtn = btn('Square', () => this.toggleSquare(), 'New gates face along the nearest axis and stay there, as a plan is drawn. Off, they face along the line from the one before.');
     /* Whoop canvas only: with it off, a click in a gate is a click on the gate. */
     this.bendBtn = btn('Bend line', () => this.toggleBendLine(), 'Drag the racing line to bend it into a waypoint. Off, a click on a gate is a click on the gate.');
 
@@ -3989,6 +4154,7 @@ export class App {
         (this.fitBtn = btn('Fit', () => this.frameAll(), 'Frame the whole field')),
         this.pathBtn,
         this.bendBtn,
+        this.squareBtn,
         this.labelsBtn,
         btn('Sponsor logos', () => this.openLogo(), 'Up to five sponsors\u2019 logos, shared out over the gates, the flags and the grass'),
       ),
@@ -4021,21 +4187,25 @@ export class App {
     this.undoBtn.title = this.history.canUndo() ? `Undo ${this.history.undoLabel()}` : 'Nothing to undo';
     this.redoBtn.title = this.history.canRedo() ? `Redo ${this.history.redoLabel()}` : 'Nothing to redo';
     const whoop = this.isWhoopRace();
+    /* A track, of either class, is built in the room: Room, Plan and 2D. A map has 2D and 3D. */
+    const room = this.buildsIn3D();
     const plan = this.mode === '3d' && this.view3d.isPlan();
     this.mode2d.classList.toggle('on', this.mode === '2d');
     this.mode3d.classList.toggle('on', this.mode === '3d');
-    /* A whoop canvas has Room, Plan and 2D; every other canvas has 2D and 3D. */
-    this.modeRoom.style.display = whoop ? '' : 'none';
-    this.modePlan.style.display = whoop ? '' : 'none';
-    this.mode3d.style.display = whoop ? 'none' : '';
-    this.modeRoom.classList.toggle('on', whoop && this.mode === '3d' && !plan);
-    this.modePlan.classList.toggle('on', whoop && plan);
-    this.bendBtn.style.display = whoop ? '' : 'none';
+    this.modeRoom.style.display = room ? '' : 'none';
+    this.modePlan.style.display = room ? '' : 'none';
+    this.mode3d.style.display = room ? 'none' : '';
+    this.modeRoom.classList.toggle('on', room && this.mode === '3d' && !plan);
+    this.modePlan.classList.toggle('on', room && plan);
+    this.bendBtn.style.display = room ? '' : 'none';
     this.bendBtn.classList.toggle('on', this.bendLine);
-    /* The whoop canvas's layout: the side column is a drawer and the room's own
-     * chrome is shown. See the block in index.html. */
-    document.body.classList.toggle('tb-whoop', whoop);
-    this.fitBtn.title = whoop ? 'Frame the track' : 'Frame the whole field';
+    /* Square is for a field: a whoop's gates are always on a quarter turn. */
+    this.squareBtn.style.display = room && !whoop ? '' : 'none';
+    this.squareBtn.classList.toggle('on', this.square);
+    /* The room's layout: the side column is a drawer and the room's own chrome is shown. See the block in
+     * index.html. The class is named for the canvas it was made for and is the room's on every track. */
+    document.body.classList.toggle('tb-whoop', room);
+    this.fitBtn.title = docModeOf(this.doc) === 'freestyle' ? 'Frame the whole plot' : 'Frame the track';
     const map = docModeOf(this.doc) === 'freestyle';
     if (this.classBtns) {
       const canvas = canvasOf(this.doc);
@@ -4366,9 +4536,9 @@ export class App {
         this.setSelection(this.doc.elements.map((el) => el.id));
         return;
       }
-      /* Control D copies on a whoop canvas, and would otherwise be the
-       * browser's bookmark. Elsewhere it is left to the browser. */
-      if (mod && e.key.toLowerCase() === 'd' && this.isWhoopRace()) {
+      /* Control D copies on a track, and would otherwise be the browser's
+       * bookmark. On a map it is left to the browser. */
+      if (mod && e.key.toLowerCase() === 'd' && this.buildsIn3D()) {
         e.preventDefault();
         this.copySelection();
         return;
@@ -4438,20 +4608,22 @@ export class App {
         this.toggleView();
         return;
       }
-      /* The arrows nudge on a whoop canvas: a grid square, or six inches with
-       * Shift. Where an armed tool or a road is being laid they are left alone. */
-      if (this.isWhoopRace() && !this.armed && this.selection.size
+      /* The arrows nudge on a track: a grid square, or a small step with Shift (scale.js). Where an armed tool or
+       * a road is being laid they are left alone. */
+      if (this.buildsIn3D() && !this.armed && this.selection.size
         && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
         this.nudgeSelection(e.key.slice(5).toLowerCase(), e.shiftKey);
         return;
       }
-      if ((e.key === 'f' || e.key === 'F') && this.isWhoopRace()) {
+      if ((e.key === 'f' || e.key === 'F') && this.buildsIn3D()) {
         this.frameSelection();
         return;
       }
       if (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E') {
-        this.nudgeYaw((e.key === 'q' || e.key === 'Q') ? 15 : -15);
+        /* Fifteen degrees, and a quarter turn with Shift: the square corner is the one a track is laid out on. */
+        const step = e.shiftKey ? 90 : 15;
+        this.nudgeYaw((e.key === 'q' || e.key === 'Q') ? step : -step);
         return;
       }
       if (e.key === 'Home') {
@@ -4463,8 +4635,9 @@ export class App {
         return;
       }
 
-      /* A whoop canvas's tools that are not pieces: H lays a row, M is the ruler. */
-      const tool = this.isWhoopRace() ? toolByKey(e.key) : undefined;
+      /* A track's tools, and on a field its pieces made of pieces: H lays a row of whoop gates, K a wall of
+       * five inch ones, M is the ruler. */
+      const tool = this.buildsIn3D() ? toolByKey(e.key, trackClassOf(this.doc)) : undefined;
       if (tool) {
         this.arm(tool.id);
         return;
@@ -4483,8 +4656,9 @@ export class App {
       return;
     }
     this.edit('rotate', (d) => {
-      /* A cube turns a quarter about its middle with every face; the pieces that are not in a group turn as they do. */
-      turnGroups(d, [...this.selection], Math.sign(degrees) * QUARTER);
+      /* A cube turns a quarter about its middle with every face, and a wall of a five inch track by the step
+       * the keys ask for; the pieces that are not in a group turn as they do. */
+      turnGroups(d, [...this.selection], this.isWhoopRace() ? Math.sign(degrees) * QUARTER : degrees * RAD);
       for (const id of this.selection) {
         const element = elementById(d, id);
         /* A road turns by its nodes and a vehicle by its road. */
@@ -4496,6 +4670,12 @@ export class App {
             setYaw(d, id, nearestQuarter(element.yaw + Math.sign(degrees) * QUARTER));
           } else if (turnsOf(element.type) === 'quarter') {
             setYaw(d, id, snapYaw(element.type, snapYaw(element.type, element.yaw) + Math.sign(degrees) * QUARTER_TURN));
+          } else if (Math.abs(degrees) === 90) {
+            /* A quarter turn on a field squares a gate up first, and turns it on from there: a gate that was
+             * laid along the line is at some angle nobody chose, and a track on a plan is made of square ones. */
+            const shown = this.shownYaw(element);
+            const square = nearestQuarter(shown);
+            setYaw(d, id, Math.abs(wrapAngle(shown - square)) > 0.01 ? square : nearestQuarter(square + Math.sign(degrees) * QUARTER));
           } else {
             /* From where a marker's square sits, not its stored yaw: see
              * shownYaw. Everything else, shownYaw returns its own yaw. */

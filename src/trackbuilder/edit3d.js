@@ -57,6 +57,8 @@ import {
   cubeItems, measuresFor, placementFor, rowPlan, rulerPoint, rulerReading, snapTurn, spacingTone,
 } from './snap.js';
 import { inches, GATE_SPACING_NOMINAL } from './racegow.js';
+import { partGhosts } from './parts.js';
+import { scaleOf, say } from './scale.js';
 
 /* How far a press travels, in pixels, before it is a drag and not a click. */
 const CLICK_PX = 4;
@@ -81,9 +83,9 @@ export class RoomEditor {
     this.pinch = null;
   }
 
-  /* Whether these are the handlers: a whoop track, with the room up. */
+  /* Whether these are the handlers: a track, of either class, with the room up. */
   active() {
-    return Boolean(this.view.enabled && this.view.renderer && this.host.isWhoopRace());
+    return Boolean(this.view.enabled && this.view.renderer && this.host.buildsIn3D());
   }
 
   /* ---------------- press ---------------- */
@@ -124,8 +126,8 @@ export class RoomEditor {
     }
     v.canvas.setPointerCapture(e.pointerId);
 
-    /* The row tool: a drag along the floor is the row. */
-    if (h.armed === 'row') {
+    /* The row tool, and a field's wall: a drag along the floor is the row. */
+    if (h.armed === 'row' || h.armed === 'wall') {
       this.beginRow(e, at);
       return;
     }
@@ -246,12 +248,13 @@ export class RoomEditor {
       d.last = at;
       return;
     }
-    if (d.kind === 'row') {
+    if (d.kind === 'row' || d.kind === 'wall') {
       const p = v.levelPoint(e.clientX, e.clientY, 0);
       if (!p) {
         return;
       }
       d.b = h.snap(p, e.altKey);
+      d.free = e.altKey;
       this.showRow(d);
       return;
     }
@@ -348,6 +351,10 @@ export class RoomEditor {
     } else if (d.kind === 'row') {
       v.clearGhost();
       h.placeRow(d.a, d.b);
+    } else if (d.kind === 'wall') {
+      v.clearGhost();
+      v.clearMeasures();
+      h.placeWallAt(d.a, d.b, 'none', d.free);
     } else if (d.kind === 'ruler' && !d.moved) {
       this.rulerClick(e);
     } else if (d.kind === 'route' && !d.moved) {
@@ -494,6 +501,12 @@ export class RoomEditor {
   hover(e) {
     const v = this.view;
     const h = this.host;
+    /* Where the pointer is on the ground, in the status line, as the plan says it: a point on a plan dimensioned in
+     * metres is read off, not worked out. */
+    const under = v.levelPoint(e.clientX, e.clientY, 0);
+    if (under) {
+      h.onHoverWorld(under);
+    }
     if (h.armed === 'ruler') {
       this.rulerHover(e);
       v.setHover(null);
@@ -536,6 +549,11 @@ export class RoomEditor {
       this.showCubeGhost(e);
       return;
     }
+    /* The five inch pieces made of pieces: a wall, a hurdle, an up gate. */
+    if (h.armed === 'wall' || h.armed === 'hurdle' || h.armed === 'upGate') {
+      this.showPartGhost(e);
+      return;
+    }
     /* The row tool's ghost, before the drag, is one gate: where the row would begin. */
     const type = h.armed === 'row' ? 'gate' : h.armed;
     const def = ELEMENTS[type];
@@ -547,7 +565,7 @@ export class RoomEditor {
     }
     const at = h.snap(p, e.altKey, { type });
     v.setGuides(h.guides);
-    const plan = placementFor(h.doc, at, type);
+    const plan = placementFor(h.doc, at, type, { square: h.square && !h.isWhoopRace() });
     v.setGhost({ type, position: { x: at.x, y: at.y, z: 0 }, yaw: plan.yaw });
     if (def.kind === KIND.APERTURE) {
       const ap = aperturesOf({ type, dims: defaultDims(type, trackClassOf(h.doc)) })[0];
@@ -602,14 +620,21 @@ export class RoomEditor {
     }
     const a = h.snap(p, e.altKey, { type: 'gate' });
     v.setGuides([]);
-    this.drag = { kind: 'row', start: at, last: at, a: { x: a.x, y: a.y }, b: { x: a.x, y: a.y } };
+    this.drag = {
+      kind: h.armed === 'wall' ? 'wall' : 'row', start: at, last: at, a: { x: a.x, y: a.y }, b: { x: a.x, y: a.y }, free: e.altKey,
+    };
     this.showRow(this.drag);
   }
 
-  /* The row as it would be laid, drawn faint, and the 30 in between the gates. */
+  /* The row as it would be laid, drawn faint, and the 30 in between the gates. A wall is the same gesture on a
+   * field, and says how many bays and how long. */
   showRow(d) {
     const v = this.view;
     const h = this.host;
+    if (d.kind === 'wall') {
+      this.showWall(d);
+      return;
+    }
     const plan = rowPlan(h.doc, d.a, d.b);
     v.setGhosts(plan.items.map((it) => ({ type: 'gate', position: { x: it.x, y: it.y, z: 0 }, yaw: it.yaw })));
     const centre = 0.3556;
@@ -623,6 +648,53 @@ export class RoomEditor {
         text: inches(GATE_SPACING_NOMINAL),
       };
     }));
+  }
+
+  /* A wall as it would be laid: its bays, faint, and one line along it saying how many and how long. */
+  showWall(d) {
+    const v = this.view;
+    const h = this.host;
+    const { plan, items } = partGhosts(h.doc, 'wall', d.a, d.b, { free: d.free, square: h.square && !d.free });
+    v.setGhosts(items);
+    const first = plan.items[0];
+    const last = plan.items[plan.items.length - 1];
+    const along = { x: plan.dir.x * plan.pitch * 0.5, y: plan.dir.y * plan.pitch * 0.5 };
+    const z = scaleOf(h.doc).measureH;
+    const from = { x: first.x - along.x, y: first.y - along.y, z };
+    const to = { x: last.x + along.x, y: last.y + along.y, z };
+    const len = Math.hypot(to.x - from.x, to.y - from.y);
+    v.setMeasures([{
+      from, to, d: len, tone: 'plain', text: `${plan.count} bays, ${say(h.doc, len)}`,
+    }]);
+  }
+
+  /* The ghost of a hurdle or an up gate: what a click would put down, and how far it is from the gate before. */
+  showPartGhost(e) {
+    const v = this.view;
+    const h = this.host;
+    if (h.armed === 'wall') {
+      const p = v.levelPoint(e.clientX, e.clientY, 0);
+      if (!p) {
+        v.clearGhost();
+        v.clearMeasures();
+        return;
+      }
+      const at = h.snap(p, e.altKey, { type: 'gate' });
+      v.setGuides(h.guides);
+      this.showWall({ a: at, b: at, free: e.altKey });
+      return;
+    }
+    const p = v.levelPoint(e.clientX, e.clientY, 0);
+    if (!p) {
+      v.clearGhost();
+      v.clearMeasures();
+      return;
+    }
+    const at = h.snap(p, e.altKey, { type: h.armed });
+    v.setGuides(h.guides);
+    const { items } = partGhosts(h.doc, h.armed, at, at, { square: h.square });
+    v.setGhosts(items);
+    v.setMeasures(measuresFor(h.doc, { x: at.x, y: at.y, z: scaleOf(h.doc).measureH }));
   }
 
   /* ---------------- the ruler ---------------- */
@@ -656,7 +728,7 @@ export class RoomEditor {
 
   showRuler() {
     const r = this.ruler;
-    this.view.setRuler(r ? { a: r.a, b: r.b, text: rulerReading(r.a, r.b).text, fixed: r.fixed } : null);
+    this.view.setRuler(r ? { a: r.a, b: r.b, text: rulerReading(r.a, r.b, this.host.doc).text, fixed: r.fixed } : null);
   }
 
   clearRuler() {

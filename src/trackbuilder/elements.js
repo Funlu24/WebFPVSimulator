@@ -1612,7 +1612,8 @@ export const FIVE_INCH_TOOLS = [
   {
     id: 'route',
     label: 'Fly order',
-    key: 'O',
+    /* Not O: on a field O is the ground logo, and a key that has meant something for months is not taken from it. */
+    key: 'N',
     note: 'Click the pieces in the order you fly them. A click on a gate again is another pass through it, which is how a gate is flown twice. Click a hurdle to fly over it. Backspace takes the last pass off.',
   },
   {

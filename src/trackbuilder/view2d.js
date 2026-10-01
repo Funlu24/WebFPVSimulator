@@ -45,6 +45,8 @@ import {
 import { sequenceNumbers } from './sequence.js';
 import { arrowLanes, stretchOf } from './passes.js';
 import { frameRectFor } from './snap.js';
+import { partGhosts } from './parts.js';
+import { say as sayLength, scaleOf } from './scale.js';
 import { figureCue } from './figures.js';
 import { travelDirection, markerPassDir } from './faces.js';
 import { guideFromKnots, knotsFromPath, tessellateGuide } from '../game/guide.js';
@@ -80,8 +82,8 @@ const PICK_PX = 9;             /* how close a click has to be, pixels */
 const C = {
   ground: '#0e1720',
   fieldFill: '#13202c',
-  gridMinor: 'rgba(157, 179, 200, 0.10)',
-  gridMajor: 'rgba(157, 179, 200, 0.22)',
+  gridMinor: 'rgba(157, 179, 200, 0.12)',
+  gridMajor: 'rgba(157, 179, 200, 0.30)',
   fieldEdge: 'rgba(247, 232, 205, 0.55)',
   ruler: '#0a121a',
   rulerText: '#9db3c8',
@@ -501,15 +503,19 @@ export class View2D {
 
   /* Fit a world rectangle into the drawing area with a margin. */
   frame(minX, minY, maxX, maxY, marginPx = 60) {
+    /* The strip and the lap figures lie along the foot of the plan on a track, over the canvas, and what is framed
+     * is framed above them: a loop at the bottom of a course is not under a toolbar. A hall's plan is left as it
+     * was framed. */
+    const foot = this.host.buildsIn3D?.() && !this.host.isWhoopRace?.() ? (this.host.panels?.barH || 90) + 54 : 0;
     const availW = Math.max(40, this.w - RULER - marginPx);
-    const availH = Math.max(40, this.h - RULER - marginPx);
+    const availH = Math.max(40, this.h - RULER - marginPx - foot);
     const spanX = Math.max(1e-3, maxX - minX);
     const spanY = Math.max(1e-3, maxY - minY);
     this.cam.scale = clamp(Math.min(availW / spanX, availH / spanY), MIN_SCALE, MAX_SCALE);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     this.cam.x = cx - (this.w / 2) / this.cam.scale;
-    this.cam.y = cy - (this.h / 2) / this.cam.scale;
+    this.cam.y = cy - ((this.h + foot) / 2) / this.cam.scale;
   }
 
   /* What Fit and every load show: the whole field, except on a whoop canvas,
@@ -700,6 +706,16 @@ export class View2D {
       return;
     }
 
+    /* A five inch wall is dragged out along the ground, from the bay that is flown first to the last, as it is in
+     * the room; a click lays three. */
+    if (this.host.armed === 'wall') {
+      const a = this.host.snap(world, e.altKey, { type: 'gate' });
+      this.drag = {
+        kind: 'wall', a: { x: a.x, y: a.y }, b: { x: a.x, y: a.y }, free: e.altKey,
+      };
+      return;
+    }
+
     /* An armed palette tool places on click and stays armed, so ten gates
      * are ten clicks. */
     if (this.host.armed) {
@@ -811,6 +827,14 @@ export class View2D {
       return;
     }
 
+    if (this.drag.kind === 'wall') {
+      const b = this.host.snap(this.pointer, e.altKey, { type: 'gate' });
+      this.drag.b = { x: b.x, y: b.y };
+      this.drag.free = e.altKey;
+      this.host.requestDraw();
+      return;
+    }
+
     if (this.drag.kind === 'node') {
       this.drag.moved = true;
       this.host.moveRoadNode(this.drag.id, this.drag.index, this.host.snap(this.pointer, e.altKey), this.drag.starts);
@@ -875,6 +899,15 @@ export class View2D {
       return;
     }
     const kind = this.drag.kind;
+    if (kind === 'wall') {
+      const d = this.drag;
+      this.drag = null;
+      this.host.placeWallAt(d.a, d.b, 'none', d.free);
+      if (e && this.canvas.hasPointerCapture?.(e.pointerId)) {
+        this.canvas.releasePointerCapture(e.pointerId);
+      }
+      return;
+    }
     if (kind === 'band' && this.band) {
       const ids = this.elementsInBand(this.band);
       this.host.setSelection(ids, this.band.additive);
@@ -1020,7 +1053,9 @@ export class View2D {
     while (step * this.cam.scale < 6) {
       step *= 10;
     }
-    const major = step * 10;
+    /* A field's major lines are every five of its metres, the way the plans a track is designed from are ruled
+     * (5 m major, 1 m minor); a hall's stay every ten inches. */
+    const major = step * (scaleOf(doc).metric && step === g ? 5 : 10);
     ctx.lineWidth = 1;
     for (let pass = 0; pass < 2; pass += 1) {
       const s = pass === 0 ? step : major;
@@ -2546,8 +2581,52 @@ export class View2D {
     ctx.restore();
   }
 
+  /* A wall as it would be laid: each bay a bar across its width with its arrow, and how many and how long. */
+  drawWallGhost(ctx, a, b, free) {
+    const doc = this.host.doc;
+    const { plan, items } = partGhosts(doc, 'wall', a, b, { free, square: this.host.square && !free });
+    ctx.save();
+    ctx.strokeStyle = C.ghost;
+    ctx.fillStyle = C.ghost;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+    for (const it of items) {
+      const half = (it.props.dims.clearW + FRAME_TUBE_OD) / 2;
+      const w = { x: -Math.sin(it.yaw), y: Math.cos(it.yaw) };
+      const p0 = this.toScreen({ x: it.position.x - w.x * half, y: it.position.y - w.y * half });
+      const p1 = this.toScreen({ x: it.position.x + w.x * half, y: it.position.y + w.y * half });
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+      const c = this.toScreen(it.position);
+      const tip = this.toScreen({ x: it.position.x + Math.cos(it.yaw) * 0.9, y: it.position.y + Math.sin(it.yaw) * 0.9 });
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.stroke();
+      ctx.lineWidth = 4;
+    }
+    const first = items[0].position;
+    const last = items[items.length - 1].position;
+    const length = Math.hypot(last.x - first.x, last.y - first.y) + plan.pitch;
+    const label = this.toScreen({ x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 });
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`${plan.count} bays, ${sayLength(doc, length)}`, label.x, label.y - 12);
+    ctx.restore();
+  }
+
   drawGhost(ctx) {
     if (!this.host.armed || !this.pointer) {
+      return;
+    }
+    if (this.host.armed === 'wall') {
+      const a = this.drag && this.drag.kind === 'wall' ? this.drag.a : this.host.snap(this.pointer, false, { type: 'gate' });
+      const b = this.drag && this.drag.kind === 'wall' ? this.drag.b : a;
+      this.drawWallGhost(ctx, a, b, Boolean(this.drag && this.drag.free));
       return;
     }
     const at = this.host.snap(this.pointer, false, { type: this.host.armed });
