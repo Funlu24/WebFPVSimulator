@@ -62560,3 +62560,115 @@ was added or removed under src/, so src/fresh.js and index.html are unchanged; t
 
 The modules are still served with cache-control public, max-age=14400, s-maxage=300, so a returning pilot's
 browser can hold the old files for up to four hours; a hard reload gets the new ones at once.
+
+## 2026-10-01 | plan, ui, builder, board | The menus reviewed, and a plan to streamline and fine tune (the owner's ask)
+
+The owner asked: "The menu systems through the game, map builders and tracks and times page have grown in
+complexity over the last month. Please undertake a full uiux review of the menu systems and make a plan to
+stream line and fine tune".
+
+Changed: `MENUS-PLAN.md` at the root, and this entry. No code changed in either repository. The plan is in the
+shape of POLISH-PLAN.md:
+
+- what was measured;
+- eight rules and a glossary;
+- before and after trees for the title, pause, Settings, the Race room and results;
+- six stages of items, 0 to 5, each with file and line;
+- the owner's calls;
+- how done is measured.
+
+### How it was looked at
+
+- **The rig.** The simulator, the builder and the live board ran in headless Chromium, through a copy of
+  `tests/lib/page.js` in the session scratchpad. The copy served the board's GET API from Node and refused
+  every other request. Every POST it saw was a stats event, and each was refused and logged, so nothing
+  reached production.
+- **Sizes and rows.** Every shell screen was taken at 1600x900. Every room, the launch card, pause and
+  results were also taken at 844x390 with touch, and the gate, title, Race room and Settings at 390x844.
+  The builder was taken at three sizes, and the board at desktop and phone. Each screen's live rows were
+  read through `window.__ui`.
+- **Presses to the air.** Counted by keyboard from a cold load: 2 for a first visitor, 3 for a returning
+  pilot.
+- **Three read only inventories by subagents:** the shell, the builder, and the board.
+  - The board is its own repository, WebFPVSimulator-LeaderBoard. It was attached to this session for reading
+    and checked out at 4935604. Nothing in it was changed, and the plan's board items are for that
+    repository's own sessions.
+- **The history.** Main was fetched to depth 3000 to measure the month, because this container's clone held
+  88 commits. Against 34e9323 (30 August), September's growth was:
+
+  | Path | 30 Aug | Now | Commits in September |
+  |---|---|---|---|
+  | `src/ui/ui.js` | 9,027 | 16,450 | 126 |
+  | `index.html` | 3,424 | 5,507 | 65 |
+  | `src/main.js` | 6,900 | 11,444 | 134 |
+  | `src/trackbuilder/` | 13,536 | 48,559 | 105 |
+
+  The `src/trackbuilder/` figures are lines across 18 files then and 34 now. Named shell screens went only
+  from 14 to 16; what grew is inside them.
+
+### What the plan rests on
+
+- **Too many names.** The board has eight names across the three surfaces. The builder has four. Flight model
+  and Physics model are one setting, and Freestyle city and the town are one map.
+- **Rows whose value is something else.** Settings shows "Not set", which is the pilot's name. Quad shows the
+  tune, so the pause menu reads "Betaflight default" twice.
+- **Rows out of reach.** Settings is 39 rows in a 464 px window: 3.6 windows of scrolling at 1600x900, 11 on
+  a landscape phone. The Race room's eight actions start at y=1854, under 31 cards. Credits' rows are 1,540
+  px down, so `lint:shell` is red; that was already recorded in the entry above. How to fly's Back and
+  Pause's Quit to title are below the window. On an 844x390 phone the title shows one and a half rows.
+- **Collisions.**
+  - The no radio message reuses the flight banner and prints over the Settings heading.
+  - PAUSED is lettered over the lap clock.
+  - The results' Total row slides under the menu.
+- **The builder.**
+  - The whoop drawer cannot be closed once it is open. It covers its own toggle and the card's close
+    button, it has no close button, and Escape ignores it. At 1024 wide it paints over dialogs. This is the
+    most serious item.
+  - Also: O on two tools, Load deleting without asking, a raw Board address field in Publish, Back to the
+    simulator landing on the gate, and phones at 0 px of canvas.
+- **The joins.**
+  - Every "The public page for" row opens the board's front page: `boardPageUrl` takes no track.
+  - The board's Fly this track lands on the title, while Fly this map flies.
+  - The board never refreshes after a time is posted.
+- **The radio.** On six screens the sticks never move the cursor (`ui.js:16350`): the title menu, Quad, Rates,
+  PIDs, the bench and Stick help. The legend still says Pitch Move there. Quad opens on Aircraft, where one
+  select swaps the aircraft. Dialogs ignore the pad, including the feel form that opens by itself.
+- **Copy that promises too much.** Three notes say the board receives the tune, the link or the flight model.
+  A posted time carries name, lap, three lap total, ghost and weight (`src/share/board.js:864-899`).
+- **Found and flagged, not in the plan.** The board's bug inbox answered a GET with tickets and no token on
+  production (`bugsAuthorized` passes when BUGS_TOKEN is unset). Writes were not tried.
+
+### Waiting on the owner
+
+The ten calls in the plan's "For the owner". Stage 0 (guards first) and Stage 1 (fine tune, all S) need
+nothing beyond "go".
+
+### What went wrong
+
+- **The touch legend.** My first phone pictures passed the gate with a keyboard Enter. That sets `lastInput`
+  to key, so the title's legend showed keyboard keys on a touch phone, and I nearly wrote it up. The code
+  says otherwise: `legendFor` (`ui.js:14663`) keeps the touch voice, "Tap a row", until a key or a pad is
+  used. Not in the plan.
+- **The Firmware bench.** A jump straight to it with `ui.show('fc')` showed every value as 0, because the
+  bench's session starts from its door. Through the Quad room's row the values are real. Not in the plan.
+- **The staged results.** I staged them with `{ lap, ms }`, but the rows read `{ n, ms }`, so they said "Lap
+  undefined". Those pictures are used for layout only.
+- **The history.** A first draft said the history restarts at the 26 August root. The fetched main reaches
+  back to 11 August, so that sentence went.
+- **Mixed up numbers in my own draft.** 1.7 claimed the results' copy says post; it says "Upload a time".
+  The pause target read 17 to 10 in one place and 17 to 12 in another. The Settings whitespace was 180 px
+  where it is about 110. All corrected before commit.
+- **The history I promised an agent.** I told the shell's research agent that this clone had full history. It
+  was shallow, so that agent counted commits through the GitHub API instead. Its numbers include merges and
+  start on 25 August, so the plan uses mine, for September only.
+- **Profiles deleted outside the repository.** The builder's research agent deleted 48 `/tmp/sim-page-*`
+  Chromium profiles left by probes, mine among them, while no Chromium was running. That is outside the
+  repository, and no run was lost.
+
+### Checks
+
+    lint:shell        FAIL, 1 problem, the credits fold (1540 px, baseline 1518), the same as the entry
+                      above. Not re-recorded: the plan's 0.1 fixes the layout instead.
+    noun-lint         PASS, 295 files (run by the builder's research agent)
+    not run           npm run verify (no code changed), shots.js (the scratch rig took the pictures),
+                      lint:devices, lint:input, check:builder (nothing they cover changed)
