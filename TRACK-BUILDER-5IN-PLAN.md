@@ -3,8 +3,11 @@
 A plan for the owner, 1 October 2026. It is written to be argued with. Section 8
 lists the decisions it takes on the owner's behalf, and how to reverse each one.
 
-Status is kept at the top and updated as stages land. Nothing below is started
-until its row in section 5 says so.
+Status is kept at the top and updated as stages land. As of 1 October 2026 every
+stage in section 5 has landed and the acceptance run in section 7 passes: the
+Nationals qualifying track is built from an empty canvas with the pointer and the
+keys in 55 gestures and matches the one that ships. Section 10 says what was done
+against this plan and where it differs.
 
 ## 0. What was asked
 
@@ -213,7 +216,8 @@ type.
 
 ### 4.3 The flight path
 
-**Fly order.** A tool, key `O`, on the 5 inch canvas as on the whoop. Click the
+**Fly order.** A tool, key `N` (see 10: `O` is Ground logo on a field), on the 5
+inch canvas as on the whoop. Click the
 pieces in the order they are flown; click a piece again for another pass;
 Backspace takes the last pass off. The lap strip along the foot shows the passes
 and lights the gate when the pointer is on a chip.
@@ -277,13 +281,13 @@ See 7.
 
 | Stage | What | Status |
 | --- | --- | --- |
-| 0 | Plan, baselines, this document | in progress |
-| 1 | The parts: plain gate dress, barrier flags (hurdle), the wall layout, the loop, the weave rule, the narrowed publish refusal. Model, game, tests. | not started |
-| 2 | Flags as chips, Fly order and Fly again on the 5 inch canvas, the inspector put in order. | not started |
-| 3 | Build in 3D on the 5 inch canvas. | not started |
-| 4 | The grid and the plan. | not started |
-| 5 | The Mission track: preset, generator, the acceptance run, overlay. | not started |
-| 6 | Docs, schema, PROGRESS, preload, checks, push. | not started |
+| 0 | Plan, baselines, this document | done (commit 5776370) |
+| 1 | The parts: plain gate dress, barrier flags (hurdle), the wall layout, the loop, the weave rule, the narrowed publish refusal. Model, game, tests. | done (commit 70b89a5) |
+| 2 | Flags as chips, Fly order and Fly again on the 5 inch canvas, the inspector put in order. | done |
+| 3 | Build in 3D on the 5 inch canvas. | done |
+| 4 | The grid and the plan. | done |
+| 5 | The Mission track: preset, generator, the acceptance run, overlay. | done |
+| 6 | Docs, schema, PROGRESS, preload, checks, push. | done |
 
 Each stage ends green on `node src/trackbuilder/selftest.js` and is committed.
 
@@ -344,15 +348,108 @@ Each is the plan's answer, in force until the owner says otherwise.
 6. **A row's pitch is the world's**, not the document's, so posts meet where the
    game builds them. The cost is a quarter metre of gap in the builder's own
    preview.
-7. **Keys.** K wall, U hurdle, M ruler, O fly order. O shadows Ground logo, as it
-   does on the whoop canvas; Ground logo stays on its palette entry without a
-   letter.
+7. **Keys.** K wall, U hurdle, M ruler, N fly order. The plan said O, shadowing
+   Ground logo as it does on the whoop canvas. It does not: the whoop palette has
+   no ground logo and a field's has, and O has been its key for months, so N it
+   is. Reverse: change `key` in `FIVE_INCH_TOOLS` (elements.js).
 8. **No logos** on the Mission preset.
 9. **Gate dimensions on the Mission preset** are chosen so the world builds a bay
    2 m between uprights, which is what the diagram draws.
+
+10. **Square is a bar button, off by default.** New gates on a field face along
+    the line at any angle, as they always did. With Square on, the first gate
+    faces east and keeps it, and each next gate, wall, hurdle and up gate takes
+    the quarter turn nearest the line and keeps it, which is how a plan is drawn.
+    It is a way of working and is kept in the browser's storage, not in the
+    track. Reverse: `readSquare` in app.js returns true.
+11. **The card says which way a gate faces as a compass** (North, East, South,
+    West), where the plan had a Turn button. One press is the heading. The Turn
+    button squares a gate up first and then turns it a quarter.
+12. **A loop can come back through its gate or not.** The plan had one loop, with a
+    second pass. The diagram's two loops are not drawn alike, so a chip on the card
+    chooses: round a post and back through the gate (the right hand gate), or a
+    hook in the line after one pass. The shipped track gives both of its loops the
+    first kind, which is how the upper left one was read in the end (section 10).
+13. **The line is not warned about where the design is tight.** The curvature
+    warning skips the line between two bays of one wall, and the line round a loop
+    (waypoints the loop made, found by their names). A track's own limit is a
+    setting already, and the warning now says where it is.
+14. **A wall, a hurdle and an up gate are one at a time**: the tool is put away
+    after the piece, which shows its card. A gate stays armed.
+15. **The Nationals track ships as a five inch track,** through `shipTracks` in
+    storage.js, from `presets5.js`, because `presets.js` is generated by the
+    RaceGOW script. It lists under the five inch canvas in Load with its
+    designer's credit, and no sponsor mark. Reverse: delete the `shipTracks` line
+    in app.js.
 
 ## 9. Not in this plan
 
 A club profile with free gate sizes, hoops, tables and cubes on the 5 inch
 canvas, a build sheet for a field, glb or Velocidrone export, WebXR, and the
 board's own copy of any of this. Each is a different ask.
+
+## 10. What was done, against the plan
+
+Everything in sections 4.1 to 4.6 was built. Where the build differs from what is
+written above:
+
+- **Keys.** Fly order is `N`, not `O` (decision 7).
+- **Magnets and steps.** A field's magnet reaches 0.35 m (the plan said about
+  0.5), the Shift nudge is 0.25 m (the plan said 5 m, which is not a nudge), and
+  the camera may come within 2 m of the ground (the plan said 8 m). `scale.js`
+  holds them, one block for the hall and one for the field, so each is one edit.
+- **Turning.** Q and E turn fifteen degrees and Shift with either a quarter, a
+  gate's ring steps fifteen degrees and Alt turns it freely, which is the
+  plan's table with the modifier the other way round: Alt already meant "off the
+  grid" everywhere else in the builder.
+- **The room opens from the south,** a little to the west and steeper, so a
+  plan's north is the far side of the room and a forty metre course fills more
+  of the picture than it does from the angle a hall is looked at from.
+- **Fit frames the track** and an empty canvas the field. The plan frames above
+  the lap bar instead of under it.
+- **Size** of a whole course is one press: Select all, then Standard, Wide or
+  Championship on the card. A wall's bays have their own (Bay).
+- **The turn flag** has its side of the flag as a compass row on the card ("Line
+  passes on its"), and the width of its turn as a number (Turn clearance),
+  because the plan's turn flag is the end of a long oval and had no way in.
+- **The 2D plan** takes a wall dragged out, and shows it before it is laid.
+- **The grid** is ruled at 1 m and 5 m, the fives brighter, in the room and on the
+  plan of a five inch track, and the plan's lines are a little stronger. Not
+  built: a third weight at 10 m and numbers on the lines in the room (the plan's
+  edge ruler numbers every five metres already). A hall's plan and room and a
+  map's plan keep what they had; the first full run of the flow check showed that
+  my first version of this had changed them (PROGRESS.md, 2026-10-01).
+- **The upper left gate.** Section 1 read it as flown east with a hook in the line
+  round its flag. The crop of the diagram is small and the line there is drawn over
+  the gate's own bars, so I read it a second time: it is flown west and loops like
+  the right hand gate does, round its flag post and back through, and the shipped
+  track is built that way. It is a reading of a picture, and the card changes it
+  with the three chips that say it: Faces, Back through and Loop.
+
+What was measured:
+
+- **The acceptance run** (`scripts/builder-flow-check.js`, "five inch: the
+  Nationals qualifier, built from an empty canvas"): 55 gestures from an empty
+  canvas to the finished lap, a gesture being a click, a drag, a key or a typed
+  number. Every piece is within 0.15 m of the one that ships (0.3 m for a
+  waypoint), every heading is exact, the flags are the same, the passes are in
+  the same order and flown the same way, the lap closes and nothing is warned
+  about.
+- **The line against the plan.** The derived racing line was laid over the
+  plan's yellow line. From ours to theirs the median distance is 0.43 m and nine
+  tenths of the line is within 1.6 m; from theirs to ours the median is 1.3 m.
+  The two places they part are the turn flag's oval, which ours draws wider, and
+  the weave, which ours draws with less swing. The plan's line is a suggestion
+  and ours is a derivation, and the track's own materials list (seven gates, nine
+  flags, a hurdle, a dive gate) is checked piece by piece.
+- **Nothing else moved.** The flow check is 507 pass and 0 fail on the finished
+  tree: the 449 it had before this work, and 58 in the five new five inch cases.
+  The self test is 1884 pass (1773 before the plan). The 19 documents of the
+  differential (every whoop preset, the saved five inch tracks and the living
+  room) are the same as after Stage 1, and the board needs nothing.
+
+What is left, on purpose: the plan did not ask for a share link, a picture or a
+build sheet for a field, club gate profiles, hoops and tables on a field,
+Velocidrone export, or the board's own copy of any of this. Whoop 2D framing
+above the lap bar, which is a bug there too, is left as it was so the whoop is
+byte for byte what it was.

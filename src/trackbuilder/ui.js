@@ -1890,7 +1890,7 @@ export class Panels {
         ? 'Everything else about it: the frame, its size, how a stack is flown'
         : 'Everything else about it: the frame, the flag, how a stack is flown'),
     );
-    const close = button('×', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
+    const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
     close.setAttribute('aria-label', 'Let go of it');
 
     /* A WALL, as the whole piece it is. */
@@ -1910,6 +1910,19 @@ export class Panels {
       const swap = this.replaceField(ids);
       if (swap) {
         card.append(swap);
+      }
+      /* A whole course made one size: Select all, and one press. A cube's faces and a wall's bays are sized as the
+       * pieces they are. */
+      const loose = ids.map((id) => elementById(doc, id)).filter((e2) => e2 && kindOf(e2) === KIND.APERTURE && !e2.group);
+      if (!this.host.isWhoopRace() && loose.length) {
+        const looseIds = loose.map((e2) => e2.id);
+        const sameAs = (preset) => loose.every((e2) => Math.abs(e2.dims.clearW - preset.clearW) < 1e-6);
+        card.append(this.cardChoice('Gate size', ['standard', 'wide', 'championship'].map((key) => {
+          const preset = GATE_PRESETS.find((p) => p.id === key);
+          return {
+            label: preset.label, on: sameAs(preset), run: () => this.host.setGateSize(looseIds, key), title: preset.hint || `${preset.label}: ${this.presetSize(preset, 'square')}`,
+          };
+        }), 'The size of every gate selected that is not part of a wall'));
       }
       card.append(actions);
       return;
@@ -2629,7 +2642,7 @@ export class Panels {
         ? 'Drag along the ground, from the bay that is flown first, to lay a wall. A tap lays three. One wall, then the tool is put away.'
         : 'Drag along the ground, from the bay that is flown first, to lay a wall of gates that share their uprights, two to six. A click lays three. One wall, then the tool is put away. Alt turns it freely.';
     } else if (room && !whoop && armed === 'hurdle') {
-      text = 'Click where the hurdle goes: a board 4 m long and 1 m high with a flag at each end, turned across the course, with the lap passing over it. One hurdle, then the tool is put away.';
+      text = 'Click where the hurdle goes: a board 4 m long and 1 m high with a flag at each end, turned across the track, with the lap passing over it. One hurdle, then the tool is put away.';
     } else if (room && !whoop && armed === 'upGate') {
       text = 'Click where the up gate goes: leaning 45 degrees with its lower edge 1.5 m up, flown up through. One gate, then the tool is put away.';
     } else if (room && (doc.elements.length || armed) && gates < 3) {
@@ -2671,7 +2684,7 @@ export class Panels {
     }
     box.append(
       el('p', null, 'Pick a gate on the left, then click the ground.'),
-      el('p', 'tb-help', 'Or start from a finished track and change it.'),
+      el('p', 'tb-help', 'Or start from a finished track and change it. Square on the bar keeps new gates on the compass, as a plan is drawn.'),
       button('Start from a track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The tracks that ship with the simulator, to open and change'),
     );
   }

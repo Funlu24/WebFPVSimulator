@@ -30,7 +30,9 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, elementByKey, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf } from './elements.js';
+import {
+  ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
+} from './elements.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
@@ -1948,6 +1950,24 @@ export class App {
         setWallFlags(d, id, choice);
       } else {
         setFlags(d, id, choice);
+      }
+    });
+  }
+
+  /* The size of every gate in `ids`, as a gate preset: the same edit the inspector's size cards make, here from the
+   * card, so a whole course is made wide with Select all and one press. A wall's bays are not loose gates and have
+   * their own (setWallBay). */
+  setGateSize(ids, presetId) {
+    const preset = GATE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) {
+      return;
+    }
+    this.edit(ids.length > 1 ? `size ${ids.length} gates` : 'gate size', (d) => {
+      for (const id of ids) {
+        const live = elementById(d, id);
+        if (live && kindOf(live) === KIND.APERTURE) {
+          applyGatePreset(live.dims, preset, apertureShapeOf(live));
+        }
       }
     });
   }

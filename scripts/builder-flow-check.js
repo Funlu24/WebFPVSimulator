@@ -3275,6 +3275,449 @@ kase('a cube ghost is where the click lays it', async () => {
   }
 });
 
+/* ------------------------------------------------------------------ */
+/* The five inch canvas, built in the room                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * TRACK-BUILDER-5IN-PLAN.md: the 5 inch canvas is built in the room the whoop canvas is, with metres for lengths, a
+ * wall dragged out along the ground, a hurdle and an up gate, the flags as one choice on the card, a loop round a
+ * post, and a plan's compass for which way a gate faces. The cases below drive it with the pointer and the keys, and
+ * the last one builds the Drone Nationals qualifying track from an empty canvas and compares it with the one that
+ * ships.
+ */
+
+async function openField(width = 1600, height = 900, { touch = false } = {}) {
+  const page = await openPage({ root, width, height, url: '/src/trackbuilder/index.html?class=full', touch });
+  await page.until('!!(window.trackBuilder && window.trackBuilder.doc)', 60000);
+  await page.until("window.trackBuilder.mode === '3d' && !!window.trackBuilder.view3d.renderer", 30000).catch(() => {});
+  await page.sleep(400);
+  return page;
+}
+
+/* A button on the card, by the words on it, optionally in the row that has a label: the card moves as it is edited, so
+ * it is waited for until it stops. */
+async function cardClick(page, label, row = null) {
+  let at = null;
+  /* Two frames: the card is put beside its piece by the frame after it appears, and a press that lands between the two
+   * is a press on the room. */
+  await page.evaluate('new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(1))))');
+  for (let i = 0; i < 20; i += 1) {
+    const now = await json(page, `(() => {
+      const card = document.getElementById('tb-card');
+      if (!card || card.hidden) return null;
+      const scope = ${JSON.stringify(row)}
+        ? [...card.querySelectorAll('.tb-card-choice')].find((c) => c.textContent.trim().toLowerCase().startsWith(${JSON.stringify(row)}.toLowerCase()))
+        : card;
+      const b = scope && [...scope.querySelectorAll('button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)});
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    if (now && at && Math.abs(now.x - at.x) < 0.5 && Math.abs(now.y - at.y) < 0.5) {
+      at = now;
+      break;
+    }
+    at = now;
+    await page.sleep(90);
+  }
+  if (!at) {
+    throw new Error(`no button called ${label}${row ? ` in the ${row} row` : ''} on the card`);
+  }
+  await click(page, at.x, at.y);
+}
+
+/* A number typed into a field of the card: clicked, set, and Enter. */
+async function cardType(page, label, value) {
+  await page.evaluate('new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(1))))');
+  await page.sleep(250);
+  const at = await json(page, `(() => {
+    const l = [...document.querySelectorAll('#tb-card label')].find((x) => x.textContent.trim().startsWith(${JSON.stringify(label)}));
+    const i = l && l.querySelector('input');
+    if (!i) return null;
+    const r = i.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  if (!at) {
+    throw new Error(`no field called ${label} on the card`);
+  }
+  await click(page, at.x, at.y);
+  await page.evaluate(`(() => { document.activeElement.value = ${JSON.stringify(String(value))}; return 1; })()`);
+  await key(page, 'Enter');
+}
+
+const cardRows = (page) => json(page, `[...document.querySelectorAll('#tb-card .tb-card-choice')].map((c) => c.querySelector('.tb-card-choice-label').textContent + ': ' + [...c.querySelectorAll('button')].map((b) => b.textContent.trim() + (b.classList.contains('on') ? '*' : '')).join(' '))`);
+const lit = async (page, row) => {
+  const rows = await cardRows(page);
+  const mine = rows.find((r) => r.toLowerCase().startsWith(row.toLowerCase()));
+  return mine ? mine.split(': ')[1].split(' ').filter((w) => w.endsWith('*')).map((w) => w.slice(0, -1)).join(' ') : null;
+};
+
+/* Put a piece down with a tool and a click on the ground at field metres. */
+async function layAt(page, toolName, x, y) {
+  await tool(page, toolName);
+  const at = await screenOf(page, 'view3d', x, y, 0);
+  if (!at) {
+    throw new Error(`${x}, ${y} is off the screen`);
+  }
+  await click(page, at.x, at.y);
+}
+
+const placed = (page) => json(page, 'window.trackBuilder.doc.elements.map((e) => ({ id: e.id, type: e.type, group: e.group ?? null, x: e.position.x, y: e.position.y, z: e.position.z, yaw: e.yaw, pitch: e.pitch, flag: e.flagSide ?? null, pinned: Boolean(e.yawOverridden), style: e.style ?? null, clearW: e.dims.clearW ?? null }))');
+const passes = (page) => json(page, 'window.trackBuilder.doc.sequence.map((q) => ({ id: q.id, el: q.elementId, entry: q.entry, clearance: q.clearance, set: Boolean(q.overridden) }))');
+
+kase('five inch: the room', async () => {
+  const page = await openField();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    check('a five inch canvas opens in the room, as the whoop canvas does, and builds there', (await app('a.mode')) === '3d' && (await app('a.buildsIn3D()')) && !(await app('a.isWhoopRace()')));
+    const labels = await json(page, "[...document.querySelectorAll('#tb-palette .tb-tool-label')].map((x) => x.textContent)");
+    check('the palette has the wall, the up gate and the hurdle among the pieces, and Fly order and Ruler under Tools',
+      ['Wall', 'Up gate', 'Hurdle', 'Fly order', 'Ruler'].every((l) => labels.includes(l)), labels.join());
+    check('and nothing of RaceGOW\'s: no build sheet on the foot of the room, no share link or picture in More',
+      !(await page.evaluate("[...document.querySelectorAll('#tb-lapbar button')].some((b) => b.textContent === 'Build sheet')"))
+      && (await page.evaluate("['link', 'sheet', 'picture'].every((id) => window.trackBuilder.moreItems.get(id).style.display === 'none')")));
+    check('an empty canvas says to click the ground, in the words of a field',
+      /click the ground/.test(await page.evaluate("document.getElementById('tb-empty').textContent")));
+
+    await tool(page, 'Gate');
+    check('the coach says what a click does', /Click the ground to place it/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    const near = await screenOf(page, 'view3d', 20, 19, 0);
+    await mouse(page, 'mouseMoved', near.x, near.y, 0);
+    await page.sleep(300);
+    const readout = await page.evaluate("document.getElementById('tb-readout').textContent");
+    check('the status line says where the pointer is on the ground, in metres, as the plan does', /^\d+\.\d\d, \d+\.\d\d m$/.test(readout) && readout !== '0.00, 0.00 m', readout);
+    check('and a ghost of the gate follows it', (await app('a.view3d.ghost && a.view3d.ghost.items.length')) === 1);
+    const steps = await undoCount(page);
+    await click(page, near.x, near.y);
+    await key(page, 'Escape');
+    const els = await placed(page);
+    check('a click puts a gate on the grid, as one undo step', els.length === 1 && els[0].type === 'gate' && Math.abs(els[0].x - 20) < 0.01 && Math.abs(els[0].y - 19) < 0.01 && (await undoCount(page)) === steps + 1,
+      JSON.stringify(els[0]));
+    const at = await screenOf(page, 'view3d', 20, 19, 0.76);
+    await click(page, at.x, at.y);
+    check('a click on it picks it, and its card is in metres', (await app('a.selection.size')) === 1 && /X \(m\)/.test(await page.evaluate("document.getElementById('tb-card').textContent"))
+      && /Faces/.test(await page.evaluate("document.getElementById('tb-card').textContent")));
+    check('the card says no North, East, South or West is lit before anything has been chosen, except where the gate faces', (await lit(page, 'Faces')) === 'East');
+    const before = await undoCount(page);
+    await cardClick(page, 'North', 'Faces');
+    let g = (await placed(page))[0];
+    check('North turns it to face north and keeps it there, as one undo step', Math.abs(g.yaw - Math.PI / 2) < 1e-6 && g.pinned && (await undoCount(page)) === before + 1, `yaw ${g.yaw}`);
+    await cardClick(page, 'Both', 'Flags');
+    g = (await placed(page))[0];
+    check('Both on the flags makes it a flagged gate with a pennant on each upright, and keeps everything else it is',
+      g.type === 'flaggedGate' && g.flag === 'both' && Math.abs(g.x - 20) < 0.01 && Math.abs(g.yaw - Math.PI / 2) < 1e-6);
+    await cardClick(page, 'None', 'Flags');
+    g = (await placed(page))[0];
+    check('None takes them off and makes it the plain gate again', g.type === 'gate' && g.flag === null);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+kase('five inch: a wall by drag', async () => {
+  const page = await openField();
+  try {
+    await trapToasts(page);
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    await key(page, 'KeyK');
+    check('K arms the wall tool, and the coach says to drag', (await app('a.armed')) === 'wall' && /Drag along the ground/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    const a = await screenOf(page, 'view3d', 24, 30, 0);
+    const b = await screenOf(page, 'view3d', 18, 30, 0);
+    const steps = await undoCount(page);
+    await drag(page, a, b, { hold: true, steps: 10 });
+    const ghost = await app('a.view3d.ghost && a.view3d.ghost.items.length');
+    const said = await page.evaluate("[...document.querySelectorAll('.tb-measure')].map((n) => n.textContent).join('|')");
+    check('while it is dragged the bays it will lay are shown, and how many and how long', ghost === 3 && /3 bays, 5\.37 m/.test(said), `${ghost} ${said}`);
+    await release(page, b);
+    const els = (await placed(page)).filter((e) => e.group);
+    check('it lays three gates in one group in the plain dress, as one undo step', els.length === 3 && els.every((e) => e.style === 'plain') && (await undoCount(page)) === steps + 1);
+    check('the tool is put away, because what comes next is the wall\'s own card', (await app('a.armed')) === null && (await app('a.selection.size')) === 3);
+    const gap = Math.abs(els[0].x - els[1].x);
+    check('the bays stand a world\'s pitch apart, so their uprights meet where the game builds them', Math.abs(gap - 1.7910111) < 1e-5, String(gap));
+    check('and the card says what it is', /Wall, 3 bays/.test(await page.evaluate("document.getElementById('tb-card').textContent")));
+    const entriesNow = async () => (await passes(page)).map((q) => q.entry);
+    const woven = (entries) => entries.length > 1 && entries.every((e, i) => i === 0 || e !== entries[i - 1]);
+    check('it is flown as a weave, every bay the other way to the one before, and the card says so', woven(await entriesNow()) && (await lit(page, 'Flown')) === 'Weave');
+    await cardClick(page, 'Straight', 'Flown');
+    check('Straight flies every bay the same way', new Set(await entriesNow()).size === 1 && (await lit(page, 'Flown')) === 'Straight');
+    await cardClick(page, 'Weave', 'Flown');
+    check('and Weave goes back', woven(await entriesNow()) && (await lit(page, 'Flown')) === 'Weave');
+    const first = (await passes(page))[0].entry;
+    await cardClick(page, 'Reverse');
+    check('Reverse turns every pass round', (await passes(page))[0].entry === -first);
+    await cardClick(page, 'Wide', 'Bay');
+    const wide = (await placed(page)).filter((e) => e.group);
+    check('Wide lays the bays again at 2 m, from the same first post', Math.abs(Math.abs(wide[0].x - wide[1].x) - 2) < 1e-5 && Math.abs((wide[0].x + 1) - (els[0].x + 1.7910111 / 2)) < 1e-5, wide.map((w) => w.x.toFixed(3)).join());
+    await cardClick(page, 'First end', 'Flags');
+    const flagged = (await placed(page)).filter((e) => e.group && e.type === 'flaggedGate');
+    check('First end puts one pennant on the outer upright of the bay it was dragged from', flagged.length === 1 && flagged[0].id === wide[0].id);
+    const drag1 = await screenOf(page, 'view3d', wide[1].x, wide[1].y, 0.76);
+    const to1 = { x: drag1.x, y: drag1.y + 70 };
+    const was = (await placed(page)).filter((e) => e.group).map((e) => [e.x, e.y]);
+    await drag(page, drag1, to1, { steps: 8 });
+    const now = (await placed(page)).filter((e) => e.group).map((e) => [e.x, e.y]);
+    const moved = now.map((p, i) => [p[0] - was[i][0], p[1] - was[i][1]]);
+    check('dragging one bay moves the whole wall by the same amount: it is one piece',
+      moved.every((m) => Math.abs(m[0] - moved[0][0]) < 1e-6 && Math.abs(m[1] - moved[0][1]) < 1e-6) && Math.hypot(moved[0][0], moved[0][1]) > 0.5, JSON.stringify(moved));
+    await key(page, 'KeyD', 2);
+    check('Control D copies the wall, three bays and the passes through them, as a wall of its own',
+      (await placed(page)).filter((e) => e.group).length === 6 && new Set((await placed(page)).filter((e) => e.group).map((e) => e.group)).size === 2 && (await passes(page)).length === 6);
+    await key(page, 'Delete');
+    check('and Delete takes the whole piece away, not a bay', (await placed(page)).filter((e) => e.group).length === 3 && (await passes(page)).length === 3);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+kase('five inch: a hurdle, an up gate and Fly order', async () => {
+  const page = await openField();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    await page.evaluate("[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Square').click()");
+    check('Square is on the bar for a field, and lights', (await app('a.square')) === true);
+    await layAt(page, 'Gate', 20, 19);
+    await key(page, 'Escape');
+    const steps = await undoCount(page);
+    await key(page, 'KeyU');
+    check('U arms the hurdle', (await app('a.armed')) === 'hurdle');
+    const at = await screenOf(page, 'view3d', 27, 28, 0);
+    await click(page, at.x, at.y);
+    const els = await placed(page);
+    const h = els.find((e) => e.type === 'barrier');
+    check('a click puts down a hurdle with a flag at each end, turned across the course on the compass, and a waypoint over it, in one step',
+      h && h.flag === 'both' && Math.abs(Math.sin(2 * h.yaw)) < 1e-5 && els.some((e) => e.type === 'waypoint' && Math.abs(e.z - 2) < 1e-6) && (await undoCount(page)) === steps + 1,
+      JSON.stringify(h));
+    check('the tool is put away, and the hurdle\'s card has its flags and a Fly over', (await app('a.armed')) === null
+      && (await cardRows(page)).some((r) => /^Flags: None Left Right Both\*$/.test(r)) && /Fly over/.test(await page.evaluate("document.getElementById('tb-card').textContent")));
+    await cardClick(page, 'Right', 'Flags');
+    const after = (await placed(page)).find((e) => e.type === 'barrier');
+    check('the flags on a hurdle are one choice too: Right leaves one, on the right', after.flag === 'right', `${after.flag} ${(await cardRows(page)).join(' / ')}`);
+
+    await layAt(page, 'Up gate', 33, 43);
+    const up = (await placed(page)).find((e) => e.type === 'diveGate');
+    const upPass = (await passes(page)).find((q) => q.el === up.id);
+    check('an up gate is a dive gate leaning 45 degrees with its lower edge 1.5 m up, facing along a quarter turn, flown up through',
+      up && Math.abs(up.pitch - Math.PI / 4) < 1e-6 && Math.abs(Math.sin(2 * up.yaw)) < 1e-5 && upPass.entry === 1 && upPass.set === true, JSON.stringify(up));
+
+    const n = (await passes(page)).length;
+    await key(page, 'KeyN');
+    check('N arms Fly order, and the coach says a hurdle is flown over', (await app('a.armed')) === 'route' && /A hurdle is flown over/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    const onHurdle = await screenOf(page, 'view3d', 27, 28, 0.5);
+    await click(page, onHurdle.x, onHurdle.y);
+    const wps = (await placed(page)).filter((e) => e.type === 'waypoint');
+    check('a click on the hurdle with Fly order adds another pass over it, a waypoint above its middle', wps.length === 2 && (await passes(page)).length === n + 1);
+    await key(page, 'Backspace');
+    check('Backspace takes the last pass off', (await passes(page)).length === n);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+kase('five inch: by touch', async () => {
+  const page = await openField(1024, 768, { touch: true });
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    const toolAt = (label) => json(page, `(() => {
+      const b = [...document.querySelectorAll('#tb-palette .tb-tool')].find((x) => x.querySelector('.tb-tool-label')?.textContent === ${JSON.stringify(label)});
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    await tap(page, await toolAt('Gate'));
+    check('a finger arms a tool', (await app('a.armed')) === 'gate');
+    const spot = await screenOf(page, 'view3d', 20, 19, 0);
+    await tap(page, spot);
+    check('and a tap on the ground puts a gate there', (await placed(page)).length === 1);
+    await tap(page, await toolAt('Gate'));
+    const on = await screenOf(page, 'view3d', 20, 19, 0.76);
+    await tap(page, on);
+    check('a tap on the gate selects it, and its card is up', (await app('a.selection.size')) === 1 && (await page.evaluate("!document.getElementById('tb-card').hidden")));
+    const sizes = await json(page, "[...document.querySelectorAll('#tb-card .tb-seg-btn')].map((b) => Math.round(b.getBoundingClientRect().height))");
+    check('every choice on it is a finger tall: 44 px at the least', sizes.length >= 9 && sizes.every((h) => h >= 44), sizes.join());
+    const north = await json(page, `(() => {
+      const row = [...document.querySelectorAll('#tb-card .tb-card-choice')].find((c) => c.textContent.startsWith('Faces'));
+      const b = [...row.querySelectorAll('button')].find((x) => x.textContent.trim() === 'North');
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    await tap(page, north);
+    check('a tap on North turns it north', Math.abs((await placed(page))[0].yaw - Math.PI / 2) < 1e-6);
+    await tap(page, await toolAt('Wall'));
+    await tap(page, await screenOf(page, 'view3d', 30, 30, 0));
+    const wall = (await placed(page)).filter((e) => e.group);
+    check('a tap with the wall tool lays three bays across the spot, and puts the tool away', wall.length === 3 && (await app('a.armed')) === null);
+    check('and its card is a wall\'s', /Wall, 3 bays/.test(await page.evaluate("document.getElementById('tb-card').textContent")));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+/*
+ * THE ACCEPTANCE RUN, which is what the plan was for: the Drone Nationals qualifying track, built from an empty canvas
+ * with the pointer and the keys and nothing else, and compared piece for piece with the one that ships
+ * (scripts/mission-preset.js). The number of gestures is counted and printed. Before this work the same plan took about a
+ * hundred and could not be finished: a gate with a flag on top, the loops, a wall of bays and the hurdle's flags had no way in.
+ */
+kase('five inch: the Nationals qualifier, built from an empty canvas', async () => {
+  const page = await openField();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    let gestures = 0;
+    const did = () => { gestures += 1; };
+    const stand = async (toolName, x, y) => { await layAt(page, toolName, x, y); did(); did(); };
+    const card = async (label, row) => { await cardClick(page, label, row); did(); };
+
+    /* The field the plan is drawn on: its size is on the foot of the room. */
+    await page.sleep(200);
+    const fieldButton = await json(page, "(() => { const b = [...document.querySelectorAll('#tb-lapbar button')].find((x) => /^Field /.test(x.textContent)); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: b.textContent }; })()");
+    check('the size of the field is a button on the foot of the room, and says it', /Field 60 \u00d7 40 m/.test(fieldButton.text), fieldButton.text);
+    await click(page, fieldButton.x, fieldButton.y);
+    did();
+    await page.sleep(300);
+    for (const [key2, value] of [['field-w', 45], ['field-d', 55], ['set-radius', 1]]) {
+      const at = await json(page, `(() => { const i = document.querySelector('[data-tbkey="${key2}"]'); i.scrollIntoView({ block: 'center' }); const r = i.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      await page.sleep(120);
+      const now = await json(page, `(() => { const r = document.querySelector('[data-tbkey="${key2}"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      await click(page, now.x, now.y);
+      await page.evaluate(`document.activeElement.value = '${value}'`);
+      await key(page, 'Enter');
+      did();
+    }
+    check('and opens the field\'s width and depth, which are set to the plan\'s 45 by 55 m, and how tight a turn is warned about, which the plan\'s loops make a metre',
+      (await app('[a.doc.field.width, a.doc.field.depth, a.doc.settings.minCurveRadius].join()')) === '45,55,1');
+    await app('(a.toggleDrawer(false), a.view3d.frameTrack(), a.requestDraw(), 1)');
+    await page.sleep(500);
+    await page.evaluate("[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Square').click()");
+    did();
+
+    /* In the order it is flown. */
+    await stand('Gate', 20, 19);
+    await stand('Hurdle', 27, 28);
+    await stand('Flagged gate', 30, 35);
+    await key(page, 'Escape');
+    did();
+    await card('East', 'Faces');
+    await card('Both', 'Flags');
+    await card('Right', 'Loop');
+    await key(page, 'Escape');
+    did();
+    await stand('Up gate', 33, 43);
+    await tool(page, 'Wall');
+    did();
+    const wa = await screenOf(page, 'view3d', 24, 43, 0);
+    const wb = await screenOf(page, 'view3d', 18, 43, 0);
+    await drag(page, wa, wb, { steps: 10 });
+    did();
+    await card('First end', 'Flags');
+    await card('Wide', 'Bay');
+    await key(page, 'Escape');
+    did();
+    await stand('Flagged gate', 5, 29);
+    await key(page, 'Escape');
+    did();
+    await card('West', 'Faces');
+    await card('Left', 'Flags');
+    await card('Right', 'Loop');
+    await key(page, 'Escape');
+    did();
+    await stand('Waypoint', 3, 24);
+    await key(page, 'Escape');
+    did();
+    await stand('Flagged gate', 5, 19);
+    await key(page, 'Escape');
+    did();
+    await card('East', 'Faces');
+    await card('Both', 'Flags');
+    await key(page, 'Escape');
+    did();
+    await stand('Flag', 5, 5);
+    await key(page, 'Escape');
+    did();
+    await page.sleep(300);
+    const flag = (await placed(page)).find((e) => e.type === 'flag');
+    const onFlag = await screenOf(page, 'view3d', flag.x, flag.y, 0.8);
+    await click(page, onFlag.x, onFlag.y);
+    did();
+    await card('South', 'Line passes');
+    await cardType(page, 'Turn clearance', 2.5);
+    did();
+    await key(page, 'Escape');
+    did();
+    /* The lower gate again, after the flag. */
+    const lower = (await placed(page)).find((e) => e.type === 'flaggedGate' && Math.abs(e.x - 5) < 0.01 && Math.abs(e.y - 19) < 0.01);
+    const onLower = await screenOf(page, 'view3d', lower.x, lower.y, 0.8);
+    await click(page, onLower.x, onLower.y);
+    did();
+    await card('Fly again');
+    await key(page, 'Escape');
+    did();
+    await stand('Start Pads', 17, 19);
+    await key(page, 'Escape');
+    did();
+    /* Every gate that is not a wall's the plan's width. */
+    await key(page, 'KeyA', 2);
+    did();
+    await card('Wide', 'Gate size');
+    await key(page, 'Escape');
+    did();
+    await page.sleep(300);
+
+    /* Against the track that ships. */
+    const built = await json(page, 'JSON.parse(JSON.stringify(window.trackBuilder.doc))');
+    const ref = JSON.parse(await page.evaluate(`(async () => { const m = await import('/src/trackbuilder/presets5.js'); return JSON.stringify(m.FIVE_INCH_PRESETS[0]); })()`));
+    const types = (d) => d.elements.map((e) => e.type).sort().join();
+    check('every piece the plan lists is there, of the type it is: the same pieces as the one that ships', types(built) === types(ref), `${types(built)}\n   ${types(ref)}`);
+    /* Each shipped piece, matched to the nearest built piece of its type. */
+    const taken = new Set();
+    const match = new Map();
+    let worst = 0;
+    let worstHeading = 0;
+    for (const r of ref.elements) {
+      let best = null;
+      for (const b of built.elements) {
+        if (b.type !== r.type || taken.has(b.id)) continue;
+        const d = Math.hypot(b.position.x - r.position.x, b.position.y - r.position.y);
+        if (!best || d < best.d) best = { b, d };
+      }
+      if (!best) continue;
+      taken.add(best.b.id);
+      match.set(r.id, best.b);
+      const tol = r.type === 'waypoint' ? 0.3 : 0.15;
+      worst = Math.max(worst, best.d - (r.type === 'waypoint' ? 0.15 : 0));
+      if (best.d > tol) {
+        check(`${r.type} ${r.id} is where the plan puts it`, false, `${best.d.toFixed(3)} m out, at ${best.b.position.x},${best.b.position.y} for ${r.position.x},${r.position.y}`);
+      }
+      if (r.type !== 'waypoint' && r.type !== 'startPads' && r.type !== 'flag') {
+        const dy = Math.abs(Math.atan2(Math.sin(best.b.yaw - r.yaw), Math.cos(best.b.yaw - r.yaw)));
+        worstHeading = Math.max(worstHeading, dy);
+      }
+    }
+    check('every piece is within 0.15 m of the plan (0.3 m for a waypoint, whose loop is round a gate that was resized after)', match.size === ref.elements.length, `${match.size} of ${ref.elements.length} matched`);
+    check('every gate, the hurdle and the up gate face the way the plan has them, to a degree', worstHeading < 0.0175, `${(worstHeading * 180 / Math.PI).toFixed(2)} degrees at worst`);
+    const flagsOf = (d) => d.elements.filter((e) => e.flagSide).map((e) => `${e.type}:${e.flagSide}`).sort().join();
+    check('and carry the flags it has them with', flagsOf(built) === flagsOf(ref), `${flagsOf(built)}\n   ${flagsOf(ref)}`);
+    const orderOf = (d, map) => d.sequence.map((q) => `${map ? map(q.elementId) : q.elementId}:${q.entry ?? '-'}`).join(' ');
+    const builtOrder = orderOf(built, (id) => { const hit = [...match.entries()].find(([, b]) => b.id === id); return hit ? hit[0] : id; });
+    check('they are flown in the plan\'s order, and each the way the plan flies it', builtOrder === orderOf(ref), `${builtOrder}\n   ${orderOf(ref)}`);
+    const pad = built.elements.find((e) => e.type === 'startPads');
+    const sizes = built.elements.filter((e) => e.group).map((e) => e.dims.clearW);
+    check('the wall\'s bays are 2 m between uprights in the world and are one piece, and the lap closes with nothing to warn about',
+      sizes.length === 3 && new Set(sizes.map((v) => v.toFixed(4))).size === 1 && Math.abs(sizes[0] - 1.7057294) < 1e-4
+      && (await app('a.path && a.path.closed')) && (await app('a.warnings.filter((w) => w.level === "warn").length')) === 0 && Boolean(pad),
+      await app('a.warnings.map((w) => w.message).join(" | ")'));
+    console.log(`  the track took ${gestures} gestures, a gesture being a click, a drag, a key or a typed number`);
+    check('and that is a gesture a piece or two, not a hundred: no more than seventy', gestures <= 70, String(gestures));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
 async function main() {
   console.log(`builder flow check${rootArg ? ` (against ${root})` : ''}\n`);
   for (const [name, fn] of CASES) {

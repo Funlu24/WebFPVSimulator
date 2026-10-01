@@ -46,7 +46,7 @@ import { sequenceNumbers } from './sequence.js';
 import { arrowLanes, stretchOf } from './passes.js';
 import { frameRectFor } from './snap.js';
 import { partGhosts } from './parts.js';
-import { say as sayLength, scaleOf } from './scale.js';
+import { say as sayLength } from './scale.js';
 import { figureCue } from './figures.js';
 import { travelDirection, markerPassDir } from './faces.js';
 import { guideFromKnots, knotsFromPath, tessellateGuide } from '../game/guide.js';
@@ -82,8 +82,12 @@ const PICK_PX = 9;             /* how close a click has to be, pixels */
 const C = {
   ground: '#0e1720',
   fieldFill: '#13202c',
-  gridMinor: 'rgba(157, 179, 200, 0.12)',
-  gridMajor: 'rgba(157, 179, 200, 0.30)',
+  gridMinor: 'rgba(157, 179, 200, 0.10)',
+  gridMajor: 'rgba(157, 179, 200, 0.22)',
+  /* A five inch track's plan: the same lines with more contrast, so they read on the dark field from the height that
+   * shows a whole track. A hall's plan and a map's keep the two above. */
+  gridMinorField: 'rgba(157, 179, 200, 0.12)',
+  gridMajorField: 'rgba(157, 179, 200, 0.30)',
   fieldEdge: 'rgba(247, 232, 205, 0.55)',
   ruler: '#0a121a',
   rulerText: '#9db3c8',
@@ -1053,13 +1057,14 @@ export class View2D {
     while (step * this.cam.scale < 6) {
       step *= 10;
     }
-    /* A field's major lines are every five of its metres, the way the plans a track is designed from are ruled
-     * (5 m major, 1 m minor); a hall's stay every ten inches. */
-    const major = step * (scaleOf(doc).metric && step === g ? 5 : 10);
+    /* A five inch track's major lines are every five of its metres, the way the plans a track is designed from are
+     * ruled (5 m major, 1 m minor); a hall's plan and a map's stay every ten of their steps, as they were. */
+    const field = Boolean(this.host.buildsIn3D?.()) && !this.host.isWhoopRace?.();
+    const major = step * (field && step === g ? 5 : 10);
     ctx.lineWidth = 1;
     for (let pass = 0; pass < 2; pass += 1) {
       const s = pass === 0 ? step : major;
-      ctx.strokeStyle = pass === 0 ? C.gridMinor : C.gridMajor;
+      ctx.strokeStyle = pass === 0 ? (field ? C.gridMinorField : C.gridMinor) : (field ? C.gridMajorField : C.gridMajor);
       ctx.beginPath();
       for (let x = 0; x <= doc.field.width + 1e-6; x += s) {
         const p = this.toScreen({ x, y: 0 });

@@ -54,7 +54,7 @@ export const FIVE_INCH_PRESETS = [
       "sponsor": "",
       "source": "the official layout and dimensions plan",
       "broughtOverBy": "",
-      "note": "Rebuilt in the builder from the plan, for practice. It is not the organisers’ file."
+      "note": "Rebuilt in the builder from the plan, for practice. It is not the organisers' file."
     },
     "elements": [
       {
@@ -86,7 +86,7 @@ export const FIVE_INCH_PRESETS = [
           "y": 28,
           "z": 0
         },
-        "yaw": 2.356194,
+        "yaw": 3.141593,
         "pitch": 0,
         "yawOverridden": true,
         "dims": {
@@ -407,7 +407,7 @@ export const FIVE_INCH_PRESETS = [
         "name": "Turn flag",
         "position": {
           "x": 5,
-          "y": 5.4,
+          "y": 5,
           "z": 0
         },
         "yaw": -1.570796,

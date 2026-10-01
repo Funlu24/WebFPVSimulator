@@ -286,7 +286,10 @@ export function collectWarnings(doc, path) {
     }
   }
   if (worst) {
-    out.push(warn('tight-corner', `The line turns tighter than ${limit.toFixed(1)} m at ${worst.s.toFixed(1)} m along the lap: ${worst.radius.toFixed(2)} m radius. Nothing flies that.`, {
+    /* A field's author is told where the limit is, because a track that means a tight turn (a slalom, a loop) has no
+     * other way to find out that it can be lowered, one track at a time. */
+    const ending = field ? 'A quad at racing speed does not fly that. If the track means it, lower Warn under radius in the field settings.' : 'Nothing flies that.';
+    out.push(warn('tight-corner', `The line turns tighter than ${limit.toFixed(1)} m at ${worst.s.toFixed(1)} m along the lap: ${worst.radius.toFixed(2)} m radius. ${ending}`, {
       s: worst.s,
       pos: worst.pos,
     }));

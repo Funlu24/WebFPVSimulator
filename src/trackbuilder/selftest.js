@@ -64,6 +64,7 @@ import { CUBE_FACES, cubeFaces } from './cube.js';
 import {
   canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addLoop,
   wallOf, wallFlagsOf, setWallFlags, wallIsWoven, setWallWeave, reverseWall, flyOver,
+  partGhosts, setWallSize, wallSizeOf,
   WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE,
 } from './parts.js';
 import { scaleOf, say } from './scale.js';
@@ -139,7 +140,10 @@ import {
 import { readBind, readEditKey, writeBind } from '../share/session.js';
 import { publishTrack, partsTheBoardDoesNotKnow, unknownPartsSentence, BOARD_UNKNOWN_TYPES } from '../share/board.js';
 import { planFromDocument, PLAN_SHAPE, isoApertures, isoShapes } from '../share/plan.js';
-import { keepDisplaced, readAutosave } from './storage.js';
+import {
+  keepDisplaced, readAutosave, shipTracks, listTracks, loadTrack, trackExists,
+} from './storage.js';
+import { FIVE_INCH_PRESETS } from './presets5.js';
 import { FPV_FLOOR_CLEAR, FPV_NEAR_CLEAR, fpvLensClear } from '../render/lens.js';
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -10003,6 +10007,212 @@ function suiteFiveInchParts() {
   }
 }
 
+/*
+ * THE 5 INCH CANVAS IN THE ROOM (TRACK-BUILDER-5IN-PLAN.md, stages 2 to 5): the rules the card, the ghosts and the
+ * shipped Nationals track stand on, which are pure and so are run here. What a pointer does with them is
+ * scripts/builder-flow-check.js's.
+ */
+function suiteFiveInchRoom() {
+  console.log('\nthe 5 inch room');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const WIDE = GATE_PRESETS.find((p) => p.id === 'wide');
+  const wideDims = () => {
+    const d = { ...ELEMENTS.gate.dims };
+    applyGatePreset(d, WIDE);
+    return d;
+  };
+
+  /* ---- a wall and a loop are not corners ---- */
+  {
+    /* Both are in the Nationals qualifier, whose line is held to a metre: the bays of its wall are 0.4 m of radius
+     * apart and its loops are a circle 0.87 m across, and the file has no warning. Take the wall's bays out of their
+     * group, and rename its loops, and each is a corner again. */
+    const tight = (doc) => collectWarnings(doc, buildPath(doc)).filter((w) => w.code === 'tight-corner');
+    const fresh = () => deserialize(JSON.stringify(FIVE_INCH_PRESETS[0])).doc;
+    const doc = fresh();
+    check('the bays of a wall and a loop round a post are tighter than a metre, and are not called a corner nothing flies',
+      buildPath(doc).tightest.radius < doc.settings.minCurveRadius && tight(doc).length === 0,
+      `tightest ${buildPath(doc).tightest.radius.toFixed(2)} m`);
+    const ungrouped = fresh();
+    for (const e of ungrouped.elements) {
+      delete e.group;
+    }
+    check('the same bays that are not one wall are corners, so the exemption is for a wall and for nothing else',
+      tight(ungrouped).length === 1, String(tight(ungrouped).length));
+    const renamed = fresh();
+    for (const e of renamed.elements.filter((x) => /^Loop /.test(x.name))) {
+      e.name = 'a bend';
+    }
+    check('and loops whose waypoints have been renamed are held to the radius again, which is the safe way for a name to be wrong',
+      tight(renamed).length === 1);
+    /* A hall is held to its rule whether its gates are in a group or not, as it always was. */
+    const hall = createTrack('hall', 'micro');
+    const a = place(hall, 'gate', 3, 3, { yaw: 0 });
+    const b = place(hall, 'gate', 3.1, 3.5, { yaw: Math.PI });
+    const c = place(hall, 'gate', 3.2, 4.4, { yaw: 0 });
+    for (const g of [a, b, c]) {
+      g.yawOverridden = true;
+      addToSequence(hall, g.id, 0);
+    }
+    const before = JSON.stringify(collectWarnings(hall, buildPath(hall)).map((w) => w.code));
+    a.group = 'grp-1';
+    b.group = 'grp-1';
+    check('a hall is held to its own rule as it always was: a group makes no difference to what it is told',
+      JSON.stringify(collectWarnings(hall, buildPath(hall)).map((w) => w.code)) === before && before.includes('tight-corner'), before);
+  }
+
+  /* ---- the way a wall is flown through first ---- */
+  {
+    const doc = createTrack('approach');
+    const up = placeUpGate(doc, { x: 33, y: 43, z: 0 });
+    up.yaw = Math.PI / 2;
+    up.yawOverridden = true;
+    const ids = placeWall(doc, { x: 24, y: 43 }, { x: 18, y: 43 }, { dims: wideDims() });
+    const first = doc.sequence.find((q) => q.elementId === ids[0]);
+    const f = apertureFrame(elementById(doc, ids[0]).yaw, 0);
+    check('a wall straight on from a gate the course left going north is entered from the north: the first bay is flown south',
+      Math.sign(f.normal.y * first.entry) === -1, `normal y ${f.normal.y.toFixed(2)} entry ${first.entry}`);
+    const south = createTrack('approach south');
+    const down = placeUpGate(south, { x: 33, y: 43, z: 0 });
+    down.yaw = -Math.PI / 2;
+    down.yawOverridden = true;
+    const ids2 = placeWall(south, { x: 24, y: 43 }, { x: 18, y: 43 }, { dims: wideDims() });
+    const f2 = apertureFrame(elementById(south, ids2[0]).yaw, 0);
+    check('and one the course left going south is entered from the south, so the first bay is flown north',
+      Math.sign(f2.normal.y * south.sequence.find((q) => q.elementId === ids2[0]).entry) === 1);
+  }
+
+  /* ---- a click lays a wall across the spot ---- */
+  {
+    const doc = createTrack('click wall');
+    const c = wallPlan(doc, { x: 20, y: 20 }, { x: 20, y: 20 });
+    const mean = c.items.reduce((m, it) => ({ x: m.x + it.x / c.count, y: m.y + it.y / c.count }), { x: 0, y: 0 });
+    check('a click lays three bays with the click at the middle of them, and a drag still begins at its first point',
+      c.count === WALL_DEFAULT && near(mean.x, 20) && near(mean.y, 20)
+      && near(wallPlan(doc, { x: 20, y: 20 }, { x: 26, y: 20 }).items[0].x, 20 + c.pitch / 2));
+    check('a wall dragged square to the field, with Square on, is on the nearest quarter, and off it is on the nearest fifteen degrees',
+      near(Math.abs(wallPlan(doc, { x: 20, y: 20 }, { x: 26, y: 22 }, { square: true }).dir.y), 0, 1e-9)
+      && Math.abs(wallPlan(doc, { x: 20, y: 20 }, { x: 26, y: 22 }).dir.y) > 0.2);
+  }
+
+  /* ---- the size of a wall's bays ---- */
+  {
+    const doc = createTrack('wall size');
+    const ids = placeWall(doc, { x: 24, y: 43 }, { x: 18, y: 43 });
+    const first = elementById(doc, ids[0]);
+    const startPost = first.position.x + wallPitchFor(first.dims, 'full') / 2;
+    check('a wall of standard bays is read as standard', wallSizeOf(doc, ids[0]) === 'standard');
+    check('making them wide lays them again at 2 m from the first post, which has not moved, and says what size it is',
+      setWallSize(doc, ids[1], 'wide') && wallSizeOf(doc, ids[0]) === 'wide'
+      && ids.map((id) => elementById(doc, id).position.x).every((x, i) => near(x, startPost - 1 - 2 * i, 1e-5))
+      && near(first.position.x + 1, startPost, 1e-5));
+    check('and what is already that size, a size that is not offered, and a gate that is not a wall change nothing',
+      !setWallSize(doc, ids[0], 'wide') && !setWallSize(doc, ids[0], 'whoop') && !setWallSize(doc, ids[0], 'nope')
+      && !setWallSize(doc, 'el-nope', 'wide'));
+    check('the uprights still meet where the game builds them after the change',
+      (() => {
+        const course = courseFromDocument(doc);
+        const bays = ids.map((id) => course.structures.find((x) => x.id === id));
+        const tube = (FRAME_TUBE_OD * GATE_SCALE) / 2;
+        return near(bays[0].x - (bays[0].dims.clearW / 2 + tube), bays[1].x + (bays[1].dims.clearW / 2 + tube), 1e-6);
+      })());
+  }
+
+  /* ---- Square: new gates on the compass ---- */
+  {
+    const doc = createTrack('square');
+    const free = placementFor(doc, { x: 10, y: 10 }, 'gate');
+    const sq = placementFor(doc, { x: 10, y: 10 }, 'gate', { square: true });
+    check('the first gate faces east, and with Square on it is kept there; off, it is left to take its heading from the next',
+      free.yaw === 0 && free.pin === false && sq.yaw === 0 && sq.pin === true);
+    const first = placeOnTrack(doc, 'gate', { x: 10, y: 10, z: 0 }, { square: true });
+    const second = placementFor(doc, { x: 22, y: 25 }, 'gate', { square: true });
+    check('the next one takes the quarter turn nearest the line from the one before, and keeps it',
+      near(second.yaw, Math.PI / 2) && second.pin === true && first.yawOverridden === true);
+    check('without Square it is as it always was: along the line, at any angle, and not kept',
+      near(placementFor(doc, { x: 22, y: 25 }, 'gate').yaw, Math.atan2(15, 12)) && placementFor(doc, { x: 22, y: 25 }, 'gate').pin === false);
+    check('Square is for a field: a hall is placed as it was whether it is asked for or not',
+      (() => {
+        const hall = createTrack('hall', 'micro');
+        place(hall, 'gate', 3, 3);
+        addToSequence(hall, hall.elements[0].id, 0);
+        const a = placementFor(hall, { x: 3, y: 4.2 }, 'gate');
+        const b = placementFor(hall, { x: 3, y: 4.2 }, 'gate', { square: true });
+        return a.yaw === b.yaw && a.pin === b.pin;
+      })());
+    const hurdle = placeHurdle(createTrack('h'), { x: 27, y: 28 }, { square: true });
+    check('a hurdle and an up gate are squared too, and what is not asked for is placed as it was',
+      (() => {
+        const d = createTrack('parts square');
+        const g = place(d, 'gate', 20, 19, { yaw: 0 });
+        addToSequence(d, g.id, 0);
+        const h = placeHurdle(d, { x: 27, y: 28 }, { square: true });
+        const u = placeUpGate(d, { x: 33, y: 43, z: 0 }, { square: true });
+        const quarter = (y) => near(Math.abs(Math.sin(2 * y)), 0, 1e-5);
+        return quarter(elementById(d, h.id).yaw) && quarter(u.yaw) && u.yawOverridden === true && hurdle.id.length > 0;
+      })());
+    const g4 = partGhosts(doc, 'upGate', { x: 33, y: 43 }, { x: 33, y: 43 }, { square: true });
+    check('the ghost of each is what is laid: a wall of the bays it would lay, a hurdle with its flags, an up gate leaning',
+      partGhosts(doc, 'wall', { x: 24, y: 43 }, { x: 18, y: 43 }).items.length === 3
+      && partGhosts(doc, 'hurdle', { x: 27, y: 28 }).items[0].props.flagSide === 'both'
+      && near(g4.items[0].props.pitch, Math.PI / 4) && near(g4.items[0].props.dims.sillH, 1.5)
+      && partGhosts(doc, 'nope', { x: 0, y: 0 }).items.length === 0);
+  }
+
+  /* ---- the Nationals qualifier, as it ships ---- */
+  {
+    const raw = FIVE_INCH_PRESETS[0];
+    const { doc, repairs } = deserialize(JSON.stringify(raw));
+    const path = buildPath(doc);
+    const warn = collectWarnings(doc, path);
+    const apertures = doc.elements.filter((e) => kindOf(e) === KIND.APERTURE && e.type !== 'diveGate');
+    const pennants = doc.elements.reduce((n, e) => {
+      const side = flagSideOf(e);
+      return n + (side === 'both' ? 2 : (side ? 1 : 0)) + (e.type === 'flag' ? 1 : 0);
+    }, 0);
+    check('the Nationals qualifier opens with nothing repaired and nothing to warn about, and the lap closes',
+      repairs.length === 0 && warn.length === 0 && path.closed, `${repairs.length} repairs, ${warn.map((w) => w.code).join()}`);
+    check('it has the materials the plan lists: seven gates, nine flags, one hurdle and one dive gate',
+      apertures.length === 7 && pennants === 9 && doc.elements.filter((e) => e.type === 'barrier').length === 1
+      && doc.elements.filter((e) => e.type === 'diveGate').length === 1,
+      `${apertures.length} gates, ${pennants} flags`);
+    check('every gate and the hurdle stand on a whole metre, which is how the plan is dimensioned',
+      doc.elements.filter((e) => kindOf(e) === KIND.APERTURE || e.type === 'barrier' || e.type === 'flag' || e.type === 'startPads')
+        .every((e) => near(e.position.x, Math.round(e.position.x), 1e-5) && near(e.position.y * 10, Math.round(e.position.y * 10), 1e-5)));
+    check('its wall has three bays 2 m apart, flown as a weave, with a flag on the end that is flown first',
+      (() => {
+        const bay = doc.elements.find((e) => e.group);
+        const wall = bay ? wallOf(doc, bay.id) : null;
+        return wall && wall.ids.length === 3 && wallIsWoven(doc, bay.id) && wallFlagsOf(doc, bay.id) === 'first'
+          && near(Math.hypot(elementById(doc, wall.ids[0]).position.x - elementById(doc, wall.ids[1]).position.x, 0), 2, 1e-5);
+      })());
+    check('the game builds it: the hurdle is a barrier with two masts, the wall bays are plain gates, the lap is closed',
+      (() => {
+        const course = courseFromDocument(doc);
+        const hurdle = course.structures.find((s) => s.kind === 'obstacle');
+        const bays = doc.elements.filter((e) => e.group).map((e) => course.structures.find((s) => s.id === e.id));
+        return hurdle && JSON.stringify(hurdle.flagSigns) === '[-1,1]' && bays.length === 3 && bays.every((s) => s && s.plain === true);
+      })());
+    check('it is not left to a hand: it is what scripts/mission-preset.js writes, which is its own check (--check)',
+      raw.id === 'nationals-2026-qualifier' && raw.credit.designer === 'Wilf' && raw.trackClass === 'full');
+
+    /* Handed to the library the way the builder hands it. */
+    shipTracks(FIVE_INCH_PRESETS);
+    const rows = listTracks('full', 'race');
+    check('it is listed under the five inch canvas, as a shipped track with its designer, and not under the hall',
+      rows.some((r) => r.id === raw.id && r.preset === true && r.credit && r.credit.designer === 'Wilf')
+      && !listTracks('micro', 'race').some((r) => r.id === raw.id)
+      && !listTracks('full', 'freestyle').some((r) => r.id === raw.id));
+    const opened = loadTrack(raw.id);
+    check('it opens as a copy under a fresh id, so the shipped one stays as it is, and it can be asked for by its own id',
+      opened && opened.doc.id !== raw.id && opened.doc.name === raw.name && opened.doc.credit.designer === 'Wilf' && trackExists(raw.id));
+    shipTracks([]);
+    check('and with nothing handed in the library has no five inch tracks of its own, which is the simulator\'s boot',
+      !listTracks('full', 'race').some((r) => r.id === raw.id) && loadTrack(raw.id) === null);
+    shipTracks(FIVE_INCH_PRESETS);
+  }
+}
+
 async function main() {
   if (process.argv.includes('--emit')) {
     process.stdout.write(serialize(demoTrack()));
@@ -10062,6 +10272,7 @@ async function main() {
   suiteBuildSheet();
   suiteImportFpv();
   suiteFiveInchParts();
+  suiteFiveInchRoom();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
 }

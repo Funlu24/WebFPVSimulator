@@ -1883,17 +1883,20 @@ export class View3D {
     const d = doc.field.depth;
     const edge = [0, 0, 0.01, w, 0, 0.01, w, 0, 0.01, w, d, 0.01,
       w, d, 0.01, 0, d, 0.01, 0, d, 0.01, 0, 0, 0.01];
-    const group = new THREE.Group();
     const lines = (list, color) => {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(list, 3));
-      group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color })));
+      return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color }));
     };
-    lines(pts, COL.grid);
-    if (major.length) {
-      lines(major, COL.gridMajor);
+    /* With no fives to pick out, which is a hall, the grid and its edge are one set of lines, as they have always
+     * been. */
+    if (!major.length) {
+      return lines([...pts, ...edge], COL.grid);
     }
-    lines(edge, major.length ? COL.frame : COL.grid);
+    const group = new THREE.Group();
+    group.add(lines(pts, COL.grid));
+    group.add(lines(major, COL.gridMajor));
+    group.add(lines(edge, COL.frame));
     return group;
   }
 

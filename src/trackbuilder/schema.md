@@ -391,6 +391,24 @@ pass goes through is a cube and is still refused.
 **A loop.** A pass through a gate followed by a circle round one of its uprights and a second pass through
 the same opening is stored as what it is made of: the pass, three ordinary `waypoint` elements a quarter
 turn apart in the flying order, then the second pass, which `addLoop` in `src/trackbuilder/parts.js` writes.
+The second pass is optional: a loop that goes round the post and on, a hook in the line, has the three
+waypoints and no second pass. The waypoints are named `Loop right` or `Loop left`, which is how the curvature
+warning knows a circle a metre across is what the author asked for and does not call it a corner nothing flies;
+a waypoint renamed is an ordinary waypoint again. The circle's radius is the upright's distance from the
+opening's middle, in the document's sizes.
+
+**A hurdle.** A `barrier`, 4 m long by 0.1 m by 1 m by default, with an optional `flagSide` (`left`, `right` or
+`both`) and `dims.flagH` (the mast's height) written only when it has flags, so a barrier with none is the
+bytes it was. A hurdle is not a gate and is not in the flying order; the lap goes over it by a `waypoint`
+named `Over the hurdle` a metre above its top, which `placeHurdle` and the Fly order tool write.
+
+**An up gate.** A `diveGate` with a 45 degree `pitch` and `dims.sillH` of 1.5 m, flown up through (its pass is
+set, so the face rule does not make a dive gate of it).
+
+**The shipped five inch tracks** are plain documents in `src/trackbuilder/presets5.js`, written by
+`scripts/mission-preset.js`, and are handed to the library by the builder (`shipTracks` in `storage.js`) so the
+simulator's own boot graph does not carry them. They list under the five inch canvas, open as a copy under a
+fresh id, and carry their designer's credit.
 
 A map also holds the freestyle assets, of two more kinds, `structure` and
 `zone`, and roads and vehicles, of two more, `road` and `vehicle`; they are
@@ -959,7 +977,7 @@ does. Codes, so a consumer can filter:
 | --- | --- | --- |
 | `no-face` | warn | a sequenced aperture with `entry: 0` |
 | `reversal` | warn | an element's face sends the line backwards along the course |
-| `tight-corner` | warn | the radius of curvature drops below `settings.minCurveRadius` |
+| `tight-corner` | warn | the radius of curvature drops below `settings.minCurveRadius`, except on a five inch track between two bays of one wall and round a loop (see **A loop**) |
 | `barrier` | warn | the line passes through a `barrier` element, or through the boxes a `table`, `chair` or `banner` is made of (under a table between its legs is not through it) |
 | `out-of-field` | warn | the line leaves the field boundary |
 | `underground` | warn | the line goes below `z = 0` |

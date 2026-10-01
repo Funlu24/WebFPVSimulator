@@ -13,8 +13,9 @@
  * column stays on a 45 by 55 m field with a margin, and the start gate is at (20, 19).
  *
  * WHAT IS ON IT, by the plan's own materials list: seven gates (the start gate, two on the left hand column, one
- * with a loop on the right, and the three bays of the wall), nine flags (two on each flagged gate but one that has
- * one, one at the end of the wall, two on the hurdle, and the turn flag), a hurdle and an up gate. The lap goes:
+ * with a loop on the right, and the three bays of the wall), nine flags (two on each of the gates on the right and
+ * the lower left, one on the upper left, one at the end of the wall, two on the hurdle, and the turn flag), a
+ * hurdle and an up gate. The lap goes:
  *
  *   start gate, over the hurdle, the gate with the loop (round its south post and back through), up through the
  *   up gate, along the wall as a weave, the left hand gate with its loop, the swing out west, the lower left hand
@@ -77,7 +78,7 @@ const PLAN = {
   loopLeft: { x: 0, y: 24, facing: 180, flags: 'left' },
   swingOut: { x: -2, y: 19, height: 0.9 },
   lower: { x: 0, y: 14, facing: 0, flags: 'both' },
-  turnFlag: { x: 0, y: 0.4, passedOn: -90, clearance: 2.5 },
+  turnFlag: { x: 0, y: 0, passedOn: -90, clearance: 2.5 },
   pads: { x: 12, y: 14 },
 };
 
@@ -104,7 +105,7 @@ function build() {
     sponsor: '',
     source: 'the official layout and dimensions plan',
     broughtOverBy: '',
-    note: 'Rebuilt in the builder from the plan, for practice. It is not the organisers’ file.',
+    note: "Rebuilt in the builder from the plan, for practice. It is not the organisers' file.",
   };
 
   /* A gate of the plan's width, facing a way, flown the way it faces, one pass. */
@@ -124,7 +125,7 @@ function build() {
   };
 
   const start = gate('gate', PLAN.start, 'Start and finish');
-  placeHurdle(doc, at(PLAN.hurdle));
+  placeHurdle(doc, at(PLAN.hurdle), { square: true });
 
   const right = gate('flaggedGate', PLAN.loopRight, 'Gate with the south loop', PLAN.loopRight.flags);
   addLoop(doc, right.seq.id, 'right');

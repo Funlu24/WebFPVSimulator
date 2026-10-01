@@ -1983,6 +1983,10 @@
         #tb-palette .tb-tool { min-height: 44px; }
         .tb-card-actions .tb-btn, #tb-lapbar .tb-btn { min-height: 44px; }
         .tb-card-x { min-width: 44px; min-height: 44px; }
+        /* The card's choices (faces, flags, loop, a wall's weave and bay) are fingers too, and wrap where five words do
+         * not fit on one line of a tablet's card. */
+        .tb-seg.tb-seg-card { flex-wrap: wrap; }
+        .tb-seg-card .tb-seg-btn { min-height: 44px; padding: 0 10px; }
         .tb-card-grid .tb-field input, .tb-card-swap select { min-height: 40px; font-size: var(--t-body); }
         #tb-side .tb-field input, #tb-side .tb-field select, #tb-side .tb-btn, #tb-side .tb-mini { min-height: 40px; }
         .tb-keys > span { display: none; }
