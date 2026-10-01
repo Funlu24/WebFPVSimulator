@@ -306,13 +306,37 @@ const RADIO_LINE = 'On the radio: choose USB joystick mode as you plug it in, be
  * actually be done there, in the order a pilot should try it, and says
  * plainly where this page can do nothing.
  *
- * THE ANDROID PARAGRAPH'S SECOND HALF IS WORKED OUT, NOT TRIED. Chrome's
- * fallback keeps X and Y, one of Z and Rx, and one of Ry and Rz, so a radio
- * that sends its four sticks on X, Y, Z and Rz and nothing else on an axis
- * should arrive whole, and in AETR order, which is the order this page
- * guesses. Nobody has flown that on a phone yet, so the sentence says
- * "should" and asks to be told, and the report it asks for carries the
- * axis list that would settle it.
+ * THE ANDROID PARAGRAPHS ARE WORKED OUT FROM BOTH ENDS' CODE, NOT TRIED.
+ *
+ * Chrome's fallback for a pad it does not know (GamepadMappings.java,
+ * UnknownGamepadMappings, the legacy branch: "only the canonical axes are
+ * exposed ... and unmatched input axes are dropped") keeps X and Y, one of Z
+ * and Rx, and one of Ry and Rz. EdgeTX in its ordinary joystick mode sends
+ * channels 1 to 8 on X, Y, Z, Rx, Ry, Rz, Slider and Dial, in that order
+ * (usb_driver.cpp fills axis i from channel i + 1), and OpenTX, which EdgeTX
+ * came from, does the same. So a phone gets channels 1 and 2, one of 3 and
+ * 4, and one of 5 and 6, and on an AETR radio that is one of throttle and yaw
+ * gone. Five tickets on 29 and 30 September, five radios from three makers
+ * (bug-8acd3b2f, bug-abaabdde, bug-b2de5239, bug-da8c8d0e, bug-f42ae325), all
+ * arrived as 4 axes and 17 buttons with axis 2 resting at the throttle's end:
+ * Z kept, Rx and yaw dropped.
+ *
+ * The fix this used to give was a computer, or EdgeTX's Advanced mode with
+ * the four sticks on X, Y, Z and rotZ. That is right, and it is no help on
+ * OpenTX, which has no such mode. Mixing the missing stick onto channels 5
+ * AND 6 works on both, in the joystick mode they are already in: Chrome keeps
+ * one of the two, so the stick arrives on it whichever that is, and on a
+ * radio that lost yaw the four axes are then roll, pitch, throttle and yaw,
+ * the order this page guesses. Nobody has flown it on a phone yet, so the
+ * copy says so and asks to be told. A copy of the model, because channel 5
+ * is often the arm switch on the model that flies a real quad. And CLEAR the
+ * two channels rather than add to them: a line added under an arm switch's
+ * line sums with it by default, and the stick would arrive offset by the
+ * switch and clipped at one end.
+ *
+ * Chrome has a newer mapping behind a flag (ANDROID_UNKNOWN_GAMEPAD_EXTRA_
+ * AXES) that keeps the rest as extra axes. Under it a radio arrives with
+ * more than four axes, fourAxisPad is false, and none of this is shown.
  */
 export function platformHelp(platform, browser = 'chromium', facts = {}) {
   const four = facts.fourAxes ? ` Your radio is arriving as ${facts.axisCount || 4} axes.` : '';
@@ -320,13 +344,18 @@ export function platformHelp(platform, browser = 'chromium', facts = {}) {
     return {
       title: 'If no bar moves: Android',
       lines: [
-        'Chrome on Android passes on only four axes from a radio and drops the rest, and one of'
-          + ' your four sticks can be among the dropped, most often throttle or yaw. When that is'
-          + ` what happened, nothing in this page or any other can bring it back, calibrating included.${four}`,
-        'The sure fix is a computer, which sees every axis. If your radio lets you choose which axis'
-          + ' each channel is sent on (EdgeTX does, in its USB joystick settings in Advanced mode),'
-          + ' sending the four sticks on X, Y, Z and rotZ, with nothing else on an axis, should get'
-          + ' all four through. If you try it, say whether it worked with Report a bug from this screen.',
+        'Chrome on Android passes on only four of a radio\'s channels and drops the rest: channels'
+          + ' 1 and 2, one of channels 3 and 4, and one of channels 5 and 6. Most radios send throttle'
+          + ' on 3 and yaw on 4, so one of those two never arrives, most often yaw. Nothing in this'
+          + ` page or any other can bring a dropped channel back, calibrating included.${four}`,
+        'The fix is on the radio. Make a copy of the model you fly the sim with, because the copy'
+          + ' gives up its channels 5 and 6, which often carry the arm switch. In the copy, on the'
+          + ' Mixes page, clear channels 5 and 6 and give each of them one line whose source is the'
+          + ' stick that does not arrive: Rud for yaw, Thr for throttle. Chrome keeps one of those two'
+          + ' channels, so the stick comes through on it. Then run Calibrate sticks.',
+        'That should work on any EdgeTX or OpenTX radio, and nobody has confirmed it on a phone yet,'
+          + ' so say whether it did with Report a bug from this screen. A radio whose channels cannot'
+          + ' be changed, a DJI controller among them, needs a computer for now, which sees every axis.',
         RADIO_LINE,
       ],
     };

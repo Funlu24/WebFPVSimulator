@@ -1794,9 +1794,21 @@ section('stick help: which machine, and what the screen says');
     /Chrome is dropping it/.test(stickSay({ ...base, dead: ['yaw'], fourAxes: true }, 'android'))
     && !/Chrome/.test(stickSay({ ...base, dead: ['yaw'], fourAxes: true }, 'windows')));
   const android = platformHelp('android', 'chromium', { fourAxes: true, axisCount: 4 });
-  check('Android: four axes, the computer, and the radio side worded as untried',
-    /only four axes/.test(android.lines.join(' ')) && /computer/.test(android.lines.join(' '))
-    && /should get\s+all four through/.test(android.lines.join(' ')) && /arriving as 4 axes/.test(android.lines.join(' ')));
+  /* bug-8acd3b2f, bug-abaabdde, bug-b2de5239, bug-da8c8d0e: five radios on
+   * phones, all four axes and yaw gone. The recipe is the one both ends' code
+   * says works (see platformHelp): the missing stick on channels 5 and 6, of
+   * which Chrome keeps one, in a copy of the model. */
+  const androidText = android.lines.join(' ');
+  check('Android: which four channels Chrome keeps, and that one of throttle and yaw is the casualty',
+    /only four of a radio's channels/.test(androidText) && /channels\s+1 and 2, one of channels 3 and 4, and one of channels 5 and 6/.test(androidText)
+    && /arriving as 4 axes/.test(androidText));
+  check('the fix on the radio: a copy of the model, channels 5 and 6 cleared and given the missing stick, then calibrate',
+    /copy of the model/.test(androidText) && /clear channels 5 and 6/.test(androidText)
+    && /one line whose source is the\s+stick that does not arrive/.test(androidText)
+    && /Rud for yaw, Thr for throttle/.test(androidText) && /Calibrate\s+sticks/.test(androidText));
+  check('worded as untried, asking to be told, and a computer for the radios that cannot change',
+    /nobody has confirmed it on a phone yet/.test(androidText) && /Report a bug/.test(androidText)
+    && /DJI controller/.test(androidText) && /computer/.test(androidText));
   check('Windows: joy.cpl as the test, and not as a calibration',
     /joy\.cpl/.test(platformHelp('windows').lines.join(' ')) && /changes nothing a browser reads/.test(platformHelp('windows').lines.join(' ')));
   check('Safari on a Mac is told to try another browser first, and Chrome on a Mac is not',
