@@ -482,10 +482,24 @@ export const TRACK_TAGS = [
    * has meant that since before there was a micro track class; beside a 65
    * mm whoop, a tag labelled "Micro" is two different things one word apart.
    * The board's src/validate.js carries the same rename. */
-  { id: 'micro', label: 'Small field', note: 'A five inch track that fits a small field or a garden.' },
-  { id: 'big', label: 'Big field', note: 'Wants the whole field and a lot of speed.' },
+  { id: 'micro', label: 'Small field', note: 'A five inch track that fits a small field or a garden.', classes: ['full'] },
+  { id: 'big', label: 'Big field', note: 'Wants the whole field and a lot of speed.', classes: ['full'] },
   { id: 'showcase', label: 'Showcase', note: 'Built to be looked at.' },
 ];
+
+/*
+ * THE TAGS A CLASS'S TRACK IS OFFERED. How big a field a track wants is a
+ * five inch question, and a whoop track stands in a room, so Small field and
+ * Big field are not offered on one: ten of the board's thirteen rooms wore
+ * Small field, which says something about a field none of them has
+ * (MENUS-PLAN.md 1.27). A tag with no `classes` is every class's. What a
+ * track already wears is the dialog's business, which shows a worn tag so it
+ * can be taken off.
+ */
+export function tagsForClass(cls) {
+  const want = cls === 'micro' ? 'micro' : 'full';
+  return TRACK_TAGS.filter((t) => !t.classes || t.classes.includes(want));
+}
 
 /* MIRRORS TAGS_MAX in the board's src/validate.js. Past five a tag stops
  * narrowing anything, because a track wearing every tag answers every
