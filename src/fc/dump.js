@@ -41,17 +41,78 @@ export const RATES_DUMP = 'use-dump';
  * The value stored is tuneBody(dump): the pilot's rates are stripped on
  * the way in and appended from the menu on every compose, so the saved
  * dump can never smuggle a rate profile past the Rates screen.
+ *
+ * This key is the OLD SINGLE SLOT now, read and never written: each aircraft
+ * saves under fcDumpKeyFor below, which is this key with the aircraft's id
+ * on the end.
  */
 export const FC_DUMP_KEY = 'webfpv.fc.v1';
 /*
- * WHICH AIRCRAFT THE DUMP WAS SAVED ON, beside it. A dump is one machine's
- * whole configuration and it was being offered as "Your edits" on both
- * aircraft, so a 6S five inch dump could be loaded onto a 1S whoop. Written
- * by the shell with the dump; read by the Tune row to decide whether to
- * offer it. Absent means the five inch, which is every dump saved before
- * there was a second aircraft.
+ * WHICH AIRCRAFT THE OLD SLOT'S DUMP WAS SAVED ON, beside it. A dump is one
+ * machine's whole configuration and it was being offered as "Your edits" on
+ * both aircraft, so a 6S five inch dump could be loaded onto a 1S whoop.
+ * Read by readFcDump to decide whose the old slot is. Absent means the five
+ * inch, which is every dump saved before there was a second aircraft.
  */
 export const FC_DUMP_AIRFRAME_KEY = 'webfpv.fc.airframe.v1';
+
+/*
+ * ONE SAVED DUMP PER AIRCRAFT, each under a key of its own.
+ *
+ * The stamp above made the dump one aircraft's, but there was still only the
+ * one slot, so a Save on the whoop threw the five inch's dump away and
+ * restamped the slot: bug-693b9ed4, a pilot who tuned both machines and found
+ * the five inch's Tune row down to Betaflight default. Every aircraft now
+ * saves to fcDumpKeyFor(its id).
+ *
+ * THE OLD SLOT IS STILL READ, for the aircraft its stamp names (the five inch
+ * when there is no stamp), until that aircraft saves into its own key, and
+ * that save is what clears it. Nothing is copied on load, so a browser that
+ * refuses a write cannot cost a pilot the dump they had.
+ */
+export function fcDumpKeyFor(airframe) {
+  return `${FC_DUMP_KEY}.${airframe}`;
+}
+
+/* Whose an unstamped dump is: every dump saved before there was a second
+ * aircraft was the five inch's. configs/airframes.js owns the id. */
+const UNSTAMPED_DUMP_AIRFRAME = '5inch';
+
+function oldSlotOwner() {
+  return localStorage.getItem(FC_DUMP_AIRFRAME_KEY) || UNSTAMPED_DUMP_AIRFRAME;
+}
+
+/* The dump saved on this aircraft, or null when it has none. */
+export function readFcDump(airframe) {
+  try {
+    const own = localStorage.getItem(fcDumpKeyFor(airframe));
+    if (own != null) {
+      return own;
+    }
+    const old = localStorage.getItem(FC_DUMP_KEY);
+    return old != null && oldSlotOwner() === airframe ? old : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* Store a dump as this aircraft's. False when the browser would not keep it. */
+export function writeFcDump(airframe, body) {
+  try {
+    localStorage.setItem(fcDumpKeyFor(airframe), body);
+  } catch (e) {
+    return false;
+  }
+  try {
+    if (localStorage.getItem(FC_DUMP_KEY) != null && oldSlotOwner() === airframe) {
+      localStorage.removeItem(FC_DUMP_KEY);
+      localStorage.removeItem(FC_DUMP_AIRFRAME_KEY);
+    }
+  } catch (e) {
+    /* Left behind, the old slot is shadowed by the key just written. */
+  }
+  return true;
+}
 
 /*
  * Keys the pilot owns. Switching a registry tune must not overwrite them,

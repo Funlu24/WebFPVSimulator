@@ -114,7 +114,7 @@ import { airframeById, simIdFor } from '../configs/airframes.js';
 import { buildWhoopCraft } from './render/whoopcraft.js';
 import { hoverStickPercent, normaliseRates, ratesAreDefault, ratesDiff, ratesSummary, TOUCH_RATE_DEFAULTS } from '../configs/rates.js';
 import { clearPidsFor, PID_AXES, pidCliKey, pidsDiffFor, SLIDER_KEYS, SLIDERS } from '../configs/pids.js';
-import { cliMap, composeConfig, FC_DUMP_KEY, FC_DUMP_AIRFRAME_KEY, moduleDump, moduleGet, RATES_KEEP, ratesFromDump, tuneBody } from './fc/dump.js';
+import { cliMap, composeConfig, moduleDump, moduleGet, RATES_KEEP, ratesFromDump, readFcDump, tuneBody, writeFcDump } from './fc/dump.js';
 import { GATE_SCALE } from './game/track.js';
 import { planStages, moduleCounter, yieldToPaint } from './ui/loading.js';
 import { loadSim, simErrorName, SIM_OK, SIM_ERR_BAD_ARG } from '../tests/lib/simmod.js';
@@ -1118,28 +1118,22 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   /* The Flight controller screen's saved dump, the body of the pilot's
    * own "custom" tune. Its rates were stripped on the way in, so it goes
-   * through composeConfig like any file in configs/. */
-  function readFcDump() {
-    try {
-      return localStorage.getItem(FC_DUMP_KEY);
-    } catch (e) {
-      return null;
-    }
+   * through composeConfig like any file in configs/. One per aircraft, and
+   * always the seated one's: see readFcDump in src/fc/dump.js. */
+  function seatedFcDump() {
+    return readFcDump(ui.settings.airframe);
   }
-  function writeFcDump(body) {
-    try {
-      localStorage.setItem(FC_DUMP_KEY, body);
-      /* Stamped with the aircraft it came off, so the Tune row offers it on
-       * that aircraft only. See FC_DUMP_AIRFRAME_KEY. */
-      localStorage.setItem(FC_DUMP_AIRFRAME_KEY, ui.settings.airframe);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  /*
+   * WHOSE "Your edits" is loaded, while it is: null whenever the config
+   * flying is not a dump. Each aircraft has its own dump and both answer to
+   * the one tune id 'custom', so a change of aircraft with Your edits chosen
+   * on both is a change of tune that the id alone cannot see. applySettings
+   * and swapTune read this to see it.
+   */
+  let dumpFor = null;
   let tuneText;
   if (configId === 'custom') {
-    tuneText = readFcDump();
+    tuneText = seatedFcDump();
     if (tuneText == null) {
       /* A stored choice whose dump is gone. Fall back to the first tune
        * rather than failing to boot; the stale choice must not stop the
@@ -1151,6 +1145,7 @@ export async function boot({ loading, bootStart, mapId }) {
       ui.persistSettings();
     } else {
       configName = 'your edits';
+      dumpFor = ui.settings.airframe;
     }
   }
   if (tuneText == null) {
@@ -1170,6 +1165,7 @@ export async function boot({ loading, bootStart, mapId }) {
     ui.settings.tune = configId;
     menuTune = configId;
     configName = `${configId}.diff`;
+    dumpFor = null;
     ui.persistSettings();
     tuneText = new TextDecoder().decode(await fetchBytes(tunePath(configId)));
     pidsText = pidsDiffFor(ui.settings.pids, configId);
@@ -5360,8 +5356,12 @@ export async function boot({ loading, bootStart, mapId }) {
      * Only a MOVE of the Tune item swaps the tune. Comparing against what
      * is loaded instead would undo a dropped diff the next time the pilot
      * changed the volume, because a dropped file is not a registry tune.
+     *
+     * Or a change of AIRCRAFT under Your edits: each aircraft has its own
+     * dump under the one id, so the id stays 'custom' while the dump that
+     * should fly changes. See dumpFor.
      */
-    if (s.tune !== menuTune) {
+    if (s.tune !== menuTune || (s.tune === 'custom' && dumpFor !== s.airframe)) {
       menuTune = s.tune;
       configLoadWait = swapTune(s.tune).catch((e) => {
         console.error(e);
@@ -5477,25 +5477,45 @@ export async function boot({ loading, bootStart, mapId }) {
    * module rejects puts the old tune back rather than leaving the shell
    * flying something nobody chose, and says so.
    */
-  async function swapTune(id) {
+  async function swapTune(id, fallen = false) {
     const entry = tuneById(id);
     /* Bump first so switching back to the already loaded tune cancels an
      * in-flight fetch of a different one. The old early return before the
      * bump is how "off a tune and back" loaded the other tune anyway. */
     const gen = bumpConfigGen();
-    if (entry.id === configId) {
+    if (entry.id === configId && (entry.id !== 'custom' || dumpFor === ui.settings.airframe)) {
       return;
     }
+    /*
+     * Where a failure below leaves the pilot: on the config that was flying,
+     * named back into the menu. Except when that config is ANOTHER
+     * AIRCRAFT'S DUMP, left behind by a change of aircraft: it is not this
+     * machine's to fly, so a failure loads this aircraft's default tune
+     * instead, and loads it rather than only naming it, or the menu would
+     * say one tune while the module flew the other machine's. Once: if that
+     * load fails as well (a fetch with no network) the menu is put back on
+     * what is flying, and the next change of a setting tries again, rather
+     * than this retrying a fetch that cannot land for as long as it fails.
+     */
+    const stranded = !fallen && configId === 'custom' && dumpFor !== ui.settings.airframe;
+    const fallBack = () => {
+      if (!stranded) {
+        ui.settings.tune = configId;
+        return undefined;
+      }
+      ui.settings.tune = airframeById(ui.settings.airframe).defaultTune;
+      menuTune = ui.settings.tune;
+      return swapTune(ui.settings.tune, true);
+    };
     let text;
     if (entry.id === 'custom') {
       /* The pilot's saved dump, from storage rather than a fetch. The row
        * only offers it while the dump exists, but a second tab can clear
        * storage under a first, so absence still has to be survivable. */
-      text = readFcDump();
+      text = seatedFcDump();
       if (text == null) {
-        ui.settings.tune = configId;
         notice = { text: 'No saved Flight controller edits to fly.', untilMs: performance.now() + 3200 };
-        return;
+        return fallBack();
       }
     } else {
       try {
@@ -5504,10 +5524,9 @@ export async function boot({ loading, bootStart, mapId }) {
         if (!isLiveConfigLoad(gen)) {
           return;
         }
-        ui.settings.tune = configId;
         notice = { text: `${entry.name} could not be loaded.`, untilMs: performance.now() + 3200 };
         console.error(e);
-        return;
+        return fallBack();
       }
     }
     if (!isLiveConfigLoad(gen)) {
@@ -5520,15 +5539,15 @@ export async function boot({ loading, bootStart, mapId }) {
     const nextText = composeConfig(text, ui.settings.rates, RATES_KEEP, nextPids);
     const code = sim.init(nextText);
     if (code !== SIM_OK) {
-      ui.settings.tune = configId;
       sim.init(configText);
       adoptSimClock();
       reset();
       publishPids();
       notice = { text: `${entry.name} could not be read.\n${configFault(code)}`, untilMs: performance.now() + 3600 };
-      return;
+      return fallBack();
     }
     configId = entry.id;
+    dumpFor = entry.id === 'custom' ? ui.settings.airframe : null;
     tuneText = text;
     configText = nextText;
     pidsText = nextPids;
@@ -6027,7 +6046,8 @@ export async function boot({ loading, bootStart, mapId }) {
    * The Flight controller's Save. The draft is a full dump of the module;
    * what it becomes is three things, each through the store that already
    * owns it: its rate keys become the pilot's rate profile, its body
-   * becomes the "custom" tune under FC_DUMP_KEY, and the PIDs screen's
+   * becomes the seated aircraft's "custom" tune (writeFcDump in
+   * src/fc/dump.js, one dump per aircraft), and the PIDs screen's
    * adjustment for that tune is cleared because the dump IS the new
    * baseline. Then one composeConfig and one sim_init, the same join and
    * the same call every other config change makes. No preset shortcut:
@@ -6049,7 +6069,7 @@ export async function boot({ loading, bootStart, mapId }) {
       ui.renderMenu();
       return;
     }
-    if (!writeFcDump(body)) {
+    if (!writeFcDump(ui.settings.airframe, body)) {
       /* Storage refused (private mode). The save still FLIES, it just
        * does not survive a reload, and the pilot is told which. */
       notice = { text: 'Saved for this session only.\nThis browser would not store the dump.', untilMs: performance.now() + 3600 };
@@ -6062,6 +6082,7 @@ export async function boot({ loading, bootStart, mapId }) {
     menuTune = 'custom';
     ui.persistSettings();
     configId = 'custom';
+    dumpFor = ui.settings.airframe;
     configName = 'your edits';
     tuneText = body;
     ratesText = ratesDiff(nextRates);

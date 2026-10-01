@@ -194,7 +194,7 @@ import {
 import {
   downloadCli, drawAttitude, FcSession, paintPageStrip, paintTabStrip,
 } from './fc.js';
-import { FC_DUMP_KEY, FC_DUMP_AIRFRAME_KEY } from '../fc/dump.js';
+import { readFcDump } from '../fc/dump.js';
 /*
  * The pilot's own tracks live in this browser, and the Track room lists
  * them now, so the shell reads the same library the builder's Load dialog
@@ -372,20 +372,12 @@ function ownMapId() {
  * Whether there is a saved Flight controller dump FOR THIS AIRCRAFT. A dump
  * is the whole of one machine's configuration, a 6S 2207's or a 1S 0702's,
  * and offering the five inch's as "Your edits" on the whoop was handing a
- * 23 g machine a tune built for thirty times its mass. The dump is stamped
- * with the aircraft it was saved on (src/fc/dump.js); one saved before the
- * stamp existed is the five inch's, because that is all there was.
+ * 23 g machine a tune built for thirty times its mass. Each aircraft keeps
+ * its own, so saving one never takes the other's off its row: see
+ * readFcDump in src/fc/dump.js.
  */
 function hasFcDump(airframe = AIRFRAME_IDS[0]) {
-  try {
-    if (!localStorage.getItem(FC_DUMP_KEY)) {
-      return false;
-    }
-    const stamped = localStorage.getItem(FC_DUMP_AIRFRAME_KEY) || AIRFRAME_IDS[0];
-    return stamped === airframe;
-  } catch (e) {
-    return false;
-  }
+  return readFcDump(airframe) != null;
 }
 
 /* The tune ids the row can offer right now. */
@@ -868,6 +860,31 @@ const DEFAULTS = {
    * and the Quad screen carries the row for every later change.
    */
   airframeAsked: false,
+  /*
+   * WHICH AIRCRAFT THE MACHINE SETTINGS IN THIS BLOB WERE SET FOR: the tune,
+   * the pack, the weight, the camera and the PIDs (MACHINE_KEYS). Written by
+   * seatAirframe and on every load, so it differs from `airframe` only when
+   * something outside this file moved the aircraft, which the builder's class
+   * toggle does by writing `airframe` alone. That difference is what
+   * loadSettings acts on, rather than guessing from the values: the guess was
+   * "still the other machine's stock value", and a five inch pilot who chose
+   * 95 degrees of lens, the whoop's stock, lost it at every load.
+   *
+   * Empty on a blob from before it existed, which gets the guess one last
+   * time; see reseatIfForeign.
+   */
+  seatedFor: '',
+  /*
+   * THE MACHINE SETTINGS OF EVERY AIRCRAFT THAT IS NOT SEATED, by airframe
+   * id, put away by seatAirframe when the pilot leaves an aircraft and given
+   * back when they return. Before it, changing aircraft wrote the new one's
+   * stock camera and tune over the pilot's and kept nothing, so going to the
+   * whoop and back cost the five inch its camera and its tune (bug-ddfe1c6d),
+   * and both aircraft shared one PID adjustment because both fly the same
+   * tune id (bug-693b9ed4). Entries are validated against their aircraft
+   * when they come back, not here.
+   */
+  hangar: {},
   /*
    * The whole rate profile, owned by the pilot rather than by the tune: a
    * rates type and three firmware fields per axis, plus Betaflight's
@@ -1367,6 +1384,20 @@ export function loadSettings() {
   if (!AIRFRAME_IDS.includes(s.airframe)) {
     s.airframe = DEFAULTS.airframe;
   }
+  /*
+   * And which aircraft the stored machine settings were SET FOR, which is
+   * not the stored airframe when the builder's class toggle has moved it
+   * since the last load (see seatedFor). Everything below is validated
+   * against the aircraft it was set for, and the move to the wanted one is
+   * made at the end, by seatAirframe, so the aircraft being left is put away
+   * whole rather than half validated against the other machine.
+   */
+  const wanted = s.airframe;
+  const marked = AIRFRAME_IDS.includes(s.seatedFor);
+  if (marked) {
+    s.airframe = s.seatedFor;
+  }
+  s.hangar = hangarOf(s);
   for (const [key, allowed] of [
     ['tune', tuneChoices(s.airframe)],
     ['link', Object.keys(LINK_PRESETS)],
@@ -1495,19 +1526,24 @@ export function loadSettings() {
    * ANYTHING STILL BELONGING TO THE OTHER AIRCRAFT.
    *
    * The seated airframe can be moved from outside this file: the track
-   * builder's class toggle writes it, and so does a link. Those writers know
-   * which aircraft is wanted and deliberately do not know its tune, its pack,
-   * its rates or its camera, because knowing would mean the builder pulling
-   * the whole shell in to draw a two button toggle.
+   * builder's class toggle writes it. That writer knows which aircraft is
+   * wanted and deliberately does not know its tune, its pack, its rates or
+   * its camera, because knowing would mean the builder pulling the whole
+   * shell in to draw a two button toggle.
    *
-   * So the reconciliation is here, on the way in, and it is the SAME rule
-   * seatAirframe applies: a setting still holding the other aircraft's stock
-   * value is moved, and a setting the pilot has changed is left alone. A
-   * whoop on 85 degrees at 30 degrees of tilt with a 6S tune was the state
-   * the first version of the shots harness produced, and it is a state a
-   * pilot could reach too.
+   * So the reconciliation is here, on the way in. A blob that says which
+   * aircraft its settings were set for is moved by seatAirframe, exactly as
+   * the Aircraft row moves it, when that is not the aircraft wanted, and is
+   * otherwise TRUSTED: the values in it are the pilot's. A blob from before
+   * seatedFor existed cannot say, and gets the old guess one last time; the
+   * next save marks it.
    */
-  reseatIfForeign(s);
+  if (!marked) {
+    reseatIfForeign(s);
+    s.seatedFor = s.airframe;
+  } else if (wanted !== s.airframe) {
+    seatAirframe(s, wanted);
+  }
   /* A profile whose pitch differs from its roll has to show three axes,
    * whatever the stored menu shape says, or the rows would be editing a
    * pitch the pilot cannot see. */
@@ -1595,6 +1631,12 @@ function saveSettings(s) {
  * degrees of lens on a five inch keeps it on a whoop, because 100 is neither
  * aircraft's default and is therefore theirs. A pilot who never touched it
  * gets the whoop's 115.
+ *
+ * ONLY FOR A BLOB THAT CANNOT SAY WHICH AIRCRAFT IT WAS SET FOR, which is a
+ * blob from before seatedFor. The test is a guess, and it guesses wrong for
+ * a pilot whose own choice happens to be the other machine's stock: since
+ * the whoop's stock lens became 95, a five inch pilot who picked 95 lost it
+ * at every load (bug-ddfe1c6d). A marked blob is never guessed at.
  */
 function reseatIfForeign(s) {
   const a = airframeById(s.airframe);
@@ -1624,6 +1666,40 @@ function reseatIfForeign(s) {
   return s;
 }
 
+/*
+ * THE SETTINGS THAT BELONG TO ONE MACHINE, which seatAirframe puts away in
+ * the hangar when the pilot leaves an aircraft and gives back when they
+ * return to it. The four the note under saveSettings names, less the rates,
+ * which are the pilot's and keep their own rule in seatAirframe, and two
+ * more that turned out to be the machine's as well:
+ *
+ *   weight  a percentage of THIS aircraft's stock mass, with this aircraft's
+ *           top, so a five inch on 140 came back from the whoop on 120.
+ *   pids    the PID adjustment is keyed by tune id and both aircraft fly the
+ *           same tune id, so tuning the whoop on the PIDs screen retuned the
+ *           five inch as well (bug-693b9ed4).
+ *
+ * The pilot's own "Your edits" dump is per aircraft too, in its own storage:
+ * see readFcDump in src/fc/dump.js. The tune here only says it is chosen.
+ */
+const MACHINE_KEYS = ['tune', 'packVoltage', 'weight', 'cameraFov', 'cameraAngle', 'pids'];
+
+/* The hangar as a fresh object holding only aircraft this build knows, so a
+ * hand edited blob cannot have seatAirframe write through into anything. */
+function hangarOf(s) {
+  const out = {};
+  const h = s.hangar;
+  if (!h || typeof h !== 'object' || Array.isArray(h)) {
+    return out;
+  }
+  for (const id of AIRFRAME_IDS) {
+    if (h[id] && typeof h[id] === 'object' && !Array.isArray(h[id])) {
+      out[id] = h[id];
+    }
+  }
+  return out;
+}
+
 /* Exported for scripts/shots.js, which has to seed the answer a pilot gives
  * on the choice screen. A seed that wrote only the airframe would leave the
  * rates and the camera belonging to the other aircraft, and every capture
@@ -1632,7 +1708,58 @@ function reseatIfForeign(s) {
 export function seatAirframe(s, id) {
   const from = airframeById(s.airframe);
   const to = airframeById(id);
+  /*
+   * PUT THE AIRCRAFT BEING LEFT AWAY, and take out the one being returned
+   * to. Only on a real change: called with the aircraft already seated this
+   * changes nothing the pilot set. Twice it did, by writing that aircraft's
+   * stock camera over theirs: from the gate, which now asks first, and from
+   * a ?craft= link naming the aircraft already seated, which the track
+   * builder's Fly button writes, so a pilot flying their own map from the
+   * builder was put back on 30 degrees and 85 every time (bug-ddfe1c6d).
+   *
+   * The first time an aircraft is seated there is nothing to give back, and
+   * it gets what it always got: its stock camera, its default tune when the
+   * pilot's is not on its row, and the PIDs as they stand. Every time after
+   * that, it gets what the pilot left on it.
+   */
+  const moving = from.id !== to.id;
+  const hangar = hangarOf(s);
+  const back = moving ? hangar[to.id] : null;
+  if (moving) {
+    /* The PIDs as a fresh copy, because on a first visit the new aircraft
+     * keeps flying the same object, and clearPidsFor deletes from it in
+     * place: a Reset to stock on the whoop would have reached into the five
+     * inch's put away adjustment too. */
+    const away = {};
+    for (const k of MACHINE_KEYS) {
+      away[k] = k === 'pids' ? normalisePids(s.pids) : s[k];
+    }
+    hangar[from.id] = away;
+    delete hangar[to.id];
+  }
+  s.hangar = hangar;
   s.airframe = to.id;
+  s.seatedFor = to.id;
+  if (back) {
+    /* Each value through the same gate the loader puts it through, against
+     * this aircraft: the tune, pack and weight lines below, the lens list
+     * and the tilt range here, and normalisePids. */
+    if (typeof back.tune === 'string') {
+      s.tune = back.tune;
+    }
+    if (typeof back.packVoltage === 'number') {
+      s.packVoltage = back.packVoltage;
+    }
+    if (typeof back.weight === 'number') {
+      s.weight = back.weight;
+    }
+    s.cameraFov = CAMERA_FOVS.includes(back.cameraFov) ? back.cameraFov : to.cameraFov;
+    s.cameraAngle = clampCameraAngle(typeof back.cameraAngle === 'number' ? back.cameraAngle : to.cameraAngle);
+    s.pids = normalisePids(back.pids);
+  } else if (moving) {
+    s.cameraFov = to.cameraFov;
+    s.cameraAngle = clampCameraAngle(to.cameraAngle);
+  }
   if (!tuneChoices(to.id).includes(s.tune)) {
     s.tune = to.defaultTune;
   }
@@ -1650,14 +1777,12 @@ export function seatAirframe(s, id) {
    * is not part of a rate profile: configs/rates.js keeps it outside the
    * system on purpose so it survives a type change. It is the aircraft's
    * though, and a whoop wants 65 where a five inch wants the whole stick, so
-   * it follows the same "still the other machine's" rule the camera does. A
+   * it follows the same "still the other machine's" rule the rates do. A
    * pilot who set 80 keeps 80.
    */
   if (s.rates && s.rates.throttleCap === from.rates.throttleCap) {
     s.rates = { ...s.rates, throttleCap: to.rates.throttleCap };
   }
-  s.cameraFov = to.cameraFov;
-  s.cameraAngle = clampCameraAngle(to.cameraAngle);
   /* And the aircraft's starting PID adjustment, if it ships one and this
    * profile has never been offered it. The tune moved to the new aircraft's
    * default a few lines up, which is the tune the seed is keyed to. */
@@ -3312,7 +3437,7 @@ function craftItem(s, midRun) {
   const other = AIRFRAMES.find((a) => a.id !== s.airframe) || af;
   return choice(
     'Aircraft',
-    `${af.blurb} Changing it loads that machine's tune, its pack and its camera, and switches the track builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates are kept unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
+    `${af.blurb} Each aircraft keeps its own tune, PIDs, pack, weight and camera: changing it brings back that machine's as you left them, or its stock ones the first time, and switches the track builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates go with you unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
     AIRFRAME_IDS,
     s.airframe,
     (id) => airframeById(id).name,
@@ -15422,6 +15547,11 @@ export class Ui {
        * stock 20 every time they opened the simulator. The old aircraft gate
        * called it unconditionally too, so this is older than the three
        * cards; it is fixed here because this is the line that does it.
+       *
+       * A ?craft= link did the same thing a second way (bug-ddfe1c6d), and
+       * that one was fixed in seatAirframe itself, which now leaves an
+       * aircraft that is already seated alone. This test stays as the plain
+       * statement of what the gate means to do.
        */
       if (way.airframe !== this.settings.airframe) {
         seatAirframe(this.settings, way.airframe);
