@@ -673,8 +673,20 @@ function maxAbsDeltaExcept(axes, rest, except) {
  * spring centred gimbal has one resting place and being anywhere else is a
  * hold, which is the discipline that keeps a diagonal from assigning two
  * channels.
+ *
+ * AND IT SAYS WHICH AXIS, the first one out of place, or -1 when every one
+ * is parked.
+ *
+ * Because the screen has to say. bug-f06287ff, a BETAFPV JoyStick whose
+ * throttle springs back to the middle, held down at the centre step as that
+ * step asks, so its rest is the bottom: the yaw release told the pilot to let
+ * the left stick come back to the centre, the throttle sprang up with it, and
+ * the wizard waited for it to come back down with a hint about diagonals.
+ * "calibration menu process seems to stop around the point where i need to
+ * let the left stick come back to center." The wait is the rule above and is
+ * right; saying nothing about it was the fault.
  */
-function othersParked(c, axes, except) {
+function blockingAxis(c, axes, except) {
   const thr = c.draft.throttle;
   const thrAxis = thr && Number.isInteger(thr.axis) && thr.axis !== except ? thr.axis : -1;
   const n = Math.min(axes.length, c.rest.length);
@@ -683,16 +695,37 @@ function othersParked(c, axes, except) {
       continue;
     }
     if (Math.abs(axes[i] - c.rest[i]) > CAL.NEAR_REST) {
-      return false;
+      return i;
     }
   }
   if (thrAxis < 0) {
-    return true;
+    return -1;
   }
   const rest = c.rest[thrAxis];
   const bottom = thr.high >= rest ? c.min[thrAxis] : c.max[thrAxis];
   const v = axes[thrAxis];
-  return Math.abs(v - bottom) <= CAL.NEAR_REST || Math.abs(v - rest) <= CAL.NEAR_REST;
+  return Math.abs(v - bottom) <= CAL.NEAR_REST || Math.abs(v - rest) <= CAL.NEAR_REST ? -1 : thrAxis;
+}
+
+/*
+ * What a channel's release is waiting on: an axis blockingAxis would name, or
+ * the channel's own axis while it has not come back, or -1 when nothing is
+ * and the release timer may run. calIdentify waits on it and calibrationView
+ * names it, so the two cannot disagree. The throttle's own release accepts
+ * its low end or its rest, because its prompt says "all the way back down".
+ */
+function releaseWaitsOn(c, axes) {
+  const spec = c.draft[c.step];
+  const own = spec ? spec.axis : -1;
+  const other = blockingAxis(c, axes, own);
+  if (other >= 0 || own < 0) {
+    return other;
+  }
+  const v = axes[own];
+  const back = c.step === 'throttle'
+    ? Math.abs(v - spec.low) <= CAL.NEAR_REST || Math.abs(v - c.rest[own]) <= CAL.NEAR_REST
+    : Math.abs(v - c.rest[own]) <= CAL.NEAR_REST;
+  return back ? -1 : own;
 }
 
 function expandRange(min, max, axes) {
@@ -883,7 +916,7 @@ function throttleSpec(axis, rest, sample, min, max) {
  *
  * The same pilot, still holding the throttle down on the roll step, met a
  * second wall one step later, and that one is fixed rather than asked
- * about: see othersParked.
+ * about: see blockingAxis.
  */
 function noteThrottleSpring(c, spec, axes) {
   const rest = c.rest[spec.axis];
@@ -957,11 +990,19 @@ function calPrompt(c, mode) {
   }
   const side = (ch) => stickSideOf(mode, ch);
   if (c.phase === 'release') {
+    /* The stick that carries the throttle as well says to leave the throttle
+     * down, because "come back to the centre" is an instruction to let go,
+     * and a throttle that springs goes up to the middle when let go of. The
+     * release then waits for it (blockingAxis), and the pilot of
+     * bug-f06287ff, on a BETAFPV JoyStick, read that as the wizard stopping. */
+    const centre = (ch) => (side(ch) === side('throttle')
+      ? `Let the ${side(ch)} stick come back to the centre, with the throttle still all the way down.`
+      : `Let the ${side(ch)} stick come back to the centre.`);
     return {
       throttle: 'Now put the throttle all the way back down.',
-      roll: `Let the ${side('roll')} stick come back to the centre.`,
-      pitch: `Let the ${side('pitch')} stick come back to the centre.`,
-      yaw: `Let the ${side('yaw')} stick come back to the centre.`,
+      roll: centre('roll'),
+      pitch: centre('pitch'),
+      yaw: centre('yaw'),
       select: 'Put it back where it was.',
     }[c.step] || 'Return to rest.';
   }
@@ -977,7 +1018,7 @@ function calPrompt(c, mode) {
   }[c.step] || '';
 }
 
-function calHint(c, travelled, need, gp, idleThrottle = 0, moving = null) {
+function calHint(c, travelled, need, gp, idleThrottle = 0, moving = null, blocked = null) {
   if (!gp) {
     return 'Radio disconnected. Plug it back in, joystick mode.';
   }
@@ -1053,6 +1094,23 @@ function calHint(c, travelled, need, gp, idleThrottle = 0, moving = null) {
       + ' a second counts as a press either way.';
   }
   if (c.phase === 'release') {
+    /* What the release is waiting on, when it is not the stick just asked
+     * for: the prompt already covers that one. See blockingAxis. */
+    if (blocked && blocked.channel === 'throttle') {
+      return `Waiting for the throttle, which reads ${blocked.percent} percent. It has to be all the way`
+        + ' down before the next step. If it springs back up when you let go, hold it down: the last'
+        + ' step offers to set zero where it rests.';
+    }
+    if (blocked && blocked.channel === SELECT_STEP) {
+      return 'Waiting for the menu switch to go back where it was.';
+    }
+    if (blocked && blocked.channel) {
+      return `Waiting for ${blocked.channel} to come back to the centre.`;
+    }
+    if (blocked) {
+      return `Waiting for axis ${blocked.axis}, which has not gone back to where it was at the start.`
+        + ' If that is a switch or a dial, put it back.';
+    }
     return 'One direction at a time. Diagonals are ignored.';
   }
   return 'Hold it there. Diagonals are ignored.';
@@ -3197,6 +3255,7 @@ export class InputManager {
     const gp = this.firstGamepad();
     let channels = { roll: 0, pitch: 0, yaw: 0, throttle: 0 };
     let axes = [];
+    let blocked = null;
     if (gp) {
       const live = snapshotAxes(gp);
       /*
@@ -3288,6 +3347,14 @@ export class InputManager {
           }
         }
       }
+      /* What a release is waiting on, named on the screen when it is not
+       * the stick that was just asked for. See blockingAxis. */
+      const spec = c.phase === 'release' && c.rest ? c.draft[c.step] : null;
+      const on = spec ? releaseWaitsOn(c, live) : -1;
+      if (on >= 0 && on !== spec.axis) {
+        const owner = [...IDENT_CHANNELS, SELECT_STEP].find((ch) => c.draft[ch] && c.draft[ch].axis === on);
+        blocked = { axis: on, channel: owner || null, percent: Math.round(channels.throttle * 100) };
+      }
     }
     /* Only ever asked on the check step: everywhere else the gimbals are
      * showing the wizard's own preview and "which one is moving" is a
@@ -3328,7 +3395,7 @@ export class InputManager {
       checkOnly: Boolean(c.checkOnly),
       title: calTitle(c),
       prompt: calPrompt(c, this.stickMode),
-      hint: calHint(c, travelled, need, gp, c.step === 'confirm' ? channels.throttle : 0, moving),
+      hint: calHint(c, travelled, need, gp, c.step === 'confirm' ? channels.throttle : 0, moving, blocked),
     };
   }
 
@@ -3424,17 +3491,7 @@ export class InputManager {
       return;
     }
     const spec = c.draft[channel];
-    let parked = othersParked(c, axes, spec ? spec.axis : -1);
-    if (parked && spec) {
-      const v = axes[spec.axis];
-      if (channel === 'throttle') {
-        parked = Math.abs(v - spec.low) <= CAL.NEAR_REST
-          || Math.abs(v - c.rest[spec.axis]) <= CAL.NEAR_REST;
-      } else {
-        parked = Math.abs(v - c.rest[spec.axis]) <= CAL.NEAR_REST;
-      }
-    }
-    if (!parked) {
+    if (releaseWaitsOn(c, axes) >= 0) {
       c.holdMs = 0;
       return;
     }

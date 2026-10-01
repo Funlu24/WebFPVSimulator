@@ -600,7 +600,7 @@ async function mousePage(page) {
    *    moved to the middle before the centre step, since rest is measured
    *    there. The pilot holds the throttle down from the release prompt
    *    until the check step, which used to stop the wizard at roll: see
-   *    othersParked in input.js.
+   *    blockingAxis in input.js.
    * ------------------------------------------------------------------ */
   section('calibrate: the check step offers to move throttle zero, and T takes it');
   await page.evaluate("window.__pad.axes[2] = 0; window.__pad.timestamp += 1;");
@@ -1451,9 +1451,15 @@ async function touchPage(page) {
 
 async function touchLaptopPage(page) {
   const ev = (expr) => page.evaluate(`(() => { const ui = window.__ui; const input = window.__input; ${expr} })()`);
+  /* The craft and the screen ride along in every sample, for the one check
+   * below that has failed twice in about six full runs and never in five
+   * runs of this section alone: "a stick key takes the sticks again" read
+   * every channel 0 with the keys holding the sticks. The next failure says
+   * whether the craft was flying when it did. */
   const snap = `return JSON.stringify({ ch: input.channels, source: input.source, hand: input.hand,
     overlay: document.getElementById('ui').classList.contains('touch-fly-on'), touchPrimary: input.isTouchPrimary(),
-    keyboardPrimary: input.isKeyboardPrimary() });`;
+    keyboardPrimary: input.isKeyboardPrimary(), craft: window.__craftState().mode,
+    landed: window.__craftState().landed, screen: ui.screen });`;
   /* A key held until the page has answered it, and sampled while it is down.
    * Not for a fixed time: the keyboard's hold clock advances at most 40 ms a
    * poll, so on a busy machine 400 ms of wall time is well under 400 ms of
