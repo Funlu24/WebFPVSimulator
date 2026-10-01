@@ -256,6 +256,24 @@ const PILOT_CHIP_SCREENS = new Set(['launch', 'results']);
 /* Support on the title and in About, not beside every crumb. */
 const PATREON_SCREENS = new Set(['title', 'credits']);
 
+/*
+ * THE SCREENS WHERE THE STICKS ARE BUSY, and what with, said in the legend
+ * in place of Move and Adjust, which were not true there (MENUS-PLAN.md
+ * 2.9). The buttons still choose and go back on all of them.
+ */
+const STICKS_BUSY = {
+  rates: 'Sticks move the dot on the curve',
+  pids: 'Sticks rest here, so a stick cannot change a gain',
+  fc: 'Sticks rest on the bench',
+  stickhelp: 'Sticks are what is being tested',
+};
+
+/* The two screens whose sticks pose the quad: pitch moves the cursor there
+ * and roll is left to the pose. See pollPad. */
+function posesQuad(ui) {
+  return ui.screen === 'quad' || (ui.screen === 'title' && !ui.onGate());
+}
+
 /* What the breadcrumb says, per screen. A room is a navigation parent, so a
  * trail rather than a single word: Escape then has one obvious destination
  * instead of the four the return chain currently chooses between. */
@@ -2527,6 +2545,64 @@ function wrapMenu() {
   const help = el('div', 'menu-help');
   stage.append(menu, help);
   return { stage, menu, help };
+}
+
+/*
+ * BEFORE YOU FLY, ONCE PER TRACK PER VISIT (MENUS-PLAN.md 2.7).
+ *
+ * The launch card carries the fairness contract, what a run on this track
+ * counts as, and it stood between the title's Fly and every single run. It
+ * is read once. So the title's Fly shows it the first time a track is flown
+ * in this tab, and after that goes to the grid with the run set up as it
+ * was. A press that names a track (its card's Fly it, a double click, the
+ * builder's Fly this track, Standings) has always gone to the grid; the
+ * seated track's sheet in the Tracks room has a Before you fly row, which
+ * is the way back to the card whenever it is wanted.
+ *
+ * The tab's own storage, so a new visit starts over and two tabs do not
+ * answer for each other. The key is the track, not the run settings: the
+ * card is a statement about the track, and changing laps is a reason to
+ * open it, which the Before you fly row does.
+ */
+const LAUNCH_SEEN_KEY = 'webfpv.launchSeen.v1';
+
+function launchCardKey(s) {
+  if (s.map !== 'custom') {
+    return s.map || null;
+  }
+  const seat = activeCourseSummary();
+  const id = seat && (seat.shareId || (seat.doc && seat.doc.id) || seat.name);
+  return id ? `custom:${id}` : null;
+}
+
+function readLaunchSeen() {
+  try {
+    const list = JSON.parse(sessionStorage.getItem(LAUNCH_SEEN_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function launchCardSeen(s) {
+  const key = launchCardKey(s);
+  return Boolean(key) && readLaunchSeen().includes(key);
+}
+
+function markLaunchCardSeen(s) {
+  const key = launchCardKey(s);
+  if (!key) {
+    return;
+  }
+  const list = readLaunchSeen();
+  if (!list.includes(key)) {
+    list.push(key);
+    try {
+      sessionStorage.setItem(LAUNCH_SEEN_KEY, JSON.stringify(list.slice(-50)));
+    } catch (e) {
+      /* No storage, so the card shows on every Fly, as it always did. */
+    }
+  }
 }
 
 /*
@@ -7272,7 +7348,18 @@ export class Ui {
             ? `${seat.name}, levelled off, with the sticks drawn on screen and a prompt at each step.`
             : 'Levelled off, with the sticks drawn on screen and a prompt at each step.',
         }
-        : { label: 'Fly', action: 'fly', primary: true };
+        : {
+          label: 'Fly',
+          action: 'fly',
+          primary: true,
+          /* Which of the two Fly does, said before it is pressed: see
+           * launchCardSeen. */
+          note: seatIsRace(s) && this.seatMatchesMode()
+            ? (launchCardSeen(s)
+              ? `Straight to the starting blocks${seat && seat.name ? ` of ${seat.name}` : ''}, set up as last time. Before you fly is under the track in Tracks.`
+              : 'Before you fly first: the laps, the pack and what this run counts as, then the grid. Once per track each visit.')
+            : undefined,
+        };
       return [
         ...(trouble ? [trouble] : []),
         flyRow,
@@ -8266,8 +8353,8 @@ export class Ui {
         action: 'standings-fly',
         primary: true,
         note: best
-          ? `Loads ${t.name} and takes you to the launch card. The time to beat is ${formatTime(bestMs)} by ${best.name || 'an unnamed pilot'}${room ? ', three laps.' : '.'}`
-          : `Loads ${t.name} and takes you to the launch card. Nobody has posted a time yet, so the first one is yours.`,
+          ? `Loads ${t.name} and goes straight to the starting blocks. The time to beat is ${formatTime(bestMs)} by ${best.name || 'an unnamed pilot'}${room ? ', three laps.' : '.'}`
+          : `Loads ${t.name} and goes straight to the starting blocks. Nobody has posted a time yet, so the first one is yours.`,
       });
       /*
        * Racing a recorded lap is the one thing a standings table is FOR
@@ -8280,7 +8367,7 @@ export class Ui {
         rows.push({
           label: 'Chase the record',
           action: 'standings-ghost',
-          note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you. Arms it for the next run on this track.`,
+          note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you, straight from the starting blocks.`,
         });
       }
       rows.push({
@@ -12041,6 +12128,9 @@ export class Ui {
         saveSettings(this.settings);
       }
     }
+    if (screen === 'launch') {
+      markLaunchCardSeen(this.settings);
+    }
     /*
      * A STICK HELD THROUGH A SCREEN CHANGE IS NOT A GESTURE ON THE SCREEN
      * IT LANDS ON.
@@ -15389,7 +15479,12 @@ export class Ui {
       return out;
     }
     const out = [];
-    if (this.cardScreen()) {
+    if (pad && STICKS_BUSY[this.screen]) {
+      /* The sticks are busy here, so the legend says with what rather than
+       * promising Move and Adjust (MENUS-PLAN.md 2.9). The buttons below
+       * still choose and go back. */
+      out.push({ keys: [], text: STICKS_BUSY[this.screen] });
+    } else if (this.cardScreen()) {
       /* Pitch, not roll. pollPad walks a card screen with the pitch axis and
        * treats roll right as choose and roll left as back, which is what the
        * Race room's own hint line has always said; this legend claimed Roll
@@ -15398,7 +15493,8 @@ export class Ui {
     } else {
       out.push({ keys: pad ? ['Pitch'] : ['\u2191', '\u2193'], text: 'Move' });
       const it = this.items()[this.cursor];
-      if (this.rowKind(it) === 'value') {
+      /* Not on the two screens whose roll poses the quad: see posesQuad. */
+      if (this.rowKind(it) === 'value' && !(pad && posesQuad(this))) {
         out.push({ keys: pad ? ['Roll'] : ['\u2190', '\u2192'], text: 'Adjust' });
       }
     }
@@ -15461,6 +15557,19 @@ export class Ui {
       const i = items.findIndex((it) => it && it.id === want && this.isStop(it));
       if (i >= 0) {
         return i;
+      }
+    }
+    /*
+     * QUAD OPENS ON A DOOR, NOT ON THE AIRCRAFT (MENUS-PLAN.md 2.9). Its
+     * first row is a two way switch, and a choose on a switch flips it, so
+     * the first press a radio pilot made in the room swapped the aircraft
+     * and the world under them. The first row that opens a screen is the
+     * first stop instead; the switch is one row up.
+     */
+    if (this.screen === 'quad') {
+      const door = items.findIndex((it) => it && this.isStop(it) && this.rowKind(it) === 'navigation');
+      if (door >= 0) {
+        return door;
       }
     }
     /*
@@ -16197,14 +16306,14 @@ export class Ui {
       return;
     }
     if (action === 'standings-fly') {
-      /* Seat it, then go on to the launch card, which is what the row
-       * promises. openBoardCourse on its own lands on the title, which is
-       * right when the track was picked from the list and wrong here. */
+      /* Seat it, then the starting blocks: a press that names a track flies
+       * it, the way its card's Fly it does (MENUS-PLAN.md 2.7). The grid
+       * waits for the world, through the same onFlySeated flyCard uses. */
       const t = this.standingsFor;
       if (t && t.id) {
         this.openBoardCourse(t.id, () => {
-          if (seatIsRace(this.settings)) {
-            this.act('fly');
+          if (seatIsRace(this.settings) && this.onFlySeated) {
+            this.onFlySeated();
           }
         });
       }
@@ -16229,8 +16338,8 @@ export class Ui {
         this.onStandingsGhost(t, top);
       }
       this.openBoardCourse(t.id, () => {
-        if (seatIsRace(this.settings)) {
-          this.act('fly');
+        if (seatIsRace(this.settings) && this.onFlySeated) {
+          this.onFlySeated();
         }
       });
       return;
@@ -16512,6 +16621,11 @@ export class Ui {
     }
     if (action === 'fly' && seatIsRace(this.settings)) {
       this.returnTo = this.screen === 'paused' ? 'paused' : 'title';
+      /* The card once per track per visit: see launchCardSeen. */
+      if (launchCardSeen(this.settings)) {
+        this.act('launch-go');
+        return;
+      }
       this.show('launch');
       return;
     }
@@ -17096,9 +17210,28 @@ export class Ui {
      * fire on the screen that comes back.
      */
     if (this.nameDialog && !this.nameDialog.hidden) {
+      /*
+       * BACK CLOSES A DIALOG, once the sticks have been seen at rest since
+       * it opened (MENUS-PLAN.md 2.9). A radio pilot could not answer the
+       * name prompt, a confirm or the feel form at all, and the form used to
+       * open on its own. Only Back, and only as Escape: the dialog's own
+       * key handler takes it, so a form with typing in it asks before it
+       * throws the typing away, exactly as Escape does. Never select, which
+       * could send a form or confirm a question with a flick.
+       */
+      const rest = !now.up && !now.down && !now.left && !now.right && !now.select && !now.back;
+      if (!this.dialogPadArmed) {
+        this.dialogPadArmed = rest;
+      } else if ((now.back && !this.padPrev.back) || (now.left && !this.padPrev.left)) {
+        this.dialogPadArmed = false;
+        this.nameDialog.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', code: 'Escape', bubbles: true, cancelable: true,
+        }));
+      }
       this.padPrev = now;
       return;
     }
+    this.dialogPadArmed = false;
     if (this.screen === 'calibrate') {
       if (now.back && !this.padPrev.back) {
         this.act('calibrate-cancel');
@@ -17157,9 +17290,53 @@ export class Ui {
     if (this.screen === 'stickhelp' && this.padInfo && !this.padInfo.buttons && !this.padInfo.hasSelect) {
       now.select = false;
     }
-    if (this.screen === 'quad' || (this.screen === 'title' && !this.onGate()) || this.screen === 'rates' || this.screen === 'pids' || this.screen === 'fc' || this.screen === 'stickhelp') {
+    /*
+     * A LIST OPEN IN PLACE TAKES THE PAD ON EVERY SCREEN (MENUS-PLAN.md
+     * 2.9). It used to sit below the guard that follows, so on the six
+     * screens the guard covers a list opened with a button could be neither
+     * stepped nor closed from the radio. Nothing is posed or measured while
+     * a list is open over it.
+     */
+    if (this.dropEl) {
+      if (now.up && !this.padPrev.up) {
+        this.moveDrop(-1);
+      }
+      if (now.down && !this.padPrev.down) {
+        this.moveDrop(1);
+      }
+      if ((now.right && !this.padPrev.right) || (now.select && !this.padPrev.select)) {
+        this.confirmDrop();
+      }
+      if ((now.left && !this.padPrev.left) || (now.back && !this.padPrev.back)) {
+        this.closeDrop();
+        if (this.onUiSound) {
+          this.onUiSound('back');
+        }
+      }
+      this.padPrev = now;
+      return;
+    }
+    /*
+     * PITCH MOVES THE CURSOR ON THE TITLE AND IN QUAD (MENUS-PLAN.md 2.9),
+     * the rule every other menu already has. They pose the quad, and the
+     * pose is roll and yaw as much as pitch, so roll stays out: roll right
+     * is choose and roll left is back everywhere else, and a pose would
+     * press them. Before this a radio on the title could fly and nothing
+     * else, because a cursor it could not move sat on Fly.
+     */
+    if (posesQuad(this)) {
+      if (now.up && !this.padPrev.up) {
+        this.move(-1);
+      }
+      if (now.down && !this.padPrev.down) {
+        this.move(1);
+      }
+    }
+    if (posesQuad(this) || STICKS_BUSY[this.screen]) {
       /*
-       * The STICKS stay out, for the reasons above. The BUTTONS do not.
+       * Roll stays out on the two that pose the quad and every stick stays
+       * out on the busy four (STICKS_BUSY), for the reasons above. The
+       * BUTTONS do not.
        *
        * The guard used to swallow everything except select on the title,
        * and the pause menu is fully stick navigable and carries rows into
@@ -17210,25 +17387,6 @@ export class Ui {
      * cycles it: see the segmented branch in select().
      */
     const rollAdjusts = Boolean(it && it.adjust) && !this.cardScreen();
-    if (this.dropEl) {
-      if (now.up && !this.padPrev.up) {
-        this.moveDrop(-1);
-      }
-      if (now.down && !this.padPrev.down) {
-        this.moveDrop(1);
-      }
-      if ((now.right && !this.padPrev.right) || (now.select && !this.padPrev.select)) {
-        this.confirmDrop();
-      }
-      if ((now.left && !this.padPrev.left) || (now.back && !this.padPrev.back)) {
-        this.closeDrop();
-        if (this.onUiSound) {
-          this.onUiSound('back');
-        }
-      }
-      this.padPrev = now;
-      return;
-    }
     if (now.up && !this.padPrev.up) {
       this.move(-1);
     }
