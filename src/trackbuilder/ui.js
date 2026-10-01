@@ -44,7 +44,7 @@ import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElement
 import { labelOf, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
 import { replacementsFor } from './snap.js';
 import {
-  canFlag, flagsOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
+  canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
 } from './parts.js';
 import { scaleOf, say as sayLength } from './scale.js';
 import { passList, reuseOf } from './passes.js';
@@ -2097,11 +2097,12 @@ export class Panels {
       }
     }
 
-    /* THE FIVE INCH PIECE'S OWN CHOICES: which way it faces, its flags, and a loop after the pass the card is about. */
+    /* THE FIVE INCH PIECE'S OWN CHOICES: which way it faces, its flags, and the flag gone round before the pass the
+     * card is about. */
     this.cardFacing(card, element);
     this.cardPassOn(card, element, at);
     this.cardFlags(card, element);
-    this.cardLoop(card, element, at);
+    this.cardRound(card, element, at);
 
     if (touched) {
       /* The small bar: what a keyboard's Q, E and X did, as buttons. */
@@ -2245,6 +2246,8 @@ export class Panels {
         }
       }, it.title ?? title);
       b.setAttribute('aria-pressed', it.on ? 'true' : 'false');
+      /* Offered and refused, with the reason in its title: a choice that is missing says nothing about why. */
+      b.disabled = Boolean(it.disabled);
       seg.append(b);
     }
     row.append(seg);
@@ -2309,30 +2312,45 @@ export class Panels {
   }
 
   /*
-   * A LOOP AFTER THE PASS THE CARD IS ABOUT: out of the gate, round one of its uprights, and back through it. It is
-   * three waypoints and a second pass, and Undo takes it away as one step. The line goes round the right hand
-   * upright for a right turn, the left for a left, as flown.
+   * ROUND THE FLAG, BEFORE THE PASS THE CARD IS ABOUT: the line goes round the pennant on one of the gate's uprights
+   * and through the gate once, spiralling down a whole turn from over the header when Spiral down is on, and round
+   * and straight in when it is off (parts.js addSpiral). Waypoints, one undo step each way. The row shows the figure
+   * that is in front of this pass, as Flags shows the flags: None, or the side it goes round, and Spiral down lit when
+   * it spirals; with none there, Spiral down is what the next press makes. Left and right are as flown, so the side
+   * is the way the pilot turns: clockwise round a flag on the right. A side with no flag on it is offered and
+   * refused, with the reason, because Flags is the row above. `label` lets a wall's card say which bay it is about.
    */
-  cardLoop(card, element, at) {
+  cardRound(card, element, at, label = 'Round the flag') {
     if (this.host.isWhoopRace() || !at || kindOf(element) !== KIND.APERTURE) {
       return;
     }
-    const back = this.host.loopBack;
-    const then = back ? ', and back through the gate' : ', and on to the next piece';
-    const row = this.cardChoice('Loop round a post', [
-      { label: 'Right', on: false, run: () => this.host.loopAfter(at.id, 'right'), title: `After this pass: round the right hand upright, clockwise${then}` },
-      { label: 'Left', on: false, run: () => this.host.loopAfter(at.id, 'left'), title: `After this pass: round the left hand upright, anticlockwise${then}` },
+    const has = flagsAsFlown(this.host.doc, at.id);
+    const now = roundFlagOf(this.host.doc, at.id);
+    const spiral = now ? now.spiral : this.host.spiralDown;
+    const how = spiral ? 'spiral down a whole turn round' : 'go round';
+    const side = (key, word, way) => ({
+      label: word,
+      on: now?.side === key,
+      disabled: !has[key] && now?.side !== key,
+      run: () => this.host.roundFlag(at.id, key),
+      title: has[key]
+        ? `Before this pass: ${how} the flag on the ${key} hand upright, ${way}, and through the gate`
+        : `There is no flag on the ${key} hand upright as this pass flies it. Flags puts one there.`,
+    });
+    card.append(this.cardChoice(label, [
+      { label: 'None', on: !now, run: () => this.host.clearRoundFlag(at.id), title: 'Straight into the gate: no figure in front of this pass' },
+      side('left', 'Left', 'anticlockwise'),
+      side('right', 'Right', 'clockwise'),
       {
-        label: 'Back through',
+        label: 'Spiral down',
         toggle: true,
-        on: back,
-        /* A choice that stays: on, the loop comes back through the gate it went round (a second pass, which is a
-         * gate flown twice); off, it is a hook in the line and the lap goes on from it. */
-        run: () => this.host.setLoopBack(!back),
-        title: 'On: the loop ends with a second pass through the same gate. Off: the line just goes round the post and on.',
+        on: spiral,
+        /* On a pass with the figure in front of it, this makes it again the other way round the same flag. Without
+         * one it is a way of working that stays for the next press, as the Square on the bar does. */
+        run: () => this.host.setSpiralDown(!spiral, now ? at.id : null),
+        title: 'On: a whole turn round the flag, coming down from over the header, then the pass. Off: round the flag and straight in.',
       },
-    ]);
-    card.append(row);
+    ]));
   }
 
   /* A wall's card: one piece of N bays, how it is flown, how wide a bay is, and which ends carry a pennant. */
@@ -2360,6 +2378,11 @@ export class Panels {
       label, on: ends === key, run: () => this.host.setPieceFlags(id, key),
       title: 'The first end is where the wall was dragged from, which is the bay flown first',
     })), 'Which ends carry a pennant, on their outer upright'));
+    /* Into the first bay round the flag on its end, which is how a wall with a flag on it is often entered. */
+    const into = doc.sequence.find((q) => wall.ids.includes(q.elementId));
+    if (into) {
+      this.cardRound(card, elementById(doc, into.elementId), into, 'Into it round the flag');
+    }
     actions.insertBefore(button('Reverse', 'tb-btn', () => this.host.reverseWallOf(id), 'Fly the wall the other way. Every pass turns round'), copyBtn);
     card.append(actions);
     const doneWall = new Set(wall.ids);

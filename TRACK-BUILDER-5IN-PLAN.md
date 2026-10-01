@@ -55,22 +55,34 @@ page.
 | --- | --- | --- | --- |
 | Start and finish gate | 15, 14, faces east | A plain gate. The lap's first pass and its close. | 0 |
 | Lower left gate | 0, 14, faces east | A gate flown twice: through, round the flag, through again. | 2, one on each upright |
-| Left middle gate | 0, 24, faces east | A gate with a loop round its flag. | 1 |
-| Wall | posts at x 13, 15, 17, 19 on y 38 | Three gates side by side sharing four posts, flown as a weave: the east bay south, the middle bay north, the west bay south. | 1, on the east end post |
-| Right gate | 25, 30, faces east | Through east, a clockwise loop of about 1 m round its south post, through east again. | 2 |
+| Left middle gate | 0, 24, faces east | A spiral down anticlockwise round the flag on its north upright, then one pass east. | 1 |
+| Wall | posts at x 13, 15, 17, 19 on y 38 | Three gates side by side sharing four posts, entered round the flag on the east end post and flown as a weave: the east bay north, the middle bay south, the west bay north. | 1, on the east end post |
+| Right gate | 25, 30, faces east | A spiral down clockwise round the flag on its south upright, then one pass east. | 2 |
 | Up gate | legs at x 27 and 29 on y 38, leaning north | Flown north and up, then the line goes over the top and back west to the wall. The rules call it the up gate and the materials list the dive gate: one piece. | 0 |
 | Hurdle | x 20 to 24 on y 23 | A board at least 1 m high, flown over, flags 4 m apart at its ends. Not a gate: nothing scores on it. | 2 |
 | Turn flag | 0, 0 | A flag the line turns round. | 1 |
 
-Lap order, from the start gate: start, over the hurdle, right gate (twice, with
-its loop), up gate, the wall as a weave (east bay, middle bay, west bay), left
-middle gate (with its loop), lower left gate, the turn flag, the lower left gate
-again, and back to the start. That is eleven passes through gates, one turn
-round a flag, and two loops, for 7 gates, 9 flags, 1 hurdle and 1 dive gate.
+Lap order, from the start gate: start, over the hurdle, right gate (after its
+spiral), up gate, round the wall's flag and the wall as a weave (east bay, middle
+bay, west bay), left middle gate (after its spiral), lower left gate, the turn
+flag, the lower left gate again, and back to the start. That is nine passes
+through gates, one turn round a flag, two spirals down round a gate's flag and
+one turn round the wall's, for 7 gates, 9 flags, 1 hurdle and 1 dive gate.
 
-The loops are one metre or so round an upright, which is the diagram being
-brutal on purpose. The builder's curvature warning will say so, and it is
-advisory, so the track will carry a handful of `tight-corner` notes by design.
+**Corrected on 2026-10-01.** The first reading of this table had the right gate
+and the left middle gate as loops back through the gate, two passes each, the
+left middle gate flown west, and the wall flown south, north, south. The owner:
+"the spiral downs around the flag then through the gate are just 2 passes
+through the gate, the triple side by side gate is not correct entry face." Read
+again: every gate on the plan is drawn folded flat towards the side it is flown
+out of, so all the single gates are flown east, and the line round a flag on top
+of a gate is a spiral down round that flag that ends in the one pass; the wall's
+flag is on the end the line comes round first, so its first bay is flown north.
+The table above is the second reading, and section 10 says what changed.
+
+The spirals are a metre or so from a flag, which is the diagram being brutal on
+purpose. The builder's curvature warning would say so, so it knows the figure's
+waypoints by their names (decision 13).
 
 The track runs from about x minus 2.6 to 30 and y minus 1.3 to 42.4 once the
 loops are counted, so it is placed 5 m in from the field's corner, in a field
@@ -97,7 +109,7 @@ model holds most of the track. What it cannot do is let a person get there.
 | A hurdle | as a barrier, plus two flags | no | A barrier has no flags, the two flags stand outside the order and raise two `unsequenced` warnings, and nothing pins the line over the bar. The 2022 GQ import modelled one as a bare barrier. | A Hurdle tool: a low board with masts at its ends, one piece, with the line pinned over it. No new document type. |
 | An up gate | yes, `diveGate` with a tilt | awkward | The dive gate defaults to flat, 4.57 m up and 7 by 6 ft. An up gate is 45 degrees or less, 1.5 m up at the lowest edge. Both are in the inspector under Tilt and Sill height, and nothing says which numbers are the rule. | An Up gate on the palette with those numbers. |
 | The same gate flown twice | yes | no | There is no Fly again on the 5 inch canvas: it is whoop only. "Add to the track" appears only for a gate that is not in the order. The lower left gate and the right gate cannot be made. | The Fly order tool and the lap strip, on the 5 inch canvas. |
-| A loop or spiral round a post | yes, as waypoints | no | Only by dragging the line out into waypoints one at a time, and two passes of one opening in a row put two knots in one place (0.13 m radius). Spiral down exists only for a triple stack. | A Loop button on a pass: right or left, round the post on that side, written as ordinary waypoints you can drag. |
+| A loop or spiral round a post | yes, as waypoints | no | Only by dragging the line out into waypoints one at a time, and two passes of one opening in a row put two knots in one place (0.13 m radius). Spiral down exists only for a triple stack. | Round the flag on the card of a pass: left or right, a spiral down round the flag on that upright and then the pass, written as ordinary waypoints you can drag. (It was a loop after the pass until the owner's correction; section 10.) |
 | A turn round a flag | yes, `flag` marker | yes | None. | None. |
 | Dimensions as drawn | yes | awkward | X and Y are fields in the same buried inspector, the grid is a 1 m wash with a 10 m major, and there is nothing that measures. | A grid that reads (1 m, 5 m with numbers), live distances, a Ruler, and coordinates on the card. |
 | A field the size of the track | yes | awkward | The default field is 60 by 40 m. This track needs about 47 m of depth. | A field control that says what the track needs, and Fit that frames the track. |
@@ -229,12 +241,19 @@ same way, this pass goes the opposite way, and when it is the first of such a
 run it goes away from the side the line arrives from. A wall then weaves when its
 bays are clicked in order, and Reverse (X) still flips any pass.
 
-**Loop.** On the card of a pass, Loop right and Loop left. A loop goes round the
-upright on that side, clockwise for the right and anticlockwise for the left, at
-the distance from that upright to the gate's middle, so the circle passes through
-the gate's centre. It is written as three ordinary waypoints in the flying order
-after the pass, at the opening's height, each draggable. Undo takes the loop
-away as one step. Nothing is stored that the document does not already know.
+**Round the flag.** On the card of a pass: None, Left, Right and Spiral down.
+Left and right are as flown, and a side without a flag on it is offered and
+refused with the reason. The line goes round the flag on that upright, clockwise
+for the right and anticlockwise for the left, on a circle centred on the flag
+where the world stands it and passing through the gate's middle, and the circle
+ends in the pass. With Spiral down it is a whole turn more, coming down from over
+the header to the opening; without it the line goes round the flag and straight
+in. It is written as ordinary waypoints in the flying order before the pass,
+each draggable, and the row shows the figure that is there, as Flags shows the
+flags. Undo takes it away as one step, and pressing again makes it again.
+Nothing is stored that the document does not already know. A wall's card has the
+same row for its first bay, "Into it round the flag". (This replaced a Loop after
+the pass, which came back through the gate a second time; section 10.)
 
 ### 4.4 Building in 3D
 
@@ -282,7 +301,7 @@ See 7.
 | Stage | What | Status |
 | --- | --- | --- |
 | 0 | Plan, baselines, this document | done (commit 5776370) |
-| 1 | The parts: plain gate dress, barrier flags (hurdle), the wall layout, the loop, the weave rule, the narrowed publish refusal. Model, game, tests. | done (commit 70b89a5) |
+| 1 | The parts: plain gate dress, barrier flags (hurdle), the wall layout, the loop (Round the flag since the correction), the weave rule, the narrowed publish refusal. Model, game, tests. | done (commit 70b89a5) |
 | 2 | Flags as chips, Fly order and Fly again on the 5 inch canvas, the inspector put in order. | done |
 | 3 | Build in 3D on the 5 inch canvas. | done |
 | 4 | The grid and the plan. | done |
@@ -367,14 +386,18 @@ Each is the plan's answer, in force until the owner says otherwise.
 11. **The card says which way a gate faces as a compass** (North, East, South,
     West), where the plan had a Turn button. One press is the heading. The Turn
     button squares a gate up first and then turns it a quarter.
-12. **A loop can come back through its gate or not.** The plan had one loop, with a
-    second pass. The diagram's two loops are not drawn alike, so a chip on the card
-    chooses: round a post and back through the gate (the right hand gate), or a
-    hook in the line after one pass. The shipped track gives both of its loops the
-    first kind, which is how the upper left one was read in the end (section 10).
+12. **Round the flag comes before the pass, and the gate is flown once.** This was
+    "a loop can come back through its gate or not", a loop after the pass with a
+    chip for a second pass, and the shipped track used it twice. It was a misreading
+    of the plan, and the owner said so on 2026-10-01: the figure is a spiral down
+    round the flag and then through the gate. So the card's row is Round the flag,
+    and Spiral down chooses between a whole turn down from over the header and just
+    going round the flag and in, which is how the same plan enters its wall. A
+    document made with the loop keeps its waypoints and its warning exemption.
 13. **The line is not warned about where the design is tight.** The curvature
-    warning skips the line between two bays of one wall, and the line round a loop
-    (waypoints the loop made, found by their names). A track's own limit is a
+    warning skips the line between two bays of one wall, and the line round a flag
+    (waypoints the figure made, found by their names: `Spiral left`, `Spiral
+    right`, `Round the flag`, and the old `Loop left` and `Loop right`). A track's own limit is a
     setting already, and the warning now says where it is.
 14. **A wall, a hurdle and an up gate are one at a time**: the tool is put away
     after the piece, which shows its card. A gate stays armed.
@@ -437,23 +460,50 @@ written above:
   edge ruler numbers every five metres already). A hall's plan and room and a
   map's plan keep what they had; the first full run of the flow check showed that
   my first version of this had changed them (PROGRESS.md, 2026-10-01).
-- **The upper left gate.** Section 1 read it as flown east with a hook in the line
-  round its flag. The crop of the diagram is small and the line there is drawn over
-  the gate's own bars, so I read it a second time: it is flown west and loops like
-  the right hand gate does, round its flag post and back through, and the shipped
-  track is built that way. It is a reading of a picture, and the card changes it
-  with the three chips that say it: Faces, Back through and Loop.
+- **The upper left gate.** Section 1 first read it as flown east with a hook in the
+  line round its flag; a second look had it flown west and looping back through like
+  the right hand gate, and the shipped track went out that way. Both loops were wrong,
+  and so was the wall: see "The owner's correction" below. It is flown east after a
+  spiral down round its north flag.
+
+**The owner's correction (2026-10-01).** After the track was on main and on the
+board: "the spiral downs around the flag then throught he gate are just 2 passes
+through the gate, the triple side by side gate is not correct entry face." Both
+were misreadings of the picture, and the builder had been shaped by the first:
+
+- **The figure.** The card's Loop (a circle round a post after a pass, and a
+  second pass back through) became Round the flag (a turn round the flag on an
+  upright before the pass, a whole turn down from over the header with Spiral
+  down, and the one pass), `addSpiral` in `parts.js`. The circle is centred on the
+  flag where the world stands it, GATE_SCALE out from the document's, because that
+  is the flag a pilot flies round.
+- **The track.** The right hand gate and the upper left gate are each flown east
+  once, after a spiral round the south flag and the north flag. The wall is entered
+  round the flag on its east end and flown north, south, north. Three waypoints
+  hold the line where the plan draws it and where the reversal warning said it
+  otherwise left a gate backwards: over the top after the up gate, out of the
+  wall, and the turn south after the upper left gate (the swing out was there
+  already). Ten stations where there were twelve, and 169 m of lap where there
+  were 149.
+- **How it was read the second time.** Every gate on the plan is drawn folded flat
+  towards the side it is flown out of (the start gate's bars point east, and its
+  arrow says east), so the gates on the left are flown east; a curl drawn round a
+  flag on a gate's upright is a spiral round that flag that ends in the gate; and
+  the wall's flag is on the end the line comes round first, which only makes sense
+  of the flag if the first bay is entered from the far side.
 
 What was measured:
 
 - **The acceptance run** (`scripts/builder-flow-check.js`, "five inch: the
   Nationals qualifier, built from an empty canvas"): 55 gestures from an empty
   canvas to the finished lap, a gesture being a click, a drag, a key or a typed
-  number. Every piece is within 0.15 m of the one that ships (0.3 m for a
-  waypoint), every heading is exact, the flags are the same, the passes are in
-  the same order and flown the same way, the lap closes and nothing is warned
-  about.
-- **The line against the plan.** The derived racing line was laid over the
+  number, and 68 after the correction, which added the wall's Reverse and its
+  turn round the flag and three waypoints. Every piece is within 0.15 m of the
+  one that ships (0.3 m for a waypoint), every heading is exact, the flags are
+  the same, the passes are in the same order and flown the same way, the lap
+  closes and nothing is warned about.
+- **The line against the plan,** measured on the first version of the track and
+  not again after the correction. The derived racing line was laid over the
   plan's yellow line. From ours to theirs the median distance is 0.43 m and nine
   tenths of the line is within 1.6 m; from theirs to ours the median is 1.3 m.
   The two places they part are the turn flag's oval, which ours draws wider, and

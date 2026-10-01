@@ -51,7 +51,8 @@ import {
   replaceWith, rowPlan, turnGroups, turnStepFor,
 } from './snap.js';
 import {
-  addLoop, flyOver, placeHurdle, placeUpGate, placeWall, reverseWall, setFlags, setWallFlags, setWallSize, setWallWeave, wallOf,
+  addSpiral, flyOver, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
+  setWallSize, setWallWeave, wallOf,
 } from './parts.js';
 import { scaleOf } from './scale.js';
 import { buildPath, passYawOf } from './path.js';
@@ -548,8 +549,8 @@ export class App {
     this.pathVisible = false;
     /* FIVE INCH TRACK ONLY. New gates square to the field: see SQUARE_KEY. */
     this.square = readSquare();
-    /* FIVE INCH TRACK ONLY. Whether the card's loop comes back through its gate. */
-    this.loopBack = true;
+    /* FIVE INCH TRACK ONLY. Whether the card's Round the flag spirals down a whole turn first or just goes round. */
+    this.spiralDown = true;
     /* WHOOP CANVAS ONLY. Whether a drag that starts on the racing line bends
      * it into a waypoint. Off by default: the line runs through the middle of
      * every gate, so with it able to take a press, a click in a gate's opening
@@ -2164,22 +2165,40 @@ export class App {
     this.edit('reverse the wall', (d) => { reverseWall(d, id); });
   }
 
-  /* Whether a loop comes back through the gate it went round: a way of working, not a fact about the track. */
-  setLoopBack(on) {
-    this.loopBack = Boolean(on);
+  /*
+   * Whether Round the flag spirals down a whole turn before the pass or just goes round. A way of working that stays
+   * for the next press, and, on a pass that already has the figure in front of it, that figure made again the other
+   * way round the same flag, because the chip on the card shows what is there.
+   */
+  setSpiralDown(on, seqId = null) {
+    this.spiralDown = Boolean(on);
+    const now = seqId ? roundFlagOf(this.doc, seqId) : null;
+    if (now) {
+      this.edit(on ? 'spiral down' : 'round the flag', (d) => { addSpiral(d, seqId, now.side, { turns: on ? 1 : 0 }); });
+    }
     this.panels.renderCard();
   }
 
-  /* A loop round a post after a pass through a gate: three waypoints, and the second pass when the loop comes
-   * back through (parts.js addLoop). */
-  loopAfter(seqId, side) {
+  /* No figure in front of the pass: its waypoints go, in one undo step. */
+  clearRoundFlag(seqId) {
+    this.edit('no flag figure', (d) => { removeSpiral(d, seqId); });
+  }
+
+  /*
+   * ROUND THE FLAG ON ONE SIDE OF A GATE, AND THROUGH IT, before the pass the card is about: waypoints round the
+   * pennant, spiralling down a whole turn first when Spiral down is on (parts.js addSpiral). One undo step. The gate
+   * stays selected, so the other side, or the other way of working, is one more press, and makes it again.
+   */
+  roundFlag(seqId, side) {
     let made = null;
-    this.edit(`loop ${side}`, (d) => { made = addLoop(d, seqId, side, { again: this.loopBack }); });
+    this.edit(`round the flag ${side}`, (d) => { made = addSpiral(d, seqId, side, { turns: this.spiralDown ? 1 : 0 }); });
     if (!made) {
-      this.toast('A loop goes round a post of a gate, after a pass through it.');
+      this.toast('Round the flag needs a pennant on that upright, as flown. Flags puts one there.');
       return null;
     }
-    this.setSelection(made.waypoints.slice(0, 1));
+    if (!made.waypoints.length) {
+      this.toast('The line already comes into the gate past that flag, so there is nothing to go round. Spiral down goes round it once.');
+    }
     return made;
   }
 

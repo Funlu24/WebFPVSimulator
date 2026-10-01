@@ -57,6 +57,7 @@ import { SEAT_SLACK } from './seat.js';
 import { gateNumberOf, sequenceLabel, unsequencedElements } from './sequence.js';
 import { dist, insideYawedBox, lerp, wrapAngle, yawVector } from './geometry.js';
 import { markerSquare } from './path.js';
+import { ROUND_NAME } from './parts.js';
 /* How much flying the race asks for between two stations, which is what
  * two stations in a row closer than it are warned against. */
 import { stationLegMin } from '../game/race.js';
@@ -268,12 +269,17 @@ export function collectWarnings(doc, path) {
     return Boolean(a && b && a.group && a.group === b.group && a.id !== b.id);
   };
   /*
-   * AND A LOOP ROUND A POST. It is three waypoints a quarter turn apart on a circle about a metre across (parts.js
-   * addLoop), which is what the author asked for by asking for a loop, and a circle that size is tighter than the
-   * 2.5 m the line between obstacles is held to. They are found by the name addLoop gives them, so a loop an author
-   * has renamed is held to the radius again, which is the safe way for a name to be wrong.
+   * AND A SPIRAL ROUND A FLAG. It is waypoints a quarter turn apart or closer on a circle a metre from the flag
+   * (parts.js addSpiral), which is what the author asked for by asking for one, and a circle that size is tighter
+   * than the 2.5 m the line between obstacles is held to. They are found by the names addSpiral gives them, so one
+   * an author has renamed is held to the radius again, which is the safe way for a name to be wrong. "Loop left" and
+   * "Loop right" are the names of the figure this one replaced, a loop out of a gate and back through it, which
+   * was on the live builder for an afternoon; a track made with it keeps its exemption.
    */
-  const loopKnot = (k) => k.elementId && /^Loop (left|right)$/.test(elementById(doc, k.elementId)?.name ?? '');
+  const loopKnot = (k) => {
+    const name = k.elementId ? elementById(doc, k.elementId)?.name ?? '' : '';
+    return ROUND_NAME.test(name) || /^Loop (left|right)$/.test(name);
+  };
   for (const smp of path.samples) {
     const seg = path.segments[smp.segment];
     /* A wrap around a stacked gate is supposed to be tight. The warning is

@@ -1,7 +1,7 @@
 /*
  * parts.js: the 5 inch canvas's pieces that are made of pieces.
  *
- * A wall, a hurdle, an up gate, a loop round a post, and flags that come and go
+ * A wall, a hurdle, an up gate, a spiral round a flag, and flags that come and go
  * on a gate. None is an element. Each is a way of writing ordinary elements,
  * so the document holds only what it always could (gates in a group, a barrier
  * with flags, a dive gate with a tilt, waypoints) and every reader of it, the
@@ -30,15 +30,18 @@
  */
 
 import {
-  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, isPlain,
-  trackClassOf, wallPitchFor,
+  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, flagSideOf,
+  flagSideSigns, isPlain, trackClassOf, wallPitchFor,
 } from './elements.js';
 import {
-  apertureCenter, aperturesOf, createElement, elementById, elementNormal, kindOf, newGroupId, setSideBuilt,
+  apertureCenter, aperturesOf, createElement, elementById, elementNormal, entryAnchor, kindOf, newGroupId,
+  setSideBuilt,
 } from './model.js';
 import { addToSequence } from './sequence.js';
 import { applyAutoFaces, defaultYawFor, lastAnchorOf } from './faces.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
+import { GATE_SCALE } from '../units.js';
+import { GATE_BANNER_H } from '../art/banners.js';
 
 /* ------------------------------------------------------------------ */
 /* Flags, as one choice                                                */
@@ -609,72 +612,222 @@ export function placeUpGate(doc, at, opts = {}) {
 }
 
 /* ------------------------------------------------------------------ */
-/* The loop                                                            */
+/* Round the flag                                                      */
 /* ------------------------------------------------------------------ */
 
 /*
- * A LOOP ROUND A POST, after a pass through a gate: out of the gate, round the upright on the
- * chosen side, and back to where it left, which is the gate's middle, so that the next pass
- * through the same gate is a pass and not a hook. Written as three ordinary waypoints in the
- * flying order, a quarter turn apart on a circle that passes through the middle of the gate, and
- * then, unless asked not to, the second pass through the same opening. Waypoints are what the
- * board, the game and the line already know, they can be dragged to reshape the loop, and Undo
- * takes the loop away as one step.
+ * ROUND THE FLAG, AND THROUGH. The figure the 2026 Nationals qualifier flies twice: the line goes
+ * round the pennant on top of one of a gate's uprights, spiralling down as it goes, and the turn
+ * ends in the ONE pass through that gate. It is flown before the pass and it is not a second pass.
+ * The first reading of the plan had it as a loop out of the gate, round a post and back through,
+ * which is two passes; the owner's correction of 2026-10-01 was that it is a spiral down around the
+ * flag and then through the gate.
  *
- * `side` is as flown: 'right' is a right turn, clockwise seen from above, round the right hand
- * upright; 'left' is the mirror. The circle's radius is the upright's distance from the opening's
- * middle, which is the document's, so in the world, where the gate is built larger, the line
- * passes a little more clear of the post than the circle says.
+ * Written as ordinary waypoints in the flying order, put in straight before the pass. Waypoints are
+ * what the board, the game and the line already know, they can be dragged to reshape the figure,
+ * and Undo takes it away as one step.
  *
- * Returns { waypoints: [ids], pass: the entry of the second pass or null }, or null when the pass
- * is not an aperture or is not there.
+ * THE CIRCLE is round the flag where the world stands it. The field builds a gate GATE_SCALE larger
+ * and does not move it, so a mast on the header stands that much further from the middle of the
+ * opening than the document's does, and the circle is centred on the world's mast with the radius
+ * that brings it back through the middle of the opening. It is turned so its last part runs
+ * through the gate the way the pass flies it: clockwise round a flag on the right, as flown, and
+ * anticlockwise round one on the left.
+ *
+ * WHERE IT STARTS is where the line coming from the knot before meets the circle on a tangent, so
+ * the line does not turn twice. The turns are whole turns round the flag on top of that arc: one by
+ * default, which is the spiral, and none, which is the line going round the flag and straight in,
+ * the way the same plan's wall is entered round the flag on its end.
+ *
+ * HOW HIGH. A spiral starts above the gate and comes down. Every time it crosses over the opening
+ * before the last, it is SPIRAL.over clear of the top of the header board as the world builds it,
+ * banner and all, and the last whole turn comes down from there to the middle of the opening. Any
+ * turn before that one is SPIRAL.climb higher again, so the line only ever comes down. With no turns
+ * it stays at the height of the opening.
+ *
+ * AGAIN MAKES IT AGAIN. The waypoints the figure put in straight before the pass are taken out
+ * first, so pressing the other side, or changing the turns, replaces the figure rather than adding
+ * a second one in front of the first.
  */
-export function addLoop(doc, seqId, side, opts = {}) {
-  const at = doc.sequence.findIndex((s) => s.id === seqId);
-  const seq = doc.sequence[at];
+export const SPIRAL = { turns: 1, over: 0.6, climb: 0.5 };
+
+/* The printed sleeve on each upright of a gate in the full dress, beside which a pennant stands (view3d.js
+ * buildHeaderFlags and render/scene.js, which each say 0.42). */
+const SLEEVE_W = 0.42;
+
+/* What the figure names its waypoints, which is how it finds them again and how warnings.js knows a tight circle
+ * was asked for. */
+export const ROUND_NAMES = { left: 'Spiral left', right: 'Spiral right', round: 'Round the flag' };
+export const ROUND_NAME = /^(Spiral (left|right)|Round the flag)$/;
+
+/* An arc this short is the line already coming in past the flag: a point a few degrees round is not a figure. */
+const MIN_ARC = Math.PI / 12;
+
+/*
+ * WHICH SIDES OF A PASS, AS FLOWN, HAVE A FLAG TO GO ROUND: { left, right }. A pennant's left and right are as seen
+ * facing the gate (elements.js flagSideSigns), which is the pilot's right and left when the gate is flown the way it
+ * faces. A pennant on top stands over the opening, which no circle through the opening can go round, and a gate
+ * leant past thirty degrees carries none.
+ */
+export function flagsAsFlown(doc, seqId) {
+  const seq = doc.sequence.find((s) => s.id === seqId);
   const el = seq ? elementById(doc, seq.elementId) : null;
-  if (!seq || !el || kindOf(el) !== KIND.APERTURE || (side !== 'right' && side !== 'left')) {
+  if (!el || kindOf(el) !== KIND.APERTURE || Math.abs(el.pitch ?? 0) >= Math.PI / 6) {
+    return { left: false, right: false };
+  }
+  const e = seq.entry === -1 ? -1 : 1;
+  const signs = flagSideSigns(flagSideOf(el));
+  return { left: signs.includes(e), right: signs.includes(-e) };
+}
+
+const mm = (v) => Math.round(v * 1000) / 1000;
+
+/* The waypoints of the figure in front of a pass, nearest the pass last: the run of them straight before it. */
+function figureBefore(doc, seq) {
+  const out = [];
+  for (let k = doc.sequence.indexOf(seq) - 1; k >= 0; k -= 1) {
+    const w = elementById(doc, doc.sequence[k].elementId);
+    if (!w || w.type !== 'waypoint' || !ROUND_NAME.test(w.name ?? '')) {
+      break;
+    }
+    out.unshift(doc.sequence[k]);
+  }
+  return out;
+}
+
+/* The way through a pass on the ground, and the pilot's right of it. */
+function travelOf(el, seq) {
+  const f = apertureFrame(el.yaw, el.pitch);
+  const e = seq.entry === -1 ? -1 : 1;
+  const travel = unit({ x: f.normal.x * e, y: f.normal.y * e });
+  return { travel, right: { x: travel.y, y: -travel.x } };
+}
+
+/*
+ * THE FIGURE IN FRONT OF A PASS, so the card can show what is there rather than what the next press would make:
+ * { side, spiral } or null. Which flag it goes round is read off where its waypoints are, because every point of a
+ * circle round the right hand flag is on the right of the line through the gate; whether it spirals is read off
+ * the names it was given.
+ */
+export function roundFlagOf(doc, seqId) {
+  const seq = doc.sequence.find((s) => s.id === seqId);
+  const el = seq ? elementById(doc, seq.elementId) : null;
+  if (!el || kindOf(el) !== KIND.APERTURE) {
     return null;
   }
-  const index = seq.apertureIndex ?? 0;
-  const ap = aperturesOf(el)[Math.min(index, aperturesOf(el).length - 1)];
-  const centre = apertureCenter(el, index);
-  const f = apertureFrame(el.yaw, el.pitch);
-  const sign = seq.entry === -1 ? -1 : 1;
-  /* The way the quad is going through it, on the ground: the right of that is the right as flown. */
-  const travel = unit({ x: f.normal.x * sign, y: f.normal.y * sign });
-  const right = { x: travel.y, y: -travel.x };
-  const turn = side === 'right' ? -1 : 1;
-  const r = (ap.clearW + FRAME_TUBE_OD) / 2;
-  const post = {
-    x: centre.x + right.x * r * (side === 'right' ? 1 : -1),
-    y: centre.y + right.y * r * (side === 'right' ? 1 : -1),
-  };
-  const start = Math.atan2(centre.y - post.y, centre.x - post.x);
-  const ids = [];
-  for (let k = 1; k <= 3; k += 1) {
-    const angle = start + turn * k * (Math.PI / 2);
-    const wp = createElement(doc, 'waypoint', {
-      x: post.x + Math.cos(angle) * r,
-      y: post.y + Math.sin(angle) * r,
-      z: centre.z,
-    }, 0);
-    wp.name = side === 'right' ? 'Loop right' : 'Loop left';
-    doc.elements.push(wp);
-    addToSequence(doc, wp.id, 0, at + k);
-    ids.push(wp.id);
+  const run = figureBefore(doc, seq);
+  if (!run.length) {
+    return null;
   }
-  let pass = null;
-  if (opts.again !== false) {
-    pass = addToSequence(doc, el.id, index, at + 4);
-    if (pass) {
-      /* Through it the way it was flown the first time. */
-      pass.entry = seq.entry;
-      pass.overridden = true;
+  const centre = apertureCenter(el, seq.apertureIndex ?? 0);
+  const { right } = travelOf(el, seq);
+  const ws = run.map((q) => elementById(doc, q.elementId));
+  const across = ws.reduce((t, w) => t + (w.position.x - centre.x) * right.x + (w.position.y - centre.y) * right.y, 0);
+  return { side: across >= 0 ? 'right' : 'left', spiral: ws.some((w) => w.name !== ROUND_NAMES.round) };
+}
+
+/* Take the figure in front of a pass out: its waypoints leave the flying order, and the document when nothing else
+ * flies them. Returns true when there was one. */
+export function removeSpiral(doc, seqId) {
+  const seq = doc.sequence.find((s) => s.id === seqId);
+  if (!seq) {
+    return false;
+  }
+  const run = figureBefore(doc, seq);
+  for (const q of run) {
+    doc.sequence.splice(doc.sequence.indexOf(q), 1);
+    if (!doc.sequence.some((s) => s.elementId === q.elementId)) {
+      doc.elements.splice(doc.elements.findIndex((e) => e.id === q.elementId), 1);
+    }
+  }
+  if (run.length) {
+    applyAutoFaces(doc);
+  }
+  return run.length > 0;
+}
+
+/* Round the flag on `side`, as flown, which has to carry one (flagsAsFlown), `opts.turns` whole turns besides the
+ * arc that joins the circle. Returns { waypoints: [ids], mast, radius, sweep }, or null when the pass is not a
+ * standing gate's or that side has no flag. */
+export function addSpiral(doc, seqId, side, opts = {}) {
+  if ((side !== 'left' && side !== 'right') || !flagsAsFlown(doc, seqId)[side]) {
+    return null;
+  }
+  const seq = doc.sequence.find((s) => s.id === seqId);
+  const el = elementById(doc, seq.elementId);
+  /* The figure already in front of this pass comes out first. */
+  removeSpiral(doc, seqId);
+  const at = doc.sequence.indexOf(seq);
+  const index = seq.apertureIndex ?? 0;
+  const levels = aperturesOf(el);
+  const top = levels[levels.length - 1];
+  const centre = apertureCenter(el, index);
+  /* The way the quad goes through it, on the ground: the right of that is the right as flown. */
+  const { travel, right } = travelOf(el, seq);
+  const scale = trackClassOf(doc) === 'micro' ? 1 : GATE_SCALE;
+  const r = scale * (top.clearW / 2 + FRAME_TUBE_OD + (isPlain(el) ? 0 : SLEEVE_W));
+  const out = side === 'right' ? 1 : -1;
+  const mast = { x: centre.x + right.x * r * out, y: centre.y + right.y * r * out };
+  /* Clockwise round a flag on the right, anticlockwise round one on the left. */
+  const turn = side === 'right' ? -1 : 1;
+  const end = Math.atan2(centre.y - mast.y, centre.x - mast.x);
+
+  /* Where the line comes from: the knot before, round the end of the lap for the first pass, or straight on. */
+  const n0 = doc.sequence.length;
+  const before = n0 > 1 ? entryAnchor(doc, doc.sequence[(at - 1 + n0) % n0]) : null;
+  const from = before ?? { x: centre.x - travel.x * 6, y: centre.y - travel.y * 6 };
+  let start = end;
+  const d = Math.hypot(from.x - mast.x, from.y - mast.y);
+  if (d > r * 1.05) {
+    const a = Math.atan2(from.y - mast.y, from.x - mast.x);
+    const b = Math.acos(r / d);
+    for (const th of [a + b, a - b]) {
+      const v = { x: -Math.sin(th) * turn, y: Math.cos(th) * turn };
+      const tx = mast.x + Math.cos(th) * r - from.x;
+      const ty = mast.y + Math.sin(th) * r - from.y;
+      if (tx * v.x + ty * v.y > 0) {
+        start = th;
+        break;
+      }
+    }
+  }
+  const TAU = 2 * Math.PI;
+  let arc = (((end - start) * turn) % TAU + TAU) % TAU;
+  if (arc < MIN_ARC || arc > TAU - MIN_ARC) {
+    arc = 0;
+  }
+  const turns = Math.max(0, Math.round(opts.turns ?? SPIRAL.turns));
+  const sweep = arc + turns * TAU;
+  const ids = [];
+  if (sweep > 0) {
+    const low = centre.z;
+    const header = scale * (top.sillH + top.clearH + 2 * FRAME_TUBE_OD) + GATE_BANNER_H + 0.03;
+    const high = el.position.z + header + SPIRAL.over;
+    /* The height with `left` still to turn before the pass. */
+    const height = (left) => {
+      if (turns === 0) {
+        return low;
+      }
+      return left <= TAU ? low + (high - low) * (left / TAU) : high + ((left - TAU) / TAU) * SPIRAL.climb;
+    };
+    /* A waypoint at least every quarter turn, evenly, the first where the line meets the circle. */
+    const n = Math.max(1, Math.ceil(sweep / (Math.PI / 2) - 1e-9));
+    const step = sweep / n;
+    for (let k = 0; k < n; k += 1) {
+      const th = start + turn * step * k;
+      const wp = createElement(doc, 'waypoint', {
+        x: mm(mast.x + Math.cos(th) * r),
+        y: mm(mast.y + Math.sin(th) * r),
+        z: mm(height(sweep - step * k)),
+      }, 0);
+      wp.name = turns > 0 ? ROUND_NAMES[side] : ROUND_NAMES.round;
+      doc.elements.push(wp);
+      addToSequence(doc, wp.id, 0, at + k);
+      ids.push(wp.id);
     }
   }
   applyAutoFaces(doc);
-  return { waypoints: ids, pass };
+  return { waypoints: ids, mast, radius: r, sweep };
 }
 
 /* ------------------------------------------------------------------ */

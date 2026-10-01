@@ -63390,3 +63390,90 @@ Three calls were mine and are written here so that they can be changed:
   not this work and was not done.
 - The five inch canvas still has no build sheet or picture (the whoop's, in inches), and the first piece placed does
   not reframe the camera.
+
+## 2026-10-01 | builder | The Nationals qualifier read again: a spiral round the flag and one pass, and the wall the other way (the owner's correction)
+
+The owner, after the track went to main and the board: "you did't get the track very correct at all, the spiral
+downs around the flag then throught he gate are just 2 passes through the gate, the triple side by side gate is not
+correct entry face. Can you review and try again". Nothing here changes the physics, the plant, the module ABI or
+the build, and `git diff --stat vendor/betaflight` is empty.
+
+### What I had wrong, and why
+
+- **The figure.** The plan draws a curl round the flag on the right hand gate and on the upper left one. I read each
+  as a loop out of the gate, round the post beside the flag and back through the gate, which is two passes, and I
+  built a tool for exactly that (the card's Loop, `addLoop`). The plan means a spiral down round the flag on top of
+  the upright, and then one pass through the gate.
+- **The upper left gate** went out flown west. The plan's line crosses it going east.
+- **The wall** went out flown south, north, south. It is entered round the flag on its east end and flown north,
+  south, north.
+- **Why.** The plan draws every gate as its front view folded flat onto the ground, legs at the gate's real feet,
+  and folded towards the side it is flown out of: the start gate's bars point east and its arrow says east, and so do
+  the bars of every gate on the left. Read that way, a flag drawn beyond a gate's header is a flag on top of that
+  upright, a curl round it is a turn round that flag, and the wall's flag is on the end the line comes round first,
+  which only makes sense of the flag if the first bay is entered from the far side. I had read the curls as drawn in
+  plan, round the post they sit nearest, and the weave from the side the line arrives on.
+
+### What changed
+
+- **`addSpiral` in `src/trackbuilder/parts.js`** replaces `addLoop`. Waypoints straight before the pass, at most a
+  quarter turn apart, on a circle centred on the flag where the world stands it (GATE_SCALE out from the document's
+  flag, beside the sleeve on a gate in the full dress) and passing through the middle of the opening, clockwise round
+  a flag on the pilot's right and anticlockwise round one on the left. It starts where the line from the knot before
+  meets the circle on a tangent. A spiral's whole turn comes down from 0.6 m over the header board, banner and all,
+  as the world builds it, to the middle of the opening, and any earlier turn is higher, so the line only comes down;
+  with no turns it is the line going round the flag and straight in at the opening's height. Pressing again makes it
+  again. `flagsAsFlown`, `roundFlagOf` and `removeSpiral` beside it say which sides have a flag as flown, what is in
+  front of a pass, and take it off.
+- **The card.** "Loop round a post" (Right, Left, Back through) became "Round the flag": None, Left, Right and Spiral
+  down. It shows the figure that is in front of the pass, as Flags shows the flags; a side with no flag on it is
+  offered dimmed with the reason in its title; with nothing there, Spiral down is what the next press makes. A
+  wall's card has the same row for its first bay, "Into it round the flag". `cardChoice` gained a disabled item, and
+  the stylesheet a dim for it.
+- **The warning.** The curvature exemption knows the figure by its names (`Spiral left`, `Spiral right`, `Round the
+  flag`) and keeps the old `Loop left` and `Loop right`, which were on the live builder for an afternoon.
+- **The track** (`scripts/mission-preset.js`, `presets5.js` regenerated). The right hand gate (now "East spiral
+  gate") is flown east once, after a spiral round its south flag; the wall is turned round the way its card's Reverse
+  turns it and entered round the flag on its east end; the upper left gate ("West spiral gate") faces and is flown
+  east, after a spiral round its north flag. Three waypoints hold the line where the plan draws it, each where the
+  reversal warning said the line otherwise left a gate backwards: "Over the top" after the up gate, "Out of the
+  wall" and "Turn south" after the west gate. 29 elements, 28 passes, 10 stations where there were 12, a 169 m lap
+  where there was 149, no warning. Measured on the derived line: each spiral crosses its gate over the header at
+  3.1 to 3.2 m (the world's header top is 2.65 m), passes 3 m out on the far side of the flag, and comes through the
+  middle of the opening once, the way the gate faces; the wall is passed on its east end 2.4 m out and its bays
+  north, south, north.
+- **TRACK-BUILDER-5IN-PLAN.md** (section 1's table, the gap row, 4.3, decisions 12 and 13, and "The owner's
+  correction" in section 10) and **schema.md** (Round the flag) say the same.
+
+### Checked, this turn
+
+    self test            node src/trackbuilder/selftest.js: 1949 passed, 0 failed. The loop's nine checks are replaced
+                         by the spiral's eighteen (which sides have a flag as flown, one pass, the circle round the world's flag and through the middle,
+                         the turning, the sweep, the descent, the two crossings of the gate on the derived line, no
+                         reversal, again, read back, None, the dressed gate, refusals), and the shipped track gains three
+                         (each spiral gate flown once east after its spiral, the wall entered round its flag and flown
+                         north, south, north, ten stations)
+    flow check           node scripts/builder-flow-check.js: PASS, 620 checks, 0 failed. The acceptance run builds the
+                         corrected track from an empty canvas in 68 gestures (55 before, the limit is 70), matches the
+                         shipped one piece for piece, pass for pass and way for way, and then checks the card shows the
+                         east gate's spiral and the wall's turn, that None takes the turn off and that Undo puts it back
+    device check         npm run lint:devices: PASS
+    the rest             lint:preload up to date (245 served), check:fresh 18 passed, check:path 12 passed,
+                         lint:nouns PASS, micro:check pass, mission-preset --check clean, no dashes in the files touched
+    the board's rules    the corrected document through the deployed board's own inspectDocument (570ea3d): accepted,
+                         10 gates, 29 elements, five inch
+    pictures             the plan and the room looked at, whole and at each spiral and the wall; not committed
+    not run              npm run verify (no physics, plant, ABI or build change); lint:board (it imports nothing this
+                         changed); shots.js, lint:shell, lint:input, lint:responsive
+
+### What went wrong, this turn
+
+- **The first corrected track had three reversal warnings**, at the up gate, the wall's last bay and the west gate:
+  the plan's line turns back after each of them, and nothing held it there. The three waypoints are the plan's line.
+- **The first spot for "Over the top" made a 0.92 m corner** with the up gate's climb. Moved half a metre west and
+  half a metre north, and higher, after trying seven spots against the warning.
+- **Two waypoints were on half metres** the room's whole metre snap cannot click, which the acceptance run found.
+  They are on whole metres now, like everything else on the plan.
+- **Two of my new checks were wrong, not the code:** element ids are reused, so "the old waypoints are gone" is a
+  question about the objects and not their ids; and a track built by hand has the builder's names, not the preset's,
+  so the acceptance run picks pieces by where they stand.

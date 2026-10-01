@@ -13,19 +13,27 @@
  * column stays on a 45 by 55 m field with a margin, and the start gate is at (20, 19).
  *
  * WHAT IS ON IT, by the plan's own materials list: seven gates (the start gate, two on the left hand column, one
- * with a loop on the right, and the three bays of the wall), nine flags (two on each of the gates on the right and
- * the lower left, one on the upper left, one at the end of the wall, two on the hurdle, and the turn flag), a
- * hurdle and an up gate. The lap goes:
+ * on the right, and the three bays of the wall), nine flags (two on each of the gates on the right and the lower
+ * left, one on the upper left, one at the end of the wall, two on the hurdle, and the turn flag), a hurdle and an
+ * up gate. The lap goes:
  *
- *   start gate, over the hurdle, the gate with the loop (round its south post and back through), up through the
- *   up gate, along the wall as a weave, the left hand gate with its loop, the swing out west, the lower left hand
- *   gate, round the turn flag, the lower left hand gate again, and home.
+ *   start gate, over the hurdle, a spiral down round the south flag of the gate on the right and through it east,
+ *   up through the up gate, round the flag on the wall's east end and through its bays north, south and north,
+ *   a spiral down round the north flag of the upper left hand gate and through it east, the swing out west, the
+ *   lower left hand gate east, round the turn flag, the lower left hand gate east again, and home.
+ *
+ * THE FIRST READING WAS WRONG, and the owner said so on 2026-10-01: the two spirals were built as loops out of a
+ * gate and back through it, which is two passes, where the plan means a spiral down round the flag on the gate and
+ * then one pass; and the wall was flown south, north, south, where it is entered round its flag and flown north,
+ * south, north. The upper left hand gate turned round with it: the plan's line crosses it going east, as it does
+ * every other gate on the left. The plan draws each gate folded flat towards the side it is flown out of, which
+ * is how the faces were read the second time.
  *
  * Every gate on it is 2 m between uprights, which is the bay the plan draws once the world builds a gate fifteen
  * percent larger than the document (GATE_SCALE), so the wall's bays are 2 m apart and its uprights meet. The
  * credit names the designer and the event, and the sponsor's mark is not on it: it is theirs and not ours to
- * ship. The line the plan draws is a suggestion and the plan's loops are a metre across, so the track holds its
- * curve warning to a metre and not to the 2.5 m a freeform course is held to.
+ * ship. The line the plan draws is a suggestion and the plan's spirals are a couple of metres across, so the track
+ * holds its curve warning to a metre and not to the 2.5 m a freeform course is held to.
  *
  * Run `node scripts/mission-preset.js` to write the file, and `--check` to fail when the file is not what this
  * would write now.
@@ -54,7 +62,7 @@ import { createElement, createTrack, toPlain } from '../src/trackbuilder/model.j
 import { addToSequence } from '../src/trackbuilder/sequence.js';
 import { applyAutoFaces } from '../src/trackbuilder/faces.js';
 import {
-  addLoop, placeHurdle, placeUpGate, placeWall, setFlags,
+  addSpiral, placeHurdle, placeUpGate, placeWall, reverseWall, setFlags,
 } from '../src/trackbuilder/parts.js';
 import { ELEMENTS, GATE_PRESETS, applyGatePreset } from '../src/trackbuilder/elements.js';
 
@@ -71,12 +79,21 @@ const FIELD = { width: 45, depth: 55 };
 const PLAN = {
   start: { x: 15, y: 14, facing: 0 },
   hurdle: { x: 22, y: 23 },
-  loopRight: { x: 25, y: 30, facing: 0, flags: 'both' },
+  /* Flown east, a flag on each upright, and the spiral goes down round the south one, on the right as flown. */
+  eastSpiral: { x: 25, y: 30, facing: 0, flags: 'both', round: 'right' },
   upGate: { x: 28, y: 38, facing: 90 },
-  /* The wall's four posts, first flown to last: the bays between them are at 18, 16 and 14, on one line. */
-  wall: { from: { x: 19, y: 38 }, to: { x: 13, y: 38 }, flags: 'first' },
-  loopLeft: { x: 0, y: 24, facing: 180, flags: 'left' },
-  swingOut: { x: -2, y: 19, height: 0.9 },
+  /* Where the plan's line tops out after the up gate and turns west, in front of it, so the line leaves it forwards. */
+  overTop: { x: 26, y: 43, height: 3.5 },
+  /* The wall's four posts, first flown to last: the bays between them are at 18, 16 and 14, on one line. The flag is
+   * on the east end, and the line goes round it into the first bay, which is flown north. */
+  wall: { from: { x: 19, y: 38 }, to: { x: 13, y: 38 }, flags: 'first', round: 'right' },
+  /* Out of the last bay north and away west, where the plan draws it, before the line turns down to the left. */
+  outOfWall: { x: 11, y: 40, height: 2 },
+  /* Flown east, its one flag on the north upright (its right, seen facing it), on the left as flown. */
+  westSpiral: { x: 0, y: 24, facing: 0, flags: 'right', round: 'left' },
+  /* Out of it east and round to the south, then the swing out west, which lines up the lower gate. */
+  turnSouth: { x: 2, y: 21, height: 0.9 },
+  swingOut: { x: -2, y: 18, height: 0.9 },
   lower: { x: 0, y: 14, facing: 0, flags: 'both' },
   turnFlag: { x: 0, y: 0, passedOn: -90, clearance: 2.5 },
   pads: { x: 12, y: 14 },
@@ -124,29 +141,39 @@ function build() {
     return { el, seq };
   };
 
+  /* A point the line is held to, at a height, at the end of the flying order. */
+  const waypoint = (spot, name) => {
+    const wp = createElement(doc, 'waypoint', { ...at(spot), z: spot.height }, 0);
+    wp.name = name;
+    doc.elements.push(wp);
+    addToSequence(doc, wp.id, 0);
+    return wp;
+  };
+
   const start = gate('gate', PLAN.start, 'Start and finish');
   placeHurdle(doc, at(PLAN.hurdle), { square: true });
 
-  const right = gate('flaggedGate', PLAN.loopRight, 'Gate with the south loop', PLAN.loopRight.flags);
-  addLoop(doc, right.seq.id, 'right');
+  const east = gate('flaggedGate', PLAN.eastSpiral, 'East spiral gate', PLAN.eastSpiral.flags);
+  addSpiral(doc, east.seq.id, PLAN.eastSpiral.round);
 
   const up = placeUpGate(doc, at(PLAN.upGate));
   up.yaw = Math.round(PLAN.upGate.facing * DEG * 1e6) / 1e6;
   up.yawOverridden = true;
   Object.assign(up.dims, { clearW: wideDims().clearW, clearH: wideDims().clearH });
   up.name = 'Up gate';
+  waypoint(PLAN.overTop, 'Over the top');
 
-  placeWall(doc, at(PLAN.wall.from), at(PLAN.wall.to), { dims: wideDims(), flags: PLAN.wall.flags });
+  /* Laid the way the tool lays it, which flies the first bay away from the side the course comes from, then turned
+   * round, as the wall's Reverse does, because the plan goes round the flag on its end first. */
+  const bays = placeWall(doc, at(PLAN.wall.from), at(PLAN.wall.to), { dims: wideDims(), flags: PLAN.wall.flags });
+  reverseWall(doc, bays[0]);
+  addSpiral(doc, doc.sequence.find((q) => q.elementId === bays[0]).id, PLAN.wall.round, { turns: 0 });
+  waypoint(PLAN.outOfWall, 'Out of the wall');
 
-  const left = gate('flaggedGate', PLAN.loopLeft, 'Gate with the north loop', PLAN.loopLeft.flags);
-  addLoop(doc, left.seq.id, 'right');
-
-  {
-    const wp = createElement(doc, 'waypoint', { ...at(PLAN.swingOut), z: PLAN.swingOut.height }, 0);
-    wp.name = 'Swing out';
-    doc.elements.push(wp);
-    addToSequence(doc, wp.id, 0);
-  }
+  const west = gate('flaggedGate', PLAN.westSpiral, 'West spiral gate', PLAN.westSpiral.flags);
+  addSpiral(doc, west.seq.id, PLAN.westSpiral.round);
+  waypoint(PLAN.turnSouth, 'Turn south');
+  waypoint(PLAN.swingOut, 'Swing out');
 
   const lower = gate('flaggedGate', PLAN.lower, 'Lower gate', PLAN.lower.flags);
   {

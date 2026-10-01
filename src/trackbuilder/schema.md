@@ -388,14 +388,21 @@ own. The board, which does not read `group`, keeps the gates and loses the group
 which every gate is flown is the same course, so the simulator publishes it. A group that has a gate no
 pass goes through is a cube and is still refused.
 
-**A loop.** A pass through a gate followed by a circle round one of its uprights and a second pass through
-the same opening is stored as what it is made of: the pass, three ordinary `waypoint` elements a quarter
-turn apart in the flying order, then the second pass, which `addLoop` in `src/trackbuilder/parts.js` writes.
-The second pass is optional: a loop that goes round the post and on, a hook in the line, has the three
-waypoints and no second pass. The waypoints are named `Loop right` or `Loop left`, which is how the curvature
-warning knows a circle a metre across is what the author asked for and does not call it a corner nothing flies;
-a waypoint renamed is an ordinary waypoint again. The circle's radius is the upright's distance from the
-opening's middle, in the document's sizes.
+**Round the flag.** A turn round the pennant on one of a gate's uprights that ends in the one pass through
+that gate, a spiral down when it makes whole turns, is stored as what it is made of: ordinary `waypoint`
+elements in the flying order straight before the pass, at most a quarter turn apart, which `addSpiral` in
+`src/trackbuilder/parts.js` writes. The circle is centred on the flag where the world stands it, `GATE_SCALE`
+times the document's distance out from the opening's middle (its pennant beside the sleeve, on a gate in the
+full dress), with the radius that brings it back through that middle, and it turns clockwise round a flag on
+the pilot's right and anticlockwise round one on the left. It starts where the line from the knot before
+meets it on a tangent; a spiral's whole turns come down from 0.6 m over the header board as the world builds
+it to the middle of the opening, and a turn without a spiral stays at the opening's height. The waypoints are
+named `Spiral right`, `Spiral left` or `Round the flag`, which is how the builder finds the figure again (to
+show it on the card, to make it again, to take it off) and how the curvature warning knows a circle a metre
+from a flag is what the author asked for and does not call it a corner nothing flies; a waypoint renamed is an
+ordinary waypoint again. Until 2026-10-01 the figure was a loop after the pass and a second pass back through
+the gate (`addLoop`, waypoints named `Loop right` and `Loop left`), a misreading of the Nationals plan; a
+document made with it reads as it did and keeps its exemption.
 
 **A hurdle.** A `barrier`, 4 m long by 0.1 m by 1 m by default, with an optional `flagSide` (`left`, `right` or
 `both`) and `dims.flagH` (the mast's height) written only when it has flags, so a barrier with none is the

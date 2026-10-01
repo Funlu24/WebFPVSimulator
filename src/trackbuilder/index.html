@@ -1294,6 +1294,9 @@
       .tb-seg-btn:hover:not(.on) { border-color: var(--edge); background: var(--lift); color: var(--cream); }
       .tb-seg-btn.on { border-color: var(--pick-edge); background: var(--pick); color: var(--cream); font-weight: 650; }
       .tb-seg-btn:focus-visible { outline: 2px solid var(--sakura); outline-offset: 1px; }
+      /* Offered and refused, the reason in its title: a side of a gate Round the flag has no pennant on. The pointer
+       * over it changes nothing, so it does not look pressable. */
+      .tb-seg-btn:disabled, .tb-seg-btn:disabled:hover { color: var(--dim); background: var(--raised); border-color: var(--rule); opacity: 0.5; cursor: default; }
 
       /* A named gap's name is what the gap IS, so it is set big. */
       .tb-gap-name input {
@@ -2155,7 +2158,7 @@
         #tb-palette .tb-tool { min-height: 44px; }
         .tb-card-actions .tb-btn, #tb-lapbar .tb-btn { min-height: 44px; }
         .tb-card-x { min-width: 44px; min-height: 44px; }
-        /* The card's choices (faces, flags, loop, a wall's weave and bay) are fingers too, and wrap where five words do
+        /* The card's choices (faces, flags, round the flag, a wall's weave and bay) are fingers too, and wrap where five words do
          * not fit on one line of a tablet's card. */
         .tb-seg.tb-seg-card { flex-wrap: wrap; }
         .tb-seg-card .tb-seg-btn { min-height: 44px; padding: 0 10px; }

@@ -3301,8 +3301,8 @@ kase('a cube ghost is where the click lays it', async () => {
 
 /*
  * TRACK-BUILDER-5IN-PLAN.md: the 5 inch canvas is built in the room the whoop canvas is, with metres for lengths, a
- * wall dragged out along the ground, a hurdle and an up gate, the flags as one choice on the card, a loop round a
- * post, and a plan's compass for which way a gate faces. The cases below drive it with the pointer and the keys, and
+ * wall dragged out along the ground, a hurdle and an up gate, the flags as one choice on the card, a spiral round a
+ * flag, and a plan's compass for which way a gate faces. The cases below drive it with the pointer and the keys, and
  * the last one builds the Drone Nationals qualifying track from an empty canvas and compares it with the one that
  * ships.
  */
@@ -3851,7 +3851,10 @@ kase('canvas words', async () => {
  * THE ACCEPTANCE RUN, which is what the plan was for: the Drone Nationals qualifying track, built from an empty canvas
  * with the pointer and the keys and nothing else, and compared piece for piece with the one that ships
  * (scripts/mission-preset.js). The number of gestures is counted and printed. Before this work the same plan took about a
- * hundred and could not be finished: a gate with a flag on top, the loops, a wall of bays and the hurdle's flags had no way in.
+ * hundred and could not be finished: a gate with a flag on top, the spirals, a wall of bays and the hurdle's flags had no way in.
+ * Its spirals are one turn down round a flag and then one pass, and its wall is entered round the flag on its end and
+ * flown north first: the owner's correction of 2026-10-01 to a first reading that had loops back through the gates and
+ * the wall the other way.
  */
 kase('five inch: the Nationals qualifier, built from an empty canvas', async () => {
   const page = await openField();
@@ -3878,7 +3881,7 @@ kase('five inch: the Nationals qualifier, built from an empty canvas', async () 
       await key(page, 'Enter');
       did();
     }
-    check('and opens the field\'s width and depth, which are set to the plan\'s 45 by 55 m, and how tight a turn is warned about, which the plan\'s loops make a metre',
+    check('and opens the field\'s width and depth, which are set to the plan\'s 45 by 55 m, and how tight a turn is warned about, which the plan\'s spirals make a metre',
       (await app('[a.doc.field.width, a.doc.field.depth, a.doc.settings.minCurveRadius].join()')) === '45,55,1');
     await app('(a.toggleDrawer(false), a.view3d.frameTrack(), a.requestDraw(), 1)');
     await page.sleep(500);
@@ -3893,10 +3896,14 @@ kase('five inch: the Nationals qualifier, built from an empty canvas', async () 
     did();
     await card('East', 'Faces');
     await card('Both', 'Flags');
-    await card('Right', 'Loop');
+    /* A spiral down round the south flag, the right hand one as it is flown, and then the one pass. */
+    await card('Right', 'Round the flag');
     await key(page, 'Escape');
     did();
     await stand('Up gate', 33, 43);
+    await stand('Waypoint', 31, 48);
+    await key(page, 'Escape');
+    did();
     await tool(page, 'Wall');
     did();
     const wa = await screenOf(page, 'view3d', 24, 43, 0);
@@ -3905,17 +3912,34 @@ kase('five inch: the Nationals qualifier, built from an empty canvas', async () 
     did();
     await card('First end', 'Flags');
     await card('Wide', 'Bay');
+    /* The tool flies the first bay away from where the course comes from; the plan goes round the flag on its end
+     * first, so it is turned round, and entered round that flag with no spiral. */
+    await card('Reverse');
+    await card('Spiral down', 'Into it');
+    await card('Right', 'Into it');
+    await key(page, 'Escape');
+    did();
+    await stand('Waypoint', 16, 45);
     await key(page, 'Escape');
     did();
     await stand('Flagged gate', 5, 29);
     await key(page, 'Escape');
     did();
-    await card('West', 'Faces');
-    await card('Left', 'Flags');
-    await card('Right', 'Loop');
+    await card('East', 'Faces');
+    await card('Right', 'Flags');
+    const westFlown = await passes(page);
+    if (westFlown[westFlown.length - 1].entry !== 1) {
+      await card('Reverse');
+    }
+    /* Round the north flag, the left hand one as it is flown, spiralling down again. */
+    await card('Spiral down', 'Round the flag');
+    await card('Left', 'Round the flag');
     await key(page, 'Escape');
     did();
-    await stand('Waypoint', 3, 24);
+    await stand('Waypoint', 7, 26);
+    await key(page, 'Escape');
+    did();
+    await stand('Waypoint', 3, 23);
     await key(page, 'Escape');
     did();
     await stand('Flagged gate', 5, 19);
@@ -3987,7 +4011,7 @@ kase('five inch: the Nationals qualifier, built from an empty canvas', async () 
         worstHeading = Math.max(worstHeading, dy);
       }
     }
-    check('every piece is within 0.15 m of the plan (0.3 m for a waypoint, whose loop is round a gate that was resized after)', match.size === ref.elements.length, `${match.size} of ${ref.elements.length} matched`);
+    check('every piece is within 0.15 m of the plan (0.3 m for a waypoint, whose spiral went round a flag on a gate that was resized after)', match.size === ref.elements.length, `${match.size} of ${ref.elements.length} matched`);
     check('every gate, the hurdle and the up gate face the way the plan has them, to a degree', worstHeading < 0.0175, `${(worstHeading * 180 / Math.PI).toFixed(2)} degrees at worst`);
     const flagsOf = (d) => d.elements.filter((e) => e.flagSide).map((e) => `${e.type}:${e.flagSide}`).sort().join();
     check('and carry the flags it has them with', flagsOf(built) === flagsOf(ref), `${flagsOf(built)}\n   ${flagsOf(ref)}`);
@@ -4002,6 +4026,31 @@ kase('five inch: the Nationals qualifier, built from an empty canvas', async () 
       await app('a.warnings.map((w) => w.message).join(" | ")'));
     console.log(`  the track took ${gestures} gestures, a gesture being a click, a drag, a key or a typed number`);
     check('and that is a gesture a piece or two, not a hundred: no more than seventy', gestures <= 70, String(gestures));
+
+    /* The card shows the figure that is in front of a pass, as Flags shows the flags, and None takes it off. */
+    const row = (label) => json(page, `(() => {
+      const r = [...document.querySelectorAll('#tb-card .tb-card-choice')].find((c) => c.textContent.trim().startsWith(${JSON.stringify(label)}));
+      return r ? [...r.querySelectorAll('button')].map((b) => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '') + (b.disabled ? '-' : '')) : null;
+    })()`);
+    const pick = (find) => app(`(a.setSelection([a.doc.elements.find(${find}).id]), 1)`);
+    await pick("(e) => e.type === 'flaggedGate' && Math.abs(e.position.x - 30) < 0.01 && Math.abs(e.position.y - 35) < 0.01");
+    await page.sleep(400);
+    check('the east gate\'s card says what is in front of it: a spiral down round the right hand flag',
+      (await row('Round the flag'))?.join() === 'None,Left,Right*,Spiral down*', (await row('Round the flag'))?.join());
+    await pick('(e) => e.group && e.flagSide');
+    await page.sleep(400);
+    check('and the wall\'s, that it is entered round the flag on its end with no spiral, and that its other end has none to go round',
+      (await row('Into it round the flag'))?.join() === 'None,Left-,Right*,Spiral down', (await row('Into it round the flag'))?.join());
+    const wps = () => app("a.doc.elements.filter((e) => e.type === 'waypoint').length");
+    const before = await wps();
+    await cardClick(page, 'None', 'Into it');
+    await page.sleep(300);
+    /* With nothing there, Spiral down is what the next press makes, which the west gate left on. */
+    check('None takes the turn round the flag off, and the row says so', (await wps()) === before - 2
+      && (await row('Into it round the flag'))?.join() === 'None*,Left-,Right,Spiral down*', `${before} then ${await wps()}, ${(await row('Into it round the flag'))?.join()}`);
+    await key(page, 'KeyZ', 2);
+    await page.sleep(300);
+    check('and Undo puts it back', (await wps()) === before);
     check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
   } finally {
     await page.close();

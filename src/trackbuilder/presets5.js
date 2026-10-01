@@ -118,7 +118,7 @@ export const FIVE_INCH_PRESETS = [
       {
         "id": "el-4",
         "type": "flaggedGate",
-        "name": "Gate with the south loop",
+        "name": "East spiral gate",
         "position": {
           "x": 30,
           "y": 35,
@@ -140,11 +140,11 @@ export const FIVE_INCH_PRESETS = [
       {
         "id": "el-5",
         "type": "waypoint",
-        "name": "Loop right",
+        "name": "Spiral right",
         "position": {
-          "x": 30.869565,
-          "y": 34.130435,
-          "z": 0.852865
+          "x": 28.547,
+          "y": 33.88,
+          "z": 3.353
         },
         "yaw": 0,
         "pitch": 0,
@@ -158,11 +158,11 @@ export const FIVE_INCH_PRESETS = [
       {
         "id": "el-6",
         "type": "waypoint",
-        "name": "Loop right",
+        "name": "Spiral right",
         "position": {
-          "x": 30,
-          "y": 33.26087,
-          "z": 0.852865
+          "x": 30.307,
+          "y": 34.968,
+          "z": 3.17
         },
         "yaw": 0,
         "pitch": 0,
@@ -176,11 +176,11 @@ export const FIVE_INCH_PRESETS = [
       {
         "id": "el-7",
         "type": "waypoint",
-        "name": "Loop right",
+        "name": "Spiral right",
         "position": {
-          "x": 29.130435,
-          "y": 34.130435,
-          "z": 0.852865
+          "x": 31.484,
+          "y": 33.267,
+          "z": 2.591
         },
         "yaw": 0,
         "pitch": 0,
@@ -193,6 +193,42 @@ export const FIVE_INCH_PRESETS = [
       },
       {
         "id": "el-8",
+        "type": "waypoint",
+        "name": "Spiral right",
+        "position": {
+          "x": 29.846,
+          "y": 32.004,
+          "z": 2.011
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-9",
+        "type": "waypoint",
+        "name": "Spiral right",
+        "position": {
+          "x": 28.5,
+          "y": 33.575,
+          "z": 1.432
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-10",
         "type": "diveGate",
         "name": "Up gate",
         "position": {
@@ -212,7 +248,25 @@ export const FIVE_INCH_PRESETS = [
         }
       },
       {
-        "id": "el-9",
+        "id": "el-11",
+        "type": "waypoint",
+        "name": "Over the top",
+        "position": {
+          "x": 31,
+          "y": 48,
+          "z": 3.5
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-12",
         "type": "flaggedGate",
         "name": "Bay 1",
         "position": {
@@ -236,7 +290,7 @@ export const FIVE_INCH_PRESETS = [
         "style": "plain"
       },
       {
-        "id": "el-10",
+        "id": "el-13",
         "type": "gate",
         "name": "Bay 2",
         "position": {
@@ -261,7 +315,7 @@ export const FIVE_INCH_PRESETS = [
         "style": "plain"
       },
       {
-        "id": "el-11",
+        "id": "el-14",
         "type": "gate",
         "name": "Bay 3",
         "position": {
@@ -286,71 +340,13 @@ export const FIVE_INCH_PRESETS = [
         "style": "plain"
       },
       {
-        "id": "el-12",
-        "type": "flaggedGate",
-        "name": "Gate with the north loop",
-        "position": {
-          "x": 5,
-          "y": 29,
-          "z": 0
-        },
-        "yaw": 3.141593,
-        "pitch": 0,
-        "yawOverridden": true,
-        "dims": {
-          "levels": 1,
-          "sillH": 0,
-          "clearW": 1.705729,
-          "clearH": 1.705729,
-          "levelPitch": 1.73913,
-          "flagH": 1.45
-        },
-        "flagSide": "left"
-      },
-      {
-        "id": "el-13",
-        "type": "waypoint",
-        "name": "Loop right",
-        "position": {
-          "x": 4.130434,
-          "y": 29.869565,
-          "z": 0.852865
-        },
-        "yaw": 0,
-        "pitch": 0,
-        "yawOverridden": false,
-        "dims": {
-          "height": 1.6,
-          "poleRadius": 0.02,
-          "clearance": 0
-        }
-      },
-      {
-        "id": "el-14",
-        "type": "waypoint",
-        "name": "Loop right",
-        "position": {
-          "x": 4.999999,
-          "y": 30.73913,
-          "z": 0.852865
-        },
-        "yaw": 0,
-        "pitch": 0,
-        "yawOverridden": false,
-        "dims": {
-          "height": 1.6,
-          "poleRadius": 0.02,
-          "clearance": 0
-        }
-      },
-      {
         "id": "el-15",
         "type": "waypoint",
-        "name": "Loop right",
+        "name": "Round the flag",
         "position": {
-          "x": 5.869565,
-          "y": 29.869566,
-          "z": 0.852865
+          "x": 24.707,
+          "y": 42.248,
+          "z": 0.853
         },
         "yaw": 0,
         "pitch": 0,
@@ -364,11 +360,11 @@ export const FIVE_INCH_PRESETS = [
       {
         "id": "el-16",
         "type": "waypoint",
-        "name": "Swing out",
+        "name": "Round the flag",
         "position": {
-          "x": 3,
-          "y": 24,
-          "z": 0.9
+          "x": 23.608,
+          "y": 42.067,
+          "z": 0.853
         },
         "yaw": 0,
         "pitch": 0,
@@ -381,6 +377,190 @@ export const FIVE_INCH_PRESETS = [
       },
       {
         "id": "el-17",
+        "type": "waypoint",
+        "name": "Out of the wall",
+        "position": {
+          "x": 16,
+          "y": 45,
+          "z": 2
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-18",
+        "type": "flaggedGate",
+        "name": "West spiral gate",
+        "position": {
+          "x": 5,
+          "y": 29,
+          "z": 0
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": true,
+        "dims": {
+          "levels": 1,
+          "sillH": 0,
+          "clearW": 1.705729,
+          "clearH": 1.705729,
+          "levelPitch": 1.73913,
+          "flagH": 1.45
+        },
+        "flagSide": "right"
+      },
+      {
+        "id": "el-19",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 3.882,
+          "y": 31.506,
+          "z": 3.432
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-20",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 3.85,
+          "y": 29.535,
+          "z": 3.318
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-21",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 5.797,
+          "y": 29.229,
+          "z": 3.035
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-22",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 6.372,
+          "y": 31.114,
+          "z": 2.49
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-23",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 4.585,
+          "y": 31.946,
+          "z": 1.944
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-24",
+        "type": "waypoint",
+        "name": "Spiral left",
+        "position": {
+          "x": 3.512,
+          "y": 30.293,
+          "z": 1.398
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-25",
+        "type": "waypoint",
+        "name": "Turn south",
+        "position": {
+          "x": 7,
+          "y": 26,
+          "z": 0.9
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-26",
+        "type": "waypoint",
+        "name": "Swing out",
+        "position": {
+          "x": 3,
+          "y": 23,
+          "z": 0.9
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "yawOverridden": false,
+        "dims": {
+          "height": 1.6,
+          "poleRadius": 0.02,
+          "clearance": 0
+        }
+      },
+      {
+        "id": "el-27",
         "type": "flaggedGate",
         "name": "Lower gate",
         "position": {
@@ -402,7 +582,7 @@ export const FIVE_INCH_PRESETS = [
         "flagSide": "both"
       },
       {
-        "id": "el-18",
+        "id": "el-28",
         "type": "flag",
         "name": "Turn flag",
         "position": {
@@ -420,7 +600,7 @@ export const FIVE_INCH_PRESETS = [
         }
       },
       {
-        "id": "el-19",
+        "id": "el-29",
         "type": "startPads",
         "name": "",
         "position": {
@@ -458,15 +638,6 @@ export const FIVE_INCH_PRESETS = [
         "overridden": false
       },
       {
-        "id": "sq-3",
-        "elementId": "el-4",
-        "apertureIndex": 0,
-        "entry": 1,
-        "passSide": null,
-        "clearance": null,
-        "overridden": true
-      },
-      {
         "id": "sq-4",
         "elementId": "el-5",
         "apertureIndex": null,
@@ -495,6 +666,24 @@ export const FIVE_INCH_PRESETS = [
       },
       {
         "id": "sq-7",
+        "elementId": "el-8",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "left",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-8",
+        "elementId": "el-9",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "left",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-3",
         "elementId": "el-4",
         "apertureIndex": 0,
         "entry": 1,
@@ -503,17 +692,8 @@ export const FIVE_INCH_PRESETS = [
         "overridden": true
       },
       {
-        "id": "sq-8",
-        "elementId": "el-8",
-        "apertureIndex": 0,
-        "entry": 1,
-        "passSide": null,
-        "clearance": null,
-        "overridden": true
-      },
-      {
         "id": "sq-9",
-        "elementId": "el-9",
+        "elementId": "el-10",
         "apertureIndex": 0,
         "entry": 1,
         "passSide": null,
@@ -522,51 +702,15 @@ export const FIVE_INCH_PRESETS = [
       },
       {
         "id": "sq-10",
-        "elementId": "el-10",
-        "apertureIndex": 0,
-        "entry": -1,
-        "passSide": null,
-        "clearance": null,
-        "overridden": true
-      },
-      {
-        "id": "sq-11",
         "elementId": "el-11",
-        "apertureIndex": 0,
-        "entry": 1,
-        "passSide": null,
-        "clearance": null,
-        "overridden": true
-      },
-      {
-        "id": "sq-12",
-        "elementId": "el-12",
-        "apertureIndex": 0,
-        "entry": 1,
-        "passSide": null,
-        "clearance": null,
-        "overridden": true
-      },
-      {
-        "id": "sq-13",
-        "elementId": "el-13",
         "apertureIndex": null,
         "entry": null,
-        "passSide": "left",
+        "passSide": "right",
         "clearance": 0,
         "overridden": false
       },
       {
         "id": "sq-14",
-        "elementId": "el-14",
-        "apertureIndex": null,
-        "entry": null,
-        "passSide": "left",
-        "clearance": 0,
-        "overridden": false
-      },
-      {
-        "id": "sq-15",
         "elementId": "el-15",
         "apertureIndex": null,
         "entry": null,
@@ -575,8 +719,26 @@ export const FIVE_INCH_PRESETS = [
         "overridden": false
       },
       {
-        "id": "sq-16",
+        "id": "sq-15",
+        "elementId": "el-16",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "left",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-11",
         "elementId": "el-12",
+        "apertureIndex": 0,
+        "entry": -1,
+        "passSide": null,
+        "clearance": null,
+        "overridden": true
+      },
+      {
+        "id": "sq-12",
+        "elementId": "el-13",
         "apertureIndex": 0,
         "entry": 1,
         "passSide": null,
@@ -584,8 +746,17 @@ export const FIVE_INCH_PRESETS = [
         "overridden": true
       },
       {
-        "id": "sq-17",
-        "elementId": "el-16",
+        "id": "sq-13",
+        "elementId": "el-14",
+        "apertureIndex": 0,
+        "entry": -1,
+        "passSide": null,
+        "clearance": null,
+        "overridden": true
+      },
+      {
+        "id": "sq-16",
+        "elementId": "el-17",
         "apertureIndex": null,
         "entry": null,
         "passSide": "right",
@@ -594,7 +765,61 @@ export const FIVE_INCH_PRESETS = [
       },
       {
         "id": "sq-18",
-        "elementId": "el-17",
+        "elementId": "el-19",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-19",
+        "elementId": "el-20",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-20",
+        "elementId": "el-21",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-21",
+        "elementId": "el-22",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-22",
+        "elementId": "el-23",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-23",
+        "elementId": "el-24",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-17",
+        "elementId": "el-18",
         "apertureIndex": 0,
         "entry": 1,
         "passSide": null,
@@ -602,8 +827,35 @@ export const FIVE_INCH_PRESETS = [
         "overridden": true
       },
       {
-        "id": "sq-19",
-        "elementId": "el-18",
+        "id": "sq-24",
+        "elementId": "el-25",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "left",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-25",
+        "elementId": "el-26",
+        "apertureIndex": null,
+        "entry": null,
+        "passSide": "right",
+        "clearance": 0,
+        "overridden": false
+      },
+      {
+        "id": "sq-26",
+        "elementId": "el-27",
+        "apertureIndex": 0,
+        "entry": 1,
+        "passSide": null,
+        "clearance": null,
+        "overridden": true
+      },
+      {
+        "id": "sq-27",
+        "elementId": "el-28",
         "apertureIndex": null,
         "entry": null,
         "passSide": "left",
@@ -611,8 +863,8 @@ export const FIVE_INCH_PRESETS = [
         "overridden": false
       },
       {
-        "id": "sq-20",
-        "elementId": "el-17",
+        "id": "sq-28",
+        "elementId": "el-27",
         "apertureIndex": 0,
         "entry": 1,
         "passSide": null,

@@ -35,7 +35,7 @@ import {
   roundTripsCleanly, serialize, aperturesOf, toPlain, startPadsOf, newElementId,
   logoForDecal, dressOrder, LOGO_SLOTS, SCHEMA_VERSION,
   SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt,
-  groupMembers, expandGroups, elementNormal,
+  groupMembers, expandGroups, elementNormal, apertureCenter,
 } from './model.js';
 import { applyAutoFaces, flipFace, setYaw, clearOverride, travelDirection, defaultYawFor } from './faces.js';
 import {
@@ -62,10 +62,10 @@ import {
 } from './snap.js';
 import { CUBE_FACES, cubeFaces } from './cube.js';
 import {
-  canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addLoop,
+  canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addSpiral, flagsAsFlown,
   wallOf, wallFlagsOf, setWallFlags, wallIsWoven, setWallWeave, reverseWall, flyOver,
   partGhosts, setWallSize, wallSizeOf,
-  WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE,
+  WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE, SPIRAL, ROUND_NAME, roundFlagOf, removeSpiral,
 } from './parts.js';
 import { scaleOf, say } from './scale.js';
 import { envelopeFor, GATE_OPENING_DEFAULT, PIPE_OD as CUBE_PIPE_OD, inches } from './racegow.js';
@@ -105,7 +105,7 @@ import {
 } from './roadtool.js';
 import { CLASH_HORIZON } from './warnings.js';
 import { clubhouseSolids } from '../art/clubhouse.js';
-import { BANNER_SIZE, flagMast, flagSailProfile } from '../art/banners.js';
+import { BANNER_SIZE, GATE_BANNER_H, flagMast, flagSailProfile } from '../art/banners.js';
 import { courseFromDocument } from '../game/trackdoc.js';
 import { GUIDE, guideFromKnots, knotsFromPath, tessellateGuide } from '../game/guide.js';
 import { GATE_SCALE, MICRO_SCALE } from '../game/track.js';
@@ -9840,48 +9840,109 @@ function suiteFiveInchParts() {
       doc.sequence.find((q) => q.elementId === el.id).entry === 1 && elementById(doc, el.id).pitch > 0.7);
   }
 
-  /* ---- the loop ---- */
+  /* ---- round the flag ---- */
   {
-    const doc = createTrack('loop');
-    const g = place(doc, 'gate', 25, 30, { yaw: 0 });
-    g.yawOverridden = true;
-    const next = place(doc, 'gate', 25, 36, { yaw: Math.PI / 2 });
-    next.yawOverridden = true;
-    addToSequence(doc, g.id, 0);
-    addToSequence(doc, next.id, 0);
-    const first = doc.sequence[0];
-    check('a gate flown east has its pass set before the loop is asked for', first.entry === 1);
-    const made = addLoop(doc, first.id, 'right');
-    const r = (ELEMENTS.gate.dims.clearW + FRAME_TUBE_OD) / 2;
-    const wps = made.waypoints.map((id) => elementById(doc, id));
-    check('a loop right is three waypoints and a second pass through the same gate, all in the flying order straight after the first pass',
-      made.waypoints.length === 3 && made.pass && doc.sequence.slice(1, 5).map((q) => q.elementId).join()
-        === [...made.waypoints, g.id].join() && doc.sequence[5].elementId === next.id);
-    check('the waypoints stand a quarter turn apart on a circle round the right hand upright, east of it, south of it, west of it, through the gate\'s middle',
-      near(wps[0].position.x, 25 + r) && near(wps[0].position.y, 30 - r)
-      && near(wps[1].position.x, 25) && near(wps[1].position.y, 30 - 2 * r)
-      && near(wps[2].position.x, 25 - r) && near(wps[2].position.y, 30 - r));
-    check('and they are at the height of the opening, which is where the line was',
-      wps.every((w) => near(w.position.z, ELEMENTS.gate.dims.clearH / 2)));
-    check('the second pass goes through the way the first did, set by hand',
-      made.pass.entry === first.entry && made.pass.overridden);
-    const loopLine = buildPath(doc);
-    const warn = collectWarnings(doc, loopLine);
-    check('the line does the loop: it is longer than the straight, comes through the gate twice the same way, and has no knot in one place',
-      !warn.some((w) => w.code === 'coincident' || w.code === 'reversal'), warn.map((w) => w.code).join());
-    check('and its tightest turn is about the circle\'s radius, not the 0.13 m the same gate flown twice in a row gave',
-      loopLine.tightest.radius > 0.5 && loopLine.tightest.radius < 2, String(loopLine.tightest?.radius));
-    const left = createTrack('loop left');
-    const g2 = place(left, 'gate', 25, 30, { yaw: 0 });
-    g2.yawOverridden = true;
-    addToSequence(left, g2.id, 0);
-    const m2 = addLoop(left, left.sequence[0].id, 'left', { again: false });
-    const w2 = m2.waypoints.map((id) => elementById(left, id));
-    check('a loop left is round the left hand upright, anticlockwise: west of it first, and with no second pass when it is asked for none',
-      m2.pass === null && left.sequence.length === 4 && near(w2[0].position.x, 25 + r) && near(w2[0].position.y, 30 + r)
-      && near(w2[1].position.y, 30 + 2 * r));
-    check('a pass that is not an aperture, or not there, is not looped',
-      addLoop(left, 'sq-nope', 'right') === null && addLoop(left, m2.waypoints[0] && left.sequence[1].id, 'right') === null);
+    /*
+     * The owner's correction of 2026-10-01: the Nationals plan's figure is a spiral down round the flag on a gate
+     * and then ONE pass through it, not a loop out of the gate and back through it. So what is checked is that the
+     * figure is in front of the pass, that the gate is flown once, and that the circle is round the flag.
+     */
+    const spiralDoc = (flags, style = 'plain') => {
+      const doc = createTrack('spiral');
+      place(doc, 'waypoint', 22, 23, { z: 2 });
+      const g = place(doc, 'flaggedGate', 25, 30, { yaw: 0 });
+      g.yawOverridden = true;
+      g.style = style;
+      setFlags(doc, g.id, flags);
+      const next = place(doc, 'gate', 28, 38, { yaw: Math.PI / 2 });
+      next.yawOverridden = true;
+      for (const e of doc.elements) {
+        addToSequence(doc, e.id, 0);
+      }
+      doc.sequence[1].entry = 1;
+      doc.sequence[1].overridden = true;
+      return { doc, g, pass: doc.sequence[1] };
+    };
+    const wp = (doc, ids) => ids.map((id) => elementById(doc, id));
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+    const both = spiralDoc('both');
+    const sides = flagsAsFlown(both.doc, both.pass.id);
+    check('a gate with a flag on each upright has a flag on either hand as flown', sides.left && sides.right);
+    const north = spiralDoc('right');
+    check('a flag on a gate\'s right, seen facing it, is on the left of a pilot flying the way it faces, and on the right flown the other way',
+      flagsAsFlown(north.doc, north.pass.id).left && !flagsAsFlown(north.doc, north.pass.id).right
+      && (() => { north.pass.entry = -1; const f = flagsAsFlown(north.doc, north.pass.id); north.pass.entry = 1; return f.right && !f.left; })());
+    const top = spiralDoc('top');
+    check('a flag on top stands over the opening, which no circle through it can go round, and a gate without flags has none',
+      !flagsAsFlown(top.doc, top.pass.id).left && !flagsAsFlown(top.doc, top.pass.id).right
+      && (() => { const d = createTrack('none'); const g = place(d, 'gate', 0, 0); addToSequence(d, g.id, 0); const f = flagsAsFlown(d, d.sequence[0].id); return !f.left && !f.right; })());
+
+    const { doc, g, pass } = both;
+    const made = addSpiral(doc, pass.id, 'right');
+    const ws = wp(doc, made.waypoints);
+    const r = GATE_SCALE * (g.dims.clearW / 2 + FRAME_TUBE_OD);
+    const centre = { x: 25, y: 30 };
+    const mast = { x: 25, y: 30 - r };
+    check('a spiral is waypoints in the flying order straight before the pass, and the gate is still flown once',
+      made.waypoints.length >= 5 && doc.sequence.slice(1, 1 + made.waypoints.length).map((q) => q.elementId).join() === made.waypoints.join()
+      && doc.sequence[1 + made.waypoints.length] === pass && doc.sequence.filter((q) => q.elementId === g.id).length === 1,
+      doc.sequence.map((q) => elementById(doc, q.elementId).name || elementById(doc, q.elementId).type).join());
+    check('round the flag on the right as flown, which is the south upright of a gate flown east, as the world builds it: GATE_SCALE out',
+      near(made.mast.x, mast.x) && near(made.mast.y, mast.y) && near(made.radius, r) && ws.every((w) => near(Math.hypot(w.position.x - mast.x, w.position.y - mast.y), r, 2e-3)));
+    check('a circle that comes back through the middle of the opening',
+      near(Math.hypot(centre.x - mast.x, centre.y - mast.y), r));
+    check('clockwise, every step of it, so its last part runs through the gate the way the pass flies it',
+      [...ws.map((w) => w.position), centre].every((p, i, all) => i === 0 || cross(mast, all[i - 1], p) < 0));
+    check('one whole turn on top of the arc that joins it from the way the line comes in, which is under a turn',
+      made.sweep > 2 * Math.PI && made.sweep < 4 * Math.PI, String(made.sweep));
+    const header = GATE_SCALE * (g.dims.sillH + g.dims.clearH + 2 * FRAME_TUBE_OD) + GATE_BANNER_H + 0.03;
+    check('and it comes down all the way: from over the header to the middle of the opening, never back up',
+      ws[0].position.z > header + SPIRAL.over - 1e-6 && ws.every((w, i) => i === 0 || w.position.z < ws[i - 1].position.z)
+      && ws[ws.length - 1].position.z > apertureCenter(g, 0).z,
+      ws.map((w) => w.position.z).join());
+    const line = buildPath(doc);
+    const f = apertureFrame(g.yaw, 0);
+    const over = [];
+    let prevD = null;
+    for (const smp of line.samples) {
+      const d = (smp.pos.x - centre.x) * f.normal.x + (smp.pos.y - centre.y) * f.normal.y;
+      const u = (smp.pos.x - centre.x) * f.widthAxis.x + (smp.pos.y - centre.y) * f.widthAxis.y;
+      if (prevD != null && (prevD > 0) !== (d > 0) && Math.abs(u) < 1.6) {
+        over.push({ z: smp.pos.z, forward: d > 0 });
+      }
+      prevD = d;
+    }
+    check('the line crosses the gate twice where its header is: over the top of it going round, and through it once, the way it is flown',
+      over.length === 2 && over[0].z > header + 0.3 && over[1].z < g.dims.clearH && over.every((o) => o.forward),
+      JSON.stringify(over));
+    const warn = collectWarnings(doc, line);
+    check('it raises no reversal and no two knots in one place', !warn.some((w) => w.code === 'coincident' || w.code === 'reversal'), warn.map((w) => w.code).join());
+
+    check('what is in front of the pass can be read back, so the card can show it: the side it goes round, and that it spirals',
+      JSON.stringify(roundFlagOf(doc, pass.id)) === JSON.stringify({ side: 'right', spiral: true }) && roundFlagOf(doc, doc.sequence[0].id) === null);
+    const again = addSpiral(doc, pass.id, 'left', { turns: 0 });
+    check('again makes it again: the spiral that was there comes out, the other side goes in, and nothing is left over',
+      again.waypoints.length >= 1 && !ws.some((w) => doc.elements.includes(w))
+      && doc.elements.filter((e) => e.type === 'waypoint').length === 1 + again.waypoints.length
+      && doc.sequence.filter((q) => q.elementId === g.id).length === 1);
+    const level = wp(doc, again.waypoints);
+    check('with no turns it goes round the flag and straight in, at the height of the opening, anticlockwise round a flag on the left',
+      level.every((w) => near(w.position.z, apertureCenter(g, 0).z, 1e-3) && w.name === 'Round the flag') && again.sweep < 2 * Math.PI
+      && [...level.map((w) => w.position), centre].every((p, i, all) => i === 0 || cross(again.mast, all[i - 1], p) > 0));
+
+    check('and read back as round the left hand flag without a spiral', JSON.stringify(roundFlagOf(doc, pass.id)) === JSON.stringify({ side: 'left', spiral: false }));
+    check('None takes it out, every waypoint of it, and leaves the gate flown once',
+      removeSpiral(doc, pass.id) && roundFlagOf(doc, pass.id) === null && doc.elements.filter((e) => e.type === 'waypoint').length === 1
+      && doc.sequence.filter((q) => q.elementId === g.id).length === 1 && !removeSpiral(doc, pass.id));
+
+    const dressed = spiralDoc('both', 'full');
+    const m3 = addSpiral(dressed.doc, dressed.pass.id, 'right');
+    check('a gate in the full dress has its pennants beside the sleeves, and the circle is round them there',
+      near(m3.radius, GATE_SCALE * (dressed.g.dims.clearW / 2 + FRAME_TUBE_OD + 0.42)));
+    check('a side with no flag, a pass that is not there and a waypoint\'s pass are not gone round',
+      addSpiral(north.doc, north.pass.id, 'right') === null && addSpiral(doc, 'sq-nope', 'right') === null
+      && addSpiral(doc, doc.sequence[0].id, 'right') === null);
   }
 
   /* ---- editing a wall once it is laid ---- */
@@ -10028,15 +10089,16 @@ function suiteFiveInchRoom() {
     return d;
   };
 
-  /* ---- a wall and a loop are not corners ---- */
+  /* ---- a wall and a spiral are not corners ---- */
   {
     /* Both are in the Nationals qualifier, whose line is held to a metre: the bays of its wall are 0.4 m of radius
-     * apart and its loops are a circle 0.87 m across, and the file has no warning. Take the wall's bays out of their
-     * group, and rename its loops, and each is a corner again. */
+     * apart and its spirals and the turn round the wall's flag are circles a metre or so from a flag, and the file has
+     * no warning. Take the wall's bays out of their group, and rename the figures' waypoints, and each is a corner
+     * again. */
     const tight = (doc) => collectWarnings(doc, buildPath(doc)).filter((w) => w.code === 'tight-corner');
     const fresh = () => deserialize(JSON.stringify(FIVE_INCH_PRESETS[0])).doc;
     const doc = fresh();
-    check('the bays of a wall and a loop round a post are tighter than a metre, and are not called a corner nothing flies',
+    check('the bays of a wall and the turns round a flag are tighter than a metre, and are not called a corner nothing flies',
       buildPath(doc).tightest.radius < doc.settings.minCurveRadius && tight(doc).length === 0,
       `tightest ${buildPath(doc).tightest.radius.toFixed(2)} m`);
     const ungrouped = fresh();
@@ -10046,11 +10108,12 @@ function suiteFiveInchRoom() {
     check('the same bays that are not one wall are corners, so the exemption is for a wall and for nothing else',
       tight(ungrouped).length === 1, String(tight(ungrouped).length));
     const renamed = fresh();
-    for (const e of renamed.elements.filter((x) => /^Loop /.test(x.name))) {
+    const figures = renamed.elements.filter((x) => ROUND_NAME.test(x.name ?? ''));
+    for (const e of figures) {
       e.name = 'a bend';
     }
-    check('and loops whose waypoints have been renamed are held to the radius again, which is the safe way for a name to be wrong',
-      tight(renamed).length === 1);
+    check('and figures whose waypoints have been renamed are held to the radius again, which is the safe way for a name to be wrong',
+      figures.length > 10 && tight(renamed).length === 1, `${figures.length} renamed, ${tight(renamed).length} warned`);
     /* A hall is held to its rule whether its gates are in a group or not, as it always was. */
     const hall = createTrack('hall', 'micro');
     const a = place(hall, 'gate', 3, 3, { yaw: 0 });
@@ -10192,6 +10255,33 @@ function suiteFiveInchRoom() {
         return wall && wall.ids.length === 3 && wallIsWoven(doc, bay.id) && wallFlagsOf(doc, bay.id) === 'first'
           && near(Math.hypot(elementById(doc, wall.ids[0]).position.x - elementById(doc, wall.ids[1]).position.x, 0), 2, 1e-5);
       })());
+    /* The owner's correction of 2026-10-01: a spiral down round the flag and then one pass, twice, and the wall
+     * entered round its flag and flown north first. */
+    const travelOf = (q) => {
+      const n = elementNormal(elementById(doc, q.elementId));
+      return { x: n.x * q.entry, y: n.y * q.entry };
+    };
+    const spiralled = (name, side) => {
+      const g = doc.elements.find((e) => e.name === name);
+      const passes = doc.sequence.filter((q) => q.elementId === g.id);
+      const i = doc.sequence.indexOf(passes[0]);
+      const before = doc.sequence.slice(Math.max(0, i - 5), i).map((q) => elementById(doc, q.elementId).name);
+      return passes.length === 1 && travelOf(passes[0]).x > 0.99 && before.every((n) => n === `Spiral ${side}`)
+        && flagsAsFlown(doc, passes[0].id)[side];
+    };
+    check('each spiral gate is flown once, east, after a spiral down round the flag the plan draws: the east gate\'s south one, the west gate\'s north one',
+      spiralled('East spiral gate', 'right') && spiralled('West spiral gate', 'left'));
+    check('its wall is entered round the flag on its end and flown north, south, north',
+      (() => {
+        const bays = doc.elements.filter((e) => e.group).map((e) => e.id);
+        const flown = doc.sequence.filter((q) => bays.includes(q.elementId));
+        const i = doc.sequence.indexOf(flown[0]);
+        const into = elementById(doc, doc.sequence[i - 1].elementId);
+        return flown.map((q) => Math.sign(Math.round(travelOf(q).y))).join() === '1,-1,1' && into.name === 'Round the flag'
+          && flagsAsFlown(doc, flown[0].id).right;
+      })());
+    check('and it is ten stations: seven gates with the lower one flown twice, the up gate and the turn flag, and nothing flown twice that the plan flies once',
+      path.knots.filter((k) => k.seq && (k.role === 'aperture' || (k.role === 'marker' && (k.seq.clearance ?? 0) > 0))).length === 10);
     check('the game builds it: the hurdle is a barrier with two masts, the wall bays are plain gates, the lap is closed',
       (() => {
         const course = courseFromDocument(doc);
