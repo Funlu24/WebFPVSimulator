@@ -5917,6 +5917,45 @@ export class Ui {
         field.placeholder = spec.placeholder || spec.label || '';
         field.dataset.key = spec.key;
         box.append(field);
+        /*
+         * ANOTHER SPELLING OF A NAME ALREADY ON THE BOARD (MENUS-PLAN.md
+         * 3.4). The board shows names that differ only by case, spaces,
+         * dots, hyphens or underscores as one pilot, and stores them as
+         * typed; a pilot who posts as "asylum fpv" beside "AsylumFPV" is
+         * told so here, before they post, and can take the spelling that is
+         * there with one press. `known` may be a promise: the post flow
+         * opens the dialog first and asks the board while the pilot types.
+         */
+        if (spec.known) {
+          const hint = el('p', 'name-dialog-hint', '');
+          hint.hidden = true;
+          box.append(hint);
+          let known = [];
+          const fold = (v) => String(v || '').toLowerCase().replace(/[\s._-]+/g, '');
+          const check = () => {
+            const typed = field.value.trim();
+            const f = fold(typed);
+            const hit = f ? known.find((k) => fold(k) === f && k !== typed) : null;
+            hint.hidden = !hit;
+            hint.textContent = '';
+            if (hit) {
+              const use = btn('name-dialog-use', hit);
+              use.title = `Use ${hit}`;
+              use.addEventListener('click', () => {
+                field.value = hit;
+                check();
+                field.focus();
+              });
+              hint.append('This track\'s board already has ', use,
+                '. If that is you, use the same spelling, so your times sit under one name.');
+            }
+          };
+          field.addEventListener('input', check);
+          Promise.resolve(spec.known).then((list) => {
+            known = Array.isArray(list) ? [...new Set(list.filter(Boolean).map(String))] : [];
+            check();
+          }).catch(() => {});
+        }
         inputs.push({ spec, field });
       }
       const row = el('div', 'name-dialog-row');
@@ -6148,7 +6187,7 @@ export class Ui {
    * a small overlay with a field. Resolves to the stored name, or null if
    * they cancel.
    */
-  askName({ title, detail } = {}) {
+  askName({ title, detail, known = null } = {}) {
     return this.askForm({
       title: title || 'Your name',
       detail: detail || 'Posted times and published tracks carry this name. Changing it updates the board for tracks you published from this browser.',
@@ -6162,6 +6201,8 @@ export class Ui {
         autocomplete: 'nickname',
         rules: nameRules(),
         save: writePilotName,
+        /* Names already on the board, or a promise of them: see askForm. */
+        known,
       }],
     }).then((values) => (values ? values.name : null));
   }
@@ -13272,7 +13313,7 @@ export class Ui {
         } else if (listing && listing.kind === 'local' && listing.canPublishNew) {
           this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can post a time.`;
         } else if (listing && listing.kind === 'owned' && listing.layoutDrift) {
-          this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before uploading a time.`;
+          this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before posting a time.`;
         }
       } catch (e) {
         /* A summary failure must not hide the times. */

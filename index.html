@@ -5376,6 +5376,17 @@
       .name-dialog-err {
         min-height: 1.3em; margin: 0 0 10px; color: #ff8f8f; font-size: 12px;
       }
+      /* Another spelling of a name already on the board (askForm in
+         src/ui/ui.js, MENUS-PLAN.md 3.4): said under the field, with the
+         spelling that is there as a button that takes it. */
+      .name-dialog-hint { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--slate); }
+      .name-dialog-hint[hidden] { display: none; }
+      .name-dialog-use {
+        font: inherit; font-weight: 700; color: var(--mint);
+        background: none; border: 0; padding: 0; cursor: pointer;
+        text-decoration: underline; text-underline-offset: 2px;
+      }
+      .name-dialog-use:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
       /* The door from the bug form to the flight feel form: a sentence that
          acts like a link, not a second primary button, because it leaves
          the form rather than submitting it. */
