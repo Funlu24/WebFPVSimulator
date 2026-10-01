@@ -362,6 +362,10 @@ export class Panels {
     if (h !== this.barH) {
       this.barH = h;
       bar.parentElement?.style.setProperty('--tb-bar-h', `${h}px`);
+      /* And a card already up is placed again against it: the bar takes a
+       * row more when the drawer opens and narrows it, and the card, placed
+       * for the shorter bar, sat on the strip's first chips. */
+      this.host.requestDraw?.();
     }
   }
 

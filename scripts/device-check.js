@@ -776,6 +776,25 @@ const DRAWER_PROBE = `(async () => {
   await wait(300);
   if (document.body.classList.contains('tb-drawer')) { bad.push('Escape did not close the drawer'); }
   if (app.selection.size !== 1) { bad.push('Escape let go of the selection before it closed the drawer'); }
+  /* The card's own More opens the drawer with the card already up: the card
+   * moves clear of where the drawer comes to rest, not of where its slide had
+   * got to when the card was placed. */
+  const more = [...card.querySelectorAll('button')].find((b) => b.textContent === 'More');
+  if (more) {
+    more.click();
+    await still();
+    await wait(400);
+    if (card.hidden) {
+      bad.push('the card went when its More opened the drawer');
+    } else {
+      if (card.getBoundingClientRect().right > side().left + 0.5) { bad.push('the card stays under the drawer its More opened, to ' + Math.round(card.getBoundingClientRect().right) + ' against ' + Math.round(side().left)); }
+      if (!pressable(card.querySelector('.tb-card-x'))) { bad.push('the card\\'s close button is under the drawer its More opened'); }
+    }
+    document.getElementById('tb-side-x').click();
+    await wait(400);
+  } else {
+    bad.push('the card has no More');
+  }
   toggle().click();
   await still();
   app.openLoad();

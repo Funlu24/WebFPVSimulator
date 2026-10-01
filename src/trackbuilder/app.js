@@ -2148,6 +2148,14 @@ export class App {
     if (!side || !stage) {
       return 0;
     }
+    /* Where the drawer comes to rest, not where its slide has got to. The
+     * offsets are the layout's, which a transform does not move, so the card
+     * of a gate already selected when the drawer opens (the card's own More)
+     * moves clear of it on the first frame. Measured on screen, mid slide, it
+     * was placed for a drawer still off the edge and stayed under it. */
+    if (side.offsetParent && side.offsetParent === stage.offsetParent) {
+      return Math.max(0, stage.offsetLeft + stage.offsetWidth - side.offsetLeft);
+    }
     const s = side.getBoundingClientRect();
     const r = stage.getBoundingClientRect();
     return Math.max(0, r.right - s.left);
