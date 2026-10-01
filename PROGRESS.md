@@ -63233,3 +63233,82 @@ the largest is the first: a 5 inch track now opens in the room, not on the plan.
     vendor/betaflight        git diff --stat is empty
     not run                  `npm run verify` (no physics, plant, ABI or build change), `shots.js`
                              pictures for the pilot (offered at the end of the turn)
+
+## 2026-10-01 | builder, board | The merge with main, the push to main, and the Nationals qualifier on the board (the owner's ask)
+
+The owner, after the report on Stages 2 to 6 and its question about how much to verify: "Build and publish the
+track and push to main." Three things, and an order they have to go in: main first, because the live game has
+to be able to draw a wall and a hurdle before anybody can pick the track; then the track, because the card a
+link to it shows is drawn by the code of the page that publishes. Nothing here changes the physics, the module
+ABI or the build, and `git diff --stat vendor/betaflight` is empty.
+
+### The merge
+
+Main had moved 24 commits since this branch forked at 831b724: the menus plan, all five stages, with its
+builder half merged as 8f6487c, a DEPLOY.md correction and PROGRESS entries (831b724..cf7901a). `git merge-base`
+answered 831b724, so the history was whole, and `origin/main` is an ancestor of the merge (4ab6f8e), so the push is a
+fast forward. Nothing was rewritten.
+
+Seven files conflicted. PROGRESS.md and the two test files (`selftest.js`, `builder-flow-check.js`) are the ones
+where both sides append at the end, and keep both. `app.js` (6 hunks), `ui.js` (13), `view2d.js` (1) and `edit3d.js`
+(1) were resolved by hand, taking main's structure and putting this branch's pieces on it: main's `toolButton`
+with the wall, up gate and hurdle through it; main's `pickTool`, drawers and `armedPress`, with a wall still
+dragged out by a finger; main's lap bar toggle with this branch's Field button beside it; main's coach lines
+with the wall, hurdle, up gate and ruler lines among them. `elements.js`, `storage.js`, `index.html`, `board.js`
+and `fresh.js` were changed by both sides and merged without a conflict, and were read afterwards: main moved
+the whoop's Fly order from O to N on the day this branch moved the five inch's, for the same reason (Ground logo
+has O), and the two agree.
+
+### The conflict that was not in the text
+
+MENUS-PLAN.md 4.2 treats the five inch canvas's 3D as a preview and builds in 2D ("Build in 2D", a tool picked
+in 3D opens 2D, 2D first on the switch, no Top). This branch builds the five inch in the room, as the whoop is,
+because the owner's report was that building top down is hard. Both were the owner's, a day apart, and they
+cannot both hold, so the later ask won for the five inch and the map keeps the preview.
+
+The mistake to avoid was a clean textual merge that left main's whoop only gates in place: the five inch would
+have opened in a room with a Top button missing, its phone menu offering the wrong view first and its drawer
+closing when a phone turned. So every `isWhoopRace()` that main added for the sake of "3D is the tool" was read
+and the ones about the room now say `buildsIn3D()`: the view buttons and their order, Top, Bend line, `previewing`,
+`pickTool`'s hint, the drawer on resize, the phone menu's view and Top and Bend rows, the empty state (shown for
+every race canvas, in either view, with "Start from a track on the board" and a line about Square), and the coach
+lines. The ones that are about inches, the build sheet and the picture stay the whoop's. A phone's More has a
+Square row, because the bar's second row folds into it. TRACK-BUILDER-5IN-PLAN.md has this as decision 16 and
+MENUS-PLAN.md 4.2 carries a note that points at it.
+
+Decision 17 is the other thing the merge raised. MENUS-PLAN.md 4.2b would ship no second copy of a board track.
+The qualifier is in Load (builder only) and on the board, as the whoop's RaceGOW5 tracks are, so it stays, and
+dropping it is one line.
+
+### Tests that held the old premise
+
+Changed with the premise, none loosened, and each says why in its comment: the `preview` case now runs on the map
+canvas, where the 3D view really is a preview; `five inch empty` and `phone` wait for the room and the phone
+case goes to the plan where the plan's gestures are its subject (the room's are `five inch: by touch`), with the
+coach line standing where a toast was; `openBuilder` waits for the room on both race canvases; the phone menu case
+has 3D before 2D, a Square row and no Top while the plan is up; `five inch: the room` says the share link is a
+race track's on either canvas (main's 4.2b) and has the views; and Start Pads is Start pads (main's rename).
+
+### Re-run on the merged tree
+
+    self test                node src/trackbuilder/selftest.js: 1937 passed, 0 failed (main's 1826 and this
+                             branch's 111 since the plan: nothing lost from either)
+    builder flow check       node scripts/builder-flow-check.js against a git archive of the merge commit (4ab6f8e,
+                             so what ran is what was committed): 53 cases, 616 checks, all pass. That is main's
+                             48 cases and 556 checks, this branch's 5 cases and 58, and 2 more in "five inch:
+                             the room". The first full run of the merge had 11 failures, every one a test that
+                             held the old premise or a label main renamed, none a product break; they were fixed
+                             as above and the run repeated
+    device check             npm run lint:devices: PASS (every builder bar control clear at 1440, 1600 and 1920 on
+                             the race canvas, all three canvases usable on a phone both ways round, the whoop
+                             room and drawer, the OSD)
+    board check              scripts/board-check.js with this tree beside the board as it is deployed (570ea3d):
+                             PASS (a copy of both laid side by side in the scratchpad, because the check wants
+                             the sibling spelled WebFPVSimulator-LeaderBoard)
+    the rest                 lint:nouns PASS; lint:preload up to date (245 served); check:fresh 18 passed;
+                             check:path 12 passed; micro:check pass; mission-preset --check clean
+    pictures                 the merged builder looked at on the five inch canvas (room, plan, a phone with both
+                             drawers); not committed
+    not run                  npm run verify (no physics, plant, ABI or build change), lint:shell, lint:input,
+                             lint:responsive and the rest of main's browser checks (every file they read is
+                             main's, byte for byte), shots.js
