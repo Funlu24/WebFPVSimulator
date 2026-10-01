@@ -41,7 +41,7 @@
 import {
   ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf,
   defaultDims, defaultPitch, defaultZ, elementHeight, normalizeFlagSide, normalizeUnbuiltSides,
-  trackClassOf, tuningFor, docModeOf, isTrafficType, clampByLimits,
+  trackClassOf, tuningFor, docModeOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
   ROAD_NODES_MAX, ROAD_NODE_REACH,
 } from './elements.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
@@ -1074,6 +1074,17 @@ export function normalize(raw) {
     if (def.flagSide) {
       el.flagSide = normalizeFlagSide(rawEl.flagSide, def.flagSide);
     }
+    /* A piece that may carry flags and does not by default, a hurdle: only when it says so, and
+     * then with the mast height beside it, so a barrier with none is the bytes it was. */
+    if (def.flagsOptional && rawEl.flagSide !== undefined) {
+      if (FLAG_SIDES.includes(rawEl.flagSide)) {
+        el.flagSide = rawEl.flagSide;
+        const mast = num(rawEl.dims?.flagH, GATE_FLAG_H);
+        el.dims.flagH = mast > 0 ? mast : GATE_FLAG_H;
+      } else {
+        repairs.push(`${id}: flagSide was not left, right, both or top, so it has no flags.`);
+      }
+    }
     /* An opening with no frame of its own: see isUnbuilt in elements.js.
      * Carried only on apertures, because nothing else has a frame to
      * leave off, and only when true, so an ordinary gate's JSON is the
@@ -1106,6 +1117,16 @@ export function normalize(raw) {
         }
       } else {
         repairs.push(`${id}: group was not a name, so it is on its own.`);
+      }
+    }
+    /* The dress a gate wears besides the MultiGP one: see GATE_STYLES in elements.js. Only on an
+     * aperture and only when it is one this build knows. A style this build has never heard of is
+     * the usual dress and is said, because it is somebody's edit or a newer build's. */
+    if (def.kind === KIND.APERTURE && rawEl.style !== undefined) {
+      if (GATE_STYLES.includes(rawEl.style)) {
+        el.style = rawEl.style;
+      } else {
+        repairs.push(`${id}: style "${String(rawEl.style).slice(0, 40)}" is not a dress this build knows, so it wears the usual one.`);
       }
     }
     doc.elements.push(el);
@@ -1334,6 +1355,10 @@ export function toPlain(doc) {
       if (def.flagSide) {
         out.flagSide = normalizeFlagSide(el.flagSide, def.flagSide);
       }
+      if (def.flagsOptional && FLAG_SIDES.includes(el.flagSide)) {
+        out.flagSide = el.flagSide;
+        out.dims.flagH = num(el.dims?.flagH > 0 ? el.dims.flagH : GATE_FLAG_H);
+      }
       if (el.unbuilt === true && def.kind === KIND.APERTURE) {
         out.unbuilt = true;
       }
@@ -1344,6 +1369,9 @@ export function toPlain(doc) {
         }
         if (typeof el.group === 'string' && el.group.trim() !== '') {
           out.group = el.group.slice(0, GROUP_NAME_MAX);
+        }
+        if (GATE_STYLES.includes(el.style)) {
+          out.style = el.style;
         }
       }
       return out;

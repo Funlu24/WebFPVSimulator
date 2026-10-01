@@ -62560,3 +62560,113 @@ was added or removed under src/, so src/fresh.js and index.html are unchanged; t
 
 The modules are still served with cache-control public, max-age=14400, s-maxage=300, so a returning pilot's
 browser can hold the old files for up to four hours; a hard reload gets the new ones at once.
+
+## 2026-10-01 | plan, builder | The 5 inch builder: the plan, and Stage 1, the parts (the owner's ask)
+
+The owner tried to build the 2026 Mission Foods Australian Drone Nationals Official Qualifying Track
+in the 5 inch builder and could not: no way to find a flagged gate's second flag ("double top
+flags"), a wall of gates "had to be hacked together", gates side by side "were hard to place", and a
+gate with a flag on top could not be flown twice with a spiral. They asked for a gap analysis, a UI
+and UX review, a plan and the work, ending with the track buildable very easily.
+
+`TRACK-BUILDER-5IN-PLAN.md` is the analysis, the review, the design and the stages (committed
+alone first, 5776370). This entry is the plan's Stage 1: the parts. Stages 2 to 6 follow in their
+own entries. Nothing here changes the physics, the module ABI or the build, and
+`git diff --stat vendor/betaflight` is empty.
+
+### What the analysis found
+
+- The diagram, read off the pixels, is on whole metres (13 + 10 + 15 = 38 down, 13 15 20 29 5
+  across) and its counts agree with its materials list: 7 gates, 9 flags, 1 hurdle, 1 dive gate.
+  The "7 gates" include a wall of three bays sharing four posts, flown as a weave.
+- The "double top flags" was not a missing part. `flagSide: both` exists and works, and its chooser
+  sits about 960 px down a 1424 px inspector seen through a 291 px window. The same panel hides the
+  rest. The 5 inch canvas also cannot fly a gate twice (Fly again is whoop only), has no wall, and
+  its hurdle would be a barrier with two orphan flags.
+- With today's primitives the track can be written from a script (12 passes, five warnings), so the
+  model holds nearly all of it and the tool is what is missing.
+- Three constraints that shaped the design came from reading the other repositories: the simulator
+  refuses any `group` as a cube (`share/board.js`), a new default `dims` key would move every
+  republished track's layout hash and clear its times, and the world builds every gate 15 percent
+  larger than the document says while never scaling a position.
+
+### What Stage 1 built
+
+- **A plain gate dress** (`style: "plain"`, optional, written only when set). No sleeves and a header
+  board as wide as the frame, in the world (`scene.js` `obstacle`) and in the builder's room
+  (`view3d.js`). The pennant then stands on its upright.
+- **A barrier may carry flags** (`flagSide`, and `dims.flagH` beside it, written only while it has
+  them), which is what a hurdle is. Built with the gate pennant function from the same kit
+  (`scene.js` `courseProps`), drawn in 2D and 3D. A barrier with none is the bytes it was.
+- **`src/trackbuilder/parts.js`**: flags as one choice (`setFlags`: none, left, right, both, top, which
+  changes the type where it must), the wall (`wallPlan`, `placeWall`: ordinary plain gates in a
+  group, the shared upright taken away, at the world's pitch, passes set to weave), the hurdle
+  (`placeHurdle`: 4 by 0.1 by 1 m with two flags and a waypoint a metre over it in the order),
+  the up gate (`placeUpGate`: a dive gate at 45 degrees with its sill 1.5 m up, flown up) and the
+  loop (`addLoop`: three waypoints on a circle round the chosen upright, then the second pass).
+- **The weave rule** in `faces.js`, for the 5 inch class only: where the chord to the neighbours is
+  square to a gate, a pass through a gate beside the last one goes the other way.
+- **A wide bay gate preset** (2 m between uprights as built), and `GATE_SCALE` moved to `units.js`,
+  where the builder can read it, and re-exported from `game/track.js`.
+- **The publish refusal narrowed** (`share/board.js`): a `group` is a cube only for a gate that no
+  pass goes through. A wall in which every gate is flown is published.
+- **Documented** in `schema.md` (the new fields, the wall, the loop).
+
+### A bug found on the way, and fixed
+
+A one-sided pennant (`flagSide` left or right) stood on the OPPOSITE upright in the world from the one
+the builder draws, for any gate flown along its own normal, which is most gates. The world builds a gate
+facing the pass with its local x on the pilot's right, and `meshSidesFor` turns the frame's sides for
+exactly that; the pennants, written earlier, were never turned. It showed when the first wall's flag stood
+over the wrong end post in the game. Fixed in `trackdoc.js`, for a pennant on one upright only (two
+pennants and a centre one are symmetric and are left exactly as they were). In the shipped tracks that is
+two pennants, `el-27` in trk-54902a69 and `el-28` in trk-f912dc57. A new check places a pennant on
+either side, on both flight directions, at six headings, and compares the builder's upright with the
+world's (24 of 24).
+
+### Against the plan
+
+- The plan said no existing track would change. Bytes, faces, headings, line length, stations and built
+  structures are identical on all 19 documents (8 whoop presets, 10 saved 5 inch tracks and the
+  living room), with two exceptions: the two pennants above, and the warning lists of six saved 5 inch
+  tracks, which each lose a `reversal` note. The reversal rule treated a chord a hair past square to a
+  face as a face sending the line back, on floating point noise (the cosine of a quarter turn is not
+  zero). It now allows two parts in a hundred on the 5 inch canvas, which a weave needs. A whoop
+  canvas keeps the rule it had, and its eight presets are identical.
+- The plan said a wall's pitch is the world's. It is, and the builder shows document sizes, so the bays
+  show a gap of about a quarter metre that the world does not have. Not changed, and said in the schema.
+
+### What went wrong
+
+- The first selftest run had three failures from my own reversal change, which also moved the whoop
+  presets' warnings until I limited it to the 5 inch class. The differential run is what showed it.
+- The first pennant fix turned two pennants and a centre one as well, and four existing checks that pin
+  their signs failed. Those cases are symmetric and cosmetic, so the fix was narrowed.
+- The first screenshot of the game was the main menu: setting the camera does nothing until the craft is
+  placed (`__placeCraft`). One wasted run.
+- Two of my own wall checks were written in a tangle (a ternary and an `a && b || c`) and passed for
+  the wrong reason; rewritten to say what they mean.
+
+### RUN LOG
+
+    code                     src/trackbuilder: parts (new), elements, model, faces, warnings, view2d,
+                             view3d, selftest, schema.md; src/game: trackdoc, track; src/render: scene;
+                             src/share: board; src/units.js
+    self test                node src/trackbuilder/selftest.js: 1830 passed, 0 failed (1773 before;
+                             57 new checks, written beside the code they check)
+    differential             19 documents through the code before and after: bytes, faces, headings,
+                             length, stations, built structures identical; differences are the two
+                             pennants and six warning lists above (scripts in the session scratchpad,
+                             not committed)
+    the game                 a track with a wall, a hurdle with flags, an up gate and a looped flagged
+                             gate flown in headless Chromium (`shots.js --course`): the wall's header
+                             is continuous, its posts are shared, its flag is over the end post; the
+                             hurdle's two flags stand at its ends; the console shows only the refused
+                             fetch to a board that is not running here. Pictures looked at, not
+                             committed
+    micro:check              all pass
+    lint:preload             up to date (parts.js is not in the app's import graph yet)
+    dashes and non ASCII     none added
+    not run                  `npm run verify` (no physics, plant, ABI or build change), `check:builder`
+                             (no page behaviour changed in this stage), `shots.js` pictures for the
+                             pilot (offered at the end of the turn)

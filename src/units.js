@@ -1,7 +1,8 @@
 /*
- * units.js: the foot, the inch, and the one piece of pipe a gate is made of.
+ * units.js: the foot, the inch, the one piece of pipe a gate is made of, and how
+ * much bigger than published the field builds one.
  *
- * Three numbers with no imports. It exists because the game and the track
+ * Four numbers with no imports. It exists because the game and the track
  * builder both need them and NEITHER may import the other: trackdoc.js
  * states that dependency as one way, the builder writes documents and the
  * game reads them, and a builder that imported src/game would close that
@@ -43,3 +44,16 @@ export const IN = FT / 12;
  * opening, which is the dimension that matters.
  */
 export const FRAME_TUBE_OD = 1.315 * IN;
+
+/*
+ * How much larger than published every obstacle is BUILT on the sixty metre
+ * field, as a pure number. The argument for it, and what it does not touch, is
+ * written once, in src/game/track.js, where the number was born; it lives here
+ * because the builder needs it too and may not import the game. A row of gates
+ * that share an upright has to be laid at this times one opening plus one tube
+ * if the uprights are to meet where the world builds them (positions are never
+ * scaled, sizes always are), and the builder knows that only if it can read the
+ * number. src/game/track.js re-exports it, so every reader it ever had still
+ * finds it there.
+ */
+export const GATE_SCALE = 1.15;

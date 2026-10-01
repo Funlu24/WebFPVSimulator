@@ -56,7 +56,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, hasMissingSides, isUnbuilt, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
+import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, hasMissingSides, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
 import {
   normalize, elementById, aperturesOf, startPadsOf, logosOf, logoForDecal, dressOrder,
 } from '../trackbuilder/model.js';
@@ -148,6 +148,11 @@ export function headingForTravel(tx, tz) {
  * is no angle at which it is a coin toss. No trigonometry, so it cannot
  * differ between engines, and only a sign comes out of it.
  */
+function meshFlipsX(el, t) {
+  const n = apertureFrame(el.yaw, el.pitch).normal;
+  return Math.hypot(t.x, t.y) > 1e-9 && (t.x * n.x + t.y * n.y) > 0;
+}
+
 function meshSidesFor(el, t, sides) {
   const n = apertureFrame(el.yaw, el.pitch).normal;
   let flipX;
@@ -429,8 +434,14 @@ function buildCourse(raw) {
     if (kind === KIND.APERTURE && hasMissingSides(el)) {
       s.frameSides = frameSidesOf(el);
     }
-    if (def.flagSide) {
-      s.flagSigns = flagSideSigns(flagSideOf(el));
+    /* The plain dress: no sleeves, a header board as wide as the frame. Nothing is written for a
+     * gate in the MultiGP dress, so a course that has none is the bytes it always was. */
+    if (kind === KIND.APERTURE && isPlain(el)) {
+      s.plain = true;
+    }
+    const flagSide = flagSideOf(el);
+    if (flagSide) {
+      s.flagSigns = flagSideSigns(flagSide);
       /*
        * Which way each pennant's cloth and whip lean, alongside where its
        * mast stands. It is carried rather than re-derived in the renderer
@@ -443,8 +454,8 @@ function buildCourse(raw) {
       /* The author's mast, through the same obstacle scale every other
        * length on the structure goes through, so the flag grows with the
        * gate it stands on rather than shrinking against it. */
-      s.flagH = gateFlagHeight(el.dims) * gateScale;
-      s.flagPoleR = GATE_FLAG_POLE_R * gateScale;
+      s.flagH = gateFlagHeight(el.dims) * (kind === KIND.APERTURE ? gateScale : SCALE);
+      s.flagPoleR = GATE_FLAG_POLE_R * (kind === KIND.APERTURE ? gateScale : SCALE);
     }
     /* Null for anything that carries no printed vinyl. */
     s.dress = dress.has(el.id) ? dress.get(el.id) : null;
@@ -461,6 +472,8 @@ function buildCourse(raw) {
    */
   const path = buildPath(doc);
   const stations = [];
+  /* The structures whose pennants have been put in the mesh's frame. */
+  const flagsTurned = new Set();
   for (const knot of path.knots) {
     if (!knot.seq) {
       continue;
@@ -597,6 +610,26 @@ function buildCourse(raw) {
      * the one that says which of its sides is which. */
     if (structure.frameSides && !structure.meshSides) {
       structure.meshSides = meshSidesFor(el, knot.tangent, structure.frameSides);
+    }
+    /*
+     * THE PENNANTS ARE IN THE MESH'S FRAME TOO, which is the mirror of the document's for a gate flown
+     * along its own normal, and that is most gates. The document says 'left' for the upright a person
+     * standing in front of the gate sees on their left, and the mesh is built facing the pass, with its
+     * local x on the pilot's right, so reading the sign straight into the mesh stood a 'left' pennant
+     * on the builder's right upright of every such gate. The frame's sides were turned for exactly this
+     * reason (meshSidesFor) and the pennants, which were written first, never were. A gate flown
+     * against its normal is built unmirrored and keeps its signs.
+     *
+     * ONLY A PENNANT ON ONE UPRIGHT HAS A SIDE TO MOVE. Two pennants stand on both uprights whichever
+     * way round the mesh is, and one in the middle is in the middle, so those are left exactly as they
+     * were and every course that has only them is the objects it always was.
+     */
+    if (structure.flagSigns && !flagsTurned.has(structure.id)) {
+      flagsTurned.add(structure.id);
+      if (structure.flagSigns.length === 1 && structure.flagSigns[0] !== 0 && meshFlipsX(el, knot.tangent)) {
+        structure.flagSigns = structure.flagSigns.map((v) => -v);
+        structure.flagLeans = structure.flagLeans.map((v) => -v);
+      }
     }
 
     const pos = toScene(field, { x: el.position.x, y: el.position.y });

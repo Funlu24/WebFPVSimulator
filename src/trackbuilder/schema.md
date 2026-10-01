@@ -237,7 +237,8 @@ course; that is what `sequence` is for.
 | `reverse` | boolean | **Vehicles only.** `true` drives against the road's node order. |
 | `drift` | boolean | **Vehicles only.** `true` makes it the drift car. |
 | `points` | integer | **Named gaps only.** What flying through it is worth: one of 100, 250, 500, 1000 or 2500, and anything else snaps to the nearest. |
-| `flagSide` | `"left"`, `"right"`, `"both"` or `"top"` | **Flagged gates and flagged doubles only.** Where the pennant stands on the top header, as seen facing the gate. `top` is one mast on the CENTRE of the board, over the opening. Default `left`. Not a dimension; the mast's height is, and it is `dims.flagH`. |
+| `flagSide` | `"left"`, `"right"`, `"both"` or `"top"` | **Flagged gates and flagged doubles, and a barrier that has flags.** Where the pennant stands on the top header, as seen facing the gate. `top` is one mast on the CENTRE of the board, over the opening. Default `left` on a flagged gate. Not a dimension; the mast's height is, and it is `dims.flagH`. On a **barrier** the field is **optional**: it is written only when the barrier has flags (a hurdle), with `dims.flagH` beside it, and a barrier without it is the JSON it always was. There the masts stand at the two ends of the board, along the way it is turned, and `left` is the `-heading` end. |
+| `style` | `"plain"`, or absent | **Apertures only.** The dress a gate wears besides the MultiGP one. A MultiGP gate in the world has a printed sleeve round each upright and a header board wider than the frame; `plain` has no sleeves and a header board exactly as wide as the frame, so a pennant on the header stands on the upright and the bays of a wall sit end to end. Written only when set, so every gate that exists serialises as it did. Only a vertical, square gate has a dress. A value this build does not know is dropped on read with a repair note. See `isPlain` in `elements.js`. |
 | `logoId` | string | **Ground logos only.** The `id` of the entry in `branding.logos` this footprint is painted with. Empty means the course's first logo. Not a dimension. |
 | `unbuilt` | `true`, or absent | **Apertures only.** The opening is a GAP IN THE LATTICE rather than a gate with a frame of its own: it scores, it lights, it carries its number and it pins the racing line, and no pipe is built for it in the world, the export, the preview or the card. The pipe that bounds it belongs to the structures around it. Written only when true, so an ordinary gate's JSON is unchanged. RaceGOW builds this way wherever a leg is carried up past a bar: the opening over the bar has the bar below and a pole beside and nothing else, and drawing a square there puts PVC in mid air. See `isUnbuilt` in `elements.js` and `TRACK-FROM-GIF.md`. |
 | `unbuiltSides` | array of strings, or absent | **Apertures only.** The sides of the frame that have no pipe, taken away one at a time: any of `"top"`, `"bottom"`, `"left"`, `"right"`, each once, written in that order. The opening still scores, lights, carries its number and pins the racing line; only the pipe is gone, along with what belongs to it (an upright's foot, fittings and printed sleeve, the top bar's header board). Four sides per STRUCTURE: `left` and `right` are the two uprights, the whole height of a stack, `top` is the bar over the top opening and `bottom` the bar under the lowest. A bar between two openings of a stack holds both up and is not one of the four. Left and right are as seen facing the gate, the same reading `flagSide` has: `left` is the `-widthAxis` upright and `top` the `+heightAxis` bar. Written only when at least one side is missing, so a gate with all four is the same JSON it was before this existed; a name that is not a side is dropped on read with a repair note. `unbuilt: true` means all four and more (no pipe at all), and wins when both are present. See `FRAME_SIDES` in `elements.js`, and `meshSidesFor` in `src/game/trackdoc.js` for how the race field, which builds each gate facing its first pass, turns these into its own frame. |
@@ -296,7 +297,7 @@ Each row's `kind` decides everything the tool does with it.
 | `diveGate` | D | aperture | yes, once per opening | same |
 | `hoop` | none | aperture | yes, once | same, with `levels` always 1. A round gate: the opening is the ellipse that touches all four sides of the `clearW` by `clearH` box, a circle when the two are equal, which is what a new one is. The whoop palette's only. See **The shape of an opening**. |
 | `hexGate` | none | aperture | yes, once | same, with `levels` always 1. A six sided gate: a point at each end of `clearW` and a flat above and below, so it is a regular hexagon when `clearH` is `clearW` times the square root of three over two, which is what a new one is. The whoop palette's only. See **The shape of an opening**. |
-| `barrier` | B | obstacle | **never** | `width depth height` |
+| `barrier` | B | obstacle | **never** | `width depth height`. Optional `flagSide`, and then `flagH` in `dims`, make it a hurdle: see `flagSide`. The palette's Hurdle is a barrier 4 m by 0.1 m by 1 m with two flags and a waypoint over it in the flying order. |
 | `flag` | F | marker | yes, with a pass side | `height poleRadius clearance` |
 | `cone` | C | marker | yes, with a pass side | `height baseRadius clearance` |
 | `waypoint` | W | marker | yes, at zero clearance | `height poleRadius clearance` |
@@ -372,6 +373,24 @@ there to be hit. A course whose document has no group has no such list, and
 so is the object it was. A track that holds a cube is not published to the
 board until the board knows a `group`: the board would keep the five gates,
 lose what makes them one, and fly two faces of it.
+
+**A wall.** Gates side by side that share their uprights, which the 5 inch palette's Wall tool
+lays by dragging along the ground. It is stored as what it is made of: ordinary `gate` elements
+(a `flaggedGate` where an end bay carries a pennant) that share a `group`, each in the `plain` dress,
+each pinned to one heading, with `unbuiltSides` taking away, on every bay after the first, the upright
+that faces the bay before it, so each post is built once. Every bay is its own opening and its own pass,
+so a wall can be flown straight through or as a weave, the passes alternating. The bays stand
+`GATE_SCALE * (clearW + FRAME_TUBE_OD)` apart (`wallPitchFor` in `elements.js`): the world builds a gate
+that much larger than the document says and never scales a position, so that is the pitch at which the
+uprights meet where the game builds them. The builder draws document sizes, so in it the bays show a gap
+of about a quarter of a metre that the world does not have. The document holds no word for a wall of its
+own. The board, which does not read `group`, keeps the gates and loses the grouping, which for a wall in
+which every gate is flown is the same course, so the simulator publishes it. A group that has a gate no
+pass goes through is a cube and is still refused.
+
+**A loop.** A pass through a gate followed by a circle round one of its uprights and a second pass through
+the same opening is stored as what it is made of: the pass, three ordinary `waypoint` elements a quarter
+turn apart in the flying order, then the second pass, which `addLoop` in `src/trackbuilder/parts.js` writes.
 
 A map also holds the freestyle assets, of two more kinds, `structure` and
 `zone`, and roads and vehicles, of two more, `road` and `vehicle`; they are

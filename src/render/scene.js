@@ -2898,6 +2898,45 @@ function courseProps(course, height, scene, colliders, baker, kit, padDecks = []
           rowR,
         );
       }
+      /*
+       * A HURDLE'S FLAGS. A barrier that says it has flags carries the same pennants a gate
+       * carries, at the ends of its top, built by the same function from the same kit so they wave
+       * and are solid in the same way (a straight mast and a whip, 5 cm of capsule round a 1.4 cm
+       * pole). The group takes the barrier's own position and yaw, so the ends are the box's ends.
+       * Nothing is built for a barrier that has no flags, so every course without one is the
+       * objects it always was.
+       */
+      if (s.flagSigns && s.flagSigns.length) {
+        const pennants = new THREE.Group();
+        pennants.position.set(s.x, y, s.z);
+        pennants.rotation.y = s.yaw;
+        const flags = attachHeaderFlags(pennants, {
+          flagSigns: s.flagSigns,
+          flagLeans: s.flagLeans,
+          flagH: s.flagH,
+          flagPoleR: s.flagPoleR,
+          kit: kit.forGate(markerIndex),
+        }, { headerTop: h, halfW: w * 0.5 });
+        markerIndex += s.flagSigns.length;
+        /* The sails stay live, in a group of their own at the barrier's own place; the masts bake. */
+        const live = new THREE.Group();
+        live.position.copy(pennants.position);
+        live.rotation.y = s.yaw;
+        for (const part of flags.animate) {
+          part.removeFromParent();
+          live.add(part);
+        }
+        scene.add(live);
+        baker.bake(pennants);
+        for (const c of flags.colliders) {
+          colliders.add(
+            c.kind,
+            s.x + c.ax * cs + c.az * sn, y + c.ay, s.z - c.ax * sn + c.az * cs,
+            s.x + c.bx * cs + c.bz * sn, y + c.by, s.z - c.bx * sn + c.bz * cs,
+            c.r,
+          );
+        }
+      }
       continue;
     }
     if (s.type === 'cone') {
@@ -3080,6 +3119,9 @@ function coursePlacements(course) {
     unbuilt: structure.unbuilt === true,
     /* 'circle' for a hoop and 'hex' for a hex gate; not there for a gate. */
     ...(structure.shape ? { shape: structure.shape } : {}),
+    /* The plain dress: no sleeves, a header board as wide as the frame. Not there for a gate in the
+     * MultiGP dress, which is every gate that has ever shipped. */
+    ...(structure.plain ? { plain: true } : {}),
     /* Sides taken away one at a time, already in THIS mesh's frame:
      * xNeg and xPos uprights, top and bottom members. Undefined on
      * every gate that has all four, which is every gate that has
@@ -3767,10 +3809,14 @@ function obstacle(spec, index, isStart, opts = {}) {
    */
   const panelW = 0.42;
   const kit = opts.kit;
+  /* The plain dress has no sleeves and a header board exactly as wide as the frame, so a pennant
+   * stands on its upright and the bays of a wall sit end to end: see isPlain in
+   * src/trackbuilder/elements.js. */
+  const plain = spec.plain === true;
   const substrate = isStart ? mats.panelStart : mats.panelRace;
   const panelBottom = sills[0];
   const panelH = topSurface - panelBottom;
-  for (const sx of (micro || unbuilt ? [] : [-1, 1])) {
+  for (const sx of (micro || unbuilt || plain ? [] : [-1, 1])) {
     if (!postBuilt(sx)) {
       continue;
     }
@@ -3799,7 +3845,7 @@ function obstacle(spec, index, isStart, opts = {}) {
    * they collapse to the top of the uprights and the opening's own half
    * width, which is exactly what the structure is.
    */
-  const outerW = 2 * (upX + tubeR + (micro ? 0 : panelW));
+  const outerW = 2 * (upX + tubeR + (micro || plain ? 0 : panelW));
   let plateY = upTop + tubeR;
   let plateHalfW = outerW * 0.5;
   let plateR = tubeR;

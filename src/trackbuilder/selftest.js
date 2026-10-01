@@ -35,7 +35,7 @@ import {
   roundTripsCleanly, serialize, aperturesOf, toPlain, startPadsOf, newElementId,
   logoForDecal, dressOrder, LOGO_SLOTS, SCHEMA_VERSION,
   SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt,
-  groupMembers, expandGroups,
+  groupMembers, expandGroups, elementNormal,
 } from './model.js';
 import { applyAutoFaces, flipFace, setYaw, clearOverride, travelDirection, defaultYawFor } from './faces.js';
 import {
@@ -61,11 +61,15 @@ import {
   rulerPoint, rulerReading, replacementsFor, replaceWith, placeCube, cubeItems, turnGroups,
 } from './snap.js';
 import { CUBE_FACES, cubeFaces } from './cube.js';
+import {
+  canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addLoop,
+  WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE,
+} from './parts.js';
 import { envelopeFor, GATE_OPENING_DEFAULT, PIPE_OD as CUBE_PIPE_OD, inches } from './racegow.js';
 import {
   RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE,
 } from './geometry.js';
-import { FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf } from './elements.js';
+import { FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor } from './elements.js';
 import { PRESETS } from './presets.js';
 import { ELEMENTS, PALETTE_ORDER, GATE_FLAG_H, flagSideOf, flagSideSigns, elementByKey, elementHeight,
   virtualApertureDims, countElementsByType, formatElementCounts,
@@ -1743,12 +1747,19 @@ function suiteFlaggedDoubleStack() {
 function suitePresets() {
   console.log('\ngate presets');
   const ids = GATE_PRESETS.map((p) => p.id).join(',');
-  check('four presets, standard first', ids === 'standard,championship,whoop,trainer', ids);
+  check('five presets, standard first', ids === 'standard,championship,whoop,wide,trainer', ids);
   check('every preset carries a size and a hint',
     GATE_PRESETS.every((p) => p.label && p.size && p.hint));
-  check('three of them claim to be published, the trainer does not',
+  check('three of them claim to be published, the wide bay and the trainer do not',
     GATE_PRESETS.filter((p) => p.published).length === 3
-    && GATE_PRESETS.find((p) => p.id === 'trainer').published === false);
+    && GATE_PRESETS.find((p) => p.id === 'trainer').published === false
+    && GATE_PRESETS.find((p) => p.id === 'wide').published === false);
+  /* The wide bay is the one whose built width is 2 m: the world builds a gate GATE_SCALE larger,
+   * so its upright to upright is (clearW + a tube) times that, which is the plan's 2 m bay. */
+  const wideP = GATE_PRESETS.find((p) => p.id === 'wide');
+  check('the wide bay builds 2 m between its uprights in the world',
+    Math.abs(GATE_SCALE * (wideP.clearW + FRAME_TUBE_OD) - 2) < 1e-9,
+    String(GATE_SCALE * (wideP.clearW + FRAME_TUBE_OD)));
 
   /* The standard preset IS the library's default gate, not a second copy
    * of 1.524 that could drift from it. */
@@ -9498,6 +9509,382 @@ async function suiteCube() {
   }
 }
 
+/*
+ * THE 5 INCH CANVAS'S PIECES THAT ARE MADE OF PIECES (src/trackbuilder/parts.js): the plain gate dress, a hurdle
+ * that is a barrier with flags, a wall of gates in a group, an up gate, a loop round a post, flags that come and
+ * go, and the weave rule. None is an element, so what is checked is what they write: ordinary gates, barriers,
+ * dive gates and waypoints, that the document reads and writes unchanged, that the game builds as intended and
+ * that every document that existed before them is the bytes it was.
+ */
+function suiteFiveInchParts() {
+  console.log('\nthe 5 inch parts');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const WIDE = GATE_PRESETS.find((p) => p.id === 'wide');
+  const wideDims = () => {
+    const d = { ...ELEMENTS.gate.dims };
+    applyGatePreset(d, WIDE);
+    return d;
+  };
+
+  /* ---- the document: plain dress and a barrier with flags ---- */
+  {
+    const doc = createTrack('dress');
+    const plainGate = place(doc, 'gate', 10, 10);
+    plainGate.style = 'plain';
+    const usual = place(doc, 'gate', 14, 10);
+    const hurdle = place(doc, 'barrier', 20, 10);
+    hurdle.flagSide = 'both';
+    hurdle.dims.flagH = 2;
+    const wall = place(doc, 'barrier', 24, 10);
+    const plain = toPlain(doc);
+    const byId = (id) => plain.elements.find((e) => e.id === id);
+    check('a plain gate is written with its style, and a gate in the usual dress has no style at all',
+      byId(plainGate.id).style === 'plain' && !('style' in byId(usual.id)));
+    check('a barrier with flags is written with its side and its mast, and one without has neither, so it is the bytes it was',
+      byId(hurdle.id).flagSide === 'both' && byId(hurdle.id).dims.flagH === 2
+      && !('flagSide' in byId(wall.id)) && JSON.stringify(Object.keys(byId(wall.id).dims)) === '["width","depth","height"]');
+    const back = deserialize(serialize(doc));
+    check('both read back as they were written, with nothing to repair', back.repairs.length === 0
+      && elementById(back.doc, plainGate.id).style === 'plain' && flagSideOf(elementById(back.doc, hurdle.id)) === 'both'
+      && elementById(back.doc, hurdle.id).dims.flagH === 2 && flagSideOf(elementById(back.doc, wall.id)) === null
+      && roundTripsCleanly(doc));
+    const odd = JSON.parse(serialize(doc));
+    odd.elements[0].style = 'sleeved';
+    odd.elements[2].flagSide = 'sideways';
+    const fixed = normalize(odd);
+    check('a dress this build does not know, and a flag side that is not one, are read as the usual and as none, and said',
+      !('style' in fixed.doc.elements[0]) && flagSideOf(fixed.doc.elements[2]) === null
+      && fixed.repairs.some((r) => /not a dress this build knows/.test(r)) && fixed.repairs.some((r) => /has no flags/.test(r)),
+      fixed.repairs.join(' | '));
+    check('isPlain is a vertical square gate with the style, and nothing else',
+      isPlain(plainGate) && !isPlain(usual) && !isPlain(hurdle) && !isPlain({ ...plainGate, type: 'hoop' }) && !isPlain(null));
+  }
+
+  /* ---- a pennant stands on the same upright in the builder and in the world ---- */
+  {
+    /*
+     * The builder draws 'left' on the -widthAxis upright. The world builds the gate facing the pass with its
+     * local x on the pilot's right, so for a gate flown along its own normal its local -x is the document's
+     * RIGHT, and a pennant read straight into the mesh stood on the wrong upright of every such gate. Checked
+     * the way the world places it: the mesh is turned to the station's heading and a mast at sign * half
+     * width along its local x lands where the document says it should, whichever way the gate is flown.
+     */
+    let agree = 0;
+    let total = 0;
+    for (const entry of [1, -1]) {
+      for (const yawDeg of [0, 30, 90, 135, -90, -45]) {
+        for (const side of ['left', 'right']) {
+          const doc = createTrack('side');
+          const lead = place(doc, 'gate', 5, 5, { yaw: 0 });
+          lead.yawOverridden = true;
+          const g = place(doc, 'flaggedGate', 20, 20, { yaw: yawDeg * RAD });
+          g.flagSide = side;
+          g.yawOverridden = true;
+          addToSequence(doc, lead.id, 0);
+          addToSequence(doc, g.id, 0);
+          const seq = doc.sequence.find((q) => q.elementId === g.id);
+          seq.entry = entry;
+          seq.overridden = true;
+          const course = courseFromDocument(doc);
+          const st = course.structures.find((x) => x.id === g.id);
+          const sta = course.stations.find((x) => x.elementId === g.id);
+          const half = 1;
+          /* A mast at sign * half along the mesh's local x, which a turn of the station's heading carries to the
+           * scene: (x cos t, -x sin t), and the scene's z is the document's -y. */
+          const local = st.flagSigns[0] * half;
+          const world = { x: local * Math.cos(sta.yaw), y: local * Math.sin(sta.yaw) };
+          const wa = apertureFrame(g.yaw, 0).widthAxis;
+          const want = side === 'left' ? -1 : 1;
+          total += 1;
+          if (world.x * wa.x * want + world.y * wa.y * want > 0.9) {
+            agree += 1;
+          }
+        }
+      }
+    }
+    check('a pennant on the left or the right is on the same upright in the world as the builder draws it, flown along the gate\'s normal or against it, at any heading',
+      agree === total && total === 24, `${agree} of ${total}`);
+    const topDoc = createTrack('top');
+    const t1 = place(topDoc, 'flaggedGate', 20, 20, { yaw: 0 });
+    t1.flagSide = 'top';
+    addToSequence(topDoc, t1.id, 0);
+    check('and a pennant on the top is in the middle, whichever way it is flown, with no side to take',
+      courseFromDocument(topDoc).structures.find((x) => x.id === t1.id).flagSigns[0] === 0);
+  }
+
+  /* ---- the pitch that makes uprights meet in the world ---- */
+  {
+    const pitch = wallPitchFor(ELEMENTS.gate.dims, 'full');
+    check('a wall is laid at the world\'s pitch: the field builds a gate GATE_SCALE larger, so one opening and a tube, that much more',
+      near(pitch, GATE_SCALE * (ELEMENTS.gate.dims.clearW + FRAME_TUBE_OD)) && pitch > ELEMENTS.gate.dims.clearW + FRAME_TUBE_OD);
+    check('and on a whoop canvas, which is built one to one, it is the document\'s',
+      near(wallPitchFor(ELEMENTS.gate.microDims, 'micro'), ELEMENTS.gate.microDims.clearW + FRAME_TUBE_OD));
+    check('the wide bay is 2 m a bay, so a wall dragged across 6 m is three bays 14, 16 and 18, which is the Nationals plan\'s',
+      (() => {
+        const doc = createTrack('wide');
+        const plan = wallPlan(doc, { x: 13, y: 38 }, { x: 19, y: 38 }, { dims: wideDims() });
+        return plan.count === 3 && plan.items.every((it, i) => near(it.x, 14 + 2 * i, 1e-9) && near(it.y, 38));
+      })());
+  }
+
+  /* ---- the wall ---- */
+  {
+    const doc = createTrack('wall');
+    const dims = wideDims();
+    const plan = wallPlan(doc, { x: 13, y: 38 }, { x: 19, y: 38 }, { dims });
+    check('a drag across three pitches is three bays; a click is three, and never fewer than two or more than six',
+      plan.count === 3 && wallPlan(doc, { x: 1, y: 1 }, { x: 1, y: 1 }).count === WALL_DEFAULT
+      && wallPlan(doc, { x: 1, y: 1 }, { x: 3.2, y: 1 }, { dims }).count === WALL_MIN
+      && wallPlan(doc, { x: 1, y: 1 }, { x: 60, y: 1 }, { dims }).count === WALL_MAX);
+    check('it runs along the drag put on fifteen degrees, and faces across it, north with nothing before it',
+      near(plan.dir.x, 1) && near(plan.dir.y, 0) && near(wrapAngle(plan.yaw - Math.PI / 2), 0, 1e-9)
+      && Math.abs(wallPlan(doc, { x: 0, y: 0 }, { x: 10, y: 3 }).dir.y - Math.sin(Math.PI / 12)) < 1e-9);
+    /* A course that is heading south turns the wall to face south. */
+    const heading = createTrack('heading');
+    const up = place(heading, 'gate', 28, 44);
+    addToSequence(heading, up.id, 0);
+    check('with a gate before it to the north the bays face south, the way the course is going',
+      near(wallPlan(heading, { x: 13, y: 38 }, { x: 19, y: 38 }, { dims }).yaw, -Math.PI / 2, 1e-9));
+
+    const ids = placeWall(heading, { x: 19, y: 38 }, { x: 13, y: 38 }, { dims, flags: 'first' });
+    const bays = ids.map((id) => elementById(heading, id));
+    check('placing it lays one gate for each bay, in the plain dress, in one group, each pinned to its heading',
+      bays.length === 3 && bays.every((b) => b.type !== undefined && isPlain(b) && b.group === bays[0].group && b.yawOverridden)
+      && new Set(bays.map((b) => b.yaw)).size === 1);
+    check('dragged from the east post to the west one the bays are 18, 16 and 14, in that order',
+      bays.every((b, i) => near(b.position.x, 18 - 2 * i, 1e-9) && near(b.position.y, 38)));
+    /* The wall faces south, so its width axis is east: the bay before is to the east of each bay after the
+     * first, and the upright that faces it is the right one. */
+    check('each bay after the first leaves out the upright that faces the bay before it, so a post is built once',
+      !bays[0].unbuiltSides && bays[1].unbuiltSides?.join() === 'right' && bays[2].unbuiltSides?.join() === 'right');
+    check('a pennant on the first bay is on its outer upright, the east one; the other bays carry none',
+      bays[0].type === 'flaggedGate' && bays[0].flagSide === 'right' && bays[1].type === 'gate' && bays[2].type === 'gate');
+    check('every bay is in the flying order, in bay order, and the passes weave: south, north, south, set by hand',
+      heading.sequence.filter((s) => bays.some((b) => b.id === s.elementId)).length === 3
+      && (() => {
+        const seqs = heading.sequence.filter((s) => bays.some((b) => b.id === s.elementId));
+        const dirOf = (s) => {
+          const e = elementById(heading, s.elementId);
+          return Math.sign(elementNormal(e).y * s.entry);
+        };
+        return seqs.map(dirOf).join() === '-1,1,-1' && seqs.every((s) => s.overridden);
+      })());
+    const clean = collectWarnings(heading, buildPath(heading));
+    check('the weave is not called backwards, and nothing is left out of the order',
+      !clean.some((w) => w.code === 'reversal' || w.code === 'unsequenced' || w.code === 'no-face'),
+      clean.map((w) => w.code).join());
+    check('the wall round trips, and a group is selected, moved and removed as one piece',
+      roundTripsCleanly(heading) && groupMembers(heading, ids[1]).length === 3
+      && expandGroups(heading, [ids[0]]).size === 3 && wallBays(heading, ids[2]).map((b) => b.id).join() === ids.slice().reverse().join());
+    check('and a wall whose every gate is flown is not a cube to the board, but one with a bay left out of the order is',
+      partsTheBoardDoesNotKnow(toPlain(heading)).length === 0
+      && (() => {
+        const loose = deserialize(serialize(heading)).doc;
+        loose.sequence = loose.sequence.filter((s) => s.elementId !== ids[1]);
+        return JSON.stringify(partsTheBoardDoesNotKnow(toPlain(loose))) === '[{"type":"cube","count":1}]';
+      })());
+
+    /* Built in the world: every bay is a station, plain, and the uprights meet. */
+    const course = courseFromDocument(heading);
+    const built = ids.map((id) => course.structures.find((s) => s.id === id));
+    check('the game reads every bay as a plain gate and a station of its own, and builds none loose',
+      built.every((s) => s && s.plain === true)
+      && course.stations.filter((s) => ids.includes(s.elementId)).length === 3
+      && (course.loose ?? []).length === 0);
+    const tubeR = (FRAME_TUBE_OD * GATE_SCALE) / 2;
+    const post = (s, side) => s.x + side * (s.dims.clearW / 2 + tubeR);
+    check('and the uprights of neighbouring bays meet where the game builds them: one bay\'s left is the next one\'s right, to the micrometre',
+      Math.abs(post(built[0], -1) - post(built[1], 1)) < 1e-6 && Math.abs(post(built[1], -1) - post(built[2], 1)) < 1e-6,
+      `${built.map((s) => s.x.toFixed(4)).join()} clearW ${built[0].dims.clearW.toFixed(4)}`);
+  }
+
+  /* ---- the weave rule, on gates the author has laid by hand ---- */
+  {
+    const doc = createTrack('weave');
+    const lead = place(doc, 'gate', 28, 44, { yaw: -Math.PI / 2 });
+    lead.yawOverridden = true;
+    const bayAt = (x) => {
+      const g = place(doc, 'gate', x, 38, { yaw: Math.PI / 2 });
+      g.yawOverridden = true;
+      return g;
+    };
+    const east = bayAt(18);
+    const mid = bayAt(16);
+    const west = bayAt(14);
+    for (const g of [lead, east, mid, west]) {
+      addToSequence(doc, g.id, 0);
+    }
+    const dir = (g) => {
+      const s = doc.sequence.find((q) => q.elementId === g.id);
+      return Math.sign(elementNormal(g).y * s.entry);
+    };
+    check('gates side by side, facing one way, with a chord that runs along them, are flown as a weave without anyone setting a pass',
+      [dir(east), dir(mid), dir(west)].join() === '-1,1,-1', [dir(east), dir(mid), dir(west)].join());
+    check('and the weave is not drawn as a reversal, which is what the same row flown one way is called',
+      !collectWarnings(doc, buildPath(doc)).some((w) => w.code === 'reversal'));
+    /* The same layout on a whoop canvas is as it always was. */
+    const whoop = createTrack('whoop', 'micro');
+    const lead2 = place(whoop, 'gate', 5, 8, { yaw: -Math.PI / 2 });
+    const e2 = place(whoop, 'gate', 4.4, 5, { yaw: Math.PI / 2 });
+    const m2 = place(whoop, 'gate', 4.4 - 0.7, 5, { yaw: Math.PI / 2 });
+    for (const g of [lead2, e2, m2]) {
+      g.yawOverridden = true;
+      addToSequence(whoop, g.id, 0);
+    }
+    const before = whoop.sequence.map((s) => s.entry).join();
+    applyAutoFaces(whoop);
+    check('on a whoop canvas the rule is not applied: the face is what it was made', whoop.sequence.map((s) => s.entry).join() === before);
+    /* A gate flown twice in a row, or one that is not beside the last, is not a weave. */
+    const apart = createTrack('apart');
+    const a1 = place(apart, 'gate', 10, 10, { yaw: 0 });
+    const a2 = place(apart, 'gate', 30, 10, { yaw: 0 });
+    a1.yawOverridden = true;
+    a2.yawOverridden = true;
+    addToSequence(apart, a1.id, 0);
+    addToSequence(apart, a2.id, 0);
+    check('two gates far apart on one line are flown the way the line goes, both of them, and not as a weave',
+      apart.sequence.map((s) => s.entry).join() === '1,1');
+  }
+
+  /* ---- flags as one choice ---- */
+  {
+    const doc = createTrack('flags');
+    const g = place(doc, 'gate', 10, 10);
+    g.group = 'grp-1';
+    g.style = 'plain';
+    g.unbuiltSides = ['left'];
+    addToSequence(doc, g.id, 0);
+    const seqId = doc.sequence[0].id;
+    check('a gate may take flags, a stack too, a barrier too, and a tower, a ladder and a dive gate may not',
+      canFlag(g) && canFlag(place(doc, 'doubleStack', 20, 10)) && canFlag(place(doc, 'barrier', 30, 10))
+      && !canFlag(place(doc, 'tower', 40, 10)) && !canFlag(place(doc, 'ladder', 50, 10)) && !canFlag(place(doc, 'diveGate', 5, 20))
+      && flagsOf(g) === 'none');
+    check('flags on a plain gate make it the flagged type and keep everything else it is: place, group, dress, sides, order',
+      setFlags(doc, g.id, 'both') && g.type === 'flaggedGate' && g.flagSide === 'both' && g.dims.flagH === GATE_FLAG_H
+      && g.group === 'grp-1' && g.style === 'plain' && g.unbuiltSides[0] === 'left' && near(g.position.x, 10)
+      && doc.sequence[0].id === seqId && flagsOf(g) === 'both');
+    check('moving the flag is a change of side and not of type, and the same choice twice changes nothing',
+      setFlags(doc, g.id, 'left') && g.type === 'flaggedGate' && g.flagSide === 'left' && !setFlags(doc, g.id, 'left'));
+    check('none takes the flags off and makes it the plain type again, without the mast it had',
+      setFlags(doc, g.id, 'none') && g.type === 'gate' && !('flagSide' in g) && !('flagH' in g.dims) && flagsOf(g) === 'none' && !setFlags(doc, g.id, 'none'));
+    const stack = doc.elements.find((e) => e.type === 'doubleStack');
+    check('a double stack goes to the flagged double and back',
+      setFlags(doc, stack.id, 'top') && stack.type === 'flaggedDoubleStack' && stack.flagSide === 'top'
+      && setFlags(doc, stack.id, 'none') && stack.type === 'doubleStack' && stack.dims.levels === 2);
+    const bar = doc.elements.find((e) => e.type === 'barrier');
+    check('a barrier gains flags and a mast, and loses both again, and is a barrier throughout',
+      setFlags(doc, bar.id, 'right') && bar.type === 'barrier' && bar.flagSide === 'right' && bar.dims.flagH === HURDLE.flagH
+      && flagsOf(bar) === 'right' && setFlags(doc, bar.id, 'none') && !('flagSide' in bar) && !('flagH' in bar.dims));
+    check('a piece with no flagged twin is left alone, and so is a choice that is not one',
+      !setFlags(doc, doc.elements.find((e) => e.type === 'tower').id, 'left') && !setFlags(doc, g.id, 'sideways') && !setFlags(doc, 'nope', 'left'));
+  }
+
+  /* ---- the hurdle ---- */
+  {
+    const doc = createTrack('hurdle');
+    const start = place(doc, 'gate', 15, 14);
+    addToSequence(doc, start.id, 0);
+    const { id, waypointId } = placeHurdle(doc, { x: 22, y: 23 });
+    const h = elementById(doc, id);
+    check('a hurdle is a barrier 4 m by 0.1 by 1 with a flag at each end, 2 m of mast, turned across the way the course is going',
+      h.type === 'barrier' && h.dims.width === 4 && h.dims.depth === 0.1 && h.dims.height === 1 && h.flagSide === 'both' && h.dims.flagH === 2
+      && Math.abs(Math.cos(h.yaw - (Math.atan2(23 - 14, 22 - 15) + Math.PI / 2))) > 0.95 && h.yawOverridden);
+    const wp = elementById(doc, waypointId);
+    check('and the lap goes over it: a waypoint a metre over the top of the middle of it, in the flying order, and nothing scores on it',
+      wp.type === 'waypoint' && near(wp.position.z, 2) && near(wp.position.x, 22) && doc.sequence.at(-1).elementId === wp.id
+      && !doc.sequence.some((s) => s.elementId === h.id));
+    check('placed without joining the order it is only the board',
+      (() => { const d2 = createTrack('x'); const r = placeHurdle(d2, { x: 5, y: 5 }, { join: false }); return r.waypointId === null && d2.sequence.length === 0 && d2.elements.length === 1; })());
+    const line = buildPath(doc);
+    const over = line.samples.reduce((m, s) => (Math.hypot(s.pos.x - 22, s.pos.y - 23) < 0.3 ? Math.max(m, s.pos.z) : m), 0);
+    check('the line passes over the board, higher than its top by the clearance the warning pass wants',
+      over >= 1.35, over.toFixed(3));
+    check('and the warning pass does not call the hurdle\'s flags unsequenced, or the line a barrier hit',
+      !collectWarnings(doc, line).some((w) => w.code === 'barrier' || w.code === 'unsequenced'));
+    const course = courseFromDocument(doc);
+    const hs = course.structures.find((s) => s.id === id);
+    check('the game reads the hurdle as a barrier with two masts at its ends, and counts only the start gate as a station',
+      hs && hs.kind === 'obstacle' && JSON.stringify(hs.flagSigns) === '[-1,1]' && near(hs.flagH, 2) && course.stations.length === 1);
+    check('and it round trips with its flags', roundTripsCleanly(doc) && deserialize(serialize(doc)).repairs.length === 0);
+  }
+
+  /* ---- the up gate ---- */
+  {
+    const doc = createTrack('up');
+    const g4 = place(doc, 'gate', 25, 30);
+    addToSequence(doc, g4.id, 0);
+    const el = placeUpGate(doc, { x: 28, y: 39 });
+    const s = doc.sequence.find((q) => q.elementId === el.id);
+    const f = apertureFrame(el.yaw, el.pitch);
+    check('an up gate is a dive gate leaning 45 degrees with its sill 1.5 m up',
+      el.type === 'diveGate' && near(el.pitch, Math.PI / 4) && near(el.dims.sillH, 1.5));
+    check('its lower edge is past the rule, 1.5 m, even leaning',
+      aperturesOf(el)[0].sillH + (aperturesOf(el)[0].clearH / 2) * (1 - Math.cos(el.pitch)) >= 1.5 - 1e-9);
+    check('it is flown UP, set by hand, so the face rule does not make a dive gate of it when the line goes down afterwards',
+      s.entry === 1 && s.overridden && f.normal.z > 0.7);
+    const next = place(doc, 'gate', 18, 38);
+    addToSequence(doc, next.id, 0);
+    check('and a lower gate after it leaves it as it is',
+      doc.sequence.find((q) => q.elementId === el.id).entry === 1 && elementById(doc, el.id).pitch > 0.7);
+  }
+
+  /* ---- the loop ---- */
+  {
+    const doc = createTrack('loop');
+    const g = place(doc, 'gate', 25, 30, { yaw: 0 });
+    g.yawOverridden = true;
+    const next = place(doc, 'gate', 25, 36, { yaw: Math.PI / 2 });
+    next.yawOverridden = true;
+    addToSequence(doc, g.id, 0);
+    addToSequence(doc, next.id, 0);
+    const first = doc.sequence[0];
+    check('a gate flown east has its pass set before the loop is asked for', first.entry === 1);
+    const made = addLoop(doc, first.id, 'right');
+    const r = (ELEMENTS.gate.dims.clearW + FRAME_TUBE_OD) / 2;
+    const wps = made.waypoints.map((id) => elementById(doc, id));
+    check('a loop right is three waypoints and a second pass through the same gate, all in the flying order straight after the first pass',
+      made.waypoints.length === 3 && made.pass && doc.sequence.slice(1, 5).map((q) => q.elementId).join()
+        === [...made.waypoints, g.id].join() && doc.sequence[5].elementId === next.id);
+    check('the waypoints stand a quarter turn apart on a circle round the right hand upright, east of it, south of it, west of it, through the gate\'s middle',
+      near(wps[0].position.x, 25 + r) && near(wps[0].position.y, 30 - r)
+      && near(wps[1].position.x, 25) && near(wps[1].position.y, 30 - 2 * r)
+      && near(wps[2].position.x, 25 - r) && near(wps[2].position.y, 30 - r));
+    check('and they are at the height of the opening, which is where the line was',
+      wps.every((w) => near(w.position.z, ELEMENTS.gate.dims.clearH / 2)));
+    check('the second pass goes through the way the first did, set by hand',
+      made.pass.entry === first.entry && made.pass.overridden);
+    const loopLine = buildPath(doc);
+    const warn = collectWarnings(doc, loopLine);
+    check('the line does the loop: it is longer than the straight, comes through the gate twice the same way, and has no knot in one place',
+      !warn.some((w) => w.code === 'coincident' || w.code === 'reversal'), warn.map((w) => w.code).join());
+    check('and its tightest turn is about the circle\'s radius, not the 0.13 m the same gate flown twice in a row gave',
+      loopLine.tightest.radius > 0.5 && loopLine.tightest.radius < 2, String(loopLine.tightest?.radius));
+    const left = createTrack('loop left');
+    const g2 = place(left, 'gate', 25, 30, { yaw: 0 });
+    g2.yawOverridden = true;
+    addToSequence(left, g2.id, 0);
+    const m2 = addLoop(left, left.sequence[0].id, 'left', { again: false });
+    const w2 = m2.waypoints.map((id) => elementById(left, id));
+    check('a loop left is round the left hand upright, anticlockwise: west of it first, and with no second pass when it is asked for none',
+      m2.pass === null && left.sequence.length === 4 && near(w2[0].position.x, 25 + r) && near(w2[0].position.y, 30 + r)
+      && near(w2[1].position.y, 30 + 2 * r));
+    check('a pass that is not an aperture, or not there, is not looped',
+      addLoop(left, 'sq-nope', 'right') === null && addLoop(left, m2.waypoints[0] && left.sequence[1].id, 'right') === null);
+  }
+
+  /* ---- publishing, and what existed before ---- */
+  {
+    const dress = createTrack('before');
+    const g = place(dress, 'gate', 10, 10);
+    addToSequence(dress, g.id, 0);
+    check('a track with none of the new fields serialises with none of them, so every track that exists is the bytes it was',
+      !/"style"|"flagSide"|"flagH"/.test(serialize(dress)));
+    const shipped = PRESETS.map((p) => p.id);
+    check('and every shipped preset still round trips byte for byte',
+      PRESETS.every((p) => roundTripsCleanly(deserialize(JSON.stringify(p)).doc)) && shipped.length === 8);
+  }
+}
+
 async function main() {
   if (process.argv.includes('--emit')) {
     process.stdout.write(serialize(demoTrack()));
@@ -9556,6 +9943,7 @@ async function main() {
   await suiteShareLink();
   suiteBuildSheet();
   suiteImportFpv();
+  suiteFiveInchParts();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
 }

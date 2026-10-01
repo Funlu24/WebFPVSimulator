@@ -36,7 +36,7 @@
 /* FT and IN come from src/units.js, shared with src/game/track.js. The
  * builder must not import the game, so the constants they both need live in
  * a leaf module rather than being typed out twice. */
-import { FT, IN, FRAME_TUBE_OD } from '../units.js';
+import { FT, IN, FRAME_TUBE_OD, GATE_SCALE } from '../units.js';
 import {
   GATE_OPENING_DEFAULT, GATE_OPENING_MAX, GATE_SPACING_NOMINAL,
   ELEVATED_SILL_MIN, PIPE_OD, POLE_FROM_GATE_MIN, ROOM_WIDTH, ROOM_DEPTH, GRID as MICRO_GRID,
@@ -278,10 +278,55 @@ export function flagLeanSign(sign) {
 
 export function flagSideOf(el) {
   const def = ELEMENTS[el?.type];
-  if (!def?.flagSide) {
+  if (!def) {
     return null;
   }
-  return normalizeFlagSide(el.flagSide, def.flagSide);
+  if (def.flagSide) {
+    return normalizeFlagSide(el.flagSide, def.flagSide);
+  }
+  /* A piece that MAY carry flags, a hurdle being the one: it has them when it says so and is
+   * the piece it always was when it does not, so no existing document changes. */
+  if (def.flagsOptional && FLAG_SIDES.includes(el.flagSide)) {
+    return el.flagSide;
+  }
+  return null;
+}
+
+/*
+ * THE DRESS A GATE WEARS BESIDE THE MULTIGP ONE.
+ *
+ * A MultiGP gate in the world is a printed sleeve round each upright and a
+ * header board a good deal wider than the frame, which is what a sponsor's
+ * mark goes on. That is right for a gate standing on its own and wrong for a
+ * wall of them: the sleeves of neighbours land in each other's openings and the
+ * boards overlap by most of a metre. `plain` is the other dress: no sleeves, a
+ * header board exactly as wide as the frame, so a pennant on the header stands
+ * on the upright it belongs over and bays sit end to end. It is an optional
+ * field written only when set, so every gate that exists is the MultiGP one and
+ * serialises to the bytes it did. Only a vertical, square gate has a dress at
+ * all: a tilted one is carried on a mast and a ring or a hexagon has no
+ * uprights to sleeve.
+ */
+export const GATE_STYLES = ['plain'];
+
+export function isPlain(el) {
+  return Boolean(el) && el.style === 'plain' && ELEMENTS[el.type]?.kind === KIND.APERTURE
+    && apertureShapeOf(el) === 'square';
+}
+
+/*
+ * WHERE A ROW OF GATES HAS TO STAND FOR ITS UPRIGHTS TO MEET IN THE WORLD.
+ *
+ * The document holds the published sizes and the field builds every gate GATE_SCALE
+ * times larger, while positions are never scaled (src/game/trackdoc.js builtDims). Two
+ * gates that share an upright therefore have to be that much further apart than one
+ * opening plus one tube says, or the one's built upright stands inside the other's
+ * opening. The builder draws document sizes, so in it the bays of a wall show a gap of
+ * about a quarter of a metre that the world does not have, and the Wall tool says so.
+ */
+export function wallPitchFor(dims, cls = TRACK_CLASS_DEFAULT) {
+  const scale = cls === 'micro' ? 1 : GATE_SCALE;
+  return scale * ((dims?.clearW ?? 0) + FRAME_TUBE_OD);
 }
 
 /*
@@ -706,7 +751,11 @@ export const ELEMENTS = {
     key: 'B',
     group: 'track',
     kind: KIND.OBSTACLE,
-    note: 'Solid obstacle. Not flown through. Collision geometry only.',
+    note: 'Solid obstacle. Not flown through. Collision geometry only. The Hurdle on the palette is a low one with flags at its ends.',
+    /* A barrier MAY carry the pennants a gate carries, at the ends of its top: `flagSide` on
+     * the piece and the mast height as `dims.flagH`, both written only when it has them. That
+     * is the whole of what a hurdle is. See flagSideOf. */
+    flagsOptional: true,
     /* Not a MultiGP obstacle. A barrier is the tool's way of saying "the
      * racing line must not go here": a shipping container, a fence, a stand.
      * The default is a 4 m by 1 m panel 2 m tall, which is a plausible crowd
@@ -1147,6 +1196,15 @@ export const GATE_PRESETS = [
     clearH: 19 * IN,
   },
   {
+    id: 'wide',
+    label: 'Wide',
+    size: '2 m bay',
+    published: false,
+    hint: 'Not a MultiGP size. About 2 m between uprights once the world builds it 15 percent larger, which is the bay the Drone Nationals plan draws, so a wall of these stands 2 m a bay.',
+    clearW: 2 / GATE_SCALE - FRAME_TUBE_OD,
+    clearH: 2 / GATE_SCALE - FRAME_TUBE_OD,
+  },
+  {
     id: 'trainer',
     label: 'Trainer',
     size: '10 x 8 ft',
@@ -1516,9 +1574,69 @@ export const WHOOP_TOOLS = [
   },
 ];
 
-export function toolByKey(letter) {
+/*
+ * THE 5 INCH CANVAS'S PIECES THAT ARE MADE OF PIECES, and its tools that are not pieces.
+ *
+ * None is an element, so none is in ELEMENTS and none is in a document: each writes
+ * ordinary elements and the document holds only those (a wall is gates in a group, a
+ * hurdle is a barrier with flags and a waypoint over it, an up gate is a dive gate with
+ * the numbers the rule gives). They stand on the palette among the pieces, in the place
+ * `after` names, because to a person laying a track they are pieces. See
+ * src/trackbuilder/parts.js for what each writes.
+ */
+export const FIVE_INCH_PIECES = [
+  {
+    id: 'wall',
+    label: 'Wall',
+    key: 'K',
+    after: 'flaggedGate',
+    note: 'Drag along the ground to lay a row of gates that share their uprights, two to six. Each bay is a gate of its own in the flying order, so a wall can be flown straight through or as a weave. The wall is one piece: it moves, turns, copies and goes as one.',
+  },
+  {
+    id: 'upGate',
+    label: 'Up gate',
+    key: '',
+    after: 'diveGate',
+    note: 'A gate leaning at 45 degrees with its lower edge 1.5 m up, flown up through. It is a dive gate with those numbers, which are the rule the Drone Nationals plan gives its up gate.',
+  },
+  {
+    id: 'hurdle',
+    label: 'Hurdle',
+    key: 'U',
+    after: 'barrier',
+    note: 'A board 4 m long and 1 m high with a flag at each end, flown over. One piece, and not a gate: nothing scores on it, and the lap is pinned over the middle of it.',
+  },
+];
+
+export const FIVE_INCH_TOOLS = [
+  {
+    id: 'route',
+    label: 'Fly order',
+    key: 'O',
+    note: 'Click the pieces in the order you fly them. A click on a gate again is another pass through it, which is how a gate is flown twice. Click a hurdle to fly over it. Backspace takes the last pass off.',
+  },
+  {
+    id: 'ruler',
+    label: 'Ruler',
+    key: 'M',
+    note: 'Click two points to measure between them, in metres. A click near a piece takes its middle. Nothing is saved with the track.',
+  },
+];
+
+/* The tool or the piece-of-pieces a key arms on a class's palette, or undefined. A whoop
+ * canvas has the tools above in WHOOP_TOOLS; a 5 inch race canvas has these two lists. */
+export function toolByKey(letter, cls = 'micro') {
   const up = String(letter || '').toUpperCase();
-  return up ? WHOOP_TOOLS.find((t) => t.key === up) : undefined;
+  if (!up) {
+    return undefined;
+  }
+  const list = cls === 'micro' ? WHOOP_TOOLS : [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS];
+  return list.find((t) => t.key === up);
+}
+
+/* Whether an id is one of the 5 inch pieces made of pieces. */
+export function isFiveInchPiece(id) {
+  return FIVE_INCH_PIECES.some((p) => p.id === id);
 }
 
 /* Convenience: every element definition in palette order, extras last. */

@@ -79,7 +79,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, FRAME_TUBE_OD, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
+import { ELEMENTS, KIND, FRAME_TUBE_OD, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD, GATE_OPENING_DEFAULT, envelopeFor } from './racegow.js';
 import {
   aperturesOf, createElement, elementById, kindOf, apertureCenter, logosOf, logoForDecal, dressOrder, topOf,
@@ -1987,6 +1987,8 @@ export class View3D {
       mesh.rotation.z = el.yaw;
       this.register(mesh, el);
       group.add(mesh);
+      /* A hurdle: a barrier with flags at its ends. Nothing for one that has none. */
+      this.buildHeaderFlags(group, el, selected);
     } else if (def.kind === KIND.MARKER) {
       this.buildMarker(group, el, selected, numbers);
     } else if (def.kind === KIND.START) {
@@ -2248,7 +2250,10 @@ export class View3D {
       const top = levels[levels.length - 1];
       const bottom = levels[0];
       const across = new THREE.Vector3(f.widthAxis.x, f.widthAxis.y, f.widthAxis.z);
-      const sleeveW = 0.42;
+      /* The plain dress has no sleeves and a header exactly as wide as the frame (isPlain in
+       * elements.js), which is what makes a wall of them read as one row of bays. */
+      const plain = isPlain(el);
+      const sleeveW = plain ? 0 : 0.42;
       const sleeveBottom = bottom.sillH;
       const sleeveH = top.sillH + top.clearH + tube * 2 - sleeveBottom;
       /*
@@ -2272,7 +2277,7 @@ export class View3D {
         }
       };
       const at = new THREE.Vector3();
-      for (const sx of [-1, 1]) {
+      for (const sx of plain ? [] : [-1, 1]) {
         /* A sleeve is sleeved over its upright and goes with it. */
         if (!sides[sx < 0 ? 'left' : 'right']) {
           continue;
@@ -2453,24 +2458,39 @@ export class View3D {
    */
   buildHeaderFlags(group, el, selected) {
     const signs = flagSideSigns(flagSideOf(el));
-    if (!signs.length || Math.abs(el.pitch) >= Math.PI / 6) {
+    /* A hurdle is a barrier with flags: its masts stand at the ends of the board, along the way
+     * it is turned, on the top of it. A gate's stand on its header, along its width. */
+    const board = ELEMENTS[el.type]?.kind === KIND.OBSTACLE;
+    if (!signs.length || (!board && Math.abs(el.pitch) >= Math.PI / 6)) {
       return;
     }
-    const levels = aperturesOf(el);
-    const top = levels[levels.length - 1];
-    const tube = FRAME_TUBE_OD;
-    const sleeveW = 0.42;
-    const headerW = 2 * (top.clearW / 2 + tube + sleeveW);
-    const headerTop = top.sillH + top.clearH + tube * 2 + BANNER_H + 0.03;
-    const f = apertureFrame(el.yaw, el.pitch);
+    let along;
+    let half;
+    let headerTop;
+    if (board) {
+      along = { x: Math.cos(el.yaw), y: Math.sin(el.yaw) };
+      half = el.dims.width / 2;
+      headerTop = el.dims.height;
+    } else {
+      const levels = aperturesOf(el);
+      const top = levels[levels.length - 1];
+      const tube = FRAME_TUBE_OD;
+      const sleeveW = isPlain(el) ? 0 : 0.42;
+      const headerW = 2 * (top.clearW / 2 + tube + sleeveW);
+      headerTop = top.sillH + top.clearH + tube * 2 + BANNER_H + 0.03;
+      const wa = apertureFrame(el.yaw, el.pitch).widthAxis;
+      along = { x: wa.x, y: wa.y };
+      half = headerW / 2;
+    }
+    const f = { widthAxis: along };
     const h = gateFlagHeight(el.dims);
     const poleR = GATE_FLAG_POLE_R;
     const poleMat = new THREE.MeshLambertMaterial({ color: selected ? COL.frameSel : COL.frame });
     const kit = this.dressFor(el);
     let i = 0;
     for (const sx of signs) {
-      const x = f.widthAxis.x * sx * (headerW / 2);
-      const y = f.widthAxis.y * sx * (headerW / 2);
+      const x = f.widthAxis.x * sx * half;
+      const y = f.widthAxis.y * sx * half;
       /* One transform for the mast and its cloth, so the bend and the sail
        * both lean outboard off the board's end. A CENTRE mast has sx zero,
        * which is a position and not a direction, so the lean is read

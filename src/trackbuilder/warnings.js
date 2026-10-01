@@ -197,6 +197,10 @@ export function collectWarnings(doc, path) {
 
   /* -------- reversals, read off the knots -------- */
 
+  /* How square to a face a chord may be before it is called backwards: the 5 inch canvas gives a
+   * weave its due, the whoop canvas keeps the rule it had. See reversed. */
+  const square = trackClassOf(doc) === 'micro' ? 0 : 0.02;
+
   for (let i = 0; i < path.knots.length - 1; i += 1) {
     const a = path.knots[i];
     const b = path.knots[i + 1];
@@ -207,13 +211,13 @@ export function collectWarnings(doc, path) {
       }));
       continue;
     }
-    if (hasFace(a) && reversed(a.tangent, a.pos, b.pos)) {
+    if (hasFace(a) && reversed(a.tangent, a.pos, b.pos, square)) {
       out.push(warn('reversal', `${describe(doc, a)} faces away from ${describe(doc, b)}. The line leaves it backwards. Press X to flip the face.`, {
         seqId: a.seq?.id ?? null,
         elementId: a.elementId,
       }));
     }
-    if (hasFace(b) && reversed(b.tangent, a.pos, b.pos)) {
+    if (hasFace(b) && reversed(b.tangent, a.pos, b.pos, square)) {
       out.push(warn('reversal', `${describe(doc, b)} faces back towards ${describe(doc, a)}. The line arrives at it backwards. Press X to flip the face.`, {
         seqId: b.seq?.id ?? null,
         elementId: b.elementId,
@@ -225,7 +229,7 @@ export function collectWarnings(doc, path) {
   const first = path.knots[0];
   if (pads && first && first.role !== 'finish') {
     const heading = yawVector(pads.yaw);
-    if (reversed(heading, pads.position, first.pos)) {
+    if (reversed(heading, pads.position, first.pos, square)) {
       out.push(warn('reversal', `The lap sets off away from ${describe(doc, first)}. Turn the start pads, or reorder the track.`, {
         elementId: pads.id,
       }));
@@ -233,7 +237,7 @@ export function collectWarnings(doc, path) {
   }
   if (path.closed && path.knots.length >= 2) {
     const lastReal = path.knots[path.knots.length - 2];
-    if (first.role === 'aperture' && reversed(first.tangent, lastReal.pos, first.pos)) {
+    if (first.role === 'aperture' && reversed(first.tangent, lastReal.pos, first.pos, square)) {
       out.push(warn('reversal', `The lap comes back to ${describe(doc, first)} from in front of it, after ${describe(doc, lastReal)}. Flip that face, or move the last element behind it.`, {
         seqId: first.seq?.id ?? null,
         elementId: first.elementId,
@@ -415,7 +419,7 @@ function hasFace(knot) {
   return knot.role === 'aperture';
 }
 
-function reversed(tangent, from, to) {
+function reversed(tangent, from, to, tol = 0) {
   const th = Math.hypot(tangent.x, tangent.y);
   if (th < HORIZONTAL_FLOOR) {
     return false;
@@ -426,7 +430,12 @@ function reversed(tangent, from, to) {
   if (ch < 1e-6) {
     return false;
   }
-  return (tangent.x * cx + tangent.y * cy) / (th * ch) < 0;
+  /* `tol` is the 5 inch canvas's: a chord square to the tangent is not a reversal, and a floating point
+   * cosine of a quarter turn is six parts in a hundred quadrillion either side of zero, which is not a
+   * thing to decide a warning on. Two gates side by side and flown opposite ways, a weave, have exactly
+   * that chord. Past about a degree beyond square it is a face sending the line back. A whoop canvas
+   * keeps the rule it had. */
+  return (tangent.x * cx + tangent.y * cy) / (th * ch) < -tol;
 }
 
 function describe(doc, knot) {

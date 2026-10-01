@@ -1966,8 +1966,11 @@ export class View2D {
     if (!signs.length) {
       return;
     }
-    const u = { x: -Math.sin(el.yaw), y: Math.cos(el.yaw) };
-    const half = el.dims.clearW * 0.5;
+    /* A gate's flags are along its width, across the way it is flown; a hurdle's are along the
+     * board, which runs the way it is turned. */
+    const board = ELEMENTS[el.type]?.kind === KIND.OBSTACLE;
+    const u = board ? { x: Math.cos(el.yaw), y: Math.sin(el.yaw) } : { x: -Math.sin(el.yaw), y: Math.cos(el.yaw) };
+    const half = (board ? el.dims.width : el.dims.clearW) * 0.5;
     ctx.fillStyle = selected ? C.selected : C.marker;
     for (const sx of signs) {
       const lean = flagLeanSign(sx);
@@ -2264,6 +2267,7 @@ export class View2D {
     ctx.strokeStyle = selected ? C.selected : (hovered ? '#ffffff' : C.barrierEdge);
     ctx.lineWidth = selected ? 2.4 : 1.4;
     ctx.stroke();
+    this.drawHeaderFlags(ctx, el, selected);
   }
 
   /*

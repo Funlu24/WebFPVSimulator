@@ -50,7 +50,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND } from './elements.js';
+import { KIND, trackClassOf } from './elements.js';
 import {
   elementById, kindOf, entryAnchor, elementNormal, startPadsOf, sequenceRefCount,
 } from './model.js';
@@ -196,6 +196,53 @@ function verticalSense(chain, i) {
 }
 
 /*
+ * A WEAVE: two passes in a row through gates that stand side by side and face the same way go
+ * opposite ways, the slalom a wall of gates is built for.
+ *
+ * The rule below reads a gate's direction off the chord between the elements either side of it
+ * in the order, and along a wall that chord runs along the wall, square to every bay, so it
+ * says nothing: the face was left as it was made, which was the same way for every bay. What it
+ * can say instead is what the pass before did. A gate flown the way the last one was not is a
+ * weave, and a gate that is first of its run has a chord with a side to it and is read as it
+ * always was.
+ *
+ * Only on the 5 inch canvas, where gates stand in rows of the builder's own making and nothing
+ * the whoop shipped asks for it, and only where the chord has less than WEAVE_EPS to say, so a
+ * gate whose neighbours give it a direction is given it. Returns +1 or -1, or null when this is
+ * not a weave and the rule below should go on as it always did.
+ */
+const WEAVE_EPS = 0.2;
+const WEAVE_BESIDE_M = 8;
+
+function weaveEntry(doc, chain, i, el) {
+  if (trackClassOf(doc) === 'micro' || i < 1) {
+    return null;
+  }
+  const before = chain[i - 1].seq;
+  if (!before || before.entry === 0) {
+    return null;
+  }
+  const prev = elementById(doc, before.elementId);
+  if (!prev || prev === el || kindOf(prev) !== KIND.APERTURE) {
+    return null;
+  }
+  if (Math.abs(prev.pitch) > 0.05 || Math.abs(el.pitch) > 0.05) {
+    return null;
+  }
+  const n = elementNormal(el);
+  const np = elementNormal(prev);
+  if (Math.abs(dot(n, np)) < 0.98) {
+    return null;
+  }
+  const d = sub(el.position, prev.position);
+  /* Beside, not behind: the gap between them is across the gates and not through them. */
+  if (Math.hypot(d.x, d.y) > WEAVE_BESIDE_M || Math.abs(dot(d, n)) > 0.5) {
+    return null;
+  }
+  return dot(scale(np, before.entry), n) > 0 ? -1 : 1;
+}
+
+/*
  * Re-derive every face and pass side the user has not overridden. Mutates
  * the document in place and returns it, because it runs after every edit and
  * cloning the track on every mouse move would be the tool's slowest thing.
@@ -236,7 +283,10 @@ export function applyAutoFaces(doc) {
         if (!seq.overridden) {
           const n = elementNormal(el);
           const along = dot(n, dir);
-          if (Math.abs(along) > 1e-6) {
+          const woven = Math.abs(along) < WEAVE_EPS ? weaveEntry(doc, chain, i, el) : null;
+          if (woven != null) {
+            seq.entry = woven;
+          } else if (Math.abs(along) > 1e-6) {
             seq.entry = along >= 0 ? 1 : -1;
           } else if (seq.entry === 0) {
             seq.entry = n.z >= 0 ? -1 : 1;

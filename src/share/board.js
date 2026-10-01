@@ -511,6 +511,13 @@ export function usableTags(list) {
 }
 
 /*
+ * A WALL IS NOT A CUBE. Both are gates that share a `group`, and the board reads neither field, so it
+ * keeps the gates and loses the grouping. For a cube that is a different course: its sides are gates
+ * no pass goes through, built as solid pipe by the group, and the board's copy would not have them. For
+ * a wall every gate is in the flying order, each is built and scored whether or not they are grouped,
+ * and the board's copy is the same course. So a group is counted below only for the pieces of it that
+ * no pass goes through, and a wall of gates that are all flown is published.
+ *
  * WHAT THE BOARD DOES NOT KNOW YET: a living room's table, chair and banner, a hoop and a hex gate, and a cube.
  *
  * The board keeps its own list of what a track is made of (WebFPVSimulator-
@@ -543,6 +550,10 @@ const PART_WORD = {
  * BOARD_UNKNOWN_TYPES and then the cube. A document that is not one holds nothing. */
 export function partsTheBoardDoesNotKnow(doc) {
   const elements = doc && Array.isArray(doc.elements) ? doc.elements : [];
+  /* The pieces the flying order goes through. A group whose every piece is in it loses nothing when
+   * the board drops the grouping, which is what a wall of gates is; one with a piece no pass goes
+   * through is a cube, whose sides the board's copy would lose. */
+  const flown = new Set((doc && Array.isArray(doc.sequence) ? doc.sequence : []).map((s) => s && s.elementId));
   const tally = new Map();
   const groups = new Set();
   for (const el of elements) {
@@ -552,8 +563,10 @@ export function partsTheBoardDoesNotKnow(doc) {
     if (BOARD_UNKNOWN_TYPES.includes(el.type)) {
       tally.set(el.type, (tally.get(el.type) ?? 0) + 1);
     }
-    /* A name and nothing else, the way the reader keeps it. */
-    if (typeof el.group === 'string' && el.group) {
+    /* A name and nothing else, the way the reader keeps it. Counted only when this piece is one
+     * the order does not go through: a group in which every piece is flown is a row, and a row is
+     * the same course on the board without its grouping. */
+    if (typeof el.group === 'string' && el.group && !flown.has(el.id)) {
       groups.add(el.group);
     }
   }

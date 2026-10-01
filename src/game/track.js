@@ -46,7 +46,7 @@
 /* FT and IN come from src/units.js, shared with the track builder: the
  * builder may not import the game, so the constants they both need live in
  * a leaf module rather than being typed out twice. */
-import { FT, IN, FRAME_TUBE_OD } from '../units.js';
+import { FT, IN, FRAME_TUBE_OD, GATE_SCALE } from '../units.js';
 import { MICRO_SCALE } from '../../configs/airframes.js';
 
 /* Re-exported because this module's callers already read it from here. The
@@ -101,7 +101,7 @@ export { FRAME_TUBE_OD };
  * offset and the frame tube itself. A gate with a 15 percent bigger hole and
  * the same pipe would read as a different product.
  */
-export const GATE_SCALE = 1.15;
+export { GATE_SCALE };
 
 /*
  * AND IT IS THE SIXTY METRE FIELD'S NUMBER, so a RaceGOW room does not get
