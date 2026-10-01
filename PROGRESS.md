@@ -62375,3 +62375,164 @@ not followed yet), in a file this work does not touch. A clean extract of main's
 failed one check as well, a different one: "and a stick key takes the sticks again, the other way", in the
 touchscreen laptop section that main's own commit added. The second run on the merged tree passed all 220. Neither
 tree is shown worse than the other, and neither check was changed: they are main's.
+
+## 2026-10-01 | ui, input, fc | The new tickets: each aircraft keeps its own settings and edits, the wizard says what it waits for, Android radios get a recipe
+
+Nothing here touches the plant, the module ABI, the build or the physics model. Everything is the shell's: the
+settings blob, where the Flight controller dump is stored, two lines of the calibration wizard and the Stick help
+copy. On the branch, not on main, and nothing was written to the board.
+
+### The ask
+
+"Pull latest bug tickets , root cause and fix please", under the standing rule from the last pass: fix what can
+be replicated or root caused, and do not churn on what might be user error. Thirty eight tickets are open; the
+five fixed in the last pass are live and wait for the owner to close them. What became of the new ones:
+
+    bug-8acd3b2f, bug-abaabdde,   no yaw on Android      root caused from Chromium's and EdgeTX's source,
+    bug-b2de5239, bug-da8c8d0e                           Stick help rewritten with a radio side recipe,
+                                                         which nobody has tried on a phone yet
+    bug-ddfe1c6d                  camera and tune lost   replicated in Chromium and in Node, fixed
+    bug-693b9ed4                  one tune slot          root caused, replicated in Chromium, fixed
+    bug-f06287ff                  calibration "hang"     replicated in the Node rig, fixed
+    bug-abfeffe6                  HDZero not recognised  not actionable here, left open
+    bug-cddc182a, bug-a18b2ed9    flicker, no drone      a lead, not replicable here, left open
+    bug-47e0e9ee, bug-1e3a3a1b    no radio on Windows    the browser lists no pad; the copy from
+                                                         bug-616cc604 already says what to do, left open
+    bug-2b2b44aa                  crashing unforgiving   a design question for the owner, left open
+    20 feel reports                                      left for the owner
+
+### Android: Chrome keeps four of a radio's channels (commit 9687cbe)
+
+Five radios from three makers, all on phones, all arriving as 4 axes and 17 buttons with yaw gone. Chrome's
+fallback for a pad it does not know (GamepadMappings.java, UnknownGamepadMappings, the legacy branch) exposes X,
+Y, one of Z and Rx, and one of Ry and Rz, and drops the rest; EdgeTX and OpenTX send channels 1 to 8 on X, Y, Z,
+Rx, Ry, Rz, Slider and Dial in order. So a phone gets channels 1 and 2, one of 3 and 4, and one of 5 and 6, and on
+an AETR radio that is throttle or yaw gone; the tickets say yaw. The Stick help says that now, in channels, and
+gives a recipe that works in the joystick mode the radio is already in: in a COPY of the model (channel 5 is often
+the arm switch), clear channels 5 and 6 and give each one line with the missing stick as its source, so
+whichever of the two Chrome keeps carries it. Cleared, not added to: a line added under an arm switch's line
+sums with it by default. Worded as untried and asking to be told, because it is.
+
+### bug-ddfe1c6d: "It doesn't remember the camera angle and fov that I set"
+
+Three causes, all found, the first measured in the real shell.
+
+1. THE BUILDER'S FLY LINK. Its address is `index.html?map=built&craft=5inch`, the reporter's own href, and a
+   `?craft=` link called seatAirframe even when it named the aircraft already seated. seatAirframe wrote that
+   aircraft's stock camera unconditionally, and the address keeps the craft, so every load and every reload of
+   it put a five inch back on 30 degrees and 85. Measured in headless Chromium before the fix: a profile on
+   105 and 35 came back 85 and 30, stored, twice; the same profile without `craft=` kept 105 and 35. The gate
+   had the same bug and got a guard on 9 September; the link did not. Fixed at the source: seatAirframe
+   changes nothing when the aircraft does not change, so no third caller can do it again.
+2. THE LOAD'S GUESS. reseatIfForeign, on every load, moved any camera value equal to the OTHER aircraft's
+   stock, to catch the builder's class toggle, which writes the airframe and nothing else. Since the whoop's
+   stock lens became 95, a five inch pilot who chose 95 lost it at every load (the reporter's context reads
+   95), and tilt 25 the same way. The blob now says which aircraft its settings were set for (`seatedFor`);
+   a load moves them only when that differs from the airframe, through seatAirframe, and otherwise trusts
+   them. A blob from before the mark gets the old guess once and comes out marked.
+3. NO MEMORY ACROSS A SWAP. Going to the whoop and back wrote stock over the camera and dropped the tune to
+   Betaflight default ("my tune is saved, just opted out"). Each aircraft now keeps its own tune, pack,
+   weight, camera and PIDs in a `hangar`, put away when the pilot leaves it and given back, through every
+   list and range, when they return. The first visit is what it always was. Rates stay the pilot's, on
+   their old rule. The Aircraft row's note says so.
+
+"In freestyle I change quad to whoop ... that's bring me to whoop racing" is by design: the whoop has no
+freestyle world. Adjusting the tilt on a seated whoop no longer moves the mode (bug-4d5b2c51, input-check
+section 6).
+
+### bug-693b9ed4: "Only one tune profile or slot"
+
+"when I saved settings for whoop the freestyle quad custom tune was gone, only default left." The Flight
+controller dump had one slot, `webfpv.fc.v1`, stamped with the aircraft it was saved on, so a Save on the
+whoop overwrote the five inch's and restamped it, and the five inch's Tune row was down to Betaflight default:
+exactly "only default left". And the PIDs screen's adjustment is keyed by tune id, which both aircraft share
+since the whoop flies the five inch's tune, so tuning one tuned both.
+
+Each aircraft now saves to `webfpv.fc.v1.<airframe id>` (readFcDump and writeFcDump in src/fc/dump.js). The old
+slot is still read for the aircraft its stamp names until that aircraft saves its own, which clears it; nothing
+is copied on load, so a browser refusing a write cannot cost anyone a dump. The PIDs are per aircraft through
+the hangar. main.js learned one thing it could not see before: a change of aircraft with Your edits chosen on
+both is a change of tune under the same id (`dumpFor`), and a failure to load the new one falls back to that
+aircraft's default tune, once, rather than leaving the other machine's dump flying. The reporter's five inch
+dump was overwritten before this existed and cannot be brought back.
+
+### bug-f06287ff: the wizard that "stops" at the left stick
+
+A BETAFPV JoyStick, eight axes and no buttons, Windows. The report's live throttle read -0.13 with the hand off:
+a throttle that springs back to the middle. The centre step says "Throttle all the way down. Hold still.", so
+this pilot held it down there and its REST IS THE BOTTOM; the middle is then neither of the two places an
+identified throttle may park (2026-09-21). They held it through roll and pitch, which are the other hand, and the
+yaw release, "Let the left stick come back to the centre", is the first instruction to let go of the left
+stick. The throttle sprang up, and the release waited for it with the hint "One direction at a time. Diagonals
+are ignored." Replicated exactly in the Node rig.
+
+The wait is right and stays: a parked radio's throttle left mid stick should still block. What changes is
+what the screen says. The release prompt on the stick that also carries the throttle (yaw in Mode 2, roll in
+Mode 1) adds "with the throttle still all the way down", and the hint names whatever the release is waiting on:
+the throttle with its percentage and the way on for one that springs ("hold it down: the last step offers to
+set zero where it rests"), another channel by name, or an unidentified axis by the number the strip shows.
+blockingAxis and releaseWaitsOn are now the one test the wait and the hint both read. The reporter's wish to
+assign axes by hand is a feature for the owner; the check step's R and M already cover some of it.
+
+### Left open, and why
+
+- bug-abfeffe6, HDZero. Axes 0, 1, 3 and 4 read a constant 2.79, outside the -1 to 1 any joystick sends, and
+  nothing moved while the report was open. Axis 9's 1227133568 is 8/7 of 2^30, a hat switch's neutral as
+  Chrome reads it, and three other radios carry the same value and flew fine. The same vendor and product,
+  e502:bbab, flew normally for another pilot (bug-3a6d6538, a feel report), so the radio and the browser can
+  work; this one was sending something else at that moment. Nothing in the page can fix it. A reply asking
+  for the radio's USB joystick mode and a model with default mixes would settle it.
+- bug-cddc182a and bug-a18b2ed9, Android. "Graphic flicker", and "I can't see the drone while I fly, I only
+  see my controls and a background image". Both are Android GPUs (Samsung Xclipse 540 asking for the desktop
+  site, and Mali-G72), both were GRANTED the low latency canvas (desynchronized), and so was the only other
+  visual complaint since it began reaching browsers on 27 September (bug-cfc02328, black screen, Intel on
+  Windows). On Android a desynchronized canvas can be scanned out from a single buffer, so a frame can be
+  seen half drawn, and the lead fits both words. It is a lead: nothing here has that GPU, and headless
+  Chromium cannot show it. Asking both pilots to switch Low latency view off in Settings and reload would
+  settle it in a minute; if it does, the default on Android should be off. Not changed on a guess, because
+  every Android pilot would pay for it in latency.
+
+### Tests
+
+    npm run seat:selftest     new, 25 checks: every lens on the five inch survives a reload, the same aircraft
+                              seated twice changes nothing, there and back gives each its own camera, weight,
+                              PIDs and Your edits, the builder's toggle, a hand edited hangar, and the dump's
+                              three storage cases. 14 fail on the old ui.js, every one tagged with a ticket
+                              among them. Ten mutations, all caught, including the aliasing below.
+    npm run check:seat        new, headless Chromium, 10 checks, about 50 s: the builder's ?craft=5inch link
+                              keeps 95 and 35 over two loads; a Save on each aircraft flies its own dump
+                              (p_roll 55 and 77) across every swap, Your edits to Your edits included, and
+                              after a reload. On the old ui.js 7 fail; with the dumpFor reload removed from
+                              main.js, "back on the five inch, its own edits" fails (it flew the whoop's 77).
+    input:selftest            371 passed. New: the BETAFPV pilot's exact sequence, the Mode 1 prompt, a
+                              knocked switch named by its axis, roll named when it is held, and the channel's
+                              own release. Six fail on the old wizard. Seven mutations, all caught.
+    lint:fc                   33 of 33 (dump.js changed)
+    lint:preload              up to date, 241 served
+    lint:input                219 of 220, then 220 of 220 (270 s); see below
+    lint:shell                1 problem: "credits: the list hangs 1540 px off the bottom of the window, was
+                              1518 px". Identical, line for line, on the untouched commit in a scratch
+                              worktree, so it is not this work; the credits grew elsewhere. Baseline not
+                              re-recorded, because that is the owner's call and not a way to make a check pass.
+    not run                   npm run verify (no physics, plant, ABI or build change), shots.js and a flight
+                              (offered to the owner), lint:catalog (cannot run in this container)
+
+### What went wrong
+
+- **My own first version aliased the PIDs.** On a first visit the new aircraft kept flying the same PID object
+  the hangar had just stowed for the old one, and clearPidsFor deletes from it in place, so Reset to stock on
+  the whoop would have cleared the five inch's put away adjustment. Found reading my own diff; the stow now
+  copies through normalisePids, and a check that fails without the copy pins it.
+- **A fallback that could retry for ever.** The first version of the stranded dump fallback called swapTune
+  again on failure, and a fetch that cannot land (no network) would have looped. It falls back once.
+- **A gap the refactor exposed.** A mutation that stopped the release waiting for the channel's OWN axis
+  survived every existing test. It is pinned now ("roll still held after it was identified").
+- **Three test mistakes, all mine.** The seat self-test cleared the store after writing the dump it then
+  tested; it crashed with a TypeError on the old ui.js instead of reporting; and check:seat expected a reload
+  of a `craft=5inch` address to stay on the whoop. The address names the five inch, so seating it is right,
+  and the check now says so and boots the whoop from an address without a craft.
+- **The touchscreen laptop check is intermittent, and it is mine** (bug-d1d3f4fb, last pass). "and a stick key
+  takes the sticks again, the other way" read every channel 0 with the keys holding the sticks, in my first
+  lint:input run today and in the other session's run of main's tip. Five runs of that section alone under two
+  busy CPU loops passed 40 of 40, so it is not root caused. Its samples now carry the craft's mode, landed and
+  the screen, so the next failure says whether the quad was flying. Nothing was loosened.
