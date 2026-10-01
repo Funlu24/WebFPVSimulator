@@ -62909,3 +62909,27 @@ All of these on the merged tree, 8f6487c and the follow-ups after it:
     not run           npm run verify: nothing here touches physics, the plant, the module ABI or the build.
                       main.js changed only where a notice is drawn. shots.js: the scratch rig took the
                       pictures, at 1600x900, 1280x720, 844x390 with touch and 390x844.
+
+### The owner's answer, 2026-10-01, and the push to main
+
+The owner read the report and the verification question and answered: "push to main and i'll test". Both
+branches went to main as fast-forwards, the board first and the simulator second, which is the order
+DEPLOY.md gives: board `4935604..570ea3d`, simulator `831b724..76ebffb`. Each was checked immediately before
+the push to be 0 commits behind main with main an ancestor of the branch, and nothing was forced, so no
+history was rewritten. The owner is flying the simulator and looking at the board themselves. No
+`npm run verify` and no `shots.js` was run, as above.
+
+- **DEPLOY.md was corrected first (76ebffb).** It still said an unset `BUGS_TOKEN` meant no check on the
+  bug inbox, and told whoever set the service up to leave it unset while handing the link around. It now says
+  what the board does: reading and updating tickets needs a board admin, `BUGS_TOKEN` is a second way in,
+  and unset there is none. Found by reading the deploy notes before pushing. Nothing else in this
+  repository reads the inbox: `src/share/bugs.js` only files tickets, which still needs no token.
+- **Checked on the live hosts with GET requests only**, after the deploys landed: `webfpv.org/board/` is
+  titled "Tracks and times, WebFPV"; `/board/api/tracks` answers 200; `/board/api/bugs?status=open` with no
+  token answers 401, which is the inbox failing closed; and `webfpv.org/sim/` serves the new menus (the page
+  carries the menu notice element this change added). Nothing was posted, filed or changed on production,
+  and the new pages were not flown or clicked through there: that is the owner's test.
+- **What the owner will meet.** The agents that read production tickets with no header now get 401 until
+  `BUGS_TOKEN` is set on the Render service and handed to them as a bearer, or they use `BOARD_ADMIN_TOKEN`.
+  That was said in the report before the push.
+- **What went wrong.** Nothing in the push itself. The one catch was the stale DEPLOY.md paragraph above.
