@@ -62549,3 +62549,14 @@ main had not moved from f745664, fetched and checked just before the push, and t
 was f745664 itself, so it goes to main as a fast-forward of ccr-07e2c12d-fuvn2z: the Android copy (9687cbe),
 the per aircraft settings and edits (1fe8e43), the wizard's hint (19c79d7), the entry above (e4ecc76) and this
 record, with no merge commit, no rebase and no force.
+
+### Live on webfpv.org
+
+main moved f745664..5d77c5b at 04:04:24 UTC, and webfpv.org/sim served it within about 90 s: src/ui/ui.js,
+src/main.js, src/fc/dump.js, src/input/input.js and src/ui/stickhelp.js, read off the live site with a cache
+busting query, each hash the same as the commit. The polls went 0 of 5 four times, 3 of 5 at 04:05:38 and 5 of
+5 at 04:05:56, so the comparison can tell old from new. Last-Modified on the site read 04:05:16 UTC. No module
+was added or removed under src/, so src/fresh.js and index.html are unchanged; the two new files are scripts.
+
+The modules are still served with cache-control public, max-age=14400, s-maxage=300, so a returning pilot's
+browser can hold the old files for up to four hours; a hard reload gets the new ones at once.
