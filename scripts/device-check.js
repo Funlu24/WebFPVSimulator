@@ -710,6 +710,233 @@ async function runWhoop(label, w, h) {
   }
 }
 
+/*
+ * THE WHOOP DRAWER, ON A LAPTOP (MENUS-PLAN.md 1.18). It had no close button
+ * of its own, its toggle on the lap bar sat under it once it was open, and at
+ * 1024 it was painted over a dialog's buttons. At the two laptop sizes the
+ * plan names: the drawer opens from the lap bar, its close button and the
+ * toggle are both clear to press while it is open, the lap bar and the card
+ * stand clear of it and the card's own close button with them, the close
+ * button closes it, Escape closes it before it lets go of a selection, and a
+ * dialog opened over it is over it.
+ */
+const DRAWER_WINDOWS = [
+  ['laptop', 1280, 800],
+  ['laptop, large', 1440, 900],
+];
+
+const DRAWER_PROBE = `(async () => {
+  const bad = [];
+  const app = window.trackBuilder;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  /* A slide is drawn at the rasteriser's pace: a hit test waits for it to stop. */
+  const still = async () => {
+    for (let i = 0; i < 60; i += 1) {
+      const t = getComputedStyle(document.getElementById('tb-side')).transform;
+      if (t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)') { return; }
+      await wait(100);
+    }
+  };
+  const pressable = (n) => {
+    if (!n || !n.getClientRects().length) { return false; }
+    const r = n.getBoundingClientRect();
+    const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return Boolean(e && (e === n || n.contains(e)));
+  };
+  const escape = () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const { PRESETS } = await import('/src/trackbuilder/presets.js');
+  app.loadDocument(JSON.parse(JSON.stringify(PRESETS.find((p) => p.id === 'racegow5-track6'))), '');
+  await wait(1200);
+  const toggle = () => document.querySelector('#tb-lapbar [data-drawer]');
+  if (!toggle()) { return JSON.stringify({ bad: ['the lap bar has no Flying order toggle'] }); }
+  toggle().click();
+  await still();
+  if (!document.body.classList.contains('tb-drawer')) { bad.push('the lap bar toggle did not open the drawer'); }
+  if (!pressable(document.getElementById('tb-side-x'))) { bad.push('the drawer has no close button that can be pressed'); }
+  if (!pressable(toggle())) { bad.push('the lap bar toggle is under the open drawer'); }
+  const side = () => document.getElementById('tb-side').getBoundingClientRect();
+  const lap = document.getElementById('tb-lapbar').getBoundingClientRect();
+  if (lap.right > side().left + 0.5) { bad.push('the lap bar runs under the open drawer, to ' + Math.round(lap.right) + ' against ' + Math.round(side().left)); }
+  const gate = app.doc.elements.find((e) => e.type === 'gate');
+  app.setSelection([gate.id]);
+  await wait(900);
+  const card = document.getElementById('tb-card');
+  if (card.hidden) {
+    bad.push('selecting a gate with the drawer open brought up no card');
+  } else {
+    if (card.getBoundingClientRect().right > side().left + 0.5) { bad.push('the card runs under the open drawer'); }
+    if (!pressable(card.querySelector('.tb-card-x'))) { bad.push('the card\\'s close button is covered while the drawer is open'); }
+  }
+  document.getElementById('tb-side-x').click();
+  await wait(400);
+  if (document.body.classList.contains('tb-drawer')) { bad.push('the drawer\\'s close button did not close it'); }
+  toggle().click();
+  await still();
+  escape();
+  await wait(300);
+  if (document.body.classList.contains('tb-drawer')) { bad.push('Escape did not close the drawer'); }
+  if (app.selection.size !== 1) { bad.push('Escape let go of the selection before it closed the drawer'); }
+  toggle().click();
+  await still();
+  app.openLoad();
+  await wait(300);
+  const m = document.querySelector('#tb-modal .tb-modal').getBoundingClientRect();
+  const s = side();
+  if (m.right > s.left) {
+    const under = document.elementFromPoint(Math.max(m.left + 4, Math.min(m.right - 4, s.left + 20)), m.top + m.height / 2);
+    if (!(under && document.getElementById('tb-modal').contains(under))) { bad.push('the drawer is painted over a dialog'); }
+  }
+  app.closeModal();
+  return JSON.stringify({ bad });
+})()`;
+
+async function runDrawer(label, w, h) {
+  const page = await openPage({ root, width: w, height: h, url: '/src/trackbuilder/index.html?class=micro' });
+  try {
+    await page.until('!!(window.trackBuilder && window.trackBuilder.doc)', 60000);
+    await page.until("window.trackBuilder.mode === '3d' && !!window.trackBuilder.view3d.renderer", 60000).catch(() => {});
+    await page.sleep(800);
+    return JSON.parse(await page.evaluate(DRAWER_PROBE));
+  } finally {
+    await page.close();
+  }
+}
+
+/*
+ * THE BUILDER ON A PHONE (MENUS-PLAN.md 4.4). At 390 by 844 the five inch
+ * drawing was 0 px wide and nine of the bar's controls were past the right
+ * edge; on a phone held sideways the drawing was 344 by 203. On each canvas,
+ * both ways round: nothing on the bar past an edge or under another control,
+ * no sideways scroll, the drawing the width of the screen and the height under
+ * the bar, no storage strip, Tools, Details, Undo, Load, More and Fly on the
+ * bar, the palette and the inspector drawers inside the screen with close
+ * buttons that close them, every tool and every More item reachable and a
+ * finger tall, and the inspector one scroll whose close button stays put.
+ */
+const PHONE_WINDOWS = [
+  ['phone portrait', 390, 844],
+  ['phone landscape', 844, 390],
+];
+
+const PHONE_CANVASES = [
+  ['five inch', '?mode=race&class=full'],
+  ['whoop', '?class=micro'],
+  ['freestyle', '?mode=freestyle'],
+];
+
+const PHONE_PROBE = `(async () => {
+  const bad = [];
+  const app = window.trackBuilder;
+  const W = innerWidth;
+  const H = innerHeight;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const still = async (id) => {
+    for (let i = 0; i < 60; i += 1) {
+      const t = getComputedStyle(document.getElementById(id)).transform;
+      if (t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)') { return; }
+      await wait(100);
+    }
+  };
+  const pressable = (n) => {
+    if (!n || !n.getClientRects().length) { return false; }
+    const r = n.getBoundingClientRect();
+    const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return Boolean(e && (e === n || n.contains(e)));
+  };
+  const name = (n) => (n.textContent || n.value || n.className || '').trim().slice(0, 22);
+  /* A toast is up for four seconds and is not a control: it is taken down so it
+   * cannot stand in front of what is being pressed. */
+  const toast = document.getElementById('tb-toast');
+  toast.classList.remove('on');
+  if (document.documentElement.scrollWidth > W + 0.5) { bad.push('the page is ' + document.documentElement.scrollWidth + ' px wide on a ' + W + ' px screen'); }
+  const bar = document.getElementById('tb-topbar');
+  const controls = [...bar.querySelectorAll('button, a, input')]
+    .filter((c) => !c.closest('.tb-more-menu') && c.getClientRects().length && getComputedStyle(c).visibility !== 'hidden');
+  for (const c of controls) {
+    const r = c.getBoundingClientRect();
+    if (r.right > W + 0.5 || r.left < -0.5) { bad.push(name(c) + ' on the bar is past the edge of the screen'); }
+    else if (!pressable(c)) { bad.push(name(c) + ' on the bar is covered'); }
+  }
+  const words = controls.map((c) => (c.textContent || '').trim());
+  for (const w of ['Tools', 'Details', 'Undo', 'Load', 'More']) {
+    if (!words.includes(w)) { bad.push('the bar has no ' + w); }
+  }
+  if (!words.some((w) => /^Fly/.test(w))) { bad.push('the bar has no Fly'); }
+  const stage = document.getElementById('tb-stage').getBoundingClientRect();
+  const top = bar.getBoundingClientRect();
+  if (stage.width < W - 1) { bad.push('the drawing is ' + Math.round(stage.width) + ' px of ' + W + ' across'); }
+  if (stage.height < H - top.height - 2) { bad.push('the drawing is ' + Math.round(stage.height) + ' px high under a ' + Math.round(top.height) + ' px bar on a ' + H + ' px screen'); }
+  if (document.getElementById('tb-keep').getClientRects().length) { bad.push('the storage strip is up on a phone'); }
+
+  app.toolsBtn.click();
+  await still('tb-palette');
+  const pal = document.getElementById('tb-palette').getBoundingClientRect();
+  if (!document.body.classList.contains('tb-tools')) { bad.push('Tools did not open the palette'); }
+  if (pal.left < -0.5 || pal.right > W + 0.5 || pal.top < top.bottom - 0.5 || pal.bottom > H + 0.5) { bad.push('the palette drawer runs off the screen'); }
+  const toolsX = document.querySelector('#tb-palette .tb-tools-x');
+  if (!pressable(toolsX)) { bad.push('the palette drawer has no close button that can be pressed'); }
+  for (const t of document.querySelectorAll('#tb-palette .tb-tool')) {
+    t.scrollIntoView({ block: 'nearest' });
+    if (!pressable(t)) { bad.push('the tool ' + name(t) + ' cannot be reached in the drawer'); break; }
+    if (t.getBoundingClientRect().height < 43.5) { bad.push('the tool ' + name(t) + ' is less than a finger tall'); break; }
+  }
+  document.getElementById('tb-palette').scrollTop = 0;
+  await wait(100);
+  toolsX.click();
+  await wait(400);
+  if (document.body.classList.contains('tb-tools')) { bad.push('the palette drawer\\'s close button did not close it'); }
+
+  app.detailsBtn.click();
+  await still('tb-side');
+  const sideNode = document.getElementById('tb-side');
+  const side = sideNode.getBoundingClientRect();
+  if (!document.body.classList.contains('tb-drawer')) { bad.push('Details did not open the inspector'); }
+  if (side.left < -0.5 || side.right > W + 0.5 || side.top < top.bottom - 0.5 || side.bottom > H + 0.5) { bad.push('the inspector drawer runs off the screen'); }
+  const sideX = document.getElementById('tb-side-x');
+  if (!pressable(sideX)) { bad.push('the inspector drawer has no close button that can be pressed'); }
+  sideNode.scrollTop = sideNode.scrollHeight;
+  await wait(150);
+  const results = document.getElementById('tb-results').getBoundingClientRect();
+  if (results.bottom > H + 1) { bad.push('the foot of the inspector drawer cannot be scrolled to'); }
+  if (!pressable(sideX)) { bad.push('the inspector drawer\\'s close button scrolls away with it'); }
+  sideNode.scrollTop = 0;
+  sideX.click();
+  await wait(400);
+  if (document.body.classList.contains('tb-drawer')) { bad.push('the inspector drawer\\'s close button did not close it'); }
+
+  app.moreBtn.click();
+  await wait(300);
+  const menu = app.moreMenu.getBoundingClientRect();
+  if (menu.left < -0.5 || menu.right > W + 0.5) { bad.push('More runs off the side of the screen'); }
+  if (menu.bottom > H + 1) { bad.push('More runs off the foot of the screen, ' + Math.round(menu.bottom) + ' of ' + H); }
+  const items = [...app.moreMenu.querySelectorAll('.tb-more-item')].filter((b) => b.getClientRects().length);
+  for (const w of ['Save', 'Fit', 'Back to the simulator']) {
+    if (!items.some((b) => b.textContent === w)) { bad.push('More has no ' + w + ' on a phone'); }
+  }
+  if (!items.some((b) => /^(Publish|Update)/.test(b.textContent))) { bad.push('More has no Publish on a phone'); }
+  for (const b of items) {
+    b.scrollIntoView({ block: 'nearest' });
+    if (!pressable(b)) { bad.push('the More item ' + name(b) + ' cannot be reached'); break; }
+    if (b.getBoundingClientRect().height < 39.5) { bad.push('the More item ' + name(b) + ' is ' + Math.round(b.getBoundingClientRect().height) + ' px tall'); break; }
+  }
+  app.closeMore();
+  return JSON.stringify({ bad, seen: controls.length });
+})()`;
+
+async function runPhone(query, w, h) {
+  const page = await openPage({ root, width: w, height: h, url: `/src/trackbuilder/index.html${query}`, touch: true });
+  try {
+    await page.until('!!(window.trackBuilder && window.trackBuilder.doc)', 60000);
+    if (/class=micro/.test(query)) {
+      await page.until("window.trackBuilder.mode === '3d' && !!window.trackBuilder.view3d.renderer", 60000).catch(() => {});
+    }
+    await page.sleep(800);
+    return JSON.parse(await page.evaluate(PHONE_PROBE));
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   const failures = [];
   console.log('device check: every screen, on a phone and a tablet\n');
@@ -748,6 +975,28 @@ async function main() {
     }
   }
 
+  console.log('\nthe whoop drawer, on a laptop\n');
+  for (const [label, w, h] of DRAWER_WINDOWS) {
+    const r = await runDrawer(label, w, h);
+    const where = `whoop drawer ${label} ${w}x${h}`;
+    console.log(`  ${where.padEnd(44)} ${r.bad.length ? `${r.bad.length} problem(s)` : 'its close button, its toggle and the card all clear, Escape first, under a dialog'}`);
+    for (const problem of r.bad) {
+      failures.push(`${where}: ${problem}`);
+    }
+  }
+
+  console.log('\nthe builder on a phone\n');
+  for (const [label, w, h] of PHONE_WINDOWS) {
+    for (const [canvas, query] of PHONE_CANVASES) {
+      const r = await runPhone(query, w, h);
+      const where = `builder ${canvas} ${label} ${w}x${h}`;
+      console.log(`  ${where.padEnd(44)} ${r.bad.length ? `${r.bad.length} problem(s)` : `all ${r.seen} bar controls, both drawers and More reachable`}`);
+      for (const problem of r.bad) {
+        failures.push(`${where}: ${problem}`);
+      }
+    }
+  }
+
   console.log('\nthe freestyle results page, on a laptop\n');
   for (const [w, h] of RESULTS_WINDOWS) {
     const r = await runResults(w, h);
@@ -776,7 +1025,7 @@ async function main() {
     }
     return 1;
   }
-  console.log('\nPASS, every row and every note is reachable on every device, every builder bar control on a laptop, the whoop room usable with fingers on a tablet, the results page clear of its menu, and the flight OSD on a phone clear of the centre third');
+  console.log('\nPASS, every row and every note is reachable on every device, every builder bar control on a laptop, the whoop room usable with fingers on a tablet, the whoop drawer clear and closable on a laptop, the builder usable on a phone both ways round on every canvas, the results page clear of its menu, and the flight OSD on a phone clear of the centre third');
   return 0;
 }
 
