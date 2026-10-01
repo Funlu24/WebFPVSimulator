@@ -9,12 +9,13 @@
  * result to read at the end of a run.
  *
  * Every screen is navigable from the keyboard alone and from a radio or
- * gamepad alone, except Settings and the title. On a radio there are no
- * reliable menu buttons, so the sticks drive the other menus: pitch moves
- * the cursor, roll right selects, roll left goes back. Any gamepad button
- * also selects. Title and Settings keep the sticks for the airframe, so
- * those screens are mouse and keyboard for the rows. A radio switch still
- * selects on the title. The screens say so. Rows that hold a value also
+ * gamepad alone. On a radio there are no reliable menu buttons, so the
+ * sticks drive the menus: pitch moves the cursor, roll right selects, roll
+ * left goes back. Any gamepad button also selects. The title and Quad pose
+ * the airframe with the sticks, so there pitch moves the cursor and roll is
+ * left to the pose; Rates, Tune, the bench and Stick help use the sticks for
+ * what they show, and there only the buttons choose and go back. The legend
+ * says which (see pollPad and STICKS_BUSY). Rows that hold a value also
  * have a mouse control: up and down arrows for a stepped number, a
  * dropdown for a named list.
  *
