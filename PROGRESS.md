@@ -63312,3 +63312,81 @@ race track's on either canvas (main's 4.2b) and has the views; and Start Pads is
     not run                  npm run verify (no physics, plant, ABI or build change), lint:shell, lint:input,
                              lint:responsive and the rest of main's browser checks (every file they read is
                              main's, byte for byte), shots.js
+
+### The push to main
+
+Fetched again immediately before the push, and main had moved again while this was checked: c516826, a pull
+request from a Cursor agent that adds Matt's Flooring as a maps only partner (six files, the roster, its two
+marks, the partners check, NOTICE and the maps index, none of them the builder's). It was merged too (2ac68a6), and
+the self test (1937 passed), `lint:partners` (59 passed), `lint:preload` (up to date, 245 served), `lint:nouns`
+(PASS) and `check:fresh` (18 passed) were run on it. The flow check was not repeated for it: none of the six files
+is read by it. Then, with `origin/main` an ancestor of HEAD, a fast forward: `c516826..2ac68a6` on main and
+`329ce5c..2ac68a6` on `claude/cool-faraday-kc254c`. Nothing was forced.
+
+The deploy landed inside two minutes of the push (`scale.js` was a 404 at 14:08:04 and a 200 at 14:08:26, and
+the builder page's Last-Modified moved to 14:08:06). Nineteen files served by `webfpv.org/sim/`, the builder's
+modules, its page, `fresh.js`, `board.js`, `trackdoc.js`, `scene.js` and the roster, were fetched with a cache busting
+query and their SHA-256 compared with main's: 19 the same, 0 different. The board was not redeployed, because
+nothing in its repository changed.
+
+### The track on the board
+
+Published after the deploy, through the builder's own Load and Publish dialog, driven in headless Chromium from the
+merged tree and pointed at `https://webfpv.org/board`. The container's Chromium has no route out, so the page's own
+requests to the board were forwarded through Node, which has one; the bridge logs a method, a path and a status
+and never a body, because a body can hold an edit key. It was done in this order, so that what was pressed on
+production had already been pressed once where it could be undone:
+
+    rehearsal    a copy of the board as deployed (570ea3d) on 127.0.0.1 with an empty file store: Load, Open,
+                 Publish, answered 201, the card drawn and uploaded in about 6 seconds, the board's sheet for the track
+                 looked at (title, "Designed by Wilf for ...", the plan, 12 gates)
+    probe        production, reads only: the list through the bridge (44 tracks) and a card drawn for another
+                 pilot's track from the board's own copy, which builds it in the orbit frame and posts nothing
+    the real one POST /api/tracks 201, the document fetched back for the card 200, POST the card 200
+
+What is on the board now: **trk-0921884e**, "Drone Nationals 2026 qualifier", five inch, 12 gates, 19 elements,
+credited to its designer (Wilf) and the event, tagged Race track, author **Mat**, a card of 73 kB, and
+`https://webfpv.org/board/?craft=5inch&track=trk-0921884e` for the link. The board lists it (45 tracks now),
+serves its document back with 19 elements and 20 passes, and a crawler asking for the link is given the title "Drone
+Nationals 2026 qualifier, a WebFPV track by Wilf", a description and the card as `og:image`. The sponsor's mark is
+not on it, as the plan said.
+
+Three calls were mine and are written here so that they can be changed:
+
+- **The author is "Mat".** The board has two other five inch tracks by that name ("2025 WA States FIX" and
+  "ladder-up, ladder-down") and the owner's address is the board's admin entry (`src/admin.js`), so it reads as
+  the owner's handle. A track's author is
+  not editable without the edit key.
+- **The tag is Race track**, because it is the qualifying track of a race. The owner's other event tracks carry no
+  tags, and a tag is optional.
+- **The edit key is not kept anywhere.** The listing's edit key lives in the browser that publishes, and that was
+  a headless profile in a container that does not outlive the session; it was written to the session's scratchpad
+  and not committed, because it is a credential. What it would allow is an update of this one track from a browser
+  that holds it. Removing a track is the board's admin's, not the key's (`removeTrack` in the board's server), so the
+  owner can take this one down, or change it, from the admin page, and a republish after that is a new track.
+
+### What went wrong, in the push and the publish
+
+- **A clean text merge would have been the wrong merge** (above). The first full run of the merged flow check had
+  11 failures, and they were what said where the two plans met.
+- **My `five inch empty` click missed** until the case waited for the room: the empty state's box moves when the
+  five inch opens in 3D after Three.js arrives, and a click aimed before that lands where the box was. A real
+  timing hazard for anything that presses straight after load, not only for the test.
+- **Two scratch scripts first read wrong:** the marker check of my conflict resolver refused PROGRESS.md because
+  it holds lines of `====` (it now looks for a marker alone on its line), and my driver's `json()` helper stringified
+  a promise before awaiting it.
+- **I asked the live site for three files that did not exist yet,** before the push, and their 404s carry
+  `max-age=14400`. Checked afterwards: the bare addresses answer 200 now, through the domain's cache (`MISS`,
+  `EXPIRED`, `HIT`), and the pages load the modules at stamped addresses (`src/fresh.js`) in any case.
+- **Main moved again during the work,** after the merge was made, so the merge was repeated against its newest tip
+  and the fetch was the last command before the push.
+
+### Left open
+
+- `lint:shell`, `lint:input`, `lint:responsive`, `lint:boot` and `shots.js` were not run on the merged tree, and the
+  physics evidence (`check:room`, `check:world-golden`) was not run: nothing of the merge touches what they read.
+- The landing page and the board vendor `src/partners/roster.js`, which now has a fourth partner, and need it
+  copied (`node scripts/vendor.js ../WebFPVSimulator` in each) before their own checks and pages know it. That is
+  not this work and was not done.
+- The five inch canvas still has no build sheet or picture (the whoop's, in inches), and the first piece placed does
+  not reframe the camera.
