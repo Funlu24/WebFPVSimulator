@@ -633,7 +633,7 @@ export const ELEMENTS = {
   },
   diveGate: {
     id: 'diveGate',
-    label: 'Dive Gate',
+    label: 'Dive gate',
     key: 'D',
     group: 'track',
     kind: KIND.APERTURE,
@@ -922,7 +922,7 @@ export const ELEMENTS = {
   },
   startPads: {
     id: 'startPads',
-    label: 'Start Pads',
+    label: 'Start pads',
     key: 'S',
     group: 'extra',
     kind: KIND.START,
@@ -1321,9 +1321,11 @@ export function paletteGroupOf(def) {
 export const PALETTE_EXTRA = ['startPads', 'label', 'groundLogo'];
 
 /*
- * The path toggle. It is in the palette because the task puts it there, and
- * it is not an element: pressing P shows or hides the derived racing line.
- * It carries a key so the hotkey table has one source.
+ * The path toggle: pressing P shows or hides the derived racing line, which is
+ * the bar's Show line. It is not an element, and it is not on the palette any
+ * more, where it was the bar's switch a second time and stayed lit like an
+ * armed tool (MENUS-PLAN.md 1.23). It carries a key so the hotkey table has
+ * one source, and P is never a piece's letter on any canvas.
  */
 export const PATH_TOGGLE = { id: 'path', label: 'Path', key: 'P', note: 'Toggles display of the derived racing line.' };
 
@@ -1508,10 +1510,19 @@ export const WHOOP_TOOLS = [
     key: 'M',
     note: 'Click two points to measure between them, in inches and millimetres. A click near a gate or a pole takes its middle. Nothing is saved with the track.',
   },
+  /*
+   * N, NOT O. Fly order had O, and so did Ground logo, which is on all three
+   * canvases' palettes with O: the whoop palette showed one letter on two tools
+   * and the key only ever reached Fly order (MENUS-PLAN.md 1.20). A piece on
+   * more than one canvas keeps its letter (4.2a), so Ground logo keeps O and
+   * this moved, to N for the numbers it hands out, which no race canvas uses.
+   * The map has a rail on N, and every one of its 36 keys is taken, so there is
+   * no letter a whoop tool could have that means nothing there.
+   */
   {
     id: 'route',
     label: 'Fly order',
-    key: 'O',
+    key: 'N',
     note: 'Click the pieces in the order you fly them. A click on a piece again is another pass through it, which is how a gate is flown twice. Backspace takes the last pass off.',
   },
 ];
@@ -1543,7 +1554,7 @@ const EXTRA_TYPES = new Set(PALETTE_EXTRA);
  * but the palette tool is distinct, and collapsing it into Gate would hide
  * that.
  */
-export function countElementsByType(elements) {
+export function countElementsByType(elements, cls = TRACK_CLASS_DEFAULT) {
   const tally = new Map();
   for (const el of elements || []) {
     const type = el && el.type;
@@ -1564,7 +1575,9 @@ export function countElementsByType(elements) {
   for (const id of order) {
     const count = tally.get(id) || 0;
     if (count > 0) {
-      rows.push({ type: id, label: ELEMENTS[id].label, count });
+      /* In the class's own words: a whoop track's dive gate is a horizontal
+       * gate in Load and in its results, as it is on its palette. */
+      rows.push({ type: id, label: labelOf(id, cls), count });
     }
   }
   return rows;

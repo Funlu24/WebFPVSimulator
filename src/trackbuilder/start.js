@@ -67,11 +67,18 @@ const app = new App({
    track opens that track. A published course from the board, or an
    Edit a copy intent from the simulator, is adopted after that, and
    a published map from the board's Remix in the builder after that. */
+/* Asked before docFromLocation, which takes ?track= out of the address once it
+   has read it (dropUrlParams in app.js), so a reload does not open it again. */
+const hadTrack = new URLSearchParams(window.location.search).has('track');
 const linked = docFromLocation();
 if (linked) {
   /* Kept, not asked: a link opens that track, and what it displaces goes into
      Load. See openIncoming in app.js. */
   app.openIncoming(linked, `Opened "${linked.name}" from the link.`);
+} else if (hadTrack) {
+  /* A link that held nothing a track could be read from opened nothing and
+     said nothing, which looks like a builder that ignored it. */
+  app.toast('That track link could not be opened. It looks cut short or damaged.');
 }
 /* A #track= link carries the whole track in the fragment (sharelink.js). It opens
    as a copy, under a new id, so nothing done to it is done to the track the link
