@@ -3870,6 +3870,13 @@
           padding: 0 8px 8px;
           border-left: none;
         }
+        /* The Tracks room's help belongs to its sheet, under the rows. Floated
+           above the stage as the Maps room floats it, it was drawn over the
+           line of cards the sheet had just opened under. */
+        .screen-courses .menu-help {
+          position: static;
+          padding: 10px 6px 0;
+        }
         .title-foot .hint { text-align: left; max-width: none; }
         .craft-showcase {
           width: min(420px, 88vw);
@@ -4186,6 +4193,86 @@
         color: var(--slate); font-size: 13px;
       }
       .board-note:empty { display: none; }
+
+      /* The strip's head: what the two halves are, and the order of the
+         board's half as three chips (settings.courseOrder). */
+      .strip-head {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+        gap: 6px 14px; margin: 10px 0 2px;
+      }
+      .strip-head .strip-label { margin: 0; }
+      .strip-order { display: flex; gap: 6px; pointer-events: auto; }
+      .order-chip {
+        font: inherit; font-size: 12px; letter-spacing: 0.03em;
+        padding: 3px 11px 4px; border-radius: 999px; cursor: pointer;
+        color: var(--slate); background: rgba(16, 22, 17, 0.72);
+        border: 1px solid rgba(244, 236, 214, 0.18);
+      }
+      .order-chip:hover { color: var(--cream); border-color: rgba(232, 168, 184, 0.6); }
+      .order-chip.on {
+        color: var(--deep); background: var(--sakura); border-color: var(--sakura);
+        font-weight: 700;
+      }
+      .order-chip:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
+
+      /* The record, on its own line under who and how big: the one number on
+         a card a pilot compares (MENUS-PLAN.md 1.14). */
+      .map-card-record {
+        margin-top: -6px; padding: 0 14px 12px;
+        color: var(--cream); font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .map-card-record:empty { display: none; }
+
+      /* Build a track: an empty field with a plus on it, which is what the
+         builder opens on. Dashed, because it is a place for a track rather
+         than a track. */
+      .course-card-new { border-top-style: dashed; }
+      .course-card-new .map-reel {
+        display: flex; align-items: center; justify-content: center;
+        background-color: #0b1119;
+        background-image:
+          linear-gradient(rgba(157, 179, 200, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(157, 179, 200, 0.07) 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+      .course-card-plus {
+        display: flex; align-items: center; justify-content: center;
+        width: 64px; height: 64px; border-radius: 50%;
+        border: 2px dashed rgba(125, 255, 180, 0.55);
+        color: var(--mint); font-size: 40px; font-weight: 300; line-height: 1;
+      }
+      .course-card-new.on .course-card-plus { border-style: solid; }
+
+      /*
+       * THE CHOSEN CARD'S SHEET (placeCourseSheet in src/ui/ui.js): the
+       * room's own menu, moved to the line under the chosen card's line of
+       * the grid. A full line to itself, a mint rule across the top with a
+       * notch over the card it belongs to, in the mint the chosen card
+       * wears, so the two read as one thing.
+       */
+      /* A line to itself whatever its width: the margins take the rest of
+         the line, so no card can sit beside it on a wide window with few
+         cards. */
+      .course-cards > .menu-stage.is-sheet {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: var(--sheet-w, 100%);
+        max-width: 100%;
+        margin: 4px calc((100% - min(100%, var(--sheet-w, 100%))) / 2) 8px;
+        padding: 2px 0 16px;
+        position: relative;
+        border-top: 1px solid rgba(125, 255, 180, 0.5);
+        background: linear-gradient(rgba(125, 255, 180, 0.07), rgba(125, 255, 180, 0) 140px);
+      }
+      .course-cards > .menu-stage.is-sheet::before {
+        content: '';
+        position: absolute; top: -9px;
+        left: calc(var(--notch-x, 50%) - 9px);
+        border-left: 9px solid transparent; border-right: 9px solid transparent;
+        border-bottom: 9px solid rgba(125, 255, 180, 0.5);
+      }
+      .course-cards > .menu-stage.is-sheet .menu { margin-top: 14px; }
 
       /*
        * How to fly. A CONTROL, NOT AN ESSAY.

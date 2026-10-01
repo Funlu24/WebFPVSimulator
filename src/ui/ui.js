@@ -224,9 +224,9 @@ const LINK_ACTIONS = new Set(['leaderboard', 'wiki', 'support', 'partners', 'car
  * and the row should not change shape between the two. */
 const SCREEN_ACTIONS = new Set([
   'courses', 'race', 'freestyle', 'pilot', 'quad', 'launch', 'standings', 'rates', 'pids', 'fc',
-  'howto', 'tricks', 'credits', 'trackbuilder', 'mapbuilder', 'builder', 'remix', 'editown',
+  'howto', 'tricks', 'credits', 'trackbuilder', 'trackbuilder-new', 'mapbuilder', 'builder', 'remix', 'editown',
   'choosepad', 'calibrate', 'calibrate-check', 'stickhelp', 'stickhelp-calibrate', 'stickhelp-check',
-  'advanced',
+  'advanced', 'card-launch',
 ]);
 
 /* What the breadcrumb says, per screen. A room is a navigation parent, so a
@@ -748,6 +748,11 @@ function counterBestSentence(s) {
 /* Where a built track lives, said in the Race room beside the row that
  * builds one. It was the title's, where it was three lines on every visit
  * and wrong with a freestyle map seated. The builder's strip says the same. */
+/* The orders the Tracks room offers for the board's half: the same three
+ * the board's own Order menu leads with, in its words. */
+const COURSE_ORDERS = [['flown', 'Most flown'], ['newest', 'Newest'], ['name', 'A to Z']];
+const COURSE_ORDER_IDS = COURSE_ORDERS.map(([id]) => id);
+
 const KEEP_NOTE = 'Tracks you build stay in this browser. Clearing it, or another device, starts you from nothing. Publish a track to put it on the public board.';
 
 /* How many kinds of trick a freestyle result lists before "N more". */
@@ -983,6 +988,12 @@ const DEFAULTS = {
    * question, which waits for the second (MENUS-PLAN.md 2.8).
    */
   resultsSeen: 0,
+  /*
+   * The order of the board's half of the Tracks room: 'flown' (most flown
+   * first, the board's own default), 'newest' or 'name'. Remembered, because
+   * a pilot who looks for new tracks looks for them every visit.
+   */
+  courseOrder: 'flown',
   /*
    * Whether the thumb-rates hand-off has happened. A fresh profile on a
    * touch device starts on TOUCH_RATE_DEFAULTS directly; an existing
@@ -1420,6 +1431,9 @@ export function loadSettings() {
    * would be offered First flight on their next visit. */
   if (Object.keys(stored).length && typeof stored.hasFlown !== 'boolean') {
     s.hasFlown = true;
+  }
+  if (!COURSE_ORDER_IDS.includes(s.courseOrder)) {
+    s.courseOrder = DEFAULTS.courseOrder;
   }
   s.stickMode = normaliseStickMode(s.stickMode);
   s.keyThrottle = normaliseKeyThrottle(s.keyThrottle);
@@ -3303,6 +3317,9 @@ function courseCardKey(card) {
   if (card.course.kind === 'board' || card.course.kind === 'local') {
     return `${card.course.kind}:${card.course.track.id}`;
   }
+  if (card.course.kind === 'new') {
+    return 'new';
+  }
   return 'current';
 }
 
@@ -3336,7 +3353,7 @@ function courseCardKey(card) {
  * card puts Fly it on screen without moving anything. A double click on the
  * card is the same press: see flyCard.
  */
-function courseCardRows(subject) {
+function courseCardRows(subject, seatRows = []) {
   const board = subject.course.kind === 'board';
   const name = subject.label;
   const rows = [
@@ -3352,14 +3369,21 @@ function courseCardRows(subject) {
         ? `Load ${name} from the board and go straight to the starting blocks. A double click on its card does the same.`
         : `Fly ${name}, straight from the starting blocks. A double click on its card does the same.`,
     },
-    {
-      label: 'Open in the builder',
-      action: 'card-builder',
-      note: board
-        ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
-        : `Open ${name} in the builder. Nothing is flown.`,
-    },
   ];
+  /* The seated track's own rows, when the card is the seat: Before you fly,
+   * Post a time, Publish, the right Edit, Standings and its page. */
+  if (seatRows.length) {
+    rows.push(...seatRows);
+    rows.push({ label: 'Back to the list', action: 'card-back' });
+    return rows;
+  }
+  rows.push({
+    label: 'Open in the builder',
+    action: 'card-builder',
+    note: board
+      ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
+      : `Open ${name} in the builder. Nothing is flown.`,
+  });
   if (board) {
     rows.push({
       label: 'Standings',
@@ -3374,6 +3398,48 @@ function courseCardRows(subject) {
   }
   rows.push({ label: 'Back to the list', action: 'card-back' });
   return rows;
+}
+
+/*
+ * THE ONE EDIT ROW, which is the right one of three (MENUS-PLAN.md 2.4):
+ * Edit this track for a published track of your own, Edit a copy for
+ * somebody else's, and Open in the builder for a track that lives only in
+ * this browser. Each used to be its own row, two of them greyed out at any
+ * moment, saying in grey what the third was for.
+ */
+function editAction(listing, seat = null) {
+  if (listing && listing.kind === 'owned') {
+    return editOwnAction(listing);
+  }
+  if (listing && listing.canRemix) {
+    return remixAction(listing);
+  }
+  const name = (seat && seat.name) || (listing && listing.name) || 'this track';
+  return {
+    label: 'Open in the builder',
+    action: 'trackbuilder',
+    note: `Opens the builder on ${name}. New in there starts a blank one. ${KEEP_NOTE}`,
+  };
+}
+
+/*
+ * Rows that can be pressed, and the one greyed row that is news rather than
+ * an apology: Time posted says the lap is on the board. A greyed row whose
+ * reason is another row's job ("Publish this one first") is left out, and
+ * the row that does that job says so in its own note.
+ */
+function applicableRows(rows) {
+  return rows.filter((r) => r && (!r.disabled || r.label === 'Time posted'));
+}
+
+function orderedCourses(list, order) {
+  const out = list.slice();
+  if (order === 'newest') {
+    out.sort((a, b) => String(b.publishedUtc || '').localeCompare(String(a.publishedUtc || '')));
+  } else if (order === 'name') {
+    out.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+  }
+  return out;
 }
 
 /* What pressing a course card does, said once for all three kinds of card so
@@ -4272,6 +4338,11 @@ export class Ui {
      * is being fetched to fly, which is the one that says Loading. */
     this.cardPress = null;
     this.flyingCard = null;
+    /* The chosen card to open again when Back returns to the room from the
+     * launch card or Standings, and the card the open sheet is drawn after.
+     * See show and placeCourseSheet. */
+    this.reopenCard = null;
+    this.sheetAfterKey = null;
     this.onAction = null;    /* (action, settings) => void */
     this.onSettings = null;  /* (settings) => void */
     /* () => void. Fly what was just seated from the starting blocks, now if
@@ -4946,7 +5017,38 @@ export class Ui {
        ordering that only ever applied to the board's half. Yours first
        because the track you were last working on is the one you came here
        to fly; the board's underneath, most flown first. */
-    this.courseStrip.append(el('div', 'strip-label', 'Yours first, then the board, most flown first'));
+    /*
+     * THE ORDER IS A CONTROL, NOT A CAPTION. The label said "most flown
+     * first" about a half the pilot could not reorder, so a pilot looking
+     * for what was published this week had thirty cards to read. Three
+     * chips, the board's own three orders in its words, and the choice is
+     * remembered (settings.courseOrder). They are buttons, so Tab reaches
+     * them; the arrow keys stay on the cards.
+     */
+    const stripHead = el('div', 'strip-head');
+    stripHead.append(el('div', 'strip-label', 'Yours first, then the board'));
+    this.courseOrderChips = el('div', 'strip-order');
+    this.courseOrderChips.setAttribute('role', 'group');
+    this.courseOrderChips.setAttribute('aria-label', "Order of the board's tracks");
+    for (const [id, word] of COURSE_ORDERS) {
+      const chip = el('button', 'order-chip', word);
+      chip.type = 'button';
+      chip.dataset.order = id;
+      chip.addEventListener('click', () => {
+        if (this.settings.courseOrder === id) {
+          return;
+        }
+        this.settings.courseOrder = id;
+        saveSettings(this.settings);
+        if (this.onUiSound) {
+          this.onUiSound('move');
+        }
+        this.renderMenu();
+      });
+      this.courseOrderChips.append(chip);
+    }
+    stripHead.append(this.courseOrderChips);
+    this.courseStrip.append(stripHead);
     this.courseCardHost = el('div', 'map-cards course-cards');
     this.boardNote = el('div', 'board-note', '');
     this.courseStrip.append(this.courseCardHost, this.boardNote);
@@ -7396,7 +7498,20 @@ export class Ui {
           action: `local:${t.id}`,
         });
       }
-      for (const t of this.boardCourses || []) {
+      /*
+       * BUILD A TRACK IS A CARD NOW, at the end of the pilot's own half
+       * (MENUS-PLAN.md 2.4). It was the first of eight rows under thirty
+       * one cards, two screens down. A card is where a pilot looking at
+       * tracks is looking, and the end of their own half is where a new one
+       * of theirs would appear.
+       */
+      cards.push({
+        label: 'Build a track',
+        note: `Opens the builder on an empty field. Whatever was on its canvas is kept in its Load list. ${KEEP_NOTE}`,
+        course: { kind: 'new' },
+        action: 'trackbuilder-new',
+      });
+      for (const t of orderedCourses(this.boardCourses || [], s.courseOrder)) {
         cards.push({
           label: t.name,
           note: t.designer
@@ -7408,52 +7523,50 @@ export class Ui {
           action: `board:${t.id}`,
         });
       }
-      /* A card the player has chosen owns the list until they go back. The
-       * cards themselves stay, so the strip still reads as where they are. */
+      /*
+       * A CARD THE PLAYER HAS CHOSEN OPENS ITS SHEET, drawn under the card's
+       * own line of the grid (placeCourseSheet), not at the foot of the
+       * page. The seated track's eight rows used to sit under all thirty one
+       * cards, two screens below the card they acted on, three of them
+       * greyed out; they are that card's sheet now, and a row that cannot
+       * apply is not drawn (MENUS-PLAN.md 2.4).
+       */
       const chosen = this.cardSubject
         ? cards.find((c) => c.course && courseCardKey(c) === this.cardSubject)
         : null;
       if (chosen) {
-        return [...cards, ...courseCardRows(chosen)];
+        const seatRows = chosen.course.kind === 'current'
+          ? [
+            {
+              label: 'Before you fly',
+              action: 'card-launch',
+              note: 'Laps, pack charge, flight model, radio link and the ghost: what this run counts as. Opens the launch card, which has its own Fly.',
+            },
+            ...applicableRows([
+              uploadAction(listing, {
+                timePosted: this.timePosted,
+                practice: s.laps === PRACTICE_LAPS,
+              }),
+              publishAction(listing, this.coursePublished),
+            ]),
+            editAction(listing, seat),
+            ...(listing && listing.shareId ? [
+              {
+                label: 'Standings',
+                action: 'standings',
+                note: `Every time posted on ${seat ? seat.name : 'this track'}, fastest first. Opens here.`,
+              },
+              {
+                label: 'This track on Tracks and times',
+                action: 'leaderboard',
+                note: 'Its page on the public board, opened on this track. A link to send somebody. Opens in a new tab.',
+              },
+            ] : []),
+          ]
+          : [];
+        return [...cards, ...courseCardRows(chosen, seatRows)];
       }
-      const rows = [
-        {
-          label: loaded ? 'Open in the track builder' : 'Build a track',
-          action: 'trackbuilder',
-          note: loaded
-            ? `Opens the track builder on the track above. New in there starts a blank one. ${KEEP_NOTE}`
-            : `Opens the track builder on an empty field. ${KEEP_NOTE}`,
-        },
-        publishAction(listing, this.coursePublished),
-        uploadAction(listing, {
-          timePosted: this.timePosted,
-          practice: s.laps === PRACTICE_LAPS,
-        }),
-        remixAction(listing),
-        editOwnAction(listing),
-        /*
-         * "Open the board" meant nothing to somebody who had never seen the
-         * board, and it left the game: the page it opened has its own
-         * link back, which reloads the simulator at the title and throws
-         * away whatever was seated. Standings is what a player wanted from
-         * it, and it is a screen in here now.
-         */
-        {
-          label: 'Standings',
-          action: 'standings',
-          note: seat
-            ? `Every time posted on ${seat.name}, fastest first. Opens here.`
-            : 'Every time posted on the track you are flying. Load one first.',
-          disabled: !listing || !listing.shareId,
-        },
-        {
-          label: 'Tracks and Statistics on the web',
-          action: 'leaderboard',
-          note: 'The public page, for sending somebody a link. Everything on it is in here too. Opens in a new tab.',
-        },
-        { label: 'Back', action: 'back' },
-      ];
-      return [...cards, ...rows];
+      return [...cards, { label: 'Back', action: 'back' }];
     }
     /*
      * FREESTYLE. One town and no ceremony.
@@ -10503,7 +10616,8 @@ export class Ui {
       this.courseCardKey = key;
       this.courseCards = cards.map((it, k) => {
         const i = k + offset;
-        const card = el('div', 'map-card course-card');
+        const fresh = it.course.kind === 'new';
+        const card = el('div', fresh ? 'map-card course-card course-card-new' : 'map-card course-card');
         const shot = el('div', 'map-reel');
         /* A card that carries its own track, as against the seated one,
            whose plan comes from the seat. Both of this screen's sources
@@ -10511,8 +10625,10 @@ export class Ui {
         const listed = it.course.kind === 'board' || it.course.kind === 'local';
         const plan = listed
           ? it.course.track.plan
-          : currentPlan();
-        const canvas = planCanvas(plan, `Plan of ${it.label}`);
+          : (fresh ? null : currentPlan());
+        /* Build a track has no plan to draw. Its picture is a plus on an
+         * empty field, which is what the builder opens on. */
+        const canvas = fresh ? null : planCanvas(plan, `Plan of ${it.label}`);
         /* Said on the picture while the board hands this track over to be
          * flown: see flyCard. Laid over it rather than put beside the name,
          * where a word rewraps the name and the card grows, and every card
@@ -10520,27 +10636,44 @@ export class Ui {
          * that holds still. */
         const wait = el('div', 'course-card-wait', 'Loading');
         wait.hidden = true;
-        shot.append(canvas, wait);
+        if (fresh) {
+          shot.append(el('div', 'course-card-plus', '+'));
+        } else {
+          shot.append(canvas);
+        }
+        shot.append(wait);
         const body = el('div', 'map-card-body');
         const name = el('div', 'map-card-name', it.label);
         const meta = el('div', 'map-card-meta', '');
-        if (listed) {
+        /*
+         * WHO, HOW BIG, AND THE TIME TO BEAT, as three things rather than one
+         * run of words (MENUS-PLAN.md 1.14). They were joined by two spaces,
+         * which a line break or a long name turned into "by Ana 12 gates
+         * record 41.20" and a reader had to find the joins. A middle dot
+         * between the facts, and the record on a line of its own with its
+         * label, because it is the one number on the card a pilot compares.
+         */
+        const record = el('div', 'map-card-record', '');
+        if (fresh) {
+          meta.textContent = 'An empty field in the builder';
+        } else if (listed) {
           const t = it.course.track;
           /* The designer where the board knows one, because the author is
            * whoever published it and on a track brought over from a series
            * those are two different people. */
-          const bits = [byLine(t), `${t.gates} gate${t.gates === 1 ? '' : 's'}`];
+          meta.textContent = [byLine(t), `${t.gates} gate${t.gates === 1 ? '' : 's'}`]
+            .filter(Boolean)
+            .join(' \u00b7 ');
           if (t.recordMs != null) {
-            bits.push(t.recordThree
-              ? `three laps ${formatTime(t.recordMs)}`
-              : `record ${formatTime(t.recordMs)}`);
+            record.textContent = t.recordThree
+              ? `Record, three laps: ${formatTime(t.recordMs)}`
+              : `Record lap: ${formatTime(t.recordMs)}`;
           }
-          meta.textContent = bits.filter(Boolean).join('  ');
         } else {
           const size = fieldSize(plan);
           meta.textContent = [`${it.course.seat.gates} gate${it.course.seat.gates === 1 ? '' : 's'}`, size]
             .filter(Boolean)
-            .join('  ');
+            .join(' \u00b7 ');
         }
         /*
          * NO BADGE OVER THE PICTURE. Shipped, on the board and not on the
@@ -10554,7 +10687,7 @@ export class Ui {
          */
         const tag = el('div', 'map-card-tag', '');
         body.append(name, tag);
-        card.append(shot, body, meta);
+        card.append(shot, body, meta, record);
         card.addEventListener('mousemove', (e) => this.hoverCursor(e, i));
         card.addEventListener('click', (e) => {
           const key = courseCardKey(it);
@@ -10577,6 +10710,13 @@ export class Ui {
       });
       this.paintCoursePlans();
     }
+    if (this.courseOrderChips) {
+      for (const chip of this.courseOrderChips.children) {
+        const on = chip.dataset.order === this.settings.courseOrder;
+        chip.classList.toggle('on', on);
+        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
     this.courseCards.forEach((c, k) => {
       const i = k + offset;
       c.card.classList.toggle('on', i === this.cursor);
@@ -10592,6 +10732,98 @@ export class Ui {
       }
       c.tag.textContent = c.kind === 'current' && this.settings.map === 'custom' ? 'Flying now' : '';
     });
+    this.placeCourseSheet();
+  }
+
+  /*
+   * THE CHOSEN CARD'S SHEET OPENS UNDER ITS OWN LINE OF THE GRID
+   * (MENUS-PLAN.md 2.4), the way a photo library opens a picture: the
+   * cards above stay where they were, the chosen one keeps its place, and
+   * what can be done with it is directly beneath it rather than under all
+   * thirty one cards. The sheet is the room's own menu stage, moved: the
+   * rows, the cursor, the help and the command bar are all the ones every
+   * other screen uses.
+   *
+   * The line is worked out from the card's index and how many cards fit
+   * across, not from where the cards are drawn now, because the sheet
+   * itself breaks the line it is put after: measured with it in place, a
+   * resize would keep the old break for ever.
+   *
+   * With nothing chosen the stage goes back under the strip, where it holds
+   * the room's Back.
+   */
+  placeCourseSheet() {
+    const stage = this.coursesStage;
+    const host = this.courseCardHost;
+    if (!stage || !host || !this.courseStrip) {
+      return;
+    }
+    const cards = this.courseCards || [];
+    const at = this.cardSubject ? cards.findIndex((c) => c.key === this.cardSubject) : -1;
+    if (at < 0) {
+      this.sheetAfterKey = null;
+      stage.classList.remove('is-sheet');
+      stage.style.removeProperty('--notch-x');
+      stage.style.removeProperty('--sheet-w');
+      if (stage.previousElementSibling !== this.courseStrip) {
+        this.courseStrip.after(stage);
+      }
+      return;
+    }
+    const first = cards[0].card;
+    const width = first.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(host).columnGap) || 0;
+    const across = width > 0
+      ? Math.max(1, Math.floor((host.clientWidth + gap + 0.5) / (width + gap)))
+      : 1;
+    const end = Math.min(cards.length - 1, (Math.floor(at / across) + 1) * across - 1);
+    this.sheetAfterKey = cards[end].key;
+    stage.classList.add('is-sheet');
+    /* As wide as a full line of cards, so its rule lines up with the grid
+     * above and below it. Still too wide to share a line with a card. */
+    const span = Math.min(across, cards.length);
+    stage.style.setProperty('--sheet-w', `${Math.round(span * width + (span - 1) * gap)}px`);
+    if (cards[end].card.nextElementSibling !== stage) {
+      cards[end].card.after(stage);
+    }
+    /* The notch points at the card the sheet belongs to. */
+    const sheetBox = stage.getBoundingClientRect();
+    const cardBox = cards[at].card.getBoundingClientRect();
+    stage.style.setProperty('--notch-x', `${Math.round(cardBox.left + cardBox.width / 2 - sheetBox.left)}px`);
+  }
+
+  /*
+   * A CHOOSE MUST NOT MOVE THE CARD THAT WAS CHOSEN. Opening one card's
+   * sheet closes another's, and when the other was above it every card
+   * from there down moves up by that sheet's height, under a pointer that
+   * did not move: a second press of a double click then lands on a
+   * different track. So the page is scrolled by however far the card moved,
+   * and the strip never gets shorter while the room is open (a shorter
+   * page scrolled to its foot is moved by the browser, not by us). show()
+   * lets the height go when the room is left.
+   */
+  courseCardTop(key) {
+    const c = (this.courseCards || []).find((x) => x.key === key);
+    return c ? c.card.getBoundingClientRect().top : null;
+  }
+
+  holdCourseStrip() {
+    const strip = this.courseStrip;
+    if (strip) {
+      strip.style.minHeight = `${Math.max(strip.offsetHeight, parseFloat(strip.style.minHeight) || 0)}px`;
+    }
+  }
+
+  keepCardStill(key, before) {
+    const after = this.courseCardTop(key);
+    const page = this.screens && this.screens.courses;
+    if (before == null || after == null || !page) {
+      return;
+    }
+    const moved = after - before;
+    if (Math.abs(moved) >= 1) {
+      page.scrollTop += moved;
+    }
   }
 
   /* A canvas reports no size until it is laid out, so the first paint waits
@@ -10614,6 +10846,9 @@ export class Ui {
      * different points of their own laps at the same moment. */
     const paint = (ms) => {
       for (const c of this.courseCards || []) {
+        if (!c.canvas) {
+          continue;
+        }
         const plan = c.canvas.planData;
         drawIso(c.canvas, plan, ms == null ? {} : { phase: (ms / isoLapMs(plan)) % 1 });
       }
@@ -11715,7 +11950,15 @@ export class Ui {
         this.returnTo = 'title';
       }
     }
+    /* The row being left, read while the screen being left is still whole:
+     * the Tracks room's sheet is closed just below, and its rows go with
+     * it. See the cursor memory further down. */
+    const leaving = this.items()[this.cursor];
     if (this.screen === 'courses' && screen !== 'courses') {
+      /* A sheet that opened a screen which comes back here is open again on
+       * the way back: Before you fly and Standings, and the screens the
+       * launch card itself opens. Anything else starts the room afresh. */
+      this.reopenCard = screen === 'launch' || screen === 'standings' ? this.cardSubject : null;
       /* Nothing draws a thumbnail for a screen nobody is looking at. */
       this.stopReels();
       this.stopCoursePlans();
@@ -11726,9 +11969,12 @@ export class Ui {
       this.lastCardKey = null;
       this.cardPress = null;
       this.flyingCard = null;
-      if (this.coursesStage) {
-        this.coursesStage.style.minHeight = '';
+      if (this.courseStrip) {
+        this.courseStrip.style.minHeight = '';
       }
+    }
+    if (screen === 'title' || screen === 'flight' || screen === 'paused') {
+      this.reopenCard = null;
     }
     /*
      * THE SAME FOR THE FREESTYLE ROOM, where the world cards moved to and
@@ -11811,7 +12057,6 @@ export class Ui {
      * `feature` prefix a dozen times, so a restore could land on the first
      * row that happened to read the same. See stampIds.
      */
-    const leaving = this.items()[this.cursor];
     if (this.screen && leaving && leaving.id) {
       this.cursorMemory[this.screen] = leaving.id;
     }
@@ -11826,6 +12071,11 @@ export class Ui {
      * starting into the same frame that is still painting the room. */
     this.noteInteraction();
     this.screen = screen;
+    if (screen === 'courses' && this.reopenCard) {
+      this.cardSubject = this.reopenCard;
+      this.lastCardKey = this.reopenCard;
+      this.reopenCard = null;
+    }
     /* this.screen is already the new one, so items() describes where we are
      * going. Settings opens on its first real row rather than on a heading. */
     this.cursor = this.restoreCursor();
@@ -12009,7 +12259,7 @@ export class Ui {
       return;
     }
     const card = this.items().find((it) => it.course && courseCardKey(it) === key);
-    if (!card) {
+    if (!card || card.course.kind === 'new') {
       return;
     }
     const go = () => {
@@ -13317,6 +13567,11 @@ export class Ui {
         this.letterTimer = setTimeout(() => {
           this.letterScreen(this.screen);
           this.fitMenuHeight();
+          /* A narrower window fits fewer cards across, so the open sheet
+           * moves to the end of its card's new line. */
+          if (this.screen === 'courses') {
+            this.placeCourseSheet();
+          }
         }, 150);
       });
     }
@@ -15042,6 +15297,24 @@ export class Ui {
     if (!n) {
       return;
     }
+    /*
+     * THE TRACKS ROOM IS WALKED IN THE ORDER IT IS DRAWN. The open sheet
+     * sits under its card's line of the grid, but its rows come after every
+     * card in items(), so a plain step went from the chosen card to the
+     * next card and from Fly it up to the last card on the page. In drawn
+     * order the line's cards come first, then the sheet, then the cards
+     * below it.
+     */
+    const drawn = this.drawnOrder(items);
+    if (drawn) {
+      const walk = new Set(this.arrowStops(items));
+      const stops = drawn.filter((i) => walk.has(i));
+      if (stops.length) {
+        const at = stops.indexOf(this.cursor);
+        this.setCursor(at < 0 ? stops[0] : stops[(at + dir + stops.length) % stops.length]);
+        return;
+      }
+    }
     let next = (this.cursor + dir + n) % n;
     /* Step over headings and skipped rows. Bounded by n so a list of
      * nothing but headings cannot spin here. */
@@ -15053,6 +15326,28 @@ export class Ui {
       next = (next + dir + n) % n;
     }
     this.setCursor(next);
+  }
+
+  /* The Tracks room's indices in drawn order while a sheet is open, or
+   * null. See move. */
+  drawnOrder(items) {
+    if (this.screen !== 'courses' || !this.cardSubject || !this.sheetAfterKey) {
+      return null;
+    }
+    const cards = [];
+    const rows = [];
+    items.forEach((it, i) => {
+      if (it.course) {
+        cards.push(i);
+      } else if (!it.map) {
+        rows.push(i);
+      }
+    });
+    const end = cards.findIndex((i) => courseCardKey(items[i]) === this.sheetAfterKey);
+    if (end < 0) {
+      return null;
+    }
+    return [...cards.slice(0, end + 1), ...rows, ...cards.slice(end + 1)];
   }
 
   /*
@@ -15239,25 +15534,27 @@ export class Ui {
      * here would have flown it instead, which is the behaviour this whole
      * change exists to remove. */
     if (this.screen === 'courses' && it.course) {
-      this.cardSubject = courseCardKey(it);
+      /* Build a track is a door, not a track: there is nothing to choose
+       * between on it, so a sheet of one row would be friction. */
+      if (it.course.kind === 'new') {
+        if (this.onUiSound) {
+          this.onUiSound('select');
+        }
+        this.act(it.action);
+        return;
+      }
+      const key = courseCardKey(it);
+      /* Where the card is now, so the sheet opening cannot move it out from
+       * under the pointer: see keepCardStill. */
+      const before = this.courseCardTop(key);
+      this.holdCourseStrip();
+      this.cardSubject = key;
       if (this.onUiSound) {
         this.onUiSound('select');
       }
-      /*
-       * THE LIST UNDER THE STRIP MAY GROW, NEVER SHRINK, while this room is
-       * open. Choosing swaps the seat's rows for this card's, usually fewer,
-       * and on a page scrolled to its foot the browser takes a shorter page
-       * off the scroll: measured, choosing the last of thirty cards moved
-       * every card 93 px down under a pointer that had not moved. So the
-       * stage holds the height it had. The room's rows are aligned to its
-       * top (.menu-stage, align-items: start), so what it holds is empty
-       * page below the panel, and show() lets it go when the room is left.
-       */
-      if (this.coursesStage) {
-        this.coursesStage.style.minHeight = `${this.coursesStage.offsetHeight}px`;
-      }
       this.renderMenu();
       this.renderCourseCards();
+      this.keepCardStill(key, before);
       /*
        * Land on Fly it, so the quick path stays Enter then Enter.
        *
@@ -15537,6 +15834,13 @@ export class Ui {
       window.location.href = 'src/trackbuilder/index.html?mode=freestyle';
       return;
     }
+    /* The Tracks room's Build a track card: a blank race canvas, with the
+     * one that was on it kept in the builder's Load list. */
+    if (action === 'trackbuilder-new') {
+      writeBuilderIntent({ kind: 'new' });
+      window.location.href = 'src/trackbuilder/index.html?mode=race';
+      return;
+    }
     /* The gate's fourth card. No ?mode, because nothing on the gate has
      * said which canvas: the builder asks, with the gate's own three
      * pictures. See BUILDER_CARD. */
@@ -15602,10 +15906,29 @@ export class Ui {
      * they belong to, so none of them has to guess at the seat.
      */
     if (action === 'card-back') {
+      const key = this.cardSubject;
+      const before = this.courseCardTop(key);
       this.cardSubject = null;
       this.renderMenu();
       this.renderCourseCards();
+      this.keepCardStill(key, before);
+      if (this.courseStrip) {
+        this.courseStrip.style.minHeight = '';
+      }
       this.setCursor(this.cardCursor());
+      return;
+    }
+    /*
+     * BEFORE YOU FLY, from the seated track's sheet: the launch card, which
+     * says what a run on it counts as and has its own Fly. The card belongs
+     * to the room here, so its Back comes back to the room with the same
+     * sheet open (see reopenCard in show).
+     */
+    if (action === 'card-launch') {
+      this.seatCraftForCourse();
+      this.roomFrom = 'courses';
+      this.returnTo = 'title';
+      this.show('launch');
       return;
     }
     /*
