@@ -27,7 +27,7 @@
  * TX15 flown and paused, which is bug-2d93629e. A sixth is a touchscreen
  * laptop with no radio, flown on its keys and on its glass, which is
  * bug-d1d3f4fb. Two more walk the builder's Fly this map into the air, and a
- * linked map that fails to load, and the last walk the gate's Map builder
+ * linked map that fails to load, and the last walk the gate's Builder
  * card into the builder and its chooser.
  *
  * Not part of `npm run verify`: this says nothing about the flight model.
@@ -1152,19 +1152,26 @@ async function mousePage(page) {
 /*
  * Safari 27 on a Mac, and a Pocket the browser will not list: bug-616cc604.
  * Everything a pilot could ask of a radio that is not there, and what each
- * asks back. The banner is read from the page, the way the pilot reads it,
- * and each is waited out before the next so one cannot answer for another.
+ * asks back. The words are read from the page, the way the pilot reads
+ * them, and each is waited out before the next so one cannot answer for
+ * another.
+ *
+ * FROM THE MENU NOTICE, NOT THE BANNER, since 2026-10-01 (MENUS-PLAN.md
+ * 1.8). Every one of these is asked from Settings, and a notice raised on a
+ * menu is the small line above the command bar now: the flight's banner had
+ * printed it in three lines of large amber over the SETTINGS heading. Same
+ * words, same timing, a different element. See setMenuNotice in ui.js.
  */
 async function safariPage(page) {
   const ev = (expr) => page.evaluate(`(() => { const ui = window.__ui; const input = window.__input; ${expr} })()`);
   const SAFARI = '/Safari usually cannot see USB radios: try Chrome, Edge or Firefox\\./';
-  const banner = () => ev('return ui.banner.textContent;');
-  /* Ask for a radio one way, and read what the banner says of it. */
+  const banner = () => ev('return ui.menuNotice.textContent;');
+  /* Ask for a radio one way, and read what the notice says of it. */
   const ask = async (expr) => {
-    await page.until("window.__ui.banner.textContent === ''", 9000).catch(() => {});
+    await page.until("window.__ui.menuNotice.textContent === ''", 9000).catch(() => {});
     await ev(expr);
     let said = true;
-    await page.until(`${SAFARI}.test(window.__ui.banner.textContent)`, 3000).catch(() => { said = false; });
+    await page.until(`${SAFARI}.test(window.__ui.menuNotice.textContent)`, 3000).catch(() => { said = false; });
     return { said, text: await banner(), screen: await ev('return ui.screen;') };
   };
 
@@ -1182,7 +1189,7 @@ async function safariPage(page) {
     JSON.stringify(row));
 
   const chose = await ask("ui.act('choosepad'); return 1;");
-  check('Choose joystick with none listed: the banner names Safari and the browsers to use, over two lines',
+  check('Choose joystick with none listed: the notice names Safari and the browsers to use, over two lines',
     chose.said && /^No radio or gamepad found\.\n/.test(chose.text) && chose.text.split('\n').length === 2
     && !/Plug one in/.test(chose.text) && chose.screen === 'pilot', JSON.stringify(chose));
   const calibrated = await ask("ui.act('calibrate'); return 1;");
@@ -1578,17 +1585,18 @@ async function keyboardPage(page) {
    * always was. bug-616cc604's words are for Safari and WebKit and nobody
    * else: see radioBlind in src/ui/stickhelp.js. */
   section('a browser that can show a radio, with none plugged in, keeps the ordinary advice');
+  /* The menu notice, as in safariPage: asked from Settings, said on Settings. */
   await ev(`${PAST_GATE} ui.show('pilot'); ui.act('choosepad'); return 1;`);
   let plain = true;
-  await page.until('/Plug one in, set it to joystick mode, then move it\\./.test(window.__ui.banner.textContent)', 3000)
+  await page.until('/Plug one in, set it to joystick mode, then move it\\./.test(window.__ui.menuNotice.textContent)', 3000)
     .catch(() => { plain = false; });
   check('Choose joystick with no radio, in Chrome: plug one in, joystick mode, then move it, and no word about Safari',
-    plain && await ev('return ui.radioBlind === null && !/Safari/.test(ui.banner.textContent);'),
-    await ev('return JSON.stringify(ui.banner.textContent);'));
+    plain && await ev('return ui.radioBlind === null && !/Safari/.test(ui.menuNotice.textContent);'),
+    await ev('return JSON.stringify(ui.menuNotice.textContent);'));
   const none = await ev('return JSON.stringify(ui.bugSnapshot().stick.pads);').then(JSON.parse);
   check('and its report says the API is there and the browser listed nothing, the same as a Safari page reads',
     none.api === true && none.listed === 0 && none.used === 0 && none.list.length === 0, JSON.stringify(none));
-  await page.until("window.__ui.banner.textContent === ''", 9000).catch(() => {});
+  await page.until("window.__ui.menuNotice.textContent === ''", 9000).catch(() => {});
 
   section('keyboard: the throttle keys spring to the measured hover, or stay put');
   const hand = await ev(`
@@ -2147,19 +2155,21 @@ const CHOOSER_STATE = `(() => { const app = window.trackBuilder;
 
 async function builderChooserPages() {
   /* ----------------------------------------------------------------------
-   * 15. The gate's Map builder card opens the builder, the builder asks
+   * 15. The gate's Builder card opens the builder, the builder asks
    *     with the gate's three cards, a card does what the switch does, and
    *     the switch still changes it back.
    * -------------------------------------------------------------------- */
-  section('the builder: the gate\'s Map builder card opens it, and it asks what is being built with the gate\'s three cards');
+  section('the builder: the gate\'s Builder card opens it, and it asks what is being built with the gate\'s three cards');
   let page = await openPage({ root, width: 1280, height: 720, seed: [SETTINGS_SEED] });
   try {
     await page.until('window.__shellReady === true && !!window.__ui && window.__ui.onGate()', 120000).catch(() => {});
     const gate = await page.evaluate(`(() => { const items = window.__ui.items();
       return JSON.stringify({ cards: items.filter((it) => it.card).map((it) => it.label),
         at: items.findIndex((it) => it.action === 'builder') }); })()`).then(JSON.parse);
-    check('the gate carries a fourth card, Map builder, after the three ways in',
-      gate.cards.join() === 'Five inch racing,Whoop racing,Freestyle,Map builder' && gate.at === 3, JSON.stringify(gate));
+    /* Builder, its one name since MENUS-PLAN.md 4.1: this card said Map
+     * builder and the builder's own bar said Track builder. */
+    check('the gate carries a fourth card, Builder, after the three ways in',
+      gate.cards.join() === 'Five inch racing,Whoop racing,Freestyle,Builder' && gate.at === 3, JSON.stringify(gate));
     await page.evaluate(`(() => { window.__ui.setCursor(${gate.at}); return 1; })()`);
     await page.tap('Enter');
     await page.until("location.pathname.endsWith('/src/trackbuilder/index.html') && !!window.trackBuilder", 60000).catch(() => {});

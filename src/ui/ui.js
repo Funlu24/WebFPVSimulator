@@ -324,7 +324,7 @@ const ROOM_PARENTS = new Set(['courses', 'freestyle', 'launch', 'quad', 'pilot']
 
 /* The rooms whose list is their content, sized to the window by
  * fitMenuHeight. */
-const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'launch', 'stickhelp', 'standings']);
+const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'launch', 'stickhelp', 'standings', 'paused']);
 
 /*
  * ONE NAME PER ROOM, and it is the name of what the room holds
@@ -4157,7 +4157,7 @@ const WAYS = [
     mode: 'race',
     label: 'Five inch racing',
     art: 'assets/gate/race.jpg',
-    blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish goes to the public leaderboard.',
+    blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish can go on the public board.',
     facts: ['6S', '220 mm', 'The board'],
   },
   {
@@ -5638,7 +5638,9 @@ export class Ui {
     this.padPickReason = 'boot';
     this.padPickPhase = 'wiggle';
 
-    const paused = el('div', 'screen screen-modal');
+    /* screen-paused names it for the checks, which find a screen's list by
+     * its class: without it the shell walk measured nothing here. */
+    const paused = el('div', 'screen screen-modal screen-paused');
     paused.append(el('h2', null, 'Paused'));
     const pausedBlock = wrapMenu();
     this.pausedMenu = pausedBlock.menu;
@@ -7296,7 +7298,7 @@ export class Ui {
           value: seat ? seat.name : 'Choose one',
           action: 'courses',
           note: seat
-            ? `${seat.name}, and every other track. Gated, against the clock, and every time flown here goes to the leaderboard.`
+            ? `${seat.name}, and every other track. Gated, against the clock, and a lap flown here can go on the board.`
             : 'No track is seated yet. Your own tracks, every track the board is offering, and the builder, are in here.',
         };
       /*
@@ -9317,18 +9319,33 @@ export class Ui {
       return;
     }
     const screen = this.screens && this.screens[this.screen];
-    const box = screen && screen.querySelector('.menu-scroll');
+    /* The pause menu scrolls by its modal's own rule rather than as a
+     * .menu-scroll, whose desktop cap would cut a list that fits. */
+    const box = screen && (screen.querySelector('.menu-scroll')
+      || (this.screen === 'paused' ? this.pausedMenu : null));
     if (!box) {
       return;
     }
     box.style.maxHeight = '';
+    box.style.minHeight = '';
     const top = box.getBoundingClientRect().top;
     const bar = this.frameBot && !this.frameBot.hidden
       ? this.frameBot.getBoundingClientRect().height
       : 0;
     const room = Math.floor(window.innerHeight - bar - top - 16);
     if (room >= 160) {
+      /* The phone floor (.menu's min-height of 200 px, which stops a list
+       * being squeezed to nothing) is lowered to what fits: the list is
+       * sized here, so it cannot be squeezed, and a floor above the room
+       * is what put it 16 px under the bar on a phone on its side. */
+      box.style.minHeight = '160px';
       box.style.maxHeight = `${room}px`;
+      /* max-height is the CONTENT's height, and the list's padding and its
+       * top rule sit outside it. Take back whatever it overshoots by. */
+      const over = Math.ceil(box.getBoundingClientRect().bottom - (window.innerHeight - bar - 8));
+      if (over > 0 && room - over >= 160) {
+        box.style.maxHeight = `${room - over}px`;
+      }
     }
   }
 

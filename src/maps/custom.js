@@ -143,8 +143,8 @@ function emptyCourse() {
     samples: [{ x: 0, z: 0 }],
     guide: { samples: [], dashes: [], arrows: [], flagArcs: [], length: 0 },
     warnings: [micro
-      ? 'Nothing has been built yet. Open the whoop track builder from the title screen, place some gates in the room, then come back.'
-      : 'Nothing has been built yet. Open the track builder from the title screen, place some gates, then come back.'],
+      ? 'Nothing has been built yet. Choose Build a track in Tracks, place some gates in the room, then come back.'
+      : 'Nothing has been built yet. Choose Build a track in Tracks, place some gates, then come back.'],
     lapLength: 0,
     closed: false,
   };

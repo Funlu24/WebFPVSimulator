@@ -100,6 +100,16 @@ const LIBRARY = Object.fromEntries(LIBRARY_SEED.map((d) => [d.id, d]));
  * nothing and their state machine is driven by a stick rather than a cursor.
  * Everything else in this.screens is here.
  */
+/*
+ * The room doors the return walk takes: [room, the door's action, the
+ * screen it opens]. See "A DOOR IS NOT A ONE WAY DOOR".
+ */
+const ROOM_DOORS = [
+  ['freestyle', 'quad', 'quad'],
+  ['launch', 'pids', 'pids'],
+  ['pilot', 'advanced', 'advanced'],
+];
+
 const SCREENS = [
   'title', 'courses', 'freestyle', 'quad', 'pilot', 'launch', 'rates', 'pids', 'fc',
   /* tricks was missing from this list until bug-f105cf4a, and that is how a
@@ -115,6 +125,9 @@ const SCREENS = [
    * screen whose stick help it is, so a radio pilot can leave it and this
    * walks it. */
   'stickhelp',
+  /* Advanced, from 1 October (MENUS-PLAN.md 2.3): the picture and latency
+   * knobs and the flight log, one door down from Settings. */
+  'advanced',
 ];
 
 /*
@@ -495,7 +508,9 @@ const BEHAVIOUR = `(() => {
   /*
    * THE ONE PATH THAT TUNES THE QUAD, walked end to end and back out again.
    *
-   * Quad, Tune, Every setting, back, back. The last step used to land on the
+   * Quad, Tune, Firmware bench, back, back. (The bench's row was called
+   * Every setting until MENUS-PLAN.md 1.5 named the door for the room it
+   * opens.) The last step used to land on the
    * TITLE: show() dropped pidsFrom on the way from the PIDs room to the
    * bench, so the room forgot it had been opened from Quad while the pilot
    * was one door deeper, and Escape threw them out of the machine. Nothing
@@ -517,7 +532,7 @@ const BEHAVIOUR = `(() => {
       return ui.screen;
     };
     const toPids = step('Tune');
-    const toBench = step('Every setting');
+    const toBench = step('Firmware bench');
     ui.back();
     const backToPids = ui.screen;
     ui.back();
@@ -914,10 +929,18 @@ const BEHAVIOUR = `(() => {
       ui.show(room);
     };
 
-    for (const room of ['freestyle', 'launch', 'pilot']) {
+    /*
+     * One door out of each room, and the screen it opens. The launch card
+     * and Settings carried a Quad door until MENUS-PLAN.md 2.3 and 2.7: the
+     * launch card's machine row is Tune now, into the Tune room, and
+     * Settings' tuning door went with the tune to Quad, leaving Advanced as
+     * its door to another screen. The property is the same: in through the
+     * door, Back, and you are in the room you left.
+     */
+    for (const [room, door, at] of ${JSON.stringify(ROOM_DOORS)}) {
       reset(room);
-      trips[room] = go(room + ':a-quad')
-        ? (() => { const at = ui.screen; ui.back(); return { at, back: ui.screen }; })()
+      trips[room] = go(room + ':a-' + door)
+        ? (() => { const there = ui.screen; ui.back(); return { at: there, want: at, back: ui.screen }; })()
         : { missing: true };
     }
 
@@ -1413,14 +1436,15 @@ const BEHAVIOUR = `(() => {
        is why this is the micro chair. */
     const autosaved = readKey('webfpv.trackbuilder.autosave.micro.v1');
     /*
-     * The pause menu's Back to the track builder, for a track of the
-     * pilot's own, which this one out of the library is. Read without
-     * showing the pause screen, which belongs to a flight this check never
-     * starts: items() is the list that screen would draw.
+     * The pause menu's Back to the builder, for a track of the pilot's own,
+     * which this one out of the library is. Read without showing the pause
+     * screen, which belongs to a flight this check never starts: items() is
+     * the list that screen would draw. (It said Back to the track builder
+     * until the builder became one name, Builder: MENUS-PLAN.md 4.1.)
      */
     const screenWas = ui.screen;
     ui.screen = 'paused';
-    const pauseRow = ui.items().find((it) => it.label === 'Back to the track builder') || null;
+    const pauseRow = ui.items().find((it) => it.label === 'Back to the builder') || null;
     ui.screen = screenWas;
     const stockSeat = {
       pauseBuilder: pauseRow ? pauseRow.action : null,
@@ -1478,7 +1502,10 @@ const BEHAVIOUR = `(() => {
        * and not a row among them: the whole point of the screen is that it
        * is not a menu. */
       asksFour: gate.length === 4
-        && gate.join() === 'Five inch racing,Whoop racing,Freestyle,Map builder'
+        /* The fourth card is the builder, under its one name since
+         * MENUS-PLAN.md 4.1: it was Map builder on this card and Track
+         * builder in the builder's own title. */
+        && gate.join() === 'Five inch racing,Whoop racing,Freestyle,Builder'
         && gateItems.filter((it) => !it.card).length === 0,
       asCards: cards.length === 4 && cards.slice(0, 3).every((c) => c.shot && c.drawn)
         && Boolean(cards[3].shot) && !cards[3].drawn,
@@ -1548,6 +1575,136 @@ const ESCAPE = `(() => {
   return JSON.stringify(out);
 })()`;
 
+/*
+ * ONE DOOR, ONE NAME (MENUS-PLAN.md 0.3 and 5.4).
+ *
+ * The rows that open the board were called Tracks and Statistics, Tracks
+ * and Statistics on the web, Open Tracks and Statistics and Open on the
+ * web, for one page that calls itself Tracks and times. Every row whose
+ * action opens it says the board's own name now, or is the Published state
+ * of the track's own row. The Tracks room's sheets are read too, by
+ * choosing the seated card and the first board card, because that is where
+ * most of these doors are.
+ */
+const BOARD_ACTIONS = ['leaderboard', 'seat-board', 'card-board'];
+
+const BOARD_DOORS = `(() => {
+  const ui = window.__ui;
+  ${PAST_GATE}
+  const out = [];
+  const read = (name) => {
+    for (const it of ui.items()) {
+      if (it && ${JSON.stringify(BOARD_ACTIONS)}.includes(it.action)) {
+        out.push({ screen: name, label: it.label, action: it.action });
+      }
+    }
+  };
+  for (const name of ${JSON.stringify(SCREENS)}) {
+    try { ui.show(name); } catch (e) { continue; }
+    read(name);
+    if (name === 'courses') {
+      const cards = ui.items().filter((it) => it && it.course);
+      const pick = ['current', 'board'].map((k) => cards.find((c) => c.course.kind === k)).filter(Boolean);
+      for (const c of pick) {
+        ui.cardSubject = c.course.kind === 'current' ? 'current' : 'board:' + c.course.track.id;
+        read('courses sheet');
+      }
+      ui.cardSubject = null;
+    }
+  }
+  ui.show('title');
+  return JSON.stringify(out);
+})()`;
+
+/*
+ * THE FOLD AT THREE WINDOWS (MENUS-PLAN.md 0.2).
+ *
+ * The walk above measures one window, 1600 by 900, and several of the
+ * findings in the menu review existed only at 1280 by 720 or on a phone on
+ * its side: How to fly's Back was 123 px under the window on a laptop, and
+ * the pause menu showed two and a half rows on a phone. So the screens a
+ * pilot passes through on every run are opened at all three, and on
+ * arrival, before anything is walked:
+ *
+ *   primary   the row the screen exists for can be pressed without a
+ *             scroll: the row itself is wholly in sight, or the command
+ *             bar's button that repeats it is.
+ *   way out   so can a way out (not on the title, which is the root): a
+ *             Back or Back to title row in sight, or the bar's Back button.
+ *   hang      how far the list hangs below the window, less the command bar,
+ *             recorded as a budget per window like the walk's below the
+ *             fold, because a new check must not move the product to go
+ *             green. It fails when a screen gets worse.
+ *
+ * The pause menu is shown without a flight under it, as the walk shows it,
+ * and the results from a three lap log, with the feel question already
+ * answered so it cannot open over the next screen.
+ */
+const FOLD_SIZES = [
+  { w: 1600, h: 900, touch: false },
+  { w: 1280, h: 720, touch: false },
+  { w: 844, h: 390, touch: true },
+];
+const FOLD_SCREENS = ['title', 'launch', 'paused', 'results', 'stickhelp', 'howto', 'credits'];
+
+const FOLD = `(() => {
+  const ui = window.__ui;
+  ${PAST_GATE}
+  ui.settings.feelAsked = true;
+  const out = {};
+  const cs = getComputedStyle(ui.root);
+  const shown = (n) => {
+    if (!n || n.hidden) { return false; }
+    const st = getComputedStyle(n);
+    if (st.display === 'none' || st.visibility === 'hidden') { return false; }
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight + 1;
+  };
+  for (const name of ${JSON.stringify(FOLD_SCREENS)}) {
+    try {
+      ui.roomFrom = null;
+      ui.returnTo = 'title';
+      if (name === 'results') {
+        ui.showResults([{ n: 1, ms: 30000 }, { n: 2, ms: 29500 }, { n: 3, ms: 29800 }], 29500, null, null, {});
+      } else {
+        ui.show(name);
+      }
+      ui.syncFrame();
+      ui.syncPrimaryButton();
+      const node = ui.screens[name];
+      const items = ui.items();
+      const rowOf = (i) => (ui.menuRows ? ui.menuRows[i - ui.rowOffset] : null);
+      /* By its flag, not by identity: items() builds new objects on every
+       * call, so the one primaryItem() found is not in this array. */
+      const pi = items.findIndex((it) => it && it.primary && !it.disabled);
+      const primary = pi >= 0 ? items[pi] : null;
+      const primaryRow = pi >= 0 ? rowOf(pi) : null;
+      const primarySeen = !primary
+        || Boolean(primaryRow && ui.rowInSight(primaryRow))
+        || shown(ui.framePrimary);
+      const exits = items
+        .map((it, i) => (it && (it.action === 'back' || it.action === 'title') ? i : -1))
+        .filter((i) => i >= 0);
+      const exitRowSeen = exits.some((i) => { const r = rowOf(i); return Boolean(r && ui.rowInSight(r)); });
+      const barBack = Array.from(ui.frameLegend.querySelectorAll('.legend-act'))
+        .some((b) => /Back/.test(b.textContent) && shown(b));
+      const sc = node.querySelector('.menu-scroll') || node.querySelector('.menu');
+      const bot = window.innerHeight - (parseFloat(getComputedStyle(ui.root).getPropertyValue('--bar-bot')) || 0);
+      const hang = sc ? Math.max(0, Math.round(sc.getBoundingClientRect().bottom - bot)) : 0;
+      out[name] = {
+        primary: primary ? primary.label : null,
+        primarySeen,
+        wayOut: name === 'title' ? true : (exitRowSeen || barBack),
+        hang,
+      };
+    } catch (e) {
+      out[name] = { error: String(e && e.message ? e.message : e) };
+    }
+  }
+  ui.show('title');
+  return JSON.stringify(out);
+})()`;
+
 function parseArgs(argv) {
   const opts = { w: 1600, h: 900, record: false };
   for (const a of argv) {
@@ -1564,17 +1721,8 @@ function parseArgs(argv) {
   return opts;
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  const page = await openPage({
-    root,
-    width: opts.w,
-    height: opts.h,
-    /* Pin the graphics preset for the same reason the window is pinned: a
-     * measurement taken at two different presets reports a regression that
-     * is only a setting. And skip the first run split, because this check
-     * is about the returning pilot's twelve rows. */
-    seed: [`try {
+/* The stored state every page this check opens starts from: see main. */
+const SEED = [`try {
       const k = ${JSON.stringify(SETTINGS_KEY)};
       const s = JSON.parse(localStorage.getItem(k) || '{}');
       s.graphics = 'low';
@@ -1588,7 +1736,30 @@ async function main() {
      * pilot's browser actually holds. */
     `try {
       localStorage.setItem(${JSON.stringify(LIBRARY_KEY)}, ${JSON.stringify(JSON.stringify(LIBRARY))});
-    } catch (e) { /* Storage refused. The room then lists none, and says so. */ }`],
+    } catch (e) { /* Storage refused. The room then lists none, and says so. */ }`];
+
+/* One window of the fold pass, in a page of its own. The 1600 by 900 one
+ * reuses the main page. */
+async function foldAt(page) {
+  return JSON.parse(await page.evaluate(FOLD));
+}
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  /* Pin the graphics preset for the same reason the window is pinned: a
+   * measurement taken at two different presets reports a regression that
+   * is only a setting. And skip the first run split, because this check
+   * is about the returning pilot's twelve rows. The library is a pilot who
+   * has saved two tracks, because the Track room lists the library now and
+   * an empty one would let the whole half of the screen be missing without
+   * a word. Seeded through the same keys the shell and the builder write
+   * rather than through a hook, so what is checked is what a pilot's
+   * browser actually holds. */
+  const page = await openPage({
+    root,
+    width: opts.w,
+    height: opts.h,
+    seed: SEED,
   });
 
   let failures = [];
@@ -1602,9 +1773,34 @@ async function main() {
     const fcTabs = JSON.parse(await page.evaluate(FC_TABS));
     const behaviour = JSON.parse(await page.evaluate(BEHAVIOUR));
     const ids = JSON.parse(await page.evaluate(IDS));
+    const boardDoors = JSON.parse(await page.evaluate(BOARD_DOORS));
     /* Leave the shell where it started, so a failing run does not also
      * leave a half torn down screen behind it. */
     await page.evaluate('window.__ui.show("title")');
+
+    /* The fold at three windows: see FOLD. The main page is the first of
+     * them when it is at 1600 by 900, and the others open pages of their
+     * own from the same stored state. */
+    const fold = {};
+    for (const size of FOLD_SIZES) {
+      const key = `${size.w}x${size.h}${size.touch ? ' touch' : ''}`;
+      if (!size.touch && size.w === opts.w && size.h === opts.h) {
+        fold[key] = await foldAt(page);
+        continue;
+      }
+      const other = await openPage({
+        root, width: size.w, height: size.h, touch: size.touch, seed: SEED,
+      });
+      try {
+        await other.until('window.__shellReady === true', 90000);
+        await other.until('!!window.__ui', 10000);
+        fold[key] = await foldAt(other);
+        const real = other.errors.filter((m) => !/net::ERR_|Failed to load resource/.test(m));
+        failures = failures.concat(real.map((m) => `console at ${key}: ${m}`));
+      } finally {
+        await other.close();
+      }
+    }
 
     const baseline = existsSync(BASELINE)
       ? JSON.parse(await readFile(BASELINE, 'utf8'))
@@ -1618,12 +1814,21 @@ async function main() {
           belowFold: walk[name] ? walk[name].belowFold ?? 0 : 0,
         };
       }
+      const foldRecord = {};
+      for (const [key, res] of Object.entries(fold)) {
+        foldRecord[key] = {};
+        for (const name of FOLD_SCREENS) {
+          foldRecord[key][name] = res[name] && Number.isFinite(res[name].hang) ? res[name].hang : 0;
+        }
+      }
       await writeFile(
         BASELINE,
         `${JSON.stringify({
           note: 'Today\'s overflow, in CSS pixels, at the window below. Not a target: a screen may already overflow. The check fails when a screen gets worse than this.',
           window: { w: opts.w, h: opts.h },
           screens: record,
+          foldNote: 'How far each list hangs under the command bar on arrival, per window, from the fold pass (MENUS-PLAN.md 0.2). A budget like the one above.',
+          fold: foldRecord,
         }, null, 2)}\n`,
       );
       console.log(`recorded baseline at ${opts.w}x${opts.h}: ${BASELINE}`);
@@ -1682,6 +1887,45 @@ async function main() {
         `  seen ${String(w.rowsSeen).padStart(3)}` +
         `  escape -> ${e && e.to ? e.to : '?'}`,
       );
+    }
+
+    /* One door, one name: see BOARD_DOORS. At least the title's own row,
+     * so a walk that found none cannot pass for one that found them right. */
+    if (!boardDoors.length) {
+      failures.push('board doors: no row that opens the board was found, so the name was not checked');
+    }
+    for (const d of boardDoors) {
+      if (!/Tracks and times/.test(d.label) && d.label !== 'Published') {
+        failures.push(`board doors: "${d.label}" on ${d.screen} opens the board under another name than Tracks and times`);
+      }
+    }
+    notes.push(`board doors: ${boardDoors.length} rows open the board, every one as Tracks and times`);
+
+    /* The fold pass's three assertions, per window. */
+    const foldRows = [];
+    for (const [key, res] of Object.entries(fold)) {
+      const base = baseline && baseline.fold ? baseline.fold[key] : null;
+      for (const name of FOLD_SCREENS) {
+        const r = res[name];
+        if (!r || r.error) {
+          failures.push(`fold at ${key}: ${name}: ${r ? r.error : 'no result'}`);
+          continue;
+        }
+        if (!r.primarySeen) {
+          failures.push(`fold at ${key}: ${name}: ${r.primary} is not on screen on arrival, and neither is the bar's button for it`);
+        }
+        if (!r.wayOut) {
+          failures.push(`fold at ${key}: ${name}: no way out is on screen on arrival, neither a Back row nor the bar's Back`);
+        }
+        const b = base ? base[name] : undefined;
+        if (b !== undefined && r.hang > b) {
+          failures.push(`fold at ${key}: ${name}: the list hangs ${r.hang} px under the command bar, was ${b} px`);
+        } else if (b !== undefined && r.hang < b) {
+          notes.push(`fold at ${key}: ${name}: the hang improved from ${b} to ${r.hang} px, re-record the baseline`);
+        }
+        foldRows.push(`  ${key.padEnd(14)} ${name.padEnd(10)} primary ${r.primarySeen ? 'seen' : 'MISSING'}`
+          + `  way out ${r.wayOut ? 'seen' : 'MISSING'}  hang ${String(r.hang).padStart(4)} px`);
+      }
     }
 
     let idRows = 0;
@@ -1758,7 +2002,7 @@ async function main() {
       const want = { toPids: 'pids', toBench: 'fc', backToPids: 'pids', backToQuad: 'quad' };
       const said = {
         toPids: 'Quad\'s Tune row did not open the PIDs room',
-        toBench: 'Every setting did not open the bench',
+        toBench: 'Firmware bench did not open the bench',
         backToPids: 'leaving the bench did not come back to the PIDs room',
         backToQuad: 'leaving the PIDs room did not come back to Quad',
       };
@@ -2014,17 +2258,17 @@ async function main() {
       failures.push(`room return: ${b.roomReturn ? b.roomReturn.error : 'no result'}`);
     } else {
       const rr = b.roomReturn;
-      for (const room of ['freestyle', 'launch', 'pilot']) {
+      for (const [room, door, want] of ROOM_DOORS) {
         const t = rr[room];
         if (!t || t.missing) {
-          failures.push(`room return: ${room} has no door into Quad, so nothing was exercised`);
+          failures.push(`room return: ${room} has no ${door} door, so nothing was exercised`);
           continue;
         }
-        if (t.at !== 'quad') {
-          failures.push(`room return: the Quad door on ${room} opened "${t.at}"`);
+        if (t.at !== want) {
+          failures.push(`room return: the ${door} door on ${room} opened "${t.at}", not "${want}"`);
         }
         if (t.back !== room) {
-          failures.push(`room return: Back from Quad opened from ${room} landed on "${t.back}"`);
+          failures.push(`room return: Back from ${want} opened from ${room} landed on "${t.back}"`);
         }
       }
       const d = rr.deep || [];
@@ -2190,6 +2434,8 @@ async function main() {
 
     console.log(`shell check at ${opts.w}x${opts.h}`);
     console.log(rows.join('\n'));
+    console.log('\n  the fold on arrival, at three windows');
+    console.log(foldRows.join('\n'));
 
     console.log('\n  firmware bench, arrow travel per tab');
     for (const [id, t] of Object.entries(fcTabs)) {

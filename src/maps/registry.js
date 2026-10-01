@@ -75,7 +75,7 @@ export const MAPS = [
     id: 'built',
     name: 'Your map',
     mode: 'freestyle',
-    note: 'A freestyle map you built in the track builder, or Hibari Yard, the starter yard, until you have built one.',
+    note: 'A freestyle map you built in the builder, or Hibari Yard, the starter yard, until you have built one.',
     buildMs: MAP_BUILD_MS.built,
     load: () => import('./built/index.js'),
   },
