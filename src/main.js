@@ -4543,7 +4543,9 @@ export async function boot({ loading, bootStart, mapId }) {
      * longer exists, and would have failed silently: show() on an unknown
      * name displays no node and leaves the previous screen's rows behind.
      */
-    const STAY_SCREENS = ['pilot', 'quad', 'launch', 'rates', 'paused', 'title', 'credits'];
+    /* 'advanced' holds Render scale and the frame cap, both settings
+     * changes that can land here (MENUS-PLAN.md 2.3). */
+    const STAY_SCREENS = ['pilot', 'advanced', 'quad', 'launch', 'rates', 'paused', 'title', 'credits'];
     const stayScreen = STAY_SCREENS.includes(ui.screen) ? ui.screen : null;
     const stayMode = keepPlace ? mode : 'title';
     swapInFlight = true;

@@ -215,7 +215,9 @@ import {
  * appear here renders as a plain action, which is the safe default: it gets no
  * chevron it has not earned.
  */
-const LINK_ACTIONS = new Set(['leaderboard', 'wiki', 'support', 'partners']);
+/* card-board opens the board's page for one track in the board's tab, so it
+ * wears the link arrow the leaderboard row wears (MENUS-PLAN.md 1.38). */
+const LINK_ACTIONS = new Set(['leaderboard', 'wiki', 'support', 'partners', 'card-board']);
 /* mapbuilder is the builder's freestyle door, and it opens the same page
  * trackbuilder does, so it wears the same chevron: the pause menu's Back to
  * the track builder is one or the other depending on what is being flown,
@@ -223,7 +225,8 @@ const LINK_ACTIONS = new Set(['leaderboard', 'wiki', 'support', 'partners']);
 const SCREEN_ACTIONS = new Set([
   'courses', 'race', 'freestyle', 'pilot', 'quad', 'launch', 'standings', 'rates', 'pids', 'fc',
   'howto', 'tricks', 'credits', 'trackbuilder', 'mapbuilder', 'builder', 'remix', 'editown',
-  'choosepad', 'calibrate', 'stickhelp', 'stickhelp-calibrate', 'stickhelp-check',
+  'choosepad', 'calibrate', 'calibrate-check', 'stickhelp', 'stickhelp-calibrate', 'stickhelp-check',
+  'advanced',
 ]);
 
 /* What the breadcrumb says, per screen. A room is a navigation parent, so a
@@ -274,40 +277,64 @@ const COURSE_PLAN_MS = 50;
 
 const ROOM_PARENTS = new Set(['courses', 'freestyle', 'launch', 'quad', 'pilot']);
 
+/* The rooms whose list is their content, sized to the window by
+ * fitMenuHeight. */
+const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'launch', 'stickhelp', 'standings']);
+
+/*
+ * ONE NAME PER ROOM, and it is the name of what the room holds
+ * (MENUS-PLAN.md, the glossary). The title's Track row opens Tracks and its
+ * Map row opens Maps; the room a Tune row opens is Tune, with the PID
+ * sliders inside it; the room that holds the credits roll and every door
+ * out to the people behind this is About. The ids stay as they were, because
+ * checks, CSS and saved cursors name rooms by id and a pilot never sees one.
+ */
 const SCREEN_TITLES = {
   title: 'WebFPV',
-  courses: 'Race',
-  freestyle: 'Freestyle',
+  courses: 'Tracks',
+  freestyle: 'Maps',
   pilot: 'Settings',
   quad: 'Quad',
   launch: 'Before you fly',
   standings: 'Standings',
   rates: 'Rates',
-  pids: 'PIDs',
+  pids: 'Tune',
   fc: 'Firmware bench',
   paused: 'Paused',
   results: 'Run complete',
   howto: 'How to fly',
   tricks: 'Trick list',
-  credits: 'Credits',
+  credits: 'About',
   stickhelp: 'Stick help',
+  advanced: 'Advanced',
+  calibrate: 'Calibrate sticks',
+  padpick: 'Choose joystick',
 };
+/*
+ * The crumb's trail, as the room is reached from its home. crumbTrail()
+ * swaps the first part for the room it was actually opened from when that
+ * is a different one, so the crumb and Escape always name the same place:
+ * Rates opened from Quad reads Quad / Rates, and Escape goes to Quad.
+ */
 const CRUMBS = {
-  courses: ['Race'],
-  freestyle: ['Freestyle'],
+  courses: ['Tracks'],
+  freestyle: ['Maps'],
   pilot: ['Settings'],
   quad: ['Quad'],
   launch: ['Before you fly'],
-  standings: ['Race', 'Standings'],
+  standings: ['Tracks', 'Standings'],
   rates: ['Settings', 'Rates'],
-  pids: ['Quad', 'PIDs'],
+  pids: ['Quad', 'Tune'],
   fc: ['Quad', 'Firmware bench'],
   paused: ['Paused'],
   results: ['Run complete'],
   howto: ['How to fly'],
-  tricks: ['Freestyle', 'Trick list'],
-  credits: ['Credits'],
+  tricks: ['Maps', 'Trick list'],
+  credits: ['About'],
   stickhelp: ['Settings', 'Stick help'],
+  advanced: ['Settings', 'Advanced'],
+  calibrate: ['Settings', 'Calibrate sticks'],
+  padpick: ['Settings', 'Choose joystick'],
   title: ['WebFPV'],
 };
 
@@ -943,6 +970,20 @@ const DEFAULTS = {
    */
   feelAsked: false,
   /*
+   * WHETHER THIS PILOT HAS EVER BEEN IN THE AIR, which is what "first run"
+   * means. It used to be read off whether any settings were saved at all,
+   * and answering the gate saves settings, so a newcomer who reloaded before
+   * flying lost First flight for good (MENUS-PLAN.md 1.43). Set the first
+   * time the flight screen comes up, by any path. A saved blob from before
+   * this key existed has no key at all and still counts as returning.
+   */
+  hasFlown: false,
+  /*
+   * How many race results screens this pilot has seen, for the flight feel
+   * question, which waits for the second (MENUS-PLAN.md 2.8).
+   */
+  resultsSeen: 0,
+  /*
    * Whether the thumb-rates hand-off has happened. A fresh profile on a
    * touch device starts on TOUCH_RATE_DEFAULTS directly; an existing
    * profile still flying the stock defaults is switched ONCE, the first
@@ -1276,7 +1317,19 @@ function markAirHintSeen() {
  */
 function detectFirstRun() {
   try {
-    if (localStorage.getItem(SETTINGS_KEY)) {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      /* Saved settings are a returning pilot unless they say, in so many
+       * words, that this pilot has not flown yet: see hasFlown. */
+      try {
+        const saved = JSON.parse(raw);
+        if (saved && saved.hasFlown === false) {
+          return true;
+        }
+      } catch (e) {
+        /* Not JSON. loadSettings starts again from the defaults; this is
+         * still somebody who has been here. */
+      }
       return false;
     }
     for (let i = 0; i < localStorage.length; i += 1) {
@@ -1360,6 +1413,13 @@ export function loadSettings() {
   }
   if (s.keyRaceMode !== 'acro') {
     s.keyRaceMode = 'angle';
+  }
+  /* A blob saved before hasFlown existed belongs to somebody who has been
+   * here, and detectFirstRun has always called them returning. Without this
+   * the default false would be written back on the next save and a veteran
+   * would be offered First flight on their next visit. */
+  if (Object.keys(stored).length && typeof stored.hasFlown !== 'boolean') {
+    s.hasFlown = true;
   }
   s.stickMode = normaliseStickMode(s.stickMode);
   s.keyThrottle = normaliseKeyThrottle(s.keyThrottle);
@@ -3000,16 +3060,16 @@ function builderReturnItem(s, sharedMap) {
       return null;
     }
     return {
-      label: 'Back to the track builder',
+      label: 'Back to the builder',
       action: kind === 'owned' ? 'editown' : 'trackbuilder',
-      note: `Opens ${listing.name || 'this track'} in the track builder. Fly this track in there brings you straight back to the starting blocks.`,
+      note: `Opens ${listing.name || 'this track'} in the builder. Fly this track in there brings you straight back to the starting blocks.`,
     };
   }
   if (s.map === 'built' && !sharedMap && ownMapId()) {
     return {
-      label: 'Back to the track builder',
+      label: 'Back to the builder',
       action: 'mapbuilder',
-      note: 'Opens your map in the track builder. Fly this map in there brings you straight back to it.',
+      note: 'Opens your map in the builder. Fly this map in there brings you straight back to it.',
     };
   }
   return null;
@@ -3040,7 +3100,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   if (timePosted && shareId) {
     const rank = timePosted.rank != null ? ` Rank ${timePosted.rank}.` : '';
     return {
-      label: 'Time uploaded',
+      label: 'Time posted',
       action: 'posttime',
       disabled: true,
       note: `That lap is on the public board.${rank}`,
@@ -3048,7 +3108,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (!listing || !shareId) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       note: 'Only a track on the board can hold a time. Publish this one first.',
@@ -3056,7 +3116,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (!listing.canPostTime) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       note: 'The layout has changed since it was published. Update the track on the board first.',
@@ -3064,7 +3124,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (ms == null) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       /* A pilot who has just flown twenty clean laps in practice and comes
@@ -3083,10 +3143,10 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
     ? ` It goes up marked Weight ${weight}%, the weight it was flown at.`
     : '';
   return {
-    label: isNew ? `Upload new best, ${formatTime(ms)}` : `Upload ${formatTime(ms)}`,
+    label: isNew ? `Post new best, ${formatTime(ms)}` : `Post ${formatTime(ms)}`,
     action: 'posttime',
     note: (isNew
-      ? 'Faster than the last time you uploaded from this browser. Sends this lap to the public board.'
+      ? 'Faster than the last time you posted from this browser. Sends this lap to the public board.'
       : 'Send this lap to the public board under your name.') + marked,
   };
 }
@@ -3106,15 +3166,15 @@ function publishAction(listing, published) {
       label: 'Publish this track',
       action: 'publishcourse',
       note: listing.remix
-        ? `Your copy${of}${by}. Goes on the board under a new name. Then you can upload a time.`
-        : 'Put this track on the public board. Then you can upload a time.',
+        ? `Your copy${of}${by}. Goes on the board under a new name. Then you can post a time.`
+        : 'Put this track on the public board. Then you can post a time.',
     };
   }
   if (listing && listing.canUpdateListing && listing.layoutDrift) {
     return {
       label: 'Update this track',
       action: 'publishcourse',
-      note: 'The layout changed. Updating the board will clear posted times, then you can upload a time.',
+      note: 'The layout changed. Updating the board will clear posted times, then you can post a time.',
     };
   }
   if (listing && listing.kind === 'owned') {
@@ -3138,7 +3198,7 @@ function publishAction(listing, published) {
     action: 'publishcourse',
     disabled: true,
     note: listing && listing.kind === 'local'
-      ? 'A track needs a flying order before it can be published. Set one in the track builder.'
+      ? 'A track needs a flying order before it can be published. Set one in the builder.'
       : 'Nothing to publish. Build a track, or pick one from the board.',
   };
 }
@@ -3149,7 +3209,7 @@ function remixAction(listing) {
     return {
       label: 'Edit a copy',
       action: 'remix',
-      note: `Open ${listing.name}${by} in the track builder as your own track, under a new name.`,
+      note: `Open ${listing.name}${by} in the builder as your own track, under a new name.`,
     };
   }
   return {
@@ -3167,7 +3227,7 @@ function editOwnAction(listing) {
     return {
       label: 'Edit this track',
       action: 'editown',
-      note: 'Open this track in the track builder. A rename updates the name on the board. A layout change asks before clearing times.',
+      note: 'Open this track in the builder. A rename updates the name on the board. A layout change asks before clearing times.',
     };
   }
   return {
@@ -3293,7 +3353,7 @@ function courseCardRows(subject) {
         : `Fly ${name}, straight from the starting blocks. A double click on its card does the same.`,
     },
     {
-      label: 'Open in the track builder',
+      label: 'Open in the builder',
       action: 'card-builder',
       note: board
         ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
@@ -3307,9 +3367,9 @@ function courseCardRows(subject) {
       note: `Every time posted on ${name}, fastest first, and who flew them. Opens here, not on another site.`,
     });
     rows.push({
-      label: 'Open on the web',
+      label: 'This track on Tracks and times',
       action: 'card-board',
-      note: `The public page for ${name}. A link to send somebody. Opens in a new tab.`,
+      note: `${name} on the public board: every time posted on it, who flew them and their ghosts. A link to send somebody. Opens in a new tab.`,
     });
   }
   rows.push({ label: 'Back to the list', action: 'card-back' });
@@ -3437,7 +3497,7 @@ function craftItem(s, midRun) {
   const other = AIRFRAMES.find((a) => a.id !== s.airframe) || af;
   return choice(
     'Aircraft',
-    `${af.blurb} Each aircraft keeps its own tune, PIDs, pack, weight and camera: changing it brings back that machine's as you left them, or its stock ones the first time, and switches the track builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates go with you unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
+    `${af.blurb} Each aircraft keeps its own tune, PIDs, pack, weight and camera: changing it brings back that machine's as you left them, or its stock ones the first time, and switches the builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates go with you unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
     AIRFRAME_IDS,
     s.airframe,
     (id) => airframeById(id).name,
@@ -3563,7 +3623,12 @@ function graphicsItem(s, scaleNow) {
     note,
     ['auto', ...GRAPHICS_IDS],
     s.graphicsAuto ? 'auto' : id,
-    (v) => (v === 'auto' ? `Auto (${graphicsLabel(id)})` : graphicsLabel(v)),
+    /* "Auto", not "Auto (Medium)": the longer one broke the segmented row's
+     * 24 character budget, so the row turned into a list on Medium and stayed
+     * segmented on Low and High, changing shape with its own value
+     * (MENUS-PLAN.md 1.40). What Auto is drawing at is the note's first
+     * sentence. */
+    (v) => (v === 'auto' ? 'Auto' : graphicsLabel(v)),
     (v) => {
       if (v === 'auto') {
         s.graphicsAuto = true;
@@ -3652,9 +3717,15 @@ function gpuItem(info) {
       info: true,
     };
   }
+  /* The renderer's own name, without the vendor in brackets after it: the
+   * row's value stops at about half the row, so "Software (Google Inc.
+   * (Google))" was cut to "Software (Google Inc. (..." (MENUS-PLAN.md 1.15).
+   * The note says the whole thing, and so does the row's tooltip. */
+  const short = String(info.display || '').split(' (')[0].trim() || info.display;
   return {
     label: 'GPU',
-    value: info.display,
+    value: short,
+    title: info.display,
     note: info.note,
     info: true,
   };
@@ -3981,7 +4052,7 @@ const WAYS = [
  */
 const BUILDER_CARD = {
   id: 'builder',
-  label: 'Map builder',
+  label: 'Builder',
   art: 'assets/gate/builder.jpg',
   blurb: 'Make your own. A race track for the five inch, a room for the whoop, or a freestyle map of bandos, cranes and named gaps, drawn from above and flown from the same page.',
   facts: ['Tracks', 'Rooms', 'Maps'],
@@ -4789,16 +4860,27 @@ export class Ui {
     this.trickPlayer = new TrickFilmPlayer(this.trickCanvas);
     this.trickShown = '';
 
+    /*
+     * ABOUT: the credits roll, and every door to the people behind this.
+     *
+     * The rows come BEFORE the roll. Under it they were 1,540 px below the
+     * window on arrival, Partners and Back both, which is what kept
+     * lint:shell red (MENUS-PLAN.md 0.1); and since 2.1 this room also holds
+     * the front page's old Support and FPV wiki rows, which have to be
+     * findable without reading a page of thanks first. The roll is the
+     * content, the rows are the furniture, and furniture goes by the door.
+     */
     const credits = el('div', 'screen screen-page screen-credits');
-    credits.append(el('h2', null, 'Credits'));
+    credits.append(el('h2', null, 'About'));
+    credits.append(el('p', 'rates-lede', 'Who made this, whose work it stands on, and how to reach them.'));
     this.creditsRoll = el('div', 'credits-roll');
     fillCredits(this.creditsRoll, { assetBase: 'assets/credits' });
     const creditsBlock = wrapMenu();
     this.creditsMenu = creditsBlock.menu;
     this.creditsHelp = creditsBlock.help;
     credits.append(
-      this.creditsRoll,
       creditsBlock.stage,
+      this.creditsRoll,
       hintWithKeys(['Esc'], 'Goes back. Arrow keys still move the menu.'),
     );
     this.screens.credits = credits;
@@ -4896,7 +4978,7 @@ export class Ui {
     /* Freestyle. Same card machinery as Race, different contents, and no
      * publish cluster because nothing here is timed or posted. */
     const freestyle = el('div', 'screen screen-page screen-courses screen-freestyle');
-    freestyle.append(el('h2', null, 'Freestyle'));
+    freestyle.append(el('h2', null, 'Maps'));
     /*
      * The lede used to end "Pick one and fly it", which was the instruction
      * for a screen that offered four worlds, and it said "no board", which
@@ -4954,7 +5036,7 @@ export class Ui {
      */
     const quad = el('div', 'screen screen-page screen-quad');
     quad.append(el('h2', null, 'Quad'));
-    quad.append(el('p', 'rates-lede', 'Everything about the machine. Carried with every time you post.'));
+    quad.append(el('p', 'rates-lede', 'Everything about the machine: the aircraft, its tune, the camera and how it flies.'));
     const quadBlock = wrapMenu();
     this.quadMenu = quadBlock.menu;
     this.quadMenu.classList.add('menu-scroll');
@@ -4977,6 +5059,26 @@ export class Ui {
     this.pilotHelp = pilotBlock.help;
     pilot.append(pilotBlock.stage, hintWithKeys(['Esc'], 'Goes back. Changes are already stored. Arrow keys still move the menu.'));
     this.screens.pilot = pilot;
+
+    /*
+     * ADVANCED, one door down from Settings (MENUS-PLAN.md 2.3).
+     *
+     * Settings had grown back to 33 stops, past the 30 that split it from
+     * Quad on 28 August, and nine of them were the render pipeline's knobs
+     * and the flight log: rows a pilot touches when something is wrong, and
+     * whose own notes say Auto handles them otherwise. A pilot looking for
+     * Volume scrolled past Frame pacing to find it. They live here now,
+     * under the same Settings styling, with Escape back to Settings.
+     */
+    const advanced = el('div', 'screen screen-page screen-pilot screen-advanced');
+    advanced.append(el('h2', null, 'Advanced'));
+    advanced.append(el('p', 'rates-lede', 'For when something is wrong. Auto looks after the picture on most machines.'));
+    const advancedBlock = wrapMenu();
+    this.advancedMenu = advancedBlock.menu;
+    this.advancedMenu.classList.add('menu-scroll');
+    this.advancedHelp = advancedBlock.help;
+    advanced.append(advancedBlock.stage, hintWithKeys(['Esc'], 'Goes back to Settings. Changes are already stored.'));
+    this.screens.advanced = advanced;
 
     /*
      * STANDINGS: the board, in the game.
@@ -5091,7 +5193,7 @@ export class Ui {
      * the running module, so what is on this screen is what is flying.
      */
     const pids = el('div', 'screen screen-page screen-rates screen-pids');
-    pids.append(el('h2', null, 'PIDs'));
+    pids.append(el('h2', null, 'Tune'));
     pids.append(el(
       'p',
       'rates-lede',
@@ -7044,11 +7146,17 @@ export class Ui {
          * a door labelled with the name of a place. Restoring it is this
          * comment turned back into a row.
          */
+        /*
+         * THE QUAD ROW NAMES THE QUAD. It showed the tune, so the pause menu
+         * read "Betaflight default" twice, one row above the other, and a
+         * pilot asked what they were flying got the name of a PID file
+         * (MENUS-PLAN.md 1.3). The tune is one row inside, under its name.
+         */
         {
           label: 'Quad',
-          value: tuneById(s.tune).name,
+          value: airframeById(s.airframe).name,
           action: 'quad',
-          note: 'The machine. Tune, PIDs, camera angle, field of view, flight mode and the firmware bench, which is every Betaflight key the module compiles.',
+          note: 'The machine. The aircraft, its tune and PIDs, camera angle, field of view, flight mode and the firmware bench, which is every Betaflight key the module compiles.',
         },
         {
           /*
@@ -7072,27 +7180,33 @@ export class Ui {
            * The row id is built from `action` rather than the label, so
            * this costs no id and nothing that names rows has to move.
            */
+          /*
+           * NO VALUE. It showed the pilot's name, so a pilot who had not set
+           * one read "Settings: Not set" as settings nobody had made
+           * (MENUS-PLAN.md 1.2). A set name is already the Pilot chip in the
+           * top right; Your name inside still says Not set.
+           */
           label: 'Settings',
-          value: readPilotName() || 'Not set',
           action: 'pilot',
-          note: 'You and your radio. Your name, choosing a joystick, Calibrate sticks, rates, graphics, sound and the flight log.',
+          note: 'You and your radio. Your name, choosing a joystick, Calibrate sticks, rates, graphics and sound.',
         },
         { label: 'How to fly', action: 'howto', note: 'The sticks, live, and what the keys do.' },
         {
-          label: 'FPV wiki',
-          action: 'wiki',
-          note: 'The closed loop, the plant, and every Betaflight 4.5.1 key. Opens the wiki on webfpv.org.',
-        },
-        {
-          label: 'Tracks and Statistics',
+          label: 'Tracks and times',
           action: 'leaderboard',
-          note: 'The public page: every published track with its times, and how the site is doing. Opens in a new tab.',
+          note: 'Every published track and map, the times flown on them and who flew them. Opens in a new tab.',
         },
-        { label: 'Support', action: 'support', note: PATREON_NOTE },
+        /*
+         * ABOUT, where Credits, Support and the FPV wiki were three rows of
+         * the front page answering "who made this" (MENUS-PLAN.md 2.1). The
+         * room behind it is the credits roll with those doors, Partners and
+         * Report a bug on it. The action is still `credits`, so the row id,
+         * the #credits address and the checks that name it do not move.
+         */
         {
-          label: 'Credits',
+          label: 'About',
           action: 'credits',
-          note: 'Who made this, who flew it, whose work it stands on, and the partners who back it.',
+          note: 'Who made this and whose work it stands on, the partners who back it, Patreon, the FPV wiki, and reporting a bug.',
         },
         /*
          * THE WAY BACK TO THE GATE, AND IT IS A ROW NOW.
@@ -7116,7 +7230,7 @@ export class Ui {
          * game, and a pilot looking for the other mode or the other machine
          * is looking for the screen that offers both.
          */
-        { label: this.gateLabel(), action: 'mode-gate', note: 'The three cards: five inch racing, whoop racing or freestyle. Changing your mind about any of it starts here.' },
+        { label: this.gateLabel(), action: 'mode-gate', note: 'The cards: five inch racing, whoop racing, freestyle and the builder. Changing your mind about any of it starts here.' },
       ];
     }
     if (this.screen === 'howto') {
@@ -7175,6 +7289,23 @@ export class Ui {
           label: 'Partners',
           action: 'partners',
           note: `${PARTNERS.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Opens their page on the board in a new tab.`,
+        },
+        { label: 'Support', action: 'support', note: PATREON_NOTE },
+        {
+          label: 'FPV wiki',
+          action: 'wiki',
+          note: 'The closed loop, the plant, and every Betaflight 4.5.1 key. Opens the wiki on webfpv.org.',
+        },
+        /*
+         * A REPORT FROM THE FRONT DOOR, for the one pilot who had none. The
+         * title deliberately carries no bug chip, and a phone has no F8, so
+         * a touch pilot could not report anything without first flying
+         * (MENUS-PLAN.md 1.41). This is that door, one row from the title.
+         */
+        {
+          label: 'Report a bug',
+          action: 'reportbug',
+          note: 'Something wrong, or something to say: the form takes a title and a sentence, and sends the map, graphics and browser with it. F8 opens it from anywhere.',
         },
         { label: 'Back', action: 'back' },
       ];
@@ -7430,11 +7561,12 @@ export class Ui {
          * bench all went out of reach from here. The title and Before you
          * fly both solve this already with a row called Quad valued at the
          * tune's name, and what this row is IS that row. So it is that row.
-         * What you are about to fly is still on it, as the value.
+         * What you are about to fly is still on it, as the value: the
+         * aircraft since 2026-10-01, as on the title (MENUS-PLAN.md 1.3).
          */
         {
           label: 'Quad',
-          value: tuneById(s.tune).name,
+          value: airframeById(s.airframe).name,
           action: 'quad',
           note: `The machine. Its Tune row opens ${SCREEN_TITLES.pids}, where the tune is chosen and Betaflight's own sliders adjust it, and the camera, the flight mode and the firmware bench are there too.`,
         },
@@ -7455,7 +7587,7 @@ export class Ui {
          * a home elsewhere: freestyle IS the other home.
          */
         choice(
-          'Physics model',
+          'Flight model',
           s.flightStyle === 'arcade'
             ? 'Arcade: the ideal quad. No propwash shake, no gyro noise, no build asymmetry. It is a plant flag, so it changes a freestyle flight exactly as much as it changes a race.'
             : 'Expert: the full physics, propwash, gyro noise and build tolerance included. Arcade turns the imperfections off for a friendlier machine. Takes effect on the next flight.',
@@ -7471,9 +7603,9 @@ export class Ui {
          * touched by it and never flown as a map.
          */
         {
-          label: 'Build a freestyle map',
+          label: 'Build a map',
           action: 'mapbuilder',
-          note: 'Opens the track builder on the freestyle canvas. Place buildings, a crane, containers, a skate set and named gaps, then fly it here as Your map.',
+          note: 'Opens the builder on the freestyle canvas. Place buildings, a crane, containers, a skate set and named gaps, then fly it here as Your map.',
         },
         { label: 'Back', action: 'back' },
       ];
@@ -7558,12 +7690,28 @@ export class Ui {
         { label: 'Flight', section: true },
         choice(
           'Flight mode',
-          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. Racing on a keyboard starts in Angle instead, because a key is on or off. Freestyle uses this setting whatever you fly with, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
+          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
           FLIGHT_MODES,
           s.flightMode === 'angle' ? 'angle' : 'acro',
           (id) => (id === 'angle' ? 'Angle' : 'Acro'),
           (id) => { s.flightMode = id; },
         ),
+        /*
+         * THE KEYBOARD'S OWN MODE, AS A ROW. A race on keys flies
+         * keyRaceMode, not the row above (modeKey in src/main.js), and the
+         * only way to change it was M in flight. So on a keyboard the room
+         * showed Acro selected over a quad captioned ANGLE, and both were
+         * true (MENUS-PLAN.md 1.16). Shown while the keyboard is the stick
+         * path, which is when it decides anything.
+         */
+        ...((!this.padInfo || !this.padInfo.count) && !touchWanted() ? [choice(
+          'Keyboard races',
+          'How a race flies on the keyboard. Angle by default: a key is on or off, so letting go levelling the quad is what makes keys flyable. Acro if you have learned to fly keys on rates. M in flight switches it too, and keeps it.',
+          FLIGHT_MODES,
+          s.keyRaceMode === 'acro' ? 'acro' : 'angle',
+          (id) => (id === 'angle' ? 'Angle' : 'Acro'),
+          (id) => { s.keyRaceMode = id; },
+        )] : []),
         toggle(
           'Launch control',
           'Betaflight race start, off by default. When on, press L on the start line, pitch forward, centre the stick, then punch throttle. The quad holds the angle until you go.',
@@ -7734,61 +7882,18 @@ export class Ui {
           (id) => LINK_PRESETS[id].label,
           (id) => { s.link = id; },
         ),
-        /* The other half of the split, signposted. When you cut a list in
-         * two you owe the reader a line saying where the rest went. */
-        {
-          label: 'Tune, PIDs and the firmware',
-          action: 'quad',
-          note: `Those belong to the machine, not to you, so they are one room over under ${SCREEN_TITLES.quad}. Camera angle and flight mode are there too.`,
-        },
         { label: 'Screen', section: true },
         graphicsItem(s, this.autoScaleNow),
-        gpuItem(this.gpuInfo),
-        choice(
-          'Render scale',
-          'Fewer pixels, then stretched to fit. The one lever that always helps a starved GPU, at the price of sharpness. 100 is native for the preset.',
-          RENDER_SCALES,
-          s.renderScale,
-          (n) => (n >= 100 ? 'Native' : `${n}%`),
-          (n) => { s.renderScale = n; },
-        ),
-        choice(
-          'Frame cap',
-          'Caps how often the world is drawn. A steady 60 reads better than a heaving 90, and it spares the battery. Sticks are still read and the physics still steps every frame; only the picture waits.',
-          FPS_CAPS,
-          s.fpsCap,
-          (n) => (n === 0 ? 'Uncapped' : `${n} fps`),
-          (n) => { s.fpsCap = n; },
-        ),
         /*
-         * THE SHORT PATH TO THE GLASS, as a row because it can tear and
-         * because it is a request a platform may refuse. The note says which
-         * happened on this machine, from what the browser actually granted,
-         * and that a change waits for the next load: see lowLatency in
-         * DEFAULTS and buildShell in src/render/shell.js.
+         * THE DOOR TO THE KNOBS. Render scale, the frame cap, low latency,
+         * predicted view, frame pacing, the input to screen meter and the
+         * flight log, one door down: see the Advanced room's comment.
          */
-        toggle(
-          'Low latency view',
-          lowLatencyNote(s.lowLatency, this.gpuInfo),
-          s.lowLatency,
-          (v) => { s.lowLatency = v; },
-        ),
-        toggle(
-          'Predicted view',
-          s.predictView
-            ? 'On: in flight the view is drawn where the quad will be when the frame reaches the screen, from its speed and rotation, a frame ahead of where it was when the frame began. That takes about a frame off the time between your sticks and the picture. Only the picture moves; the flight, the lap and the physics are the same either way.'
-            : 'Off: the view is drawn where the quad was when the frame began, which the screen shows a frame later.',
-          s.predictView,
-          (v) => { s.predictView = v; },
-        ),
-        choice(
-          'Frame pacing',
-          pacingNote(s),
-          PACING_MODES,
-          s.pacing,
-          (id) => ({ auto: 'Timer with Low', timer: 'Timer, always', display: 'Display, always' }[id]),
-          (id) => { s.pacing = id; },
-        ),
+        {
+          label: 'Advanced',
+          action: 'advanced',
+          note: 'Render scale, frame cap, low latency and predicted view, frame pacing, what reaches the screen how fast, and the flight log. For when something is wrong; Auto looks after the picture otherwise.',
+        },
         toggle(
           'Fullscreen in flight',
           s.fullscreenFly
@@ -7797,9 +7902,6 @@ export class Ui {
           s.fullscreenFly,
           (v) => { s.fullscreenFly = v; },
         ),
-        /* What the pieces above add up to on this machine, measured: see
-         * src/render/latency.js. Read only, like the GPU row. */
-        latencyItem(this.latencyProbe ? this.latencyProbe() : null),
         /*
          * THE SWITCH OVER ALL OF IT: the manga look everywhere, the black
          * outline round the world on Medium and High, and the score's
@@ -7854,7 +7956,6 @@ export class Ui {
          * now, the crosshairs, a fixed mark at the centre of the frame.
          * The note says per shape what it is, like Frame pacing's.
          */
-        { label: 'HUD', section: true },
         choice(
           'Crosshairs',
           {
@@ -7901,6 +8002,63 @@ export class Ui {
           s.focusTone,
           (v) => { s.focusTone = v; },
         ),
+        { label: 'Back', action: 'back' },
+      ];
+    }
+
+    /* ADVANCED: the rows Settings sends here. See the room's comment. */
+    if (this.screen === 'advanced') {
+      return [
+        { label: 'Picture and latency', section: true },
+        gpuItem(this.gpuInfo),
+        choice(
+          'Render scale',
+          'Fewer pixels, then stretched to fit. The one lever that always helps a starved GPU, at the price of sharpness. 100 is native for the preset.',
+          RENDER_SCALES,
+          s.renderScale,
+          (n) => (n >= 100 ? 'Native' : `${n}%`),
+          (n) => { s.renderScale = n; },
+        ),
+        choice(
+          'Frame cap',
+          'Caps how often the world is drawn. A steady 60 reads better than a heaving 90, and it spares the battery. Sticks are still read and the physics still steps every frame; only the picture waits.',
+          FPS_CAPS,
+          s.fpsCap,
+          (n) => (n === 0 ? 'Uncapped' : `${n} fps`),
+          (n) => { s.fpsCap = n; },
+        ),
+        /*
+         * THE SHORT PATH TO THE GLASS, as a row because it can tear and
+         * because it is a request a platform may refuse. The note says which
+         * happened on this machine, from what the browser actually granted,
+         * and that a change waits for the next load: see lowLatency in
+         * DEFAULTS and buildShell in src/render/shell.js.
+         */
+        toggle(
+          'Low latency view',
+          lowLatencyNote(s.lowLatency, this.gpuInfo),
+          s.lowLatency,
+          (v) => { s.lowLatency = v; },
+        ),
+        toggle(
+          'Predicted view',
+          s.predictView
+            ? 'On: in flight the view is drawn where the quad will be when the frame reaches the screen, from its speed and rotation, a frame ahead of where it was when the frame began. That takes about a frame off the time between your sticks and the picture. Only the picture moves; the flight, the lap and the physics are the same either way.'
+            : 'Off: the view is drawn where the quad was when the frame began, which the screen shows a frame later.',
+          s.predictView,
+          (v) => { s.predictView = v; },
+        ),
+        choice(
+          'Frame pacing',
+          pacingNote(s),
+          PACING_MODES,
+          s.pacing,
+          (id) => ({ auto: 'Timer with Low', timer: 'Timer, always', display: 'Display, always' }[id]),
+          (id) => { s.pacing = id; },
+        ),
+        /* What the pieces above add up to on this machine, measured: see
+         * src/render/latency.js. Read only, like the GPU row. */
+        latencyItem(this.latencyProbe ? this.latencyProbe() : null),
         { label: 'Diagnostics', section: true },
         toggle(
           'Flight log',
@@ -7960,15 +8118,15 @@ export class Ui {
       const ghosts = times.filter((x) => x.hasGhost && x.id);
       if (ghosts.length) {
         rows.push({
-          label: 'Race the record',
+          label: 'Chase the record',
           action: 'standings-ghost',
           note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you. Arms it for the next run on this track.`,
         });
       }
       rows.push({
-        label: 'Open on the web',
+        label: 'This track on Tracks and times',
         action: 'card-board',
-        note: `The public page for ${t.name}. A link to send somebody. Opens in a new tab.`,
+        note: `${t.name} on the public board, opened on its own page. A link to send somebody. Opens in a new tab.`,
       });
       rows.push({ label: 'Back', action: 'back' });
       return rows;
@@ -7995,12 +8153,15 @@ export class Ui {
             ? `${seat.gates} gates. This is what your time will be measured on.`
             : 'This is what your time will be measured on.',
         },
-        {
-          label: 'Quad',
-          value: tuneById(s.tune).name,
-          action: 'quad',
-          note: `The tune, the PIDs, the camera and the firmware. Opens ${SCREEN_TITLES.quad}. Whatever is loaded there is what this run flies, and it goes to the board with the time.`,
-        },
+        /*
+         * TUNE, NOT QUAD, because the tune is what a run is filed under and
+         * the camera is not (recordKey in src/main.js). The row read "Quad:
+         * Betaflight default" and promised the tune "goes to the board with
+         * the time", which it does not: a posted time carries the name, the
+         * lap, the three lap total, the ghost and the weight, and nothing
+         * else (postTime in src/share/board.js; MENUS-PLAN.md 1.35).
+         */
+        tuneItem(s, false),
         { label: 'What this run counts as', section: true },
         choice(
           'Laps',
@@ -8033,7 +8194,7 @@ export class Ui {
         choice(
           'Radio link',
           s.link === 'perfect'
-            ? 'A perfect link is sharper than any real radio: every frame arrives, exactly on time. Times set on it are marked on the board.'
+            ? 'A perfect link is sharper than any real radio: every frame arrives, exactly on time. Pick a real link to race on what a real radio feels like. The board is not told which link a time was flown on.'
             : `${LINK_PRESETS[s.link].hz} Hz, ${LINK_PRESETS[s.link].delayMs} ms delay, ${LINK_PRESETS[s.link].jitterMs} ms jitter.`,
           Object.keys(LINK_PRESETS),
           s.link,
@@ -8125,30 +8286,28 @@ export class Ui {
         },
         weightItem(s),
         feelItem(),
+        /*
+         * ELSEWHERE IS TWO DOORS AND THE WAY OUT (MENUS-PLAN.md 2.2).
+         *
+         * A pause is for the run: resume it, restart it, fix how it feels,
+         * or leave. Quad went because the two of its doors a pilot pauses
+         * for, Tune and Rates, are already above, and its value was the
+         * same "Betaflight default" as Tune's, one row apart. Graphics is
+         * one door away under Settings. The wiki, Support and Credits went
+         * because a new tab opened mid run is a way to lose the run, and
+         * they are one row from the title in About. At 1600x900 the last
+         * row, the way out, was cut off by the legend; now it is not.
+         */
         { label: 'Elsewhere', section: true },
         {
-          label: 'Quad',
-          value: tuneById(s.tune).name,
-          action: 'quad',
-          note: `PIDs, camera, flight mode and the firmware bench.${MID_RUN_WARNING}`,
-        },
-        {
-          /* Named for what is in it, as on the title, and it reads what the
-           * title's reads: the pilot's name. It used to read the rates, the
-           * same string as the Rates row four rows above it. */
           label: 'Settings',
-          value: readPilotName() || 'Not set',
           action: 'pilot',
           /* Rates are the first thing in this room and they no longer cost
            * the run, so the blanket warning would be wrong more often than
            * right. The rows that still restart a run carry it themselves. */
-          note: 'Your name, your radio, rates, graphics and sound.',
+          note: 'Your name, your radio, graphics and sound.',
         },
-        graphicsItem(s, this.autoScaleNow),
         { label: 'How to fly', action: 'howto' },
-        { label: 'FPV wiki', action: 'wiki', note: 'The plant, the compiled controller, and every catalog key. Opens the wiki on webfpv.org.' },
-        { label: 'Support', action: 'support', note: PATREON_NOTE },
-        { label: 'Credits', action: 'credits', note: 'Who made this, who flew it, and whose work it stands on.' },
         { label: 'Quit to title', action: 'title' },
       ];
     }
@@ -8207,7 +8366,7 @@ export class Ui {
               note: built ? (this.sharedMap ? BOARD_MAP_OFF_BOARD : BUILT_OFF_BOARD) : (nothing
                 ? 'A run with no tricks in it is not a score. Fly one and it appears here.'
                 : (run && run.timed === false
-                  ? 'Free flight has no clock, so there is nothing for a board to compare it against. Switch Run to Scored on the Freestyle screen and fly it again.'
+                  ? 'Free flight has no clock, so there is nothing for a board to compare it against. Set Scoring to Scored run in the Maps room and fly it again.'
                   : (run && run.assisted
                     ? 'This run used the harness hooks, so it is not a flown score and the board will not take it.'
                     /* The weight goes up with the run and the board prints
@@ -8241,9 +8400,9 @@ export class Ui {
             };
           })(),
           {
-            label: 'Open Tracks and Statistics',
+            label: 'Tracks and times',
             action: 'leaderboard',
-            note: 'Every published track, and the times flown on it.',
+            note: 'Every published track and map, and the times flown on them. Opens in a new tab.',
           },
           feelItem(),
           { label: 'Back to title', action: 'title' },
@@ -8604,9 +8763,9 @@ export class Ui {
       }
       rows.push(
         {
-          label: 'Every setting',
+          label: 'Firmware bench',
           action: 'fc',
-          note: 'The full Flight controller screen: filters, features and every firmware key, not just the PIDs. Configurator-shaped. No CLI paste.',
+          note: 'The Firmware bench: filters, features and every firmware key, not just the PIDs. Configurator-shaped. No CLI paste.',
         },
         {
           label: 'Back to the tune\'s own values',
@@ -8698,6 +8857,7 @@ export class Ui {
       courses: this.coursesMenu,
       freestyle: this.freestyleMenu,
       pilot: this.pilotMenu,
+      advanced: this.advancedMenu,
       quad: this.quadMenu,
       launch: this.launchMenu,
       standings: this.standingsMenu,
@@ -8818,9 +8978,11 @@ export class Ui {
         row.append(this.makeStepper(it, i));
       } else if (it.value != null) {
         const val = el('span', 'row-value', it.value);
-        if (it.info) {
-          val.title = it.value;
-        }
+        /* Every plain value can be cut at half the row, a device name, an
+         * adjusted tune or a long track name on a door, so every one carries
+         * its whole text as a tooltip, not only the read only rows
+         * (MENUS-PLAN.md 1.39). An item may name a longer title of its own. */
+        val.title = it.title || it.value;
         row.append(val);
       }
       /* A browser player reaches for the mouse. A menu that only answers
@@ -8867,6 +9029,7 @@ export class Ui {
      * behind the header and the pilot is asked a question they cannot read.
      * Anything shorter than the box gets the top.
      */
+    this.fitMenuHeight();
     host.scrollTop = host.scrollHeight > host.clientHeight ? scroll : 0;
     /* Before syncCursor paints anything: the cursor belongs to a row, not
      * to an index, and this list may have changed length. */
@@ -8882,6 +9045,37 @@ export class Ui {
       const want = this.numberFocusWanted;
       this.numberFocusWanted = null;
       this.focusNumber(want);
+    }
+  }
+
+  /*
+   * A LIST WINDOW USES THE HEIGHT IT HAS (MENUS-PLAN.md 2.3).
+   *
+   * The rooms whose content IS their list capped it with a share of the
+   * viewport, so Settings scrolled 1,691 px of rows through a 464 px window
+   * with 110 px of empty page under it, and on a landscape phone the same
+   * cap left the list running under the command bar. The window now runs
+   * from where the list starts to just above the command bar, measured, so
+   * it is right at every size and whatever the heading above it took. Below
+   * a usable height the room's own CSS cap stands.
+   */
+  fitMenuHeight() {
+    if (typeof window === 'undefined' || !FIT_SCREENS.has(this.screen)) {
+      return;
+    }
+    const screen = this.screens && this.screens[this.screen];
+    const box = screen && screen.querySelector('.menu-scroll');
+    if (!box) {
+      return;
+    }
+    box.style.maxHeight = '';
+    const top = box.getBoundingClientRect().top;
+    const bar = this.frameBot && !this.frameBot.hidden
+      ? this.frameBot.getBoundingClientRect().height
+      : 0;
+    const room = Math.floor(window.innerHeight - bar - top - 16);
+    if (room >= 160) {
+      box.style.maxHeight = `${room}px`;
     }
   }
 
@@ -9055,6 +9249,7 @@ export class Ui {
       courses: this.coursesHelp,
       freestyle: this.freestyleHelp,
       pilot: this.pilotHelp,
+      advanced: this.advancedHelp,
       quad: this.quadHelp,
       launch: this.launchHelp,
       standings: this.standingsHelp,
@@ -9830,6 +10025,8 @@ export class Ui {
     const b = btn('drop-btn', it.value);
     b.setAttribute('aria-haspopup', 'listbox');
     b.setAttribute('aria-label', it.label);
+    /* The whole value, for when the button cuts it (MENUS-PLAN.md 1.39). */
+    b.title = String(it.value == null ? '' : it.value);
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this.dropIndex === i) {
@@ -10692,7 +10889,7 @@ export class Ui {
         const own = ownMapId();
         this.boardMapNote.textContent = list.length
           ? ''
-          : 'No freestyle maps on the board yet. Build one in the track builder and publish it.';
+          : 'No freestyle maps on the board yet. Build one in the builder and publish it.';
         this.relistBoardMaps(pickNewestMaps(list.filter((m) => m.id !== own)));
       })
       .catch(() => {
@@ -11452,6 +11649,15 @@ export class Ui {
 
   show(screen) {
     this.closeDrop();
+    /* In the air by any path, a card's double click and a ?fly=1 link
+     * included, is having flown: see hasFlown. */
+    if (screen === 'flight') {
+      this.firstRun = false;
+      if (!this.settings.hasFlown) {
+        this.settings.hasFlown = true;
+        saveSettings(this.settings);
+      }
+    }
     /*
      * A STICK HELD THROUGH A SCREEN CHANGE IS NOT A GESTURE ON THE SCREEN
      * IT LANDS ON.
@@ -11577,7 +11783,7 @@ export class Ui {
     if (this.screen === 'pids' && screen !== 'pids' && screen !== 'fc') {
       this.pidsFrom = null;
     }
-    if (this.screen === 'fc' && screen !== 'fc') {
+    if (this.screen === 'fc' && screen !== 'fc' && !(screen === 'rates' && this.ratesFrom === 'fc')) {
       this.fcFrom = null;
     }
     if (this.screen === 'credits' && screen !== 'credits') {
@@ -12004,7 +12210,7 @@ export class Ui {
           ['Set the angle', 'Throttle at idle. Pitch forward until the OSD reads around 30 to 40 degrees. Centre the stick. The motors hold it.'],
           ['Go', 'Punch throttle past about 20 percent. The hold dumps, the props bite, and you are flying. L again resets it after a launch.'],
           ['Keyboard', 'Up arrow is pitch forward. W is throttle. Launch control switches you to Acro for the hold, then your own mode comes back after you go.'],
-          ['Radio', 'Same sequence as a real board. L is the mode switch. Fine-tune launch_angle_limit and launch_trigger_throttle_percent on the Flight controller screen.'],
+          ['Radio', 'Same sequence as a real board. L is the mode switch. Fine-tune launch_angle_limit and launch_trigger_throttle_percent on the Firmware bench, under Quad.'],
           ['Turtle', 'If you tip over on the blocks, TURTLE MODE takes over. Pitch or roll to flip. You do not have to time it. Centre the stick, then press L and launch again.'],
         ]
       : [
@@ -12524,7 +12730,7 @@ export class Ui {
       this.resultsNote.textContent = '';
     } else if (this.share && this.share.id) {
       const by = this.share.author ? ` by ${this.share.author}` : '';
-      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} is on the public board. Upload a time under your name to appear on it.`;
+      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} is on the public board. Post a time under your name to appear on it.`;
     } else {
       try {
         const listing = inspectCourse();
@@ -12532,7 +12738,7 @@ export class Ui {
           const of = listing.sourceName ? ` of ${listing.sourceName}` : '';
           this.resultsNote.textContent = `${listing.name} is your copy${of}. Publish it under a new name to put it on the board.`;
         } else if (listing && listing.kind === 'local' && listing.canPublishNew) {
-          this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can upload a time.`;
+          this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can post a time.`;
         } else if (listing && listing.kind === 'owned' && listing.layoutDrift) {
           this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before uploading a time.`;
         }
@@ -13108,11 +13314,19 @@ export class Ui {
       this.letterTimer = 0;
       window.addEventListener('resize', () => {
         clearTimeout(this.letterTimer);
-        this.letterTimer = setTimeout(() => this.letterScreen(this.screen), 150);
+        this.letterTimer = setTimeout(() => {
+          this.letterScreen(this.screen);
+          this.fitMenuHeight();
+        }, 150);
       });
     }
     for (const h of node.querySelectorAll(':scope > h2, h1.wordmark, h2.results-head')) {
       letterHeading(h);
+    }
+    /* A lettered heading can be a different height from its text, so the
+     * list under it is measured again. */
+    if (screen === this.screen) {
+      this.fitMenuHeight();
     }
   }
 
@@ -14299,7 +14513,7 @@ export class Ui {
 
   setGpuInfo(info) {
     this.gpuInfo = info || null;
-    if (this.screen === 'pilot') {
+    if (this.screen === 'pilot' || this.screen === 'advanced') {
       this.renderMenu();
     }
   }
@@ -14596,7 +14810,7 @@ export class Ui {
     this.root.style.setProperty('--bar-bot', '52px');
 
     this.crumb.textContent = '';
-    const trail = CRUMBS[this.screen] || [SCREEN_TITLES[this.screen] || this.screen];
+    const trail = this.crumbTrail();
     trail.forEach((part, i) => {
       if (i) {
         this.crumb.append(el('span', 'crumb-sep', '/'));
@@ -14633,6 +14847,31 @@ export class Ui {
     if (primary) {
       this.framePrimary.textContent = primary.label;
     }
+  }
+
+  /*
+   * THE CRUMB NAMES WHERE ESCAPE GOES. It was fixed text per screen, so Rates
+   * said Settings / Rates when it had been opened from Quad or the pause
+   * menu and Escape went there instead (MENUS-PLAN.md 1.37). The first part
+   * is read off the same pointers back() reads, in the same order; CRUMBS is
+   * the trail when the room was reached from its home.
+   */
+  crumbTrail() {
+    const here = SCREEN_TITLES[this.screen] || this.screen;
+    let from = null;
+    if (this.screen === 'rates' && this.ratesFrom) {
+      from = this.ratesFrom;
+    } else if (this.screen === 'pids' && this.pidsFrom) {
+      from = this.pidsFrom;
+    } else if (this.returnTo === 'paused' && !['paused', 'results', 'title', 'flight'].includes(this.screen)) {
+      from = 'paused';
+    } else if (this.roomFrom && this.roomFrom !== this.screen) {
+      from = this.roomFrom;
+    }
+    if (from && SCREEN_TITLES[from] && from !== 'title') {
+      return [SCREEN_TITLES[from], here];
+    }
+    return CRUMBS[this.screen] || [here];
   }
 
   /* What is loaded, in the top right, so no screen has to be left to find out
@@ -15111,10 +15350,11 @@ export class Ui {
    * offered again on the next load to somebody who has already taken it.
    */
   flown() {
-    if (!this.firstRun) {
+    if (!this.firstRun && this.settings.hasFlown) {
       return;
     }
     this.firstRun = false;
+    this.settings.hasFlown = true;
     saveSettings(this.settings);
     this.renderMenu();
   }
@@ -15632,7 +15872,7 @@ export class Ui {
      */
     if (action === 'howto' || action === 'pilot' || action === 'quad'
       || action === 'courses' || action === 'freestyle' || action === 'credits'
-      || action === 'tricks' || action === 'stickhelp') {
+      || action === 'tricks' || action === 'stickhelp' || action === 'advanced') {
       /*
        * A room opened FROM another room remembers which, so Back is the way
        * you came rather than a jump to the title. Only from a real room,
@@ -15641,7 +15881,13 @@ export class Ui {
       this.roomFrom = ROOM_PARENTS.has(this.screen) && this.screen !== action
         ? this.screen
         : null;
-      this.returnTo = this.screen === 'paused' ? 'paused' : 'title';
+      /* A room opened from a room inside a paused run is still inside that
+       * run. This used to reset to the title, so Paused, Settings, Stick
+       * help, Escape, Escape quit the run instead of going back to it. */
+      this.returnTo = this.screen === 'paused'
+        || (this.screen !== 'title' && this.returnTo === 'paused')
+        ? 'paused'
+        : 'title';
       this.show(action);
       return;
     }
@@ -15727,10 +15973,14 @@ export class Ui {
        * From the flight controller's signpost row, returnTo is left alone:
        * it may be carrying a paused run two screens up, and this row must
        * not be the reason Escape quits it. */
-      if (this.screen === 'pilot' || this.screen === 'quad') {
+      if (this.screen === 'pilot' || this.screen === 'quad' || this.screen === 'fc') {
         /* Both rooms carry a Rates row: Settings has the real one, Quad has a
          * signpost saying rates are not the machine's. Escape goes back to
-         * whichever one was used, or the signpost is a one way door. */
+         * whichever one was used, or the signpost is a one way door. The
+         * bench's "Open the Rates screen" is the same kind of signpost, and
+         * Escape used to land on the title from it (MENUS-PLAN.md 1.37), so
+         * it comes back to the bench, draft and all: fcFrom survives the trip
+         * in show(), as pidsFrom survives a trip to the bench. */
         this.ratesFrom = this.screen;
       } else {
         this.ratesFrom = null;
@@ -15742,9 +15992,11 @@ export class Ui {
       return;
     }
     if (action === 'pids') {
-      /* Same going-back contract as Rates, for the same reason. */
-      if (this.screen === 'quad') {
-        this.pidsFrom = 'quad';
+      /* Same going-back contract as Rates, for the same reason. The launch
+       * card's Tune row comes back to the launch card, which is the moment
+       * a pilot opened it from: Escape used to land them on the title. */
+      if (this.screen === 'quad' || this.screen === 'launch') {
+        this.pidsFrom = this.screen;
       } else {
         this.pidsFrom = null;
         this.returnTo = this.screen === 'paused' ? 'paused' : 'title';

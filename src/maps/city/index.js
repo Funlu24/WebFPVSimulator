@@ -2566,7 +2566,7 @@ export async function buildMap(shell, onProgress, options) {
 
   return {
     id: 'city',
-    name: 'Freestyle city',
+    name: 'The town',
     mode: 'freestyle',
     graphics: q.id,
     scene,
