@@ -95,7 +95,7 @@ import { poleWireAnchors } from '../../props/street.js';
 import { sincos } from '../../props/trig.js';
 import { makeStfMark } from '../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../art/partnermark.js';
-import { PARTNERS } from '../../partners/roster.js';
+import { PARTNERS, MAP_ONLY_PARTNERS } from '../../partners/roster.js';
 import { seatDocument, groundUnder, topUnder, PLATFORM_REACH } from './place.js';
 import { starterMap } from './starter.js';
 import { lookOf, kitLook, paintLights, paintSky, paintPost } from './looks.js';
@@ -882,8 +882,9 @@ function paintStfMark(props, placed, spot, look) {
  */
 function paintPartnerMarks(props, placed, spots, look) {
   const out = [];
+  const allPartners = [...PARTNERS, ...MAP_ONLY_PARTNERS];
   for (const spot of spots) {
-    const partner = PARTNERS.find((p) => p.slug === spot.slug);
+    const partner = allPartners.find((p) => p.slug === spot.slug);
     if (!partner) {
       continue;
     }
@@ -1009,11 +1010,13 @@ export async function buildMap(shell, onProgress, options) {
     console.error('stf: no spot for the mark on this map', e);
   }
   /* And the partners', after it and never on its wall (./egg.js, rule 8),
-   * for the same reason read only and for the same reason forgiving. */
+   * for the same reason read only and for the same reason forgiving. Include
+   * both PARTNERS and MAP_ONLY_PARTNERS for freestyle map placement. */
   let partnerSpots = [];
   try {
+    const allPartners = [...PARTNERS, ...MAP_ONLY_PARTNERS];
     partnerSpots = choosePartnerSpots(placed, doc, chosen.source, stfSpot,
-      PARTNERS.map((p) => ({ slug: p.slug, aspect: signAspect(p) })));
+      allPartners.map((p) => ({ slug: p.slug, aspect: signAspect(p) })));
   } catch (e) {
     console.error('partners: no spots for the marks on this map', e);
   }

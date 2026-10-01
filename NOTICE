@@ -117,6 +117,9 @@ partnership to show.
   * `wcmrc/colour.png` is the club's logo as supplied, a 708 by 252 PNG.
     `wcmrc/mono.png` is made from it by scripts/partners.js, every pixel
     cream and its transparency kept.
+  * `mattsflooring/colour.png` is the Matt's Flooring logo as supplied, a
+    499 by 111 PNG. `mattsflooring/mono.png` is made from it by
+    scripts/partners.js, every pixel cream and its transparency kept.
 
 The copies in the front door's and the board's repositories are these files,
 copied byte for byte, and this entry covers them there too.
