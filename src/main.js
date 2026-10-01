@@ -9288,6 +9288,9 @@ export async function boot({ loading, bootStart, mapId }) {
     if (queuedPick) {
       openPadPick(queuedPick);
     }
+    /* A notice while a menu is up is the menu's, not the banner's: see
+     * setMenuNotice. The banner below only ever says it in flight. */
+    ui.setMenuNotice(notice && nowWall < notice.untilMs && ui.isModal() ? notice.text : '');
     if (ui.screen === 'padpick') {
       const pick = input.padPickView();
       if (pick) {
@@ -9317,7 +9320,7 @@ export async function boot({ loading, bootStart, mapId }) {
       && ui.screen === 'flight'
     ) {
       ui.setBanner(turtleBannerText(), true);
-    } else if (notice && nowWall < notice.untilMs && !(launchNow > 0) && !crashflipOn) {
+    } else if (notice && nowWall < notice.untilMs && !(launchNow > 0) && !crashflipOn && !ui.isModal()) {
       ui.setBanner(notice.text);
     } else if (ui.isModal()) {
       /* A banner is a flight message. Any screen that is up owns the
