@@ -5206,7 +5206,7 @@ export class Ui {
     /* One line (MENUS-PLAN.md 2.5). What is counted, and that trick names
      * start off, is the Scoring row's note, which says it where the switch
      * is; the machine is the Quad row's. */
-    freestyle.append(el('p', 'rates-lede', 'Open ground with no gates: the town, a map of your own, or one from the board.'));
+    freestyle.append(el('p', 'rates-lede', 'Open ground, no gates: the town, your map, or one from the board.'));
     this.freestyleCards = el('div', 'map-cards');
     /*
      * THE BOARD'S MAPS, the Race room's board strip for freestyle: the ten
@@ -5251,7 +5251,7 @@ export class Ui {
      */
     const quad = el('div', 'screen screen-page screen-quad');
     quad.append(el('h2', null, 'Quad'));
-    quad.append(el('p', 'rates-lede', 'Everything about the machine: the aircraft, its tune, the camera and how it flies.'));
+    quad.append(el('p', 'rates-lede', 'The aircraft, its tune, the camera and how it flies.'));
     const quadBlock = wrapMenu();
     this.quadMenu = quadBlock.menu;
     this.quadMenu.classList.add('menu-scroll');
@@ -5287,7 +5287,7 @@ export class Ui {
      */
     const advanced = el('div', 'screen screen-page screen-pilot screen-advanced');
     advanced.append(el('h2', null, 'Advanced'));
-    advanced.append(el('p', 'rates-lede', 'For when something is wrong. Auto looks after the picture on most machines.'));
+    advanced.append(el('p', 'rates-lede', 'For when something is wrong. Auto suits most machines.'));
     const advancedBlock = wrapMenu();
     this.advancedMenu = advancedBlock.menu;
     this.advancedMenu.classList.add('menu-scroll');
@@ -5380,7 +5380,7 @@ export class Ui {
       /* One line (MENUS-PLAN.md 2.5). The five systems are the Rates type
        * row's note, and what a key race does with the curve is the keyboard
        * Stick path row's. */
-      'How far the sticks turn the quad. Yours, not the tune\'s: they stay when you switch tunes.',
+      'How far the sticks turn the quad. They stay when you switch tunes.',
     ));
     this.ratesPanel = mountRatesPanel();
     const ratesBlock = wrapMenu();
@@ -5415,7 +5415,7 @@ export class Ui {
       'rates-lede',
       /* One line (MENUS-PLAN.md 2.5). What each slider does is its row's
        * note, the master multiplier's included. */
-      'How hard the flight controller works: Betaflight\'s own sliders, kept for each tune.',
+      'How hard the flight controller works. Kept for each tune.',
     ));
     this.pidsPanel = mountPidsPanel();
     const pidsBlock = wrapMenu();
@@ -5589,7 +5589,7 @@ export class Ui {
       'stickhelp-lede',
       /* One line (MENUS-PLAN.md 2.5). What a moving bar means is the line
        * under the bars, which says it about the bar that moved. */
-      'Move the stick that is not working to each end. Each bar is one axis your radio sends.',
+      'Move the stick that is not working to each end, and watch its bar.',
     ));
     this.stickAxes = el('div', 'cal-axes stickhelp-axes');
     this.stickAxisCells = [];
@@ -9328,11 +9328,32 @@ export class Ui {
     }
     box.style.maxHeight = '';
     box.style.minHeight = '';
+    /* Only a list that scrolls itself is fitted. Below 1280 px Quad and
+     * Rates let the PAGE scroll instead (overflow visible on the list), and
+     * a height put on a list that does not clip only draws its rows past
+     * its own border. */
+    if (getComputedStyle(box).overflowY === 'visible') {
+      return;
+    }
     const top = box.getBoundingClientRect().top;
     const bar = this.frameBot && !this.frameBot.hidden
       ? this.frameBot.getBoundingClientRect().height
       : 0;
-    const room = Math.floor(window.innerHeight - bar - top - 16);
+    let room = Math.floor(window.innerHeight - bar - top - 16);
+    /*
+     * A HELP LINE UNDER THE LIST GETS ITS ROOM TOO, where the layout has
+     * stacked it there and the window can spare it: Quad at 1280 by 720
+     * fitted its list to the bar and printed the note for the row under the
+     * cursor beneath the bar. Three lines' worth, and only when the list
+     * keeps about four rows, so a phone, which has neither, is unchanged.
+     */
+    const help = screen.querySelector('.menu-help');
+    if (help && getComputedStyle(help).position !== 'absolute') {
+      const below = help.getBoundingClientRect().top >= box.getBoundingClientRect().bottom - 1;
+      if (below && room - 72 >= 180) {
+        room -= 72;
+      }
+    }
     if (room >= 160) {
       /* The phone floor (.menu's min-height of 200 px, which stops a list
        * being squeezed to nothing) is lowered to what fits: the list is
