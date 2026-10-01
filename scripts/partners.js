@@ -87,7 +87,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
 import {
-  LINK_KINDS, LOGO_DIR, PARTNERS, ROLE_TITLES,
+  LINK_KINDS, LOGO_DIR, PARTNERS, MAP_ONLY_PARTNERS, ROLE_TITLES,
 } from '../src/partners/roster.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -337,11 +337,40 @@ function checkRoster() {
     }
     check(`${who}: the paint's field is a colour`, /^#[0-9a-f]{6}$/.test(p.mark.field));
   }
+  
+  console.log('\nthe maps-only partners');
+  const mapOnlySlugs = MAP_ONLY_PARTNERS.map((p) => p.slug);
+  check(`${MAP_ONLY_PARTNERS.length} maps-only partners, slugs unique`, new Set(mapOnlySlugs).size === mapOnlySlugs.length);
+  const allSlugs = [...slugs, ...mapOnlySlugs];
+  check('no slug collision between PARTNERS and MAP_ONLY_PARTNERS', new Set(allSlugs).size === allSlugs.length);
+  for (const p of MAP_ONLY_PARTNERS) {
+    const who = p.slug;
+    check(`${who}: slug is a board source`, SLUG_RE.test(p.slug) && !RESERVED.has(p.slug));
+    check(`${who}: has no role (maps-only partners are not categorized)`, !p.role);
+    check(`${who}: name, short name and draft present`,
+      [p.name, p.short, p.about].every((s) => typeof s === 'string' && s.trim().length > 0));
+    const words = [p.name, p.short, p.about, ...p.links.map((l) => l.label)];
+    check(`${who}: no en or em dash in anything printed`, !words.some((s) => DASH.test(s)));
+    check(`${who}: the first link is the site`, p.links.length > 0 && p.links[0].kind === 'site');
+    for (const l of p.links) {
+      let url = null;
+      try {
+        url = new URL(l.href);
+      } catch (e) {
+        url = null;
+      }
+      check(`${who}: ${l.kind} link is https and a known kind`,
+        Boolean(url) && url.protocol === 'https:' && LINK_KINDS.includes(l.kind) && Boolean(l.label));
+      check(`${who}: ${l.kind} link is not wcmrc.com.au`, !url || !/(^|\.)wcmrc\.com\.au$/.test(url.hostname));
+    }
+    check(`${who}: the paint's field is a colour`, /^#[0-9a-f]{6}$/.test(p.mark.field));
+  }
 }
 
 function checkFiles(made) {
   console.log('\nthe files');
-  for (const p of PARTNERS) {
+  const allPartners = [...PARTNERS, ...MAP_ONLY_PARTNERS];
+  for (const p of allPartners) {
     for (const which of ['colour', 'mono']) {
       const rel = p.logo[which];
       let aspect = NaN;
@@ -400,6 +429,7 @@ function checkFiles(made) {
 const made = [
   { kind: 'svg', rel: 'mantisfpv/mono.svg', body: mantisMono(readFileSync(at('mantisfpv/colour.svg'), 'utf8')) },
   { kind: 'png', rel: 'wcmrc/mono.png', img: creamPng(readPng(readFileSync(at('wcmrc/colour.png')), 'wcmrc/colour.png')) },
+  { kind: 'png', rel: 'mattsflooring/mono.png', img: creamPng(readPng(readFileSync(at('mattsflooring/colour.png')), 'mattsflooring/colour.png')) },
   {
     kind: 'svg',
     rel: '../credits/betaflight-mono.svg',
