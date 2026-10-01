@@ -96,7 +96,7 @@ Environment variables:
 | `DATABASE_URL` | the database's **Internal** connection string |
 | `SIM_ORIGIN` | the simulator's URL, no trailing slash |
 | `BOARD_TRUST_PROXY` | `1` |
-| `BUGS_TOKEN` | optional, any random string |
+| `BUGS_TOKEN` | optional, any random string: a second way into the bug inbox for an agent with no sign in (see below) |
 
 Internal, not external, and this one is not a preference. Render's external
 connection string requires SSL, and `store.js` builds its pool with a
@@ -173,10 +173,14 @@ the blueprint is what makes that come out as `https` rather than `http`. Set
 it when the forwarded headers cannot tell the truth, which is what happens
 behind a mount prefix: see section 5.
 
-`BUGS_TOKEN` is optional. Set it to any random string and listing and
-updating bug tickets will need `Authorization: Bearer <token>`. Testers can
-still file tickets without it either way. Leave it unset while you are
-still handing the link around.
+`BUGS_TOKEN` is optional, and what it does changed on 2026-10-01. Reading
+and updating bug tickets always needs a board admin: signed in on the board,
+or `BOARD_ADMIN_TOKEN` as `Authorization: Bearer <token>`. Set `BUGS_TOKEN`
+to any random string and it is a second way in, as that same header or as
+`?token=`, for an agent with no sign in. Left unset there is no second way in,
+and the inbox fails closed: before this, an unset token meant no check at all,
+and anybody could read tickets and mark them fixed. Testers can file tickets
+without any of it, because filing never asks for a token.
 
 ## 4. Check it
 

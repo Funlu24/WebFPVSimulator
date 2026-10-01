@@ -351,7 +351,9 @@ Each is the plan's answer, in force until the owner says otherwise.
 7. **Keys.** K wall, U hurdle, M ruler, N fly order. The plan said O, shadowing
    Ground logo as it does on the whoop canvas. It does not: the whoop palette has
    no ground logo and a field's has, and O has been its key for months, so N it
-   is. Reverse: change `key` in `FIVE_INCH_TOOLS` (elements.js).
+   is. Reverse: change `key` in `FIVE_INCH_TOOLS` (elements.js). Main's menus plan
+   (1.20) reached the same letter for the whoop's Fly order on the same day,
+   because Ground logo is on all three palettes, so it is N on both race canvases.
 8. **No logos** on the Mission preset.
 9. **Gate dimensions on the Mission preset** are chosen so the world builds a bay
    2 m between uprights, which is what the diagram draws.
@@ -381,6 +383,22 @@ Each is the plan's answer, in force until the owner says otherwise.
     RaceGOW script. It lists under the five inch canvas in Load with its
     designer's credit, and no sponsor mark. Reverse: delete the `shipTracks` line
     in app.js.
+16. **The five inch canvas's 3D is where it is built, so it is not a preview.**
+    MENUS-PLAN.md 4.2 was written on 2026-10-01 for a five inch canvas that was
+    built in 2D, and called its 3D a preview ("Build in 2D", a tool picked there
+    opens 2D). This plan, from the owner's own report that top down building is
+    hard, builds the five inch in the room as the whoop is, so after the merge the
+    two race canvases share the views (3D first, 2D second, Top beside Fit, V
+    between 3D and 2D) and a map keeps the preview. Everything the menus plan
+    gated on the whoop for the sake of "3D is the tool" reads `buildsIn3D()` now.
+    Reverse: make `buildsIn3D` false for the full class, which brings back the
+    plan as the five inch's canvas and the preview note with it.
+17. **The qualifier stays in Load after it is on the board.** It was shipped for
+    the acceptance run and as a starter that works offline, and it was then put on
+    the board (2026-10-01). MENUS-PLAN.md 4.2b would rather ship no second copy of
+    a board track, and the whoop's Load ships RaceGOW5 beside the board's copies
+    already, so it stays; the empty canvas offers the board's tracks first. Reverse:
+    the same `shipTracks` line.
 
 ## 9. Not in this plan
 

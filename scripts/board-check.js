@@ -289,24 +289,31 @@ async function main() {
         failures.push(`the Race room still has a strip labelled "${label}"`);
       }
     }
-    if (!room.rows.includes('Standings')) {
-      failures.push('the Race room has no Standings row');
-    }
     if (room.rows.includes('Open the board')) {
       failures.push('the Race room still offers "Open the board", which means nothing to a new player');
     }
 
-    /* Standings, in game, for the seated track. */
+    /*
+     * Standings, in game, for the seated track, FROM ITS SHEET. The seat's
+     * rows were the room's own rows under all the cards until MENUS-PLAN.md
+     * 2.4 folded them into the seated card's sheet, so the row is reached
+     * the way a pilot reaches it now: choose the seated card, then
+     * Standings.
+     */
     const opened = JSON.parse(await page.evaluate(`(() => {
       const ui = window.__ui;
+      const seat = ui.items().findIndex((it) => it.course && it.course.kind === 'current');
+      if (seat < 0) { return JSON.stringify({ missing: true, why: 'no seated card' }); }
+      ui.setCursor(seat);
+      ui.select();
       const i = ui.items().findIndex((it) => it.id === 'courses:a-standings');
-      if (i < 0) { return JSON.stringify({ missing: true }); }
+      if (i < 0) { return JSON.stringify({ missing: true, why: 'no Standings in the sheet of the seated card' }); }
       ui.setCursor(i);
       ui.select();
       return JSON.stringify({ screen: ui.screen });
     })()`));
     if (opened.missing) {
-      failures.push('the Standings row was not found, so nothing was exercised');
+      failures.push(`the Standings row was not found (${opened.why}), so nothing was exercised`);
     } else if (opened.screen !== 'standings') {
       failures.push(`Standings opened "${opened.screen}" rather than a standings screen`);
     } else {
@@ -365,7 +372,9 @@ async function main() {
       const rival = JSON.parse(await page.evaluate(`(() => {
         const ui = window.__ui;
         return JSON.stringify({
-          hasGhostRow: ui.items().some((i) => i.label === 'Race the record'),
+          /* Chase the record since MENUS-PLAN.md 1.6: the board's verb
+           * for the same row. It said Race the record. */
+          hasGhostRow: ui.items().some((i) => i.label === 'Chase the record'),
           tagged: document.querySelectorAll('.standings-ghost').length,
         });
       })()`));
@@ -426,11 +435,13 @@ async function main() {
         const box = row ? row.getBoundingClientRect() : null;
         const top = ui.frameTop.getBoundingClientRect();
         const bot = ui.frameBot.getBoundingClientRect();
+        ui.syncPrimaryButton();
         const seen = {
           row: box ? { top: Math.round(box.top), bottom: Math.round(box.bottom) } : null,
           clear: Boolean(box) && box.top >= top.bottom && box.bottom <= bot.top,
           cursor: (ui.items()[ui.cursor] || {}).label || null,
           bar: ui.framePrimary.hidden ? null : ui.framePrimary.textContent,
+          inSight: Boolean(row) && ui.rowInSight(row),
         };
         ui.back();
         seen.after = ui.screen;
@@ -443,8 +454,16 @@ async function main() {
       if (keysSeen.cursor !== 'Fly it') {
         failures.push(`Enter on a track card put the cursor on "${keysSeen.cursor}" rather than Fly it`);
       }
-      if (keysSeen.bar !== 'Fly it') {
-        failures.push(`with ${keysChoose.name} chosen the command bar offers ${keysSeen.bar === null ? 'nothing' : `"${keysSeen.bar}"`} rather than Fly it`);
+      /*
+       * FLY IT WITHOUT A SCROLL: the sheet's own row in sight, or the bar's
+       * button while it is not. The bar used to carry Fly it whenever a card
+       * was chosen, because the list was under every card; the sheet opens
+       * under the chosen card's line, so the bar repeats it only when the
+       * sheet is below the window (MENUS-PLAN.md 2.4 and 2.6). The owner's
+       * ask of 2026-09-27 is the property: no scroll to fly.
+       */
+      if (!keysSeen.inSight && keysSeen.bar !== 'Fly it') {
+        failures.push(`with ${keysChoose.name} chosen neither its Fly it row nor the command bar offers Fly it without a scroll (bar ${keysSeen.bar === null ? 'empty' : `"${keysSeen.bar}"`})`);
       }
       if (keysSeen.after !== 'courses' || keysSeen.subject) {
         failures.push(`Escape from a chosen track card left "${keysSeen.after}" with ${keysSeen.subject} chosen, not the track list`);
@@ -542,12 +561,15 @@ async function main() {
       const ui = window.__ui;
       const under = document.elementFromPoint(${aim.x}, ${aim.y});
       const card = under && under.closest('.course-card');
+      ui.syncPrimaryButton();
+      const fly = (ui.menuRows || []).find((r) => r.classList.contains('row') && r.textContent === 'Fly it');
       return JSON.stringify({
         scrollTop: Math.round(ui.screens.courses.scrollTop),
         under: card ? card.querySelector('.map-card-name').textContent : null,
         subject: ui.cardSubject,
         screen: ui.screen,
         bar: ui.framePrimary.hidden ? null : ui.framePrimary.textContent,
+        inSight: Boolean(fly) && ui.rowInSight(fly),
       });
     })()`));
     if (chose.screen !== 'courses' || chose.subject !== aim.key) {
@@ -559,8 +581,10 @@ async function main() {
     if (chose.under !== aim.name) {
       failures.push(`after one click on ${aim.name} the pointer is on ${chose.under || 'no card'}, so a second press lands elsewhere`);
     }
-    if (chose.bar !== 'Fly it') {
-      failures.push(`one click on ${aim.name} put ${chose.bar === null ? 'nothing' : `"${chose.bar}"`} on the command bar rather than Fly it`);
+    /* Fly it without a scroll, as above: at the foot of the page the sheet
+     * opens below the window, so this is the bar's case. */
+    if (!chose.inSight && chose.bar !== 'Fly it') {
+      failures.push(`one click on ${aim.name} left Fly it out of reach without a scroll: not in sight, and the bar ${chose.bar === null ? 'empty' : `says "${chose.bar}"`}`);
     }
     /* The second press of the double click, as the browser counts it. */
     await press(aim, 2);

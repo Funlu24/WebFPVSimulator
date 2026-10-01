@@ -73,17 +73,23 @@ import {
 import {
   animationFilename, deleteTrack, downloadBlob, downloadTrack, keepDisplaced, listTracks, pictureFilename,
   loadTrack, makeAutosaver, readAutosave, readFileText, saveTrack, shipMaps, shipTracks, trackExists, writeAutosave,
+  savedTrack, restoreTrack, librarySize,
 } from './storage.js';
 /* The five inch tracks that ship with the builder (scripts/mission-preset.js writes them): handed to storage.js
  * from here for the same reason the maps are. */
 import { FIVE_INCH_PRESETS } from './presets5.js';
+/* What each canvas calls things, and the address back to the simulator. */
+import {
+  CANVAS_WORDS, CANVAS_ORDER, canvasOf, wordsFor, simulatorLink, isPlaceholderName, changedAgo, exactDate,
+  rowsForCanvas, errorSentence,
+} from './words.js';
 /* The yard Your map flies while the map seat is empty, and the showpiece
  * built on it, the yard with a drift course and a tandem, listed in Load
  * as the maps' shipped rows. Plain documents with no imports but each
  * other, so the builder takes nothing of the simulator's world with it.
  * Handed to storage.js from here, because storage.js is on the
  * simulator's boot graph and these are not (see shipMaps). */
-import { starterMap } from '../maps/built/starter.js';
+import { starterMap, STARTER_ID } from '../maps/built/starter.js';
 import { showpieceMap } from '../maps/built/showpiece.js';
 import { normaliseLogo, drawBannerPreview, drawGroundPreview } from './logo.js';
 import {
@@ -94,9 +100,10 @@ import { Panels } from './ui.js';
 import { RAD, wrapAngle } from './geometry.js';
 import { isRoomType } from '../props/room.js';
 import {
-  boardOrigin, boardPageUrl, fetchMapDocument, publishMap, publishTrack, setBoardOrigin,
+  boardOrigin, boardPageUrl, fetchMapDocument, publishMap, publishTrack,
   partsTheBoardDoesNotKnow, unknownPartsSentence,
-  adoptShareFromLocation, TRACK_TAGS, TRACK_TAGS_MAX, tagLabel, usableTags,
+  adoptShareFromLocation, TRACK_TAGS, TRACK_TAGS_MAX, tagLabel, usableTags, tagsForClass,
+  fetchTrackList, fetchTrackDocument,
 } from '../share/board.js';
 import { sendCardAnimation } from '../share/cardgif.js';
 import { sendShareCard } from '../share/card.js';
@@ -190,9 +197,9 @@ export function newTrackClass() {
  */
 export const CANVAS_KEY = 'webfpv.trackbuilder.canvas.v1';
 
-export function canvasOf(doc) {
-  return docModeOf(doc) === 'freestyle' ? 'freestyle' : trackClassOf(doc);
-}
+/* Which canvas a document is on. It lives in ./words.js beside what each
+ * canvas is called; exported from here as well, where it always was. */
+export { canvasOf };
 
 function readCanvas() {
   try {
@@ -234,8 +241,60 @@ function rememberSquare(on) {
   }
 }
 
-/* What each canvas is called where the builder names one to the author. */
+/*
+ * A PHONE, for the builder: under 500 px in either direction, where the
+ * palette and the side column are drawers (MENUS-PLAN.md 4.4). The same query
+ * as the stylesheet's phone block, so the two cannot disagree.
+ */
+export const PHONE_QUERY = '(max-width: 499.98px), (max-height: 499.98px)';
+
+function isPhone() {
+  try {
+    return window.matchMedia(PHONE_QUERY).matches;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* What each canvas is called where the builder names one to the author in
+ * the middle of a sentence. */
 const CANVAS_NAMES = { full: 'five inch', micro: 'whoop', freestyle: 'freestyle' };
+
+/*
+ * THE STORAGE NOTICE IS READ ONCE. A first visit gets the full sentence as a
+ * strip under the bar, because where the work lives is the one thing a new
+ * author has to know before they build anything; after the first Save it is a
+ * short line beside Save with the sentence in its title, because a sentence on
+ * the screen for every session after the first is chrome, not information
+ * (MENUS-PLAN.md 1.25). A browser that already has a saved document has read
+ * it, whoever saved it.
+ */
+const SAVED_ONCE_KEY = 'webfpv.trackbuilder.savedonce.v1';
+
+function savedOnce() {
+  try {
+    if (localStorage.getItem(SAVED_ONCE_KEY) === '1') {
+      return true;
+    }
+  } catch (e) {
+    /* Private mode: the library below answers instead. */
+  }
+  return librarySize() > 0;
+}
+
+function markSavedOnce() {
+  try {
+    localStorage.setItem(SAVED_ONCE_KEY, '1');
+  } catch (e) {
+    /* Private mode. The notice stays a strip, which is the safe way round. */
+  }
+}
+
+/* The notice's sentence, after its "This browser only.", in the canvas's own
+ * noun: a map is not a track, and the strip said tracks on all three. */
+function keepSentence(noun) {
+  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)}s you build stay here. Clearing the browser, or opening another device, starts you from nothing. Publish a ${noun} to put it on the board.`;
+}
 
 /*
  * THE CHOOSER'S THREE CARDS, which are the simulator's gate cards with the
@@ -394,6 +453,31 @@ function dropUrlMode() {
   }
 }
 
+/*
+ * ?track= AND ?share= COME OUT OF THE ADDRESS ONCE READ, as ?mode= and
+ * ?mapshare= already did (MENUS-PLAN.md 4.5). Left in, a reload was the link
+ * opening again over whatever had been done since: measured in headless
+ * Chromium on 831b724, a ?track= link edited and reloaded came back as the
+ * link's version with the edits moved into Load under the same name, and a
+ * ?share= copy edited and reloaded asked "Open a copy of ...?" all over again.
+ * Every other parameter stays, ?board= and ?class= included.
+ */
+export function dropUrlParams(...names) {
+  try {
+    const url = new URL(window.location.href);
+    const had = names.filter((n) => url.searchParams.has(n));
+    if (!had.length) {
+      return;
+    }
+    for (const n of had) {
+      url.searchParams.delete(n);
+    }
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch (e) {
+    /* A sandboxed frame. The parameter stays, and a reload reads it again. */
+  }
+}
+
 function newMap() {
   return createTrack(undefined, 'full', 'freestyle');
 }
@@ -527,6 +611,18 @@ export class App {
     this.bindKeys();
     this.bindResize();
     this.bindModalBackdrop();
+    /* The side drawer's own close button: see toggleDrawer. */
+    document.getElementById('tb-side-x')?.addEventListener('click', () => this.toggleDrawer(false));
+    /* On a phone an open drawer lays a scrim over the drawing (the stage's
+     * ::after in the stylesheet), and a tap on it puts the drawers away rather
+     * than placing or selecting through it. */
+    nodes.canvas3d.parentElement?.addEventListener('pointerdown', (e) => {
+      if (e.target === e.currentTarget && isPhone() && (this.drawerOpen || document.body.classList.contains('tb-tools'))) {
+        e.preventDefault();
+        this.closeTools();
+        this.toggleDrawer(false);
+      }
+    });
 
     this.view2d.resize();
     this.view2d.frameTrack();
@@ -586,13 +682,23 @@ export class App {
       const intent = takeBuilderIntent();
       let share = readShareImport();
       const params = new URLSearchParams(window.location.search);
+      /* The simulator's Build a track: a blank canvas, unless a board link
+       * came with it, which names a track and wins. See startBlank. */
+      if (intent && intent.kind === 'new' && !params.get('share')) {
+        this.startBlank();
+        return;
+      }
       if (params.get('share')) {
         try {
           share = await adoptShareFromLocation();
         } catch (e) {
-          this.toast(`Could not open that published track. ${e.message || e}`);
+          /* Left in the address, so a reload asks the board again: a board
+           * that was asleep is the usual reason, and it wakes. */
+          this.toast(['Could not open that published track.', errorSentence(e), 'Reload to try again.'].filter(Boolean).join(' '));
           return;
         }
+        /* Read: a reload from here on is the author reloading their copy. */
+        dropUrlParams('share');
       }
       if (!share || !share.document) {
         share = readShareImport() || share;
@@ -765,6 +871,26 @@ export class App {
       this.view3d.resize();
       this.requestDraw();
       this.panels.renderResults();
+      /* A phone turned round can cross the phone line: the notice and the
+       * Patreon link follow it (placeKeep), and so do the lines that say
+       * where the tools are. The palette is a drawer only on a phone. */
+      this.placeKeep();
+      const phone = isPhone();
+      if (phone !== this.wasPhone) {
+        this.wasPhone = phone;
+        if (!phone) {
+          /* Off a phone the palette is a column again, and only a room's side
+           * column is a drawer (the whoop's, and the five inch's): one left
+           * open on a map would be invisible and still take Escape's first
+           * press. */
+          this.closeTools();
+          if (!this.buildsIn3D()) {
+            this.toggleDrawer(false);
+          }
+        }
+        this.panels.renderEmpty();
+        this.panels.renderCoach();
+      }
       this.fitTopBar();
     };
     window.addEventListener('resize', onResize);
@@ -1321,6 +1447,53 @@ export class App {
 
   /* ---------------- placement ---------------- */
 
+  /*
+   * A TOOL PICKED, by its button on the palette or by its key.
+   *
+   * On the five inch and map canvases the 3D view is a preview, and a tool
+   * armed there placed nothing however often the field was clicked
+   * (MENUS-PLAN.md 4.2). The palette says "Build in 2D" while the preview is
+   * up, and picking a tool there takes the author to 2D with the tool in hand,
+   * because the tool is what they asked for and 2D is where it works. On the
+   * whoop canvas the room is where things are built, and a tool is armed as
+   * it always was.
+   */
+  pickTool(typeId) {
+    /* A phone's palette is a drawer over the drawing, and the next thing to do
+     * with a tool is tap the drawing, so picking one puts the drawer away. */
+    const phone = isPhone();
+    if (phone) {
+      this.closeTools();
+    }
+    if (this.previewing()) {
+      this.viewChosen = true;
+      this.setMode('2d');
+      if (this.armed !== typeId) {
+        this.arm(typeId);
+      }
+    } else {
+      this.arm(typeId);
+    }
+    /* And says, once, what a tap does now and how the tool goes back, since
+     * the palette that would show it lit has just closed. The room's coach
+     * line says it on a room canvas, and the road and the car say their own. */
+    if (phone && this.armed === typeId && !this.buildsIn3D() && typeId !== 'road' && typeId !== 'vehicle') {
+      this.sayOnce('phone tool', `Tap the ${wordsFor(this.doc).place} to place it. It stays in hand for the next one, and Tools on the bar puts it away.`);
+    }
+  }
+
+  /* Whether this is a phone, where the palette is behind Tools: the panels
+   * say so in their words. */
+  onPhone() {
+    return isPhone();
+  }
+
+  /* Whether the view up is the 3D preview, where nothing is placed: a map's. A room, the whoop's or the five
+   * inch's, is where it is built. */
+  previewing() {
+    return this.mode === '3d' && !this.buildsIn3D();
+  }
+
   arm(typeId) {
     this.armed = this.armed === typeId ? null : typeId;
     /* A road half laid is put away with the tool that was laying it. */
@@ -1335,7 +1508,7 @@ export class App {
     this.clearGhost();
     this.requestDraw();
     if (this.armed === 'ruler' && this.mode === '2d') {
-      this.sayOnce('ruler in 2d', 'The ruler measures in the room and in the plan camera. Press V, or Room or Plan on the bar.');
+      this.sayOnce('ruler in 2d', 'The ruler measures in 3D, at an angle or from the top. Press V, or 3D on the bar.');
     }
     if (this.armed === 'road') {
       this.sayOnce('arm road', 'Click to lay the road’s nodes: it bends through them the way a car can drive. Click the first node to close a loop, press Enter or double click to finish it open, Escape to stop.');
@@ -1369,9 +1542,15 @@ export class App {
   armGroundLogo(logoId) {
     this.armed = 'groundLogo';
     this.armedLogoId = typeof logoId === 'string' ? logoId : '';
+    /* Painted in 2D on a plot, where a click places: the 3D view there is a
+     * preview. A room is built in 3D. */
+    if (this.mode === '3d' && !this.buildsIn3D()) {
+      this.viewChosen = true;
+      this.setMode('2d');
+    }
     this.panels.renderPalette();
     this.requestDraw();
-    this.toast('Click the field where the paint goes. Its size is in the inspector.');
+    this.toast(`Click the ${wordsFor(this.doc).place} where the paint goes. Its size is in the inspector.`);
   }
 
   disarm() {
@@ -2073,12 +2252,137 @@ export class App {
 
   /*
    * THE DRAWER: the inspector, the flying order and the results, which a whoop
-   * canvas keeps out of the drawing's way and opens when asked (the lap bar's
-   * button, the card's More). CSS does the sliding; this is the state.
+   * canvas, and every canvas on a phone, keeps out of the drawing's way and
+   * opens when asked (the lap bar's Flying order, the card's More, the bar's
+   * Details on a phone). CSS does the sliding; this is the state.
+   *
+   * IT CLOSES THE WAYS EVERYTHING ELSE DOES (MENUS-PLAN.md 1.18). It could not
+   * be closed once open: it covered its own only toggle, it had no close
+   * button, and Escape went past it to the selection. Now it has its own close
+   * button, Escape closes it before anything else that is not a dialog, the
+   * room's overlays move out of its way while it is open so the toggle is
+   * never under it, and it sits under the dialogs rather than over them.
+   *
+   * `from` is the control that opened it, which gets the keyboard back when it
+   * closes; a keyboard that opened it is put on its close button.
    */
-  toggleDrawer(open = null) {
-    this.drawerOpen = open == null ? !this.drawerOpen : open;
+  toggleDrawer(open = null, { from = null, keys = false } = {}) {
+    const next = open == null ? !this.drawerOpen : open;
+    if (next === this.drawerOpen) {
+      return;
+    }
+    this.drawerOpen = next;
     document.body.classList.toggle('tb-drawer', this.drawerOpen);
+    this.detailsBtn?.setAttribute('aria-expanded', next ? 'true' : 'false');
+    this.detailsBtn?.classList.toggle('on', next);
+    const opener = from || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    /* The lap bar first, because its toggle is made again with the drawer's
+     * state on it: the keyboard has to go to the new one, not to the one this
+     * render is about to take out of the page. */
+    this.panels.renderLapBar();
+    if (next) {
+      this.closeTools();
+      this.drawerFrom = opener;
+      if (keys) {
+        document.getElementById('tb-side-x')?.focus({ preventScroll: true });
+      }
+    } else {
+      const back = this.drawerFrom;
+      this.drawerFrom = null;
+      const side = document.getElementById('tb-side');
+      if (side && side.contains(document.activeElement)) {
+        /* The control that opened it, or the lap bar's toggle, which the
+         * render above made again. */
+        const toggle = back && back.isConnected ? back : document.querySelector('#tb-lapbar [data-drawer]');
+        (toggle || document.body).focus?.({ preventScroll: true });
+      }
+    }
+    /* The card keeps out from under it: see placeCard. */
+    this.view3d.markDirty();
+    this.requestDraw();
+  }
+
+  /* How many pixels of the stage the open drawer covers on its right, or 0:
+   * what the card measures its room against. */
+  drawerCover() {
+    /* A phone's drawer is over the room, which it dims, and nothing makes
+     * room for it. */
+    if (!this.drawerOpen || !document.body.classList.contains('tb-whoop') || isPhone()) {
+      return 0;
+    }
+    const side = document.getElementById('tb-side');
+    const stage = this.nodes.canvas3d.parentElement;
+    if (!side || !stage) {
+      return 0;
+    }
+    /* Where the drawer comes to rest, not where its slide has got to. The
+     * offsets are the layout's, which a transform does not move, so the card
+     * of a gate already selected when the drawer opens (the card's own More)
+     * moves clear of it on the first frame. Measured on screen, mid slide, it
+     * was placed for a drawer still off the edge and stayed under it. */
+    if (side.offsetParent && side.offsetParent === stage.offsetParent) {
+      return Math.max(0, stage.offsetLeft + stage.offsetWidth - side.offsetLeft);
+    }
+    const s = side.getBoundingClientRect();
+    const r = stage.getBoundingClientRect();
+    return Math.max(0, r.right - s.left);
+  }
+
+  /* The palette drawer of a phone, and its button on the bar. `keys` is a
+   * drawer opened from the keyboard, which takes the keyboard to its close
+   * button; closed with the keyboard inside, the keyboard goes back to Tools. */
+  toggleTools(open = null, { keys = false } = {}) {
+    const was = document.body.classList.contains('tb-tools');
+    const next = open == null ? !was : open;
+    if (next === was) {
+      return;
+    }
+    if (next) {
+      this.toggleDrawer(false);
+      this.closeMore();
+    }
+    document.body.classList.toggle('tb-tools', next);
+    this.toolsBtn?.setAttribute('aria-expanded', next ? 'true' : 'false');
+    this.toolsBtn?.classList.toggle('on', next);
+    const palette = document.getElementById('tb-palette');
+    if (next && keys) {
+      palette?.querySelector('.tb-tools-x')?.focus();
+    } else if (!next && palette && palette.contains(document.activeElement)) {
+      this.toolsBtn?.focus();
+    }
+  }
+
+  /*
+   * A PHONE'S TOOLS BUTTON SAYS WHAT IS IN HAND. On a bigger screen the armed
+   * tool is lit on the palette beside the drawing. On a phone the palette is a
+   * drawer that closes the moment a tool is picked, and each tap on the
+   * drawing then places another with nothing on the screen to say why, so the
+   * button the palette opens from carries the tool's name, lit, until the
+   * tool is put away there. renderPalette calls this; on a bigger screen the
+   * button is not shown.
+   */
+  syncToolsBtn() {
+    const b = this.toolsBtn;
+    if (!b) {
+      return;
+    }
+    const lit = this.armed ? document.querySelector('#tb-palette .tb-tool[aria-pressed="true"] .tb-tool-label') : null;
+    const name = lit ? lit.textContent.trim() : '';
+    if (b.textContent !== (name || 'Tools')) {
+      b.textContent = name || 'Tools';
+    }
+    b.classList.toggle('tb-in-hand', Boolean(name));
+    b.title = name
+      ? `${name} is in hand: tap where it goes. Open the palette here and tap ${name} again to put it away`
+      : 'The palette: pick a piece, then tap where it goes';
+  }
+
+  closeTools() {
+    if (document.body.classList.contains('tb-tools')) {
+      this.toggleTools(false);
+      return true;
+    }
+    return false;
   }
 
   /* Whether the racing line can be grabbed and bent in the room. See bendLine. */
@@ -2118,11 +2422,29 @@ export class App {
     this.panels.placeCard(project, rect);
   }
 
+  /*
+   * THE CURSOR READOUT, in the canvas's one unit from the canvas's one origin
+   * (MENUS-PLAN.md 4.2a): metres from the corner on a field or a plot, as the
+   * rulers are, and on the whoop canvas inches from the middle of the room,
+   * the card's way, with the millimetres in small print after them.
+   */
   onHoverWorld(world) {
-    if (!this.nodes.readout || !world) {
+    const out = this.nodes.readout;
+    if (!out || !world) {
       return;
     }
-    this.nodes.readout.textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)} m`;
+    if (!this.isWhoopRace()) {
+      out.textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)} m`;
+      return;
+    }
+    const f = this.doc.field;
+    const dx = world.x - f.width / 2;
+    const dy = world.y - f.depth / 2;
+    const inch = (m) => (m / 0.0254).toFixed(1);
+    const small = document.createElement('small');
+    small.textContent = `${Math.round(dx * 1000)}, ${Math.round(dy * 1000)} mm`;
+    out.replaceChildren(`${inch(dx)}, ${inch(dy)} in `, small);
+    out.title = 'From the middle of the room';
   }
 
   /*
@@ -2321,6 +2643,12 @@ export class App {
     this.mode = mode;
     /* Roads are laid on the plan. */
     this.roadDraft = null;
+    /* A tool cannot place in the five inch or map preview, so it is put away
+     * on the way in rather than left lit over a view where it does nothing
+     * (pickTool). */
+    if (this.previewing() && this.armed) {
+      this.disarm();
+    }
     this.nodes.canvas2d.hidden = mode !== '2d';
     this.nodes.canvas3d.hidden = mode !== '3d';
     /* Three.js arrives on the first press of the 3D button, so this settles
@@ -2328,7 +2656,7 @@ export class App {
      * of view3d.js for why the preview is not allowed to be load bearing. */
     this.view3d.setEnabled(mode === '3d').then((ok) => {
       if (!ok) {
-        this.toast(`The 3D preview could not load Three.js: ${this.view3d.loadError}. The 2D view is unaffected.`);
+        this.toast(`The 3D view could not load Three.js: ${this.view3d.loadError}. The 2D view is unaffected.`);
         this.setMode('2d');
       }
     });
@@ -2341,33 +2669,37 @@ export class App {
     if (c) {
       this.focusSelection();
     }
+    /* The five inch's empty state is for the plan, where a gate can be put. */
+    this.panels.renderEmpty();
     this.updateTopBar();
     this.requestDraw();
   }
 
   /*
-   * THE WHOOP CANVAS'S THREE VIEWS. Room is the track in 3D, where it is built.
-   * Plan is the same room from straight above, for measuring: a camera angle
-   * and not a second editor. 2D is the canvas this tool has always had, one
-   * press away, and the fall back when Three.js does not arrive. The other
-   * canvases keep their 2D and 3D buttons.
+   * THE VIEWS. 2D and 3D on every canvas; on the whoop canvas 3D is where the
+   * track is built and 2D is the canvas this tool has always had, one press
+   * away, and the fall back when Three.js does not arrive. Top is a camera of
+   * the 3D view: the same room from straight above, for measuring, and not a
+   * second editor. showRoom and showPlan are 3D at the angle and from the top.
    */
   showRoom() {
-    this.viewChosen = true;
-    this.autoRoom = false;
-    this.setMode('3d');
+    this.show3d();
     this.view3d.setPlanCamera(false);
     this.updateTopBar();
     this.requestDraw();
   }
 
   showPlan() {
-    this.viewChosen = true;
-    this.autoRoom = false;
-    this.setMode('3d');
+    this.show3d();
     this.view3d.setPlanCamera(true);
     this.updateTopBar();
     this.requestDraw();
+  }
+
+  show3d() {
+    this.viewChosen = true;
+    this.autoRoom = false;
+    this.setMode('3d');
   }
 
   show2d() {
@@ -2376,16 +2708,23 @@ export class App {
     this.setMode('2d');
   }
 
-  /* V: on a track, room and plan; on a map, 2D and 3D as ever. */
-  toggleView() {
-    if (!this.buildsIn3D()) {
-      this.setMode(this.mode === '2d' ? '3d' : '2d');
-      return;
-    }
-    if (this.mode === '3d' && !this.view3d.isPlan()) {
-      this.showPlan();
-    } else {
+  /* Top, beside Fit: straight down, and back to the angle there was. */
+  toggleTop() {
+    if (this.mode === '3d' && this.view3d.isPlan()) {
       this.showRoom();
+    } else {
+      this.showPlan();
+    }
+  }
+
+  /* V: 2D and 3D, on every canvas. It went between the room and its plan
+   * camera on the whoop canvas and between 2D and 3D on the others, so one key
+   * meant two things a canvas apart. */
+  toggleView() {
+    if (this.mode === '2d') {
+      this.show3d();
+    } else {
+      this.show2d();
     }
   }
 
@@ -2549,6 +2888,12 @@ export class App {
       kept = k.said;
     }
     this.doc = doc;
+    /* An open drawer was about the document that just left, and the readout
+     * was in its canvas's unit. */
+    this.toggleDrawer(false);
+    if (this.nodes.readout) {
+      this.nodes.readout.textContent = '';
+    }
     /* The palette is the track class's, so it is rebuilt whenever a document
      * arrives rather than once at boot. A RaceGOW room and a sixty metre
      * field are not made of the same parts, and a map is made of neither. */
@@ -2595,6 +2940,39 @@ export class App {
     return true;
   }
 
+  /*
+   * A BLANK CANVAS, ASKED FOR BY THE SIMULATOR. Its Tracks room has a Build a
+   * track card (MENUS-PLAN.md 2.4), which writes a 'new' intent and opens this
+   * page on ?mode=race, and a press on it landed on whatever track was last on
+   * the canvas, which is not what the card says. So it starts a blank one of
+   * the address's canvas, as New does.
+   *
+   * New asks first, because it is pressed here, over the work. This was asked
+   * for on the page before, so it does not ask again: what was on the canvas
+   * goes into Load first, by the rule every other replacement here keeps
+   * (keepDisplaced in ./storage.js), and the toast says where. When it could
+   * not be kept nothing changes, and the toast says that instead. Returns
+   * whether the blank canvas opened.
+   */
+  startBlank() {
+    const map = docModeOf(this.doc) === 'freestyle';
+    const fresh = map ? newMap() : createTrack(undefined, newTrackClass());
+    const seated = this.seatedFor(fresh);
+    let said = '';
+    if (!isEmptyCanvas(seated)) {
+      const kept = keepDisplaced(seated);
+      if (!kept.ok) {
+        this.toast(`"${seated.name}" is still on the canvas: it could not be kept in Load, because local storage is unavailable or full, so nothing new was started. Export it from More first, then press New.`);
+        return false;
+      }
+      said = kept.saved && kept.saved !== seated
+        ? `"${seated.name}" had changes made after it was saved, so they are in Load as "${kept.saved.name}".`
+        : `"${seated.name}" is in Load.`;
+    }
+    /* Kept already, so loadDocument is told so rather than keeping it twice. */
+    return this.loadDocument(fresh, [map ? 'New map, on a 160 metre plot.' : 'New track.', said].filter(Boolean).join(' '), { ok: true, said: '' });
+  }
+
   newTrack() {
     if (docModeOf(this.doc) === 'freestyle') {
       this.confirm('Start a new map?', 'Anything unsaved in the current one is gone.', () => {
@@ -2608,8 +2986,17 @@ export class App {
   }
 
   save() {
+    /* Asked before the save, which is what makes the library non-empty. */
+    const first = !savedOnce();
     const ok = saveTrack(this.doc);
-    this.toast(ok ? `Saved "${this.doc.name}".` : 'Could not save. Local storage is unavailable, so use Export instead.');
+    /* The first save in this browser folds the storage notice away: the toast
+     * says where the work went, once, and the line beside Save says it after. */
+    if (ok) {
+      markSavedOnce();
+    }
+    this.toast(ok
+      ? `Saved "${this.doc.name}"${first ? ' in this browser. It is in Load from now on' : ''}.`
+      : `Could not save. Local storage is unavailable, so use Export in More instead.`);
     this.updateTopBar();
   }
 
@@ -2625,20 +3012,48 @@ export class App {
     this.removeCurrent();
   }
 
-  toggleMore() {
+  /*
+   * THE MORE MENU, as a menu: More says whether it is open, the arrows walk
+   * its items, and Escape closes it and gives the keyboard back to More
+   * (MENUS-PLAN.md 1.19). It closed on a mousedown elsewhere or on its own
+   * items and on nothing a keyboard could press. `keys` is a menu opened by
+   * the keyboard, which puts the keyboard on its first item.
+   */
+  toggleMore(keys = false) {
     if (!this.moreMenu) {
       return;
     }
-    this.moreMenu.hidden = !this.moreMenu.hidden;
-    this.moreBtn.classList.toggle('on', !this.moreMenu.hidden);
+    if (!this.moreMenu.hidden) {
+      this.closeMore(keys);
+      return;
+    }
+    this.moreMenu.hidden = false;
+    this.moreBtn.classList.add('on');
+    this.moreBtn.setAttribute('aria-expanded', 'true');
+    if (keys) {
+      this.moreItemsShown()[0]?.focus();
+    }
   }
 
-  closeMore() {
+  /* `refocus` puts the keyboard back on More, which is where Escape and a
+   * keyboard's second press of More leave it. */
+  closeMore(refocus = false) {
     if (!this.moreMenu || this.moreMenu.hidden) {
-      return;
+      return false;
     }
     this.moreMenu.hidden = true;
     this.moreBtn.classList.remove('on');
+    this.moreBtn.setAttribute('aria-expanded', 'false');
+    if (refocus) {
+      this.moreBtn.focus();
+    }
+    return true;
+  }
+
+  /* The items a pointer or a keyboard can reach in More right now. */
+  moreItemsShown() {
+    return [...this.moreMenu.querySelectorAll('.tb-more-item, a.patreon')]
+      .filter((n) => n.getClientRects().length > 0 && !n.disabled);
   }
 
   removeCurrent() {
@@ -2648,18 +3063,31 @@ export class App {
     });
   }
 
+  /*
+   * LOAD: this canvas's saved documents, then the ones shipped for it.
+   *
+   * What each row says, and what changed (MENUS-PLAN.md 1.21). A row says what
+   * kind of document it is, and when it last changed the way a person says it
+   * ("2 days ago", the exact date in its title) rather than as a raw ISO
+   * stamp. The five inch canvas lists five inch tracks and the whoop canvas
+   * whoop tracks, as maps were already apart: opening the other kind moved the
+   * author to the other canvas and seated the other aircraft, which is a switch
+   * nobody asked Load for. The list says how many of the other kind there are
+   * and where they are. And Delete takes a row out at once and leaves an Undo
+   * in its place, where it removed a document on one click with nothing to say
+   * it had.
+   */
   openLoad() {
-    /* A map lists with maps and a track with tracks, so the Load list of one
-     * canvas never offers the other's documents. */
     const map = docModeOf(this.doc) === 'freestyle';
-    const tracks = listTracks(trackClassOf(this.doc), docModeOf(this.doc));
+    const canvas = canvasOf(this.doc);
+    const w = wordsFor(this.doc);
+    const { rows: tracks, others } = rowsForCanvas(listTracks(trackClassOf(this.doc), docModeOf(this.doc)), canvas);
     const body = document.createElement('div');
-    if (!tracks.length) {
+    const now = Date.now();
+    if (!tracks.some((t) => !t.preset)) {
       const p = document.createElement('p');
       p.className = 'tb-help';
-      p.textContent = map
-        ? 'No maps saved yet. Save the current map, or import a .json file.'
-        : 'Nothing saved yet. Save the current track, or import a .json file.';
+      p.textContent = `No ${w.kind.toLowerCase()}s saved in this browser yet. Save the one on the canvas, or import a .json file from More.${tracks.length ? ' The ones below ship with the Builder: open one to start from it.' : ''}`;
       body.append(p);
     }
     for (const t of tracks) {
@@ -2667,19 +3095,35 @@ export class App {
       row.className = 'tb-load-row';
       const name = document.createElement('div');
       name.className = 'tb-load-name';
-      name.textContent = t.name;
+      const title = document.createElement('div');
+      title.className = 'tb-load-title';
+      title.textContent = t.name;
+      title.title = t.name;
+      name.append(title);
       const meta = document.createElement('div');
       meta.className = 'tb-load-meta';
-      if (map) {
-        /* The shipped yard has no change date worth showing; what a pilot
-         * knows it as is the map the simulator flew them round. */
-        meta.textContent = t.preset
-          ? `${t.mix}, the yard Your map flies until you build one`
-          : `${t.mix}, changed ${t.modifiedUtc}`;
+      const kind = document.createElement('span');
+      kind.className = 'tb-load-kind';
+      kind.textContent = w.kind;
+      const bits = [t.mix];
+      if (!map) {
+        bits.push(`${t.sequence} in the order`);
+      }
+      if (t.preset) {
+        /* The shipped yard is what Your map flies before a pilot has built
+         * one; every other shipped row simply came with the Builder. */
+        bits.push(t.id === STARTER_ID ? 'the yard Your map flies until you build one' : 'ships with the Builder');
       } else {
-        meta.textContent = t.preset
-          ? `${t.mix}, ${t.sequence} in the order`
-          : `${t.mix}, ${t.sequence} in the order, changed ${t.modifiedUtc}`;
+        const ago = changedAgo(t.modifiedUtc, now);
+        if (ago) {
+          const when = document.createElement('span');
+          when.textContent = `changed ${ago}`;
+          when.title = exactDate(t.modifiedUtc);
+          meta.append(kind, document.createTextNode(` · ${bits.join(', ')} · `), when);
+        }
+      }
+      if (!meta.childNodes.length) {
+        meta.append(kind, document.createTextNode(` · ${bits.join(', ')}`));
       }
       name.append(meta);
       /*
@@ -2710,8 +3154,11 @@ export class App {
       open.addEventListener('click', () => {
         const found = loadTrack(t.id);
         this.closeModal();
+        /* Through openIncoming, which keeps what the canvas held in Load
+         * first: Open went straight to loadDocument, and on the same canvas
+         * that wrote over work nobody had saved with nothing kept or said. */
         if (found) {
-          this.loadDocument(found.doc, `Opened "${found.doc.name}".`);
+          this.openIncoming(found.doc, `Opened "${found.doc.name}".`);
         }
       });
       /* No Delete on a shipped track. There is nothing to delete: it is
@@ -2724,16 +3171,194 @@ export class App {
         del.type = 'button';
         del.className = 'tb-btn tb-danger';
         del.textContent = 'Delete';
-        del.addEventListener('click', () => {
-          deleteTrack(t.id);
-          this.closeModal();
-          this.openLoad();
-        });
+        del.title = `Delete "${t.name}" from this browser. Undo puts it back while this list is open.`;
+        del.addEventListener('click', () => this.deleteFromLoad(t, row));
         row.append(name, open, del);
       }
       body.append(row);
     }
-    this.modal(map ? 'Saved maps' : 'Saved tracks', body);
+    /* Where the other race canvas's documents went, since this list no longer
+     * shows them, and the one press that gets there. */
+    if (others > 0 && !map) {
+      const other = canvas === 'micro' ? 'full' : 'micro';
+      const note = document.createElement('p');
+      note.className = 'tb-help tb-load-others';
+      note.append(`${others} ${CANVAS_WORDS[other].kind.toLowerCase()}${others === 1 ? '' : 's'} saved here ${others === 1 ? 'opens' : 'open'} on the ${CANVAS_WORDS[other].label} canvas. `);
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'tb-btn';
+      go.textContent = `Show ${others === 1 ? 'it' : 'them'}`;
+      go.addEventListener('click', () => {
+        this.closeModal();
+        this.setCanvas(other);
+        this.openLoad();
+      });
+      note.append(go);
+      body.append(note);
+    }
+    this.modal(map ? 'Saved maps' : `Saved ${w.kind.toLowerCase()}s`, body);
+  }
+
+  /*
+   * START FROM A TRACK ON THE BOARD: the five inch canvas's way in from empty
+   * (MENUS-PLAN.md 4.2b). The board's five inch tracks, most flown first, and
+   * Open a copy on each, which opens it the way the board's Remix does: under
+   * a new id and a remix's name, credited to where it came from, so Publish
+   * puts up a new track and the original stays its builder's. Offline, or with
+   * the board asleep, it says the board could not be reached and points at
+   * Load, rather than showing an empty list that looks like a board with
+   * nothing on it.
+   */
+  async openBoardStarters() {
+    const body = document.createElement('div');
+    const lede = document.createElement('p');
+    lede.className = 'tb-help';
+    lede.textContent = 'Five inch tracks other pilots have put on Tracks and times. Open one and it is your copy: change anything, and publish it under a name of your own. The original stays theirs.';
+    const status = document.createElement('p');
+    status.className = 'tb-help';
+    status.setAttribute('role', 'status');
+    status.textContent = 'Asking the board for its tracks.';
+    const list = document.createElement('div');
+    list.className = 'tb-load-list';
+    body.append(lede, status, list);
+    const shown = this.modal('Start from a track on the board', body);
+    const origin = boardOrigin();
+    /* Where the palette is: beside the drawing, or behind Tools on a phone. */
+    const fromNothing = isPhone() ? 'Gate, in Tools, starts one from nothing.' : 'Gate on the left starts one from nothing.';
+    let tracks = [];
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error('This device is offline.');
+      }
+      tracks = (await fetchTrackList(origin)).filter((t) => t.trackClass === 'full');
+    } catch (e) {
+      if (!shown.box.isConnected) {
+        return;
+      }
+      status.textContent = ['The board could not be reached, so its tracks cannot be listed.', errorSentence(e), `Your own tracks are in Load, and ${fromNothing}`].filter(Boolean).join(' ');
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.className = 'tb-btn';
+      again.textContent = 'Try again';
+      again.addEventListener('click', () => this.openBoardStarters());
+      const load = document.createElement('button');
+      load.type = 'button';
+      load.className = 'tb-btn';
+      load.textContent = 'Load';
+      load.addEventListener('click', () => this.openLoad());
+      /* On the dialog's own row, beside Close, rather than a second row of
+       * buttons above it. */
+      shown.close.before(again, load);
+      return;
+    }
+    /* The dialog may have been closed while the board answered. */
+    if (!shown.box.isConnected) {
+      return;
+    }
+    if (!tracks.length) {
+      status.textContent = `The board has no five inch tracks yet. ${fromNothing}`;
+      return;
+    }
+    status.textContent = `${tracks.length} five inch track${tracks.length === 1 ? '' : 's'}, most flown first.`;
+    tracks.sort((a, b) => (b.times - a.times) || (b.gates - a.gates) || a.name.localeCompare(b.name));
+    for (const t of tracks) {
+      const row = document.createElement('div');
+      row.className = 'tb-load-row';
+      const name = document.createElement('div');
+      name.className = 'tb-load-name';
+      const title = document.createElement('div');
+      title.className = 'tb-load-title';
+      title.textContent = t.name;
+      const meta = document.createElement('div');
+      meta.className = 'tb-load-meta';
+      const by = t.designer || t.author;
+      meta.textContent = [by ? `by ${by}` : '', `${t.gates} gate${t.gates === 1 ? '' : 's'}`, t.times ? `${t.times} time${t.times === 1 ? '' : 's'} posted` : 'no times yet']
+        .filter(Boolean).join(' · ');
+      name.append(title, meta);
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'tb-btn';
+      open.textContent = 'Open a copy';
+      open.title = `Your own copy of "${t.name}", to change and publish under your name`;
+      open.addEventListener('click', async () => {
+        open.disabled = true;
+        open.textContent = 'Opening';
+        try {
+          const payload = await fetchTrackDocument(t.id, t.board || origin);
+          this.closeModal();
+          this.openBoardCopy({
+            id: payload.id || t.id,
+            name: payload.name || t.name,
+            author: payload.author || t.author,
+            board: t.board || origin,
+            document: payload.document || payload,
+          });
+        } catch (e) {
+          open.disabled = false;
+          open.textContent = 'Open a copy';
+          status.textContent = [`"${t.name}" could not be fetched from the board.`, errorSentence(e)].filter(Boolean).join(' ');
+        }
+      });
+      row.append(name, open);
+      list.append(row);
+    }
+  }
+
+  /* A board track opened as a copy: the remix half of adoptIncomingShare,
+   * for a track picked here rather than handed over by a link. What it
+   * replaces is kept in Load first (keepSeat), and the bind that credits the
+   * original is written only once the copy has opened. */
+  openBoardCopy(share) {
+    const incoming = normalize(share.document).doc;
+    const name = share.name || incoming.name;
+    const { copy, commit } = forkDocument(incoming, {
+      sourceId: share.id,
+      sourceName: name,
+      sourceAuthor: share.author || '',
+      board: share.board || boardOrigin(),
+    });
+    const keep = this.keepSeat(copy);
+    if (!keep.ok) {
+      this.toast(keep.said);
+      return false;
+    }
+    commit();
+    const by = share.author ? ` by ${share.author}` : '';
+    const said = `This is your copy of "${name}"${by}. Publish it under a new name to put it on the board.`;
+    const same = canvasOf(copy) === canvasOf(this.doc);
+    return this.loadDocument(copy, same ? [said, keep.said].filter(Boolean).join(' ') : said, keep);
+  }
+
+  /*
+   * A ROW OF LOAD DELETED, with its Undo where it was. The document is out of
+   * the library at once, and the row says so and offers it back, exactly as it
+   * was saved, for as long as the list is open.
+   */
+  deleteFromLoad(t, row) {
+    const raw = savedTrack(t.id);
+    if (!raw || !deleteTrack(t.id)) {
+      this.toast(`Could not delete "${t.name}": local storage is unavailable.`);
+      return;
+    }
+    row.classList.add('tb-load-gone');
+    const said = document.createElement('div');
+    said.className = 'tb-load-name';
+    said.textContent = `Deleted "${t.name}".`;
+    const undo = document.createElement('button');
+    undo.type = 'button';
+    undo.className = 'tb-btn';
+    undo.textContent = 'Undo';
+    undo.title = `Put "${t.name}" back in Load`;
+    undo.addEventListener('click', () => {
+      if (!restoreTrack(raw)) {
+        this.toast(`Could not put "${t.name}" back: local storage is unavailable or full.`);
+        return;
+      }
+      /* The list again, with the row back where it sorts. */
+      this.openLoad();
+    });
+    row.replaceChildren(said, undo);
+    undo.focus({ preventScroll: true });
   }
 
   exportFile() {
@@ -2931,9 +3556,13 @@ export class App {
     const courseInput = document.createElement('input');
     courseInput.type = 'text';
     courseInput.maxLength = 80;
+    courseInput.id = 'tb-publish-name';
+    courseLabel.htmlFor = courseInput.id;
     courseInput.value = remix ? suggestRemixName(this.doc.name) : this.doc.name;
     courseField.append(courseLabel, courseInput);
     body.append(courseField);
+    const nameAsk = this.nameAsk(courseInput, 'track');
+    body.append(nameAsk.line);
 
     const nameField = document.createElement('div');
     nameField.className = 'tb-field';
@@ -2979,6 +3608,11 @@ export class App {
      */
     const held = publishedTags(this.doc.id);
     const chosen = new Set(usableTags(held));
+    /* This class's tags, and any other this track already wears, so a whoop
+     * track that was given Small field can have it taken off. See
+     * tagsForClass in src/share/board.js. */
+    const offered = tagsForClass(trackClassOf(this.doc));
+    const shownTags = TRACK_TAGS.filter((t) => offered.includes(t) || chosen.has(t.id));
     const tagField = document.createElement('div');
     tagField.className = 'tb-field';
     const tagLabelEl = document.createElement('label');
@@ -3000,7 +3634,7 @@ export class App {
         tagHelp.textContent = `Optional, and up to ${TRACK_TAGS_MAX}. People filter the board by these, so a track with none is harder to find.`;
       }
     };
-    for (const tag of TRACK_TAGS) {
+    for (const tag of shownTags) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tb-tag';
@@ -3028,19 +3662,16 @@ export class App {
     tagField.append(tagLabelEl, tagRow);
     body.append(tagField, tagHelp);
 
-    const boardField = document.createElement('div');
-    boardField.className = 'tb-field';
-    const boardLabel = document.createElement('label');
-    boardLabel.className = 'tb-field-label';
-    boardLabel.textContent = 'Board address';
-    const boardInput = document.createElement('input');
-    boardInput.type = 'url';
-    boardInput.value = boardOrigin();
-    boardField.append(boardLabel, boardInput);
-    body.append(boardField);
-
+    /*
+     * NO BOARD ADDRESS. The dialog carried a URL field for the board's
+     * address, which is a developer's override that ?board= in the address
+     * already is, in front of every author who will never need it
+     * (MENUS-PLAN.md 1.22). The board is boardOrigin()'s, and ?board= still
+     * points this page at another one.
+     */
     const status = document.createElement('p');
     status.className = 'tb-help';
+    status.setAttribute('role', 'status');
     body.append(status);
 
     const send = document.createElement('button');
@@ -3048,17 +3679,22 @@ export class App {
     send.className = 'tb-btn tb-primary';
     send.textContent = owned ? 'Update the board' : (remix ? 'Publish as yours' : 'Publish this track');
     send.addEventListener('click', async () => {
+      /* A real name first: the board lists tracks by name (isPlaceholderName). */
+      if (!nameAsk.ok()) {
+        return;
+      }
       const author = writePilotName(nameInput.value);
       if (!author) {
         status.textContent = nameRules();
+        nameInput.focus();
         return;
       }
-      const courseName = String(courseInput.value || '').trim() || 'Untitled track';
+      const courseName = String(courseInput.value || '').trim();
       this.doc.name = courseName;
       if (this.nameInput) {
         this.nameInput.value = courseName;
       }
-      const origin = setBoardOrigin(boardInput.value) || boardOrigin();
+      const origin = boardOrigin();
       send.disabled = true;
       status.textContent = 'Sending the track, logos included.';
       /* A list, empty when the author unticked every tag they were shown,
@@ -3126,24 +3762,76 @@ export class App {
           kind: 'track', noun: 'track', origin, editKey: readEditKey(this.doc.id), status,
         });
         this.updateTopBar();
+        /*
+         * THE TRACK'S OWN SHEET ON THE BOARD (MENUS-PLAN.md 5.2). The link
+         * opened the board's front page, so an author who had just published
+         * a track had to find it again in a list of forty. The board turns
+         * ?track=id into its sheet; the builder's class goes with it, so an
+         * author on the whoop canvas lands on the whoop side.
+         */
         const open = document.createElement('a');
         open.className = 'tb-btn tb-primary';
-        /* The builder's class goes with the link, so an author on the
-         * whoop builder lands on the whoop board. */
-        open.href = boardPageUrl(origin, trackClassOf(this.doc) === 'micro' ? 'whoop65' : '5inch');
+        open.href = boardPageUrl(origin, wordsFor(this.doc).craft, { track: posted.id });
         /* The board's own tab, reused if it is already open. No rel here:
          * noopener would send this to a fresh tab every time. */
         open.target = BOARD_WINDOW;
-        open.textContent = 'Open Tracks and Statistics';
+        open.textContent = 'This track on Tracks and times';
         send.replaceWith(open);
+        shown.close.textContent = 'Close';
+        open.focus({ preventScroll: true });
       } catch (e) {
         send.disabled = false;
         status.textContent = e.message || 'The board could not take that track.';
         this.toast(`Could not publish: ${e.message || e}`);
       }
     });
-    body.append(send);
-    this.modal(owned ? 'Update this track' : (remix ? 'Publish as yours' : 'Publish this track'), body);
+    const shown = this.modal(owned ? 'Update this track' : (remix ? 'Publish as yours' : 'Publish this track'), body, [], { primary: send });
+    nameAsk.start();
+  }
+
+  /*
+   * A NAME FIRST (MENUS-PLAN.md 4.3). The board lists tracks and maps by name,
+   * and its first impression was a row of "Untitled track", "Untitled map" and
+   * worse. Publish keeps the dialog it is in and asks there: the name field has
+   * the caret, and a line under it says why. `line` goes under the field;
+   * `start()` is called once the dialog is up and puts the caret there when the
+   * name is still the placeholder; `ok()` is asked by the send button, and asks
+   * again rather than sending.
+   */
+  nameAsk(input, noun) {
+    const line = document.createElement('p');
+    line.className = 'tb-help tb-ask';
+    line.id = `${input.id}-why`;
+    line.hidden = true;
+    input.setAttribute('aria-describedby', line.id);
+    const ask = () => {
+      line.hidden = false;
+      line.textContent = `Give it a name first. Tracks and times lists every ${noun} by its name, and "Untitled ${noun}" does not say which one this is.`;
+      input.setAttribute('aria-invalid', 'true');
+      input.focus();
+      input.select();
+    };
+    input.addEventListener('input', () => {
+      if (!isPlaceholderName(input.value)) {
+        line.hidden = true;
+        input.removeAttribute('aria-invalid');
+      }
+    });
+    return {
+      line,
+      start: () => {
+        if (isPlaceholderName(input.value)) {
+          ask();
+        }
+      },
+      ok: () => {
+        if (isPlaceholderName(input.value)) {
+          ask();
+          return false;
+        }
+        return true;
+      },
+    };
   }
 
   /*
@@ -3199,8 +3887,12 @@ export class App {
     const mapInput = document.createElement('input');
     mapInput.type = 'text';
     mapInput.maxLength = 80;
+    mapInput.id = 'tb-publish-name';
     mapInput.value = this.doc.name;
     field('Map name', mapInput);
+    body.lastElementChild.querySelector('label').htmlFor = mapInput.id;
+    const nameAsk = this.nameAsk(mapInput, 'map');
+    body.append(nameAsk.line);
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.maxLength = 24;
@@ -3210,13 +3902,11 @@ export class App {
     nameHelp.className = 'tb-help';
     nameHelp.textContent = nameRules();
     body.append(nameHelp);
-    const boardInput = document.createElement('input');
-    boardInput.type = 'url';
-    boardInput.value = boardOrigin();
-    field('Board address', boardInput);
+    /* No board address: see openPublish. */
 
     const status = document.createElement('p');
     status.className = 'tb-help';
+    status.setAttribute('role', 'status');
     body.append(status);
 
     const send = document.createElement('button');
@@ -3224,17 +3914,21 @@ export class App {
     send.className = 'tb-btn tb-primary';
     send.textContent = owned ? 'Update the board' : 'Publish this map';
     send.addEventListener('click', async () => {
+      if (!nameAsk.ok()) {
+        return;
+      }
       const author = writePilotName(nameInput.value);
       if (!author) {
         status.textContent = nameRules();
+        nameInput.focus();
         return;
       }
-      const mapName = String(mapInput.value || '').trim() || 'Untitled map';
+      const mapName = String(mapInput.value || '').trim();
       this.doc.name = mapName;
       if (this.nameInput) {
         this.nameInput.value = mapName;
       }
-      const origin = setBoardOrigin(boardInput.value) || boardOrigin();
+      const origin = boardOrigin();
       send.disabled = true;
       status.textContent = 'Sending the map, sponsor prints included.';
       const sendDoc = async (doc) => {
@@ -3290,21 +3984,24 @@ export class App {
         this.updateTopBar();
         const open = document.createElement('a');
         open.className = 'tb-btn tb-primary';
-        /* Straight to the map's own sheet on the board's maps tab. */
-        open.href = `${boardPageUrl(origin)}#map=${encodeURIComponent(posted.id)}`;
+        /* Straight to the map's own sheet on the board, which turns ?map=id
+         * into it, the same way a track's link does. */
+        open.href = boardPageUrl(origin, null, { map: posted.id });
         /* The board's own tab, reused if it is already open. No rel here:
          * noopener would send this to a fresh tab every time. */
         open.target = BOARD_WINDOW;
-        open.textContent = 'Open Tracks and Statistics';
+        open.textContent = 'This map on Tracks and times';
         send.replaceWith(open);
+        shown.close.textContent = 'Close';
+        open.focus({ preventScroll: true });
       } catch (e) {
         send.disabled = false;
         status.textContent = e.message || 'The board could not take that map.';
         this.toast(`Could not publish: ${e.message || e}`);
       }
     });
-    body.append(send);
-    this.modal(owned ? 'Update this map' : 'Publish this map', body);
+    const shown = this.modal(owned ? 'Update this map' : 'Publish this map', body, [], { primary: send });
+    nameAsk.start();
   }
 
   /* ---------------- the sponsors' logos ---------------- */
@@ -3342,10 +4039,18 @@ export class App {
    * chosen, so the next click on the field is the decal.
    */
   openLogo() {
+    /* Grass on a field, the floor in a room, the plot's ground on a map: the
+     * dialog said grass on all three (MENUS-PLAN.md 4.1). A map has no flying
+     * order to deal the logos round, so on a map they go where they are
+     * painted, and the dialog says so. */
+    const w = wordsFor(this.doc);
+    const map = docModeOf(this.doc) === 'freestyle';
     const body = document.createElement('div');
     const help = document.createElement('p');
     help.className = 'tb-help';
-    help.textContent = 'Up to five sponsors\u2019 logos. They are dealt out round the gates in flying order, so each sponsor gets a share of the boards, the upright banners and the flags, spread down the lap rather than bunched at the start. Any of them can also be painted on the grass: press Paint on the grass under it, then click the field. They travel inside the track file, so a track you send somebody arrives with its branding on.';
+    help.textContent = map
+      ? `Up to five sponsors\u2019 logos, painted on the ${w.ground} wherever you put them: press Paint on the ${w.ground} under one, then click the ${w.place}. They travel inside the map file, so a map you send somebody arrives with its branding on.`
+      : `Up to five sponsors\u2019 logos. They are dealt out round the gates in flying order, so each sponsor gets a share of the boards, the upright banners and the flags, spread down the lap rather than bunched at the start. Any of them can also be painted on the ${w.ground}: press Paint on the ${w.ground} under it, then click the ${w.place}. They travel inside the track file, so a track you send somebody arrives with its branding on.`;
     body.append(help);
 
     const list = document.createElement('div');
@@ -3413,7 +4118,7 @@ export class App {
           const note = document.createElement('p');
           note.className = 'tb-help';
           note.textContent = i === logos.length
-            ? 'Empty. Add a logo here and the gates start sharing it.'
+            ? (map ? `Empty. Add a logo here, then paint it on the ${w.ground}.` : 'Empty. Add a logo here and the gates start sharing it.')
             : 'Empty.';
           slot.append(note);
           if (i === logos.length) {
@@ -3473,8 +4178,8 @@ export class App {
         const paint = document.createElement('button');
         paint.type = 'button';
         paint.className = 'tb-btn';
-        paint.textContent = 'Paint on the grass';
-        paint.title = 'Put this logo on the turf: click the field where you want it';
+        paint.textContent = `Paint on the ${w.ground}`;
+        paint.title = `Put this logo on the ${w.ground}: click the ${w.place} where you want it`;
         paint.addEventListener('click', () => {
           this.armGroundLogo(mark.id);
           this.closeModal();
@@ -3488,7 +4193,7 @@ export class App {
             d.branding.logos.splice(i, 1);
           });
           redraw();
-          this.toast('Logo removed. Any grass painted with it now shows nothing until you pick another.');
+          this.toast(`Logo removed. Any ${w.ground} painted with it now shows nothing until you pick another.`);
         });
         btns.append(swap, paint, drop);
         slot.append(btns);
@@ -3503,7 +4208,11 @@ export class App {
       const n = logos.length;
       const left = Math.max(0, BRANDING_MAX_CHARS - spent);
       const budget = `${Math.round(spent / 1024)} kB of ${Math.round(BRANDING_MAX_CHARS / 1024)} kB used, ${Math.round(left / 1024)} kB left.`;
-      if (!n) {
+      if (map) {
+        summary.textContent = n
+          ? `${n} logo${n === 1 ? '' : 's'}, painted where you put them. ${budget}`
+          : `No logos yet. ${budget}`;
+      } else if (!n) {
         summary.textContent = `No logos yet. The gates carry a chequered flag device and their number. ${budget}`;
       } else if (!gates) {
         summary.textContent = `Nothing is in the flying order yet, so nothing is wearing them. ${budget}`;
@@ -3653,7 +4362,9 @@ export class App {
    * treated as hostile.
    */
   async copyShareLink() {
-    if (!this.isWhoopRace()) {
+    /* A race track's, on the five inch canvas as on the whoop's: the same
+     * fragment carries either document whole (the self test proves it). */
+    if (docModeOf(this.doc) === 'freestyle') {
       return;
     }
     let link = '';
@@ -3671,14 +4382,18 @@ export class App {
       copied = false;
     }
     this.lastLink = link;
+    /* A track with sponsor logos carries them, and a picture is long. */
+    const long = link.length > 8000
+      ? ' It is long because it carries the sponsor logos, and some chat apps cut a link that long: for those, Export the file from More.'
+      : '';
     if (copied) {
-      this.toast(`Link copied, ${link.length} characters. It carries the whole track and opens as a copy for whoever has it.`);
+      this.toast(`Link copied, ${link.length} characters. It carries the whole track and opens as a copy for whoever has it.${long}`);
       return;
     }
     const body = document.createElement('div');
     const help = document.createElement('p');
     help.className = 'tb-help';
-    help.textContent = 'Copy this link. It carries the whole track, so there is nothing to upload, and it opens as a copy for whoever has it.';
+    help.textContent = `Copy this link. It carries the whole track, so there is nothing to upload, and it opens as a copy for whoever has it.${long}`;
     const area = document.createElement('textarea');
     area.className = 'tb-paste';
     area.readOnly = true;
@@ -3696,7 +4411,7 @@ export class App {
       return;
     }
     if (this.mode !== '3d') {
-      this.toast('The picture is of the room. Press Room or Plan on the bar first.');
+      this.toast('The picture is of the room in 3D. Press V, or 3D on the bar, first.');
       return;
     }
     const blob = await this.view3d.snapshot();
@@ -3823,7 +4538,7 @@ export class App {
    * The same move for any of the three canvases. A map seats the five inch,
    * exactly as the 5 inch button does, because that is what flies it.
    */
-  setCanvas(canvas) {
+  setCanvas(canvas, { arriving = false } = {}) {
     const want = canvas === 'freestyle' || canvas === 'micro' ? canvas : 'full';
     if (canvasOf(this.doc) === want) {
       return;
@@ -3840,15 +4555,24 @@ export class App {
      * of the toggle. */
     const held = readAutosave(cls, mode);
     const doc = (held && held.doc) || (mode === 'freestyle' ? newMap() : createTrack(undefined, cls));
-    const name = CANVAS_NAMES[want];
     const fresh = {
-      full: 'five inch track, on a sixty metre field',
-      micro: 'whoop track, in a ten by twelve metre hall',
-      freestyle: 'freestyle map, on a 160 metre plot. Place buildings, cranes and a skate set, then fly it',
+      full: 'A new five inch track, on a sixty metre field.',
+      micro: 'A new whoop track, in a ten by twelve metre hall.',
+      freestyle: 'A new freestyle map, on a 160 metre plot.',
     }[want];
-    this.loadDocument(doc, held && held.doc
-      ? `Back on the ${name} builder, holding "${doc.name}".`
-      : `A new ${fresh}.`);
+    /*
+     * WHAT THE SWITCH DID, said (MENUS-PLAN.md 4.2c). It has two effects an
+     * author cannot see: the undo history is this canvas's from here on, and
+     * the simulator's seated aircraft is the one this canvas is for. Both were
+     * silent, so an Undo after a switch said there was nothing to undo, and the
+     * next flight was on another aircraft.
+     */
+    const w = CANVAS_WORDS[want];
+    const what = held && held.doc ? `${w.label}: "${doc.name}", as you left it.` : fresh;
+    /* Picked on arrival, from the chooser, there is no undo history yet to
+     * start again. */
+    const undo = arriving ? '' : ' Undo starts again here, and';
+    this.loadDocument(doc, `${what}${undo || ''}${undo ? ' the' : ' The'} simulator will fly ${w.flies}${want === 'freestyle' ? ' on this map' : ''}.`);
   }
 
   /*
@@ -3879,11 +4603,11 @@ export class App {
     const body = document.createElement('div');
     const lede = document.createElement('p');
     lede.className = 'tb-help tb-choose-lede';
-    lede.textContent = 'Each keeps its own work, so nothing is lost by picking. The 5 inch, Whoop and Freestyle switch at the top left moves between them any time.';
+    lede.textContent = `Each keeps its own work, so nothing is lost by picking. The ${CANVAS_ORDER.map((c) => CANVAS_WORDS[c].label).join(', ').replace(/, ([^,]*)$/, ' and $1')} switch at the top left moves between them any time.`;
     const grid = document.createElement('div');
     grid.className = 'tb-choose';
     grid.setAttribute('role', 'group');
-    grid.setAttribute('aria-label', 'Which builder');
+    grid.setAttribute('aria-label', 'Which canvas');
     let current = null;
     for (const c of CHOICES) {
       const card = document.createElement('button');
@@ -3959,7 +4683,7 @@ export class App {
 
   chooseCanvas(canvas) {
     this.closeModal();
-    this.setCanvas(canvas);
+    this.setCanvas(canvas, { arriving: true });
   }
 
   /* Two sakura pulses round the switch in the bar, which is the way back to
@@ -4013,14 +4737,19 @@ export class App {
 
     this.undoBtn = btn('Undo', () => this.undo(), 'Control Z');
     this.redoBtn = btn('Redo', () => this.redo(), 'Control Shift Z');
-    /* Any press on a view button is the author's own choice, and the room
-     * opening by itself on a whoop canvas never overrules it. */
+    /*
+     * ONE VIEW VOCABULARY (MENUS-PLAN.md 4.2): 2D and 3D on every canvas, and
+     * V goes between them. On the five inch and map canvases 2D is where a
+     * track is built and 3D previews it; on the whoop canvas 3D is where it is
+     * built, so 3D comes first there. The whoop's view straight down was a
+     * third view called Plan beside one called 2D, two plans; it is a camera
+     * now, Top, beside Fit, because it is the same room seen from above.
+     * Any press on a view button is the author's own choice, and the room
+     * opening by itself on a whoop canvas never overrules it.
+     */
     this.mode2d = btn('2D', () => this.show2d(), 'Top down authoring view');
-    this.mode3d = btn('3D', () => { this.viewChosen = true; this.setMode('3d'); }, 'Preview. Drag a horizontal pole or a waypoint to change its height. Everything else stands on the ground, or on what is under it on a map.');
-    /* A whoop canvas is built in the room. Plan is the same room from straight
-     * above, for measuring, and 2D is the canvas this tool has always had. */
-    this.modeRoom = btn('Room', () => this.showRoom(), 'The track in 3D. Build here: pick a gate on the left, click the floor, drag a gate to move it.');
-    this.modePlan = btn('Plan', () => this.showPlan(), 'The same room from straight above, for measuring. Every gesture is the same.');
+    this.mode3d = btn('3D', () => this.show3d(), 'Preview');
+    this.topBtn = btn('Top', () => this.toggleTop(), 'Look straight down on the room, north up, for measuring. Press again for the angle you had. Every gesture is the same.');
     /* Plain, not primary. There is one green button on this bar and it is
      * the one that leaves for the air; a second would make neither read as
      * the thing to press. Show line goes amber while a line is showing,
@@ -4051,14 +4780,19 @@ export class App {
      * fly the wrong track once.
      */
     this.flyBtn = btn('Fly this track', () => this.flyThisTrack(), 'Build the world around this track and fly it', 'tb-btn tb-primary');
-    this.publishBtn = btn('Publish', () => this.openPublish(), 'Put this track on the public board, logos and all');
+    this.publishBtn = btn('Publish', () => this.openPublish(), 'Put this track on the public board, logos and all', 'tb-btn tb-publish');
     this.listingChip = document.createElement('span');
     this.listingChip.className = 'tb-listing';
 
+    /* Back to the simulator names the world and the aircraft this canvas is
+     * for, so the simulator opens on its title with this work seated rather
+     * than asking what to fly all over again (MENUS-PLAN.md 1.24 and 5.2a).
+     * The address follows the canvas: see updateTopBar. */
     const back = document.createElement('a');
-    back.className = 'tb-btn tb-quiet';
-    back.href = '../../index.html';
+    back.className = 'tb-btn tb-quiet tb-back';
+    back.href = simulatorLink(this.doc);
     back.textContent = 'Back to the simulator';
+    this.backLink = back;
 
     /*
      * THREE ZONES, NOT SEVENTEEN BUTTONS.
@@ -4076,10 +4810,33 @@ export class App {
      */
     this.moreWrap = document.createElement('div');
     this.moreWrap.className = 'tb-more';
-    this.moreBtn = btn('More', () => this.toggleMore(), 'Import, export, duplicate, delete');
+    /* A click a keyboard made has no pointer position and a detail of 0. */
+    this.moreBtn = btn('More', (e) => this.toggleMore(e.detail === 0), 'Import, export, duplicate, delete');
     this.moreMenu = document.createElement('div');
     this.moreMenu.className = 'tb-more-menu';
+    this.moreMenu.id = 'tb-more-menu';
     this.moreMenu.hidden = true;
+    this.moreMenu.setAttribute('role', 'menu');
+    this.moreMenu.setAttribute('aria-label', 'More');
+    this.moreBtn.setAttribute('aria-haspopup', 'menu');
+    this.moreBtn.setAttribute('aria-expanded', 'false');
+    this.moreBtn.setAttribute('aria-controls', 'tb-more-menu');
+    /* The arrows, Home and End walk the items; Escape is the page's (bindKeys)
+     * and closes it from anywhere; Tab out of it closes it. */
+    this.moreMenu.addEventListener('keydown', (e) => {
+      const items = this.moreItemsShown();
+      const at = items.indexOf(document.activeElement);
+      const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+      if (to !== undefined && items.length) {
+        e.preventDefault();
+        items[(to + items.length) % items.length].focus();
+      }
+    });
+    this.moreWrap.addEventListener('focusout', (e) => {
+      if (e.relatedTarget && !this.moreWrap.contains(e.relatedTarget)) {
+        this.closeMore();
+      }
+    });
     /* Kept by name, because a map words them differently and has no lap to
      * animate. */
     this.moreItems = new Map();
@@ -4095,6 +4852,7 @@ export class App {
       ['delete', 'Delete', () => this.confirmRemove(), 'Remove this track from this browser', 'tb-danger'],
     ]) {
       const b = btn(label, () => { this.closeMore(); fn(); }, title, `tb-more-item ${cls}`.trim());
+      b.setAttribute('role', 'menuitem');
       this.moreItems.set(id, b);
       this.moreMenu.append(b);
     }
@@ -4128,56 +4886,67 @@ export class App {
     this.classToggle = document.createElement('div');
     this.classToggle.className = 'tb-class';
     this.classToggle.setAttribute('role', 'group');
-    this.classToggle.setAttribute('aria-label', 'Which builder');
+    this.classToggle.setAttribute('aria-label', 'Which canvas');
     this.classBtns = new Map();
     /*
      * THE THIRD CANVAS IS A MAP, not a third class. It is flown on the five
      * inch, so choosing it seats the five inch exactly as the first button
      * does; what it changes is what the document IS: a place made of
      * assets, with no flying order through it.
+     *
+     * THE GATE'S WORDS, Five inch, Whoop and Freestyle, each titled with
+     * what it makes. It said "5 inch" here and "Five inch racing" on the
+     * simulator's gate, two spellings of one choice (MENUS-PLAN.md 4.1).
      */
-    for (const [canvas, label, hint] of [
-      ['full', '5 inch', 'MultiGP gates on a sixty metre field'],
-      ['micro', 'Whoop', 'RaceGOW gates in a ten by twelve metre hall'],
-      ['freestyle', 'Freestyle', 'Your own freestyle map: buildings, cranes, a skate set and named gaps on a 160 metre plot, flown on the five inch'],
-    ]) {
+    for (const canvas of CANVAS_ORDER) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'tb-class-btn';
-      b.textContent = label;
-      b.title = hint;
+      b.textContent = CANVAS_WORDS[canvas].label;
+      b.title = CANVAS_WORDS[canvas].makes;
       b.addEventListener('click', () => this.setCanvas(canvas));
       this.classBtns.set(canvas, b);
       this.classToggle.append(b);
     }
 
+    /* The storage notice once it has been read: a line beside Save, with the
+     * sentence in its title, and a press says the sentence for a screen that
+     * has no pointer to hover with. See SAVED_ONCE_KEY. */
+    this.keptChip = btn('Saved in this browser', () => this.toast(this.keptChip.title), '', 'tb-kept');
     const zoneFile = document.createElement('div');
     zoneFile.className = 'tb-zone tb-zone-file';
     zoneFile.append(
-      Object.assign(document.createElement('span'), { className: 'tb-title', textContent: 'Track Builder' }),
+      /* The page is the Builder, whichever canvas it is on: the glossary's
+       * one name for it, where this bar, its tab and the simulator's gate had
+       * three between them (MENUS-PLAN.md 4.1). */
+      Object.assign(document.createElement('span'), { className: 'tb-title', textContent: 'Builder' }),
       this.classToggle,
       name,
-      group(
-        (this.newBtn = btn('New', () => this.newTrack(), 'Start a blank track')),
-        btn('Save', () => this.save(), 'Control S'),
+      Object.assign(group(
+        (this.newBtn = btn('New', () => this.newTrack(), 'Start a blank track', 'tb-btn tb-new')),
+        (this.saveBtn = btn('Save', () => this.save(), 'Control S', 'tb-btn tb-save')),
         (this.loadBtn = btn('Load', () => this.openLoad(), 'Open a saved track')),
-      ),
+      ), { className: 'tb-bargroup tb-file-group' }),
+      this.keptChip,
       this.moreWrap,
     );
 
     const zoneEdit = document.createElement('div');
     zoneEdit.className = 'tb-zone tb-zone-edit';
+    this.viewGroup = Object.assign(group(this.mode2d, this.mode3d), { className: 'tb-bargroup tb-view-group' });
+    this.logosBtn = btn('Sponsor logos', () => this.openLogo(), 'Up to five sponsors\u2019 logos, shared out over the gates, the flags and the grass');
     zoneEdit.append(
-      group(this.undoBtn, this.redoBtn),
-      group(this.modeRoom, this.modePlan, this.mode2d, this.mode3d),
-      group(
+      Object.assign(group(this.undoBtn, this.redoBtn), { className: 'tb-bargroup tb-undo-group' }),
+      this.viewGroup,
+      Object.assign(group(
         (this.fitBtn = btn('Fit', () => this.frameAll(), 'Frame the whole field')),
+        this.topBtn,
         this.pathBtn,
         this.bendBtn,
         this.squareBtn,
         this.labelsBtn,
-        btn('Sponsor logos', () => this.openLogo(), 'Up to five sponsors\u2019 logos, shared out over the gates, the flags and the grass'),
-      ),
+        this.logosBtn,
+      ), { className: 'tb-bargroup tb-show-group' }),
     );
 
     const zoneOut = document.createElement('div');
@@ -4188,14 +4957,175 @@ export class App {
      * toggle joined it. */
     zoneOut.append(this.listingChip, this.publishBtn, this.flyBtn, back);
 
-    bar.append(zoneFile, zoneEdit, zoneOut, file);
+    /*
+     * A PHONE'S TWO DRAWERS, opened from the bar (MENUS-PLAN.md 4.4). Under
+     * 500 px either way the palette and the side column are drawers over the
+     * drawing, which gets the screen, and these are their buttons; the bar's
+     * second row folds into More (buildPhoneMenu). The stylesheet's phone block
+     * shows them and lays the bar out; on a bigger screen they are not there.
+     */
+    this.toolsBtn = btn('Tools', (e) => this.toggleTools(null, { keys: e.detail === 0 }), 'The palette: pick a piece, then tap where it goes', 'tb-btn tb-phone-only tb-tools-btn');
+    this.toolsBtn.setAttribute('aria-controls', 'tb-palette');
+    this.toolsBtn.setAttribute('aria-expanded', 'false');
+    this.detailsBtn = btn('Details', (e) => this.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
+      'What is selected, the flying order and the results', 'tb-btn tb-phone-only tb-details-btn');
+    this.detailsBtn.setAttribute('aria-controls', 'tb-side');
+    this.detailsBtn.setAttribute('aria-expanded', 'false');
+    /* Where a portrait phone's bar turns to its second row. */
+    const turn = Object.assign(document.createElement('span'), { className: 'tb-bar-turn' });
+    this.buildPhoneMenu(btn);
+
+    bar.append(this.toolsBtn, zoneFile, zoneEdit, zoneOut, this.detailsBtn, turn, file);
     /* On the keep strip, not in the toolbar. The toolbar is already the
-     * width of its three zones, and a pill in it cuts the last edit button. */
-    const keep = document.getElementById('tb-keep');
-    if (keep) {
-      keep.append(patreonAnchor());
-    }
+     * width of its three zones, and a pill in it cuts the last edit button.
+     * Once the strip has been read and is folded away it moves to the foot of
+     * More, as Support on Patreon: see placeKeep. */
+    this.keepNode = document.getElementById('tb-keep');
+    this.keepText = document.getElementById('tb-keep-text');
+    this.patreon = patreonAnchor();
     this.updateTopBar();
+  }
+
+  /*
+   * MORE, ON A PHONE: the bar's second row and its quieter half, folded in
+   * (MENUS-PLAN.md 4.4). A phone's bar holds the two drawers, the name, Undo,
+   * Redo, Load, More and Fly, and everything else the bar carries on a bigger
+   * screen is here, the same buttons doing the same things, in the order the
+   * bar has them: the canvas, the file, the view, the logos, Publish, the rest
+   * of More, and the way back. The stylesheet shows them only on a phone, and
+   * updateTopBar keeps their state with the bar's (syncPhoneMenu).
+   *
+   * They go into the menu IN THAT ORDER, ahead of More's own items, rather than
+   * being put there by the stylesheet: the arrow keys walk the menu in the
+   * order of its nodes, and More opened from the keyboard puts the keyboard on
+   * its first, so a menu drawn in one order and walked in another opened
+   * scrolled to its middle, on Duplicate.
+   */
+  buildPhoneMenu(btn) {
+    const menu = this.moreMenu;
+    const head = menu.firstChild;
+    const item = (id, label, fn, title, cls = '') => {
+      const b = btn(label, () => { this.closeMore(); fn(); }, title, `tb-more-item tb-phone-only ${cls}`.trim());
+      b.setAttribute('role', 'menuitem');
+      b.dataset.phone = id;
+      this.phoneItems.set(id, b);
+      menu.insertBefore(b, head);
+      return b;
+    };
+    /* A row of choices inside the menu: the canvas, and the view. */
+    const seg = (id, label, choices) => {
+      const row = document.createElement('div');
+      row.className = 'tb-more-seg tb-phone-only';
+      row.dataset.phone = id;
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', label);
+      for (const [key, words, fn, title] of choices) {
+        const b = btn(words, () => { this.closeMore(); fn(); }, title, 'tb-more-item tb-more-seg-btn');
+        b.setAttribute('role', 'menuitemradio');
+        b.dataset.choice = key;
+        row.append(b);
+      }
+      this.phoneItems.set(id, row);
+      menu.insertBefore(row, head);
+    };
+    this.phoneItems = new Map();
+    seg('canvas', 'Which canvas', CANVAS_ORDER.map((c) => [c, CANVAS_WORDS[c].label, () => this.setCanvas(c), CANVAS_WORDS[c].makes]));
+    item('new', 'New', () => this.newTrack(), 'Start a blank one');
+    item('save', 'Save', () => this.save(), 'Keep it in Load, in this browser');
+    seg('view', 'View', [
+      ['2d', '2D', () => this.show2d(), 'The plan from above'],
+      ['3d', '3D', () => this.show3d(), 'The track in 3D'],
+    ]);
+    item('fit', 'Fit', () => this.frameAll(), 'Frame the whole of it');
+    item('top', 'Top', () => this.toggleTop(), 'Look straight down on the room');
+    item('line', 'Show line', () => this.togglePath(), 'Draw the racing line');
+    item('bend', 'Bend line', () => this.toggleBendLine(), 'Drag the racing line to bend it');
+    item('square', 'Square', () => this.toggleSquare(), 'New gates face along the nearest axis and stay there, as a plan is drawn');
+    item('labels', 'Labels', () => this.toggleLabels(), 'Numbers and names on the drawing');
+    item('logos', 'Sponsor logos', () => this.openLogo(), 'Up to five sponsors’ logos');
+    item('publish', 'Publish', () => this.openPublish(), 'Put it on the board');
+    const back = document.createElement('a');
+    back.className = 'tb-more-item tb-phone-only';
+    back.setAttribute('role', 'menuitem');
+    back.dataset.phone = 'back';
+    back.textContent = 'Back to the simulator';
+    this.phoneItems.set('back', back);
+    menu.append(back);
+  }
+
+  /* The phone's More items say what the bar's buttons say: see buildPhoneMenu. */
+  syncPhoneMenu() {
+    const p = this.phoneItems;
+    if (!p) {
+      return;
+    }
+    /* A room is a canvas that is built in 3D: the whoop's and the five inch's. */
+    const room = this.buildsIn3D();
+    const map = docModeOf(this.doc) === 'freestyle';
+    const check = (node, on) => {
+      node.setAttribute('aria-checked', on ? 'true' : 'false');
+      node.classList.toggle('on', on);
+    };
+    const canvas = canvasOf(this.doc);
+    for (const b of p.get('canvas').children) {
+      check(b, b.dataset.choice === canvas);
+    }
+    const view = p.get('view');
+    for (const b of view.children) {
+      check(b, b.dataset.choice === this.mode);
+    }
+    /* 3D first where it is the tool, as on the bar. */
+    const lead = view.querySelector(`[data-choice="${room ? '3d' : '2d'}"]`);
+    if (view.firstElementChild !== lead) {
+      view.prepend(lead);
+    }
+    const plan = this.mode === '3d' && this.view3d.isPlan();
+    p.get('top').hidden = !(room && this.mode === '3d');
+    check(p.get('top'), room && plan);
+    p.get('line').hidden = map;
+    check(p.get('line'), this.pathVisible);
+    p.get('bend').hidden = !room;
+    check(p.get('bend'), this.bendLine);
+    /* Square is a field's: a whoop's gates are always on a quarter turn. */
+    p.get('square').hidden = !(room && !this.isWhoopRace());
+    check(p.get('square'), this.square);
+    check(p.get('labels'), this.labelsVisible);
+    p.get('new').textContent = map ? 'New map' : 'New track';
+    p.get('publish').textContent = this.publishBtn.textContent;
+    p.get('back').href = simulatorLink(this.doc);
+  }
+
+  /*
+   * THE STORAGE NOTICE, in the canvas's noun, as a strip until this browser
+   * has saved something and as the line beside Save after that. The Patreon
+   * link goes where the notice is not: on the strip while it is up, and at the
+   * foot of More once it is folded away.
+   */
+  placeKeep() {
+    const noun = wordsFor(this.doc).noun;
+    const sentence = keepSentence(noun);
+    if (this.keepText) {
+      this.keepText.textContent = sentence;
+    }
+    const folded = savedOnce();
+    if (this.keepNode) {
+      this.keepNode.hidden = folded;
+    }
+    this.keptChip.hidden = !folded;
+    this.keptChip.title = `This browser only. ${sentence}`;
+    if (!this.patreon) {
+      return;
+    }
+    /* A phone has no strip at all (the stylesheet's phone block), so there it
+     * is in More from the start. */
+    const inMenu = folded || isPhone();
+    const home = inMenu ? this.moreMenu : this.keepNode;
+    if (home && this.patreon.parentElement !== home) {
+      home.append(this.patreon);
+    }
+    this.patreon.classList.toggle('tb-more-item', inMenu);
+    this.patreon.setAttribute('role', inMenu ? 'menuitem' : 'link');
+    this.patreon.lastElementChild.textContent = inMenu ? 'Support on Patreon' : 'Patreon';
   }
 
   updateTopBar() {
@@ -4212,11 +5142,24 @@ export class App {
     const plan = this.mode === '3d' && this.view3d.isPlan();
     this.mode2d.classList.toggle('on', this.mode === '2d');
     this.mode3d.classList.toggle('on', this.mode === '3d');
-    this.modeRoom.style.display = room ? '' : 'none';
-    this.modePlan.style.display = room ? '' : 'none';
-    this.mode3d.style.display = room ? 'none' : '';
-    this.modeRoom.classList.toggle('on', room && this.mode === '3d' && !plan);
-    this.modePlan.classList.toggle('on', room && plan);
+    this.mode2d.setAttribute('aria-pressed', this.mode === '2d' ? 'true' : 'false');
+    this.mode3d.setAttribute('aria-pressed', this.mode === '3d' ? 'true' : 'false');
+    /* 3D first where it is the tool, which is in a room (the whoop's, and the five inch's), and 2D first where it
+     * is, which is on a map. */
+    const lead = room ? this.mode3d : this.mode2d;
+    if (this.viewGroup && this.viewGroup.firstElementChild !== lead) {
+      this.viewGroup.prepend(lead);
+    }
+    this.mode2d.title = room
+      ? 'The plan from above, the canvas this builder has always had. V for 3D'
+      : 'Build here, on the plan from above. V for the 3D preview';
+    this.mode3d.title = room
+      ? `Build here, in 3D: pick a piece on the left, click the ${whoop ? 'floor' : 'ground'}, drag a piece to move it. V for 2D`
+      : 'A 3D preview: building is in 2D. Drag a horizontal pole or a waypoint here to change its height; everything else stands on the ground, or on what is under it on a map. V for 2D';
+    /* Top is a camera of the room's 3D, beside Fit, lit while it looks down. */
+    this.topBtn.style.display = room && this.mode === '3d' ? '' : 'none';
+    this.topBtn.classList.toggle('on', room && plan);
+    this.topBtn.setAttribute('aria-pressed', room && plan ? 'true' : 'false');
     this.bendBtn.style.display = room ? '' : 'none';
     this.bendBtn.classList.toggle('on', this.bendLine);
     /* Square is for a field: a whoop's gates are always on a quarter turn. */
@@ -4225,7 +5168,7 @@ export class App {
     /* The room's layout: the side column is a drawer and the room's own chrome is shown. See the block in
      * index.html. The class is named for the canvas it was made for and is the room's on every track. */
     document.body.classList.toggle('tb-whoop', room);
-    this.fitBtn.title = docModeOf(this.doc) === 'freestyle' ? 'Frame the whole plot' : 'Frame the track';
+    this.fitBtn.title = room ? 'Frame the track' : `Frame the whole ${wordsFor(this.doc).place}`;
     const map = docModeOf(this.doc) === 'freestyle';
     if (this.classBtns) {
       const canvas = canvasOf(this.doc);
@@ -4252,7 +5195,11 @@ export class App {
     document.body.classList.toggle('tb-map', map);
     /* The status bar's hints for the 3D view's own gestures. */
     document.body.classList.toggle('tb-in-3d', this.mode === '3d');
-    this.flyBtn.textContent = map ? 'Fly this map' : 'Fly this track';
+    /* "Fly", and the rest of the sentence in a span a portrait phone's bar
+     * leaves out for room; the button's text is still the whole of it. */
+    this.flyBtn.replaceChildren('Fly', Object.assign(document.createElement('span'), {
+      className: 'tb-long', textContent: map ? ' this map' : ' this track',
+    }));
     this.flyBtn.title = map
       ? 'Build this map in the town\u2019s style and fly it on the five inch'
       : 'Build the world around this track and fly it';
@@ -4265,7 +5212,10 @@ export class App {
       this.moreItems.get('export').title = `Write a .json ${noun} file`;
       this.moreItems.get('delete').title = `Remove this ${noun} from this browser`;
       this.moreItems.get('animation').style.display = map ? 'none' : '';
-      for (const id of ['link', 'sheet', 'picture']) {
+      /* The share link is a race track's, on either canvas (MENUS-PLAN.md
+       * 4.2b); the build sheet and the picture are the room's. */
+      this.moreItems.get('link').style.display = map ? 'none' : '';
+      for (const id of ['sheet', 'picture']) {
         this.moreItems.get(id).style.display = whoop ? '' : 'none';
       }
     }
@@ -4312,6 +5262,19 @@ export class App {
         this.publishBtn.title = 'Put this track on the public board, logos and all';
       }
     }
+    if (this.backLink) {
+      this.backLink.href = simulatorLink(this.doc);
+      this.backLink.title = `The simulator's title, with ${wordsFor(this.doc).flies} and this ${wordsFor(this.doc).noun} seated`;
+    }
+    const w = wordsFor(this.doc);
+    this.logosBtn.title = map
+      ? `Up to five sponsors’ logos, painted on the ${w.ground} where you put them`
+      : `Up to five sponsors’ logos, shared out over the gates, the flags and the ${w.ground}`;
+    this.pathBtn.title = 'Draw the racing line on the canvas. P';
+    this.detailsBtn.setAttribute('aria-expanded', this.drawerOpen ? 'true' : 'false');
+    this.detailsBtn.classList.toggle('on', this.drawerOpen);
+    this.syncPhoneMenu();
+    this.placeKeep();
     this.fitTopBar();
   }
 
@@ -4334,6 +5297,15 @@ export class App {
     const bar = this.nodes.topbar;
     const zones = bar ? [...bar.children].filter((z) => z.classList.contains('tb-zone')) : [];
     if (zones.length !== 3) {
+      return;
+    }
+    /* A phone's bar is laid out by the stylesheet's phone block, one row held
+     * sideways and two upright, and the wide bar's wrap only spread its gaps.
+     * What it measures is handed on: More hangs under it and is as tall as
+     * the screen below it allows. */
+    if (isPhone()) {
+      bar.classList.remove('tb-bar-wrap');
+      document.documentElement.style.setProperty('--tb-top-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
       return;
     }
     /* Measured on one row, as it would be drawn unwrapped: the wrapped bar
@@ -4431,6 +5403,12 @@ export class App {
    * width: the chooser is three picture cards across, not a column. */
   modal(title, body, actions = [], opts = {}) {
     const back = this.nodes.modal;
+    /* The control that opened the first of a run of dialogs gets the keyboard
+     * back when the last one closes (closeModal). */
+    if (back.hidden) {
+      const at = document.activeElement;
+      this.modalFrom = at instanceof HTMLElement && at !== document.body ? at : null;
+    }
     back.textContent = '';
     back.hidden = false;
     /* A new dialog replaces the old one's content without closing it, so
@@ -4448,6 +5426,11 @@ export class App {
     box.append(h, body);
     const row = document.createElement('div');
     row.className = 'tb-row-btns';
+    /* A dialog's own primary button (Publish) leads the row it closes from,
+     * rather than standing on a line of its own above Close. */
+    if (opts.primary) {
+      row.append(opts.primary);
+    }
     for (const a of actions) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -4462,11 +5445,19 @@ export class App {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'tb-btn';
-    close.textContent = actions.length ? 'Cancel' : 'Close';
+    close.textContent = actions.length || opts.primary ? 'Cancel' : 'Close';
     close.addEventListener('click', () => this.closeModal());
     row.append(close);
     box.append(row);
     back.append(box);
+    /* The keyboard goes into the dialog, onto the box itself, so Tab reaches
+     * its first control and Escape is the dialog's; a dialog with a field to
+     * fill in, or a cursor of its own, moves it on from there. Not onto a
+     * button: Enter on a confirm's Yes is not a thing to have happen by
+     * accident. */
+    box.tabIndex = -1;
+    box.focus({ preventScroll: true });
+    return { box, close };
     /* The backdrop click handler is bound ONCE, in the constructor. It used
      * to be registered per open with { once: true }, which only removes
      * itself when it fires: closing with a button left it attached, so a
@@ -4492,8 +5483,14 @@ export class App {
   }
 
   closeModal() {
+    const had = this.nodes.modal.contains(document.activeElement);
     this.nodes.modal.hidden = true;
     this.nodes.modal.textContent = '';
+    const from = this.modalFrom;
+    this.modalFrom = null;
+    if (had && from && from.isConnected) {
+      from.focus({ preventScroll: true });
+    }
     const after = this.afterModal;
     this.afterModal = null;
     if (after) {
@@ -4506,6 +5503,14 @@ export class App {
   bindKeys() {
     window.addEventListener('keydown', (e) => {
       const t = e.target;
+      /* Escape closes a dialog from anywhere in it, a field included: a
+       * dialog whose name field had the caret ignored Escape, which is the
+       * one key every dialog answers. The chooser has its own rule below. */
+      if (e.key === 'Escape' && !this.nodes.modal.hidden && !this.choosing() && t && this.nodes.modal.contains(t)) {
+        e.preventDefault();
+        this.closeModal();
+        return;
+      }
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
         return;
       }
@@ -4525,6 +5530,14 @@ export class App {
        * otherwise land on a canvas they have not chosen yet. Its own keys,
        * the arrows, Enter and Space, are handled on its cards. */
       if (this.choosing()) {
+        if (e.key === 'Escape') {
+          this.closeModal();
+        }
+        return;
+      }
+      /* Every other dialog holds the page's keys the same way: G pressed over
+       * Load armed a gate behind it, and Delete took one away. */
+      if (!this.nodes.modal.hidden) {
         if (e.key === 'Escape') {
           this.closeModal();
         }
@@ -4585,9 +5598,22 @@ export class App {
           return;
         }
       }
+      /*
+       * ESCAPE PUTS AWAY THE NEAREST THING, in this order: a dialog, the More
+       * menu (and the keyboard goes back to More), a phone's tools drawer, the
+       * side drawer, an armed tool, a picked pipe, and last the selection. The
+       * drawer used to come nowhere, so Escape with it open let go of the
+       * selection and left the drawer over half the room (MENUS-PLAN.md 1.18).
+       */
       if (e.key === 'Escape') {
         if (!this.nodes.modal.hidden) {
           this.closeModal();
+        } else if (this.closeMore(true)) {
+          /* The menu is shut and More has the keyboard. */
+        } else if (this.closeTools()) {
+          /* The palette drawer of a phone is shut. */
+        } else if (this.drawerOpen) {
+          this.toggleDrawer(false);
         } else if (this.armed) {
           this.disarm();
         } else if (this.clearPickedSide()) {
@@ -4655,18 +5681,18 @@ export class App {
         return;
       }
 
-      /* A track's tools, and on a field its pieces made of pieces: H lays a row of whoop gates, K a wall of
-       * five inch ones, M is the ruler. */
+      /* A track's tools, and on a field its pieces made of pieces: H lays a row of whoop gates, K a cube on the whoop
+       * and a wall of five inch gates, M is the ruler and N the fly order. */
       const tool = this.buildsIn3D() ? toolByKey(e.key, trackClassOf(this.doc)) : undefined;
       if (tool) {
-        this.arm(tool.id);
+        this.pickTool(tool.id);
         return;
       }
 
       /* The palette's own keys: a map's are not a track's. */
       const def = elementByKey(e.key, trackClassOf(this.doc), docModeOf(this.doc));
       if (def) {
-        this.arm(def.id);
+        this.pickTool(def.id);
       }
     });
   }
@@ -4714,6 +5740,9 @@ export class App {
  * by index.html at boot and kept here so app.js owns every way a document
  * can arrive. */
 export function docFromLocation() {
-  /* Decoded once, by the module that owns the link's format: see sharelink.js. */
-  return docFromQuery(window.location.search);
+  /* Decoded once, by the module that owns the link's format: see sharelink.js,
+   * and then out of the address: see dropUrlParams. */
+  const doc = docFromQuery(window.location.search);
+  dropUrlParams('track');
+  return doc;
 }

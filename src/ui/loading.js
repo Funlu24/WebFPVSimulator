@@ -116,7 +116,7 @@ const STAGE_NAMES = {
  */
 const STAGE_DOING = {
   three: 'Loading the renderer',
-  board: 'Asking the leaderboard',
+  board: 'Asking the board',
   sim: 'Starting the flight controller',
   module: 'Loading the map',
   world: 'Building the world',

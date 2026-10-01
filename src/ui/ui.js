@@ -9,12 +9,13 @@
  * result to read at the end of a run.
  *
  * Every screen is navigable from the keyboard alone and from a radio or
- * gamepad alone, except Settings and the title. On a radio there are no
- * reliable menu buttons, so the sticks drive the other menus: pitch moves
- * the cursor, roll right selects, roll left goes back. Any gamepad button
- * also selects. Title and Settings keep the sticks for the airframe, so
- * those screens are mouse and keyboard for the rows. A radio switch still
- * selects on the title. The screens say so. Rows that hold a value also
+ * gamepad alone. On a radio there are no reliable menu buttons, so the
+ * sticks drive the menus: pitch moves the cursor, roll right selects, roll
+ * left goes back. Any gamepad button also selects. The title and Quad pose
+ * the airframe with the sticks, so there pitch moves the cursor and roll is
+ * left to the pose; Rates, Tune, the bench and Stick help use the sticks for
+ * what they show, and there only the buttons choose and go back. The legend
+ * says which (see pollPad and STICKS_BUSY). Rows that hold a value also
  * have a mouse control: up and down arrows for a stepped number, a
  * dropdown for a named list.
  *
@@ -215,16 +216,64 @@ import {
  * appear here renders as a plain action, which is the safe default: it gets no
  * chevron it has not earned.
  */
-const LINK_ACTIONS = new Set(['leaderboard', 'wiki', 'support', 'partners']);
+/* card-board opens the board's page for one track in the board's tab, so it
+ * wears the link arrow the leaderboard row wears (MENUS-PLAN.md 1.38). */
+const LINK_ACTIONS = new Set(['leaderboard', 'seat-board', 'wiki', 'support', 'partners', 'card-board']);
 /* mapbuilder is the builder's freestyle door, and it opens the same page
  * trackbuilder does, so it wears the same chevron: the pause menu's Back to
  * the track builder is one or the other depending on what is being flown,
  * and the row should not change shape between the two. */
 const SCREEN_ACTIONS = new Set([
   'courses', 'race', 'freestyle', 'pilot', 'quad', 'launch', 'standings', 'rates', 'pids', 'fc',
-  'howto', 'tricks', 'credits', 'trackbuilder', 'mapbuilder', 'builder', 'remix', 'editown',
-  'choosepad', 'calibrate', 'stickhelp', 'stickhelp-calibrate', 'stickhelp-check',
+  'howto', 'tricks', 'credits', 'trackbuilder', 'trackbuilder-new', 'mapbuilder', 'builder', 'remix', 'editown',
+  'choosepad', 'calibrate', 'calibrate-check', 'stickhelp', 'stickhelp-calibrate', 'stickhelp-check',
+  'advanced', 'card-launch',
 ]);
+
+/*
+ * THE CHROME BUDGET (MENUS-PLAN.md 2.6). Up to seven things floated over
+ * every room: the crumb, the Flying and Pilot chips, Report bug, the music
+ * dock, Patreon and the command bar's button. On a phone they took the top
+ * 120 px and the bottom 40 px of a 390 px window, and on a laptop they sat
+ * on headings and ledes. Each now appears where it is about the screen it
+ * is on, and these sets are where that is decided.
+ *
+ * Report bug where reports come from: the run, its pause and results, and
+ * the rooms a pilot opens because something is wrong. F8 opens it from
+ * every screen, and How to fly teaches the key. The title has had none by
+ * decision since the gate was a first impression, and keeps none.
+ */
+const BUG_CHIP_SCREENS = new Set([
+  'flight', 'paused', 'results', 'pilot', 'advanced', 'stickhelp', 'calibrate', 'padpick',
+]);
+/* The music where it is chosen or heard over a run: the title, the run and
+ * its pause, and Settings, which holds Sound. */
+const MUSIC_SCREENS = new Set(['title', 'flight', 'paused', 'pilot']);
+/* What is seated, in the rooms where it decides what happens next. The Maps
+ * room only once a map is seated (see contextChips). */
+const FLYING_CHIP_SCREENS = new Set(['courses', 'launch', 'quad', 'freestyle']);
+/* The pilot's name, where a time is about to go on the board under it. */
+const PILOT_CHIP_SCREENS = new Set(['launch', 'results']);
+/* Support on the title and in About, not beside every crumb. */
+const PATREON_SCREENS = new Set(['title', 'credits']);
+
+/*
+ * THE SCREENS WHERE THE STICKS ARE BUSY, and what with, said in the legend
+ * in place of Move and Adjust, which were not true there (MENUS-PLAN.md
+ * 2.9). The buttons still choose and go back on all of them.
+ */
+const STICKS_BUSY = {
+  rates: 'Sticks move the dot on the curve',
+  pids: 'Sticks rest here, so a stick cannot change a gain',
+  fc: 'Sticks rest on the bench',
+  stickhelp: 'Sticks are what is being tested',
+};
+
+/* The two screens whose sticks pose the quad: pitch moves the cursor there
+ * and roll is left to the pose. See pollPad. */
+function posesQuad(ui) {
+  return ui.screen === 'quad' || (ui.screen === 'title' && !ui.onGate());
+}
 
 /* What the breadcrumb says, per screen. A room is a navigation parent, so a
  * trail rather than a single word: Escape then has one obvious destination
@@ -274,40 +323,64 @@ const COURSE_PLAN_MS = 50;
 
 const ROOM_PARENTS = new Set(['courses', 'freestyle', 'launch', 'quad', 'pilot']);
 
+/* The rooms whose list is their content, sized to the window by
+ * fitMenuHeight. */
+const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'launch', 'stickhelp', 'standings', 'paused']);
+
+/*
+ * ONE NAME PER ROOM, and it is the name of what the room holds
+ * (MENUS-PLAN.md, the glossary). The title's Track row opens Tracks and its
+ * Map row opens Maps; the room a Tune row opens is Tune, with the PID
+ * sliders inside it; the room that holds the credits roll and every door
+ * out to the people behind this is About. The ids stay as they were, because
+ * checks, CSS and saved cursors name rooms by id and a pilot never sees one.
+ */
 const SCREEN_TITLES = {
   title: 'WebFPV',
-  courses: 'Race',
-  freestyle: 'Freestyle',
+  courses: 'Tracks',
+  freestyle: 'Maps',
   pilot: 'Settings',
   quad: 'Quad',
   launch: 'Before you fly',
   standings: 'Standings',
   rates: 'Rates',
-  pids: 'PIDs',
+  pids: 'Tune',
   fc: 'Firmware bench',
   paused: 'Paused',
   results: 'Run complete',
   howto: 'How to fly',
   tricks: 'Trick list',
-  credits: 'Credits',
+  credits: 'About',
   stickhelp: 'Stick help',
+  advanced: 'Advanced',
+  calibrate: 'Calibrate sticks',
+  padpick: 'Choose joystick',
 };
+/*
+ * The crumb's trail, as the room is reached from its home. crumbTrail()
+ * swaps the first part for the room it was actually opened from when that
+ * is a different one, so the crumb and Escape always name the same place:
+ * Rates opened from Quad reads Quad / Rates, and Escape goes to Quad.
+ */
 const CRUMBS = {
-  courses: ['Race'],
-  freestyle: ['Freestyle'],
+  courses: ['Tracks'],
+  freestyle: ['Maps'],
   pilot: ['Settings'],
   quad: ['Quad'],
   launch: ['Before you fly'],
-  standings: ['Race', 'Standings'],
+  standings: ['Tracks', 'Standings'],
   rates: ['Settings', 'Rates'],
-  pids: ['Quad', 'PIDs'],
+  pids: ['Quad', 'Tune'],
   fc: ['Quad', 'Firmware bench'],
   paused: ['Paused'],
   results: ['Run complete'],
   howto: ['How to fly'],
-  tricks: ['Freestyle', 'Trick list'],
-  credits: ['Credits'],
+  tricks: ['Maps', 'Trick list'],
+  credits: ['About'],
   stickhelp: ['Settings', 'Stick help'],
+  advanced: ['Settings', 'Advanced'],
+  calibrate: ['Settings', 'Calibrate sticks'],
+  padpick: ['Settings', 'Choose joystick'],
   title: ['WebFPV'],
 };
 
@@ -721,6 +794,11 @@ function counterBestSentence(s) {
 /* Where a built track lives, said in the Race room beside the row that
  * builds one. It was the title's, where it was three lines on every visit
  * and wrong with a freestyle map seated. The builder's strip says the same. */
+/* The orders the Tracks room offers for the board's half: the same three
+ * the board's own Order menu leads with, in its words. */
+const COURSE_ORDERS = [['flown', 'Most flown'], ['newest', 'Newest'], ['name', 'A to Z']];
+const COURSE_ORDER_IDS = COURSE_ORDERS.map(([id]) => id);
+
 const KEEP_NOTE = 'Tracks you build stay in this browser. Clearing it, or another device, starts you from nothing. Publish a track to put it on the public board.';
 
 /* How many kinds of trick a freestyle result lists before "N more". */
@@ -942,6 +1020,26 @@ const DEFAULTS = {
    * in; an automatic prompt that returns is how feedback dies.
    */
   feelAsked: false,
+  /*
+   * WHETHER THIS PILOT HAS EVER BEEN IN THE AIR, which is what "first run"
+   * means. It used to be read off whether any settings were saved at all,
+   * and answering the gate saves settings, so a newcomer who reloaded before
+   * flying lost First flight for good (MENUS-PLAN.md 1.43). Set the first
+   * time the flight screen comes up, by any path. A saved blob from before
+   * this key existed has no key at all and still counts as returning.
+   */
+  hasFlown: false,
+  /*
+   * How many race results screens this pilot has seen, for the flight feel
+   * question, which waits for the second (MENUS-PLAN.md 2.8).
+   */
+  resultsSeen: 0,
+  /*
+   * The order of the board's half of the Tracks room: 'flown' (most flown
+   * first, the board's own default), 'newest' or 'name'. Remembered, because
+   * a pilot who looks for new tracks looks for them every visit.
+   */
+  courseOrder: 'flown',
   /*
    * Whether the thumb-rates hand-off has happened. A fresh profile on a
    * touch device starts on TOUCH_RATE_DEFAULTS directly; an existing
@@ -1276,7 +1374,19 @@ function markAirHintSeen() {
  */
 function detectFirstRun() {
   try {
-    if (localStorage.getItem(SETTINGS_KEY)) {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      /* Saved settings are a returning pilot unless they say, in so many
+       * words, that this pilot has not flown yet: see hasFlown. */
+      try {
+        const saved = JSON.parse(raw);
+        if (saved && saved.hasFlown === false) {
+          return true;
+        }
+      } catch (e) {
+        /* Not JSON. loadSettings starts again from the defaults; this is
+         * still somebody who has been here. */
+      }
       return false;
     }
     for (let i = 0; i < localStorage.length; i += 1) {
@@ -1360,6 +1470,16 @@ export function loadSettings() {
   }
   if (s.keyRaceMode !== 'acro') {
     s.keyRaceMode = 'angle';
+  }
+  /* A blob saved before hasFlown existed belongs to somebody who has been
+   * here, and detectFirstRun has always called them returning. Without this
+   * the default false would be written back on the next save and a veteran
+   * would be offered First flight on their next visit. */
+  if (Object.keys(stored).length && typeof stored.hasFlown !== 'boolean') {
+    s.hasFlown = true;
+  }
+  if (!COURSE_ORDER_IDS.includes(s.courseOrder)) {
+    s.courseOrder = DEFAULTS.courseOrder;
   }
   s.stickMode = normaliseStickMode(s.stickMode);
   s.keyThrottle = normaliseKeyThrottle(s.keyThrottle);
@@ -2147,16 +2267,6 @@ function btn(cls, text) {
   return n;
 }
 
-function hintWithKeys(keys, text) {
-  const n = el('div', 'hint');
-  const ks = el('span', 'hint-keys');
-  for (const k of keys) {
-    ks.append(el('kbd', null, k));
-  }
-  n.append(ks, el('span', 'hint-copy', text));
-  return n;
-}
-
 function wordmark() {
   const h = el('h1', 'wordmark');
   h.append(document.createTextNode('WEB'), el('span', 'fpv', 'FPV'));
@@ -2436,6 +2546,64 @@ function wrapMenu() {
   const help = el('div', 'menu-help');
   stage.append(menu, help);
   return { stage, menu, help };
+}
+
+/*
+ * BEFORE YOU FLY, ONCE PER TRACK PER VISIT (MENUS-PLAN.md 2.7).
+ *
+ * The launch card carries the fairness contract, what a run on this track
+ * counts as, and it stood between the title's Fly and every single run. It
+ * is read once. So the title's Fly shows it the first time a track is flown
+ * in this tab, and after that goes to the grid with the run set up as it
+ * was. A press that names a track (its card's Fly it, a double click, the
+ * builder's Fly this track, Standings) has always gone to the grid; the
+ * seated track's sheet in the Tracks room has a Before you fly row, which
+ * is the way back to the card whenever it is wanted.
+ *
+ * The tab's own storage, so a new visit starts over and two tabs do not
+ * answer for each other. The key is the track, not the run settings: the
+ * card is a statement about the track, and changing laps is a reason to
+ * open it, which the Before you fly row does.
+ */
+const LAUNCH_SEEN_KEY = 'webfpv.launchSeen.v1';
+
+function launchCardKey(s) {
+  if (s.map !== 'custom') {
+    return s.map || null;
+  }
+  const seat = activeCourseSummary();
+  const id = seat && (seat.shareId || (seat.doc && seat.doc.id) || seat.name);
+  return id ? `custom:${id}` : null;
+}
+
+function readLaunchSeen() {
+  try {
+    const list = JSON.parse(sessionStorage.getItem(LAUNCH_SEEN_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function launchCardSeen(s) {
+  const key = launchCardKey(s);
+  return Boolean(key) && readLaunchSeen().includes(key);
+}
+
+function markLaunchCardSeen(s) {
+  const key = launchCardKey(s);
+  if (!key) {
+    return;
+  }
+  const list = readLaunchSeen();
+  if (!list.includes(key)) {
+    list.push(key);
+    try {
+      sessionStorage.setItem(LAUNCH_SEEN_KEY, JSON.stringify(list.slice(-50)));
+    } catch (e) {
+      /* No storage, so the card shows on every Fly, as it always did. */
+    }
+  }
 }
 
 /*
@@ -3000,16 +3168,16 @@ function builderReturnItem(s, sharedMap) {
       return null;
     }
     return {
-      label: 'Back to the track builder',
+      label: 'Back to the builder',
       action: kind === 'owned' ? 'editown' : 'trackbuilder',
-      note: `Opens ${listing.name || 'this track'} in the track builder. Fly this track in there brings you straight back to the starting blocks.`,
+      note: `Opens ${listing.name || 'this track'} in the builder. Fly this track in there brings you straight back to the starting blocks.`,
     };
   }
   if (s.map === 'built' && !sharedMap && ownMapId()) {
     return {
-      label: 'Back to the track builder',
+      label: 'Back to the builder',
       action: 'mapbuilder',
-      note: 'Opens your map in the track builder. Fly this map in there brings you straight back to it.',
+      note: 'Opens your map in the builder. Fly this map in there brings you straight back to it.',
     };
   }
   return null;
@@ -3040,7 +3208,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   if (timePosted && shareId) {
     const rank = timePosted.rank != null ? ` Rank ${timePosted.rank}.` : '';
     return {
-      label: 'Time uploaded',
+      label: 'Time posted',
       action: 'posttime',
       disabled: true,
       note: `That lap is on the public board.${rank}`,
@@ -3048,7 +3216,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (!listing || !shareId) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       note: 'Only a track on the board can hold a time. Publish this one first.',
@@ -3056,7 +3224,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (!listing.canPostTime) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       note: 'The layout has changed since it was published. Update the track on the board first.',
@@ -3064,7 +3232,7 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
   }
   if (ms == null) {
     return {
-      label: 'Upload a time',
+      label: 'Post a time',
       action: 'posttime',
       disabled: true,
       /* A pilot who has just flown twenty clean laps in practice and comes
@@ -3083,10 +3251,10 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
     ? ` It goes up marked Weight ${weight}%, the weight it was flown at.`
     : '';
   return {
-    label: isNew ? `Upload new best, ${formatTime(ms)}` : `Upload ${formatTime(ms)}`,
+    label: isNew ? `Post new best, ${formatTime(ms)}` : `Post ${formatTime(ms)}`,
     action: 'posttime',
     note: (isNew
-      ? 'Faster than the last time you uploaded from this browser. Sends this lap to the public board.'
+      ? 'Faster than the last time you posted from this browser. Sends this lap to the public board.'
       : 'Send this lap to the public board under your name.') + marked,
   };
 }
@@ -3095,7 +3263,7 @@ function publishAction(listing, published) {
   if (published) {
     return {
       label: 'Published',
-      action: 'leaderboard',
+      action: 'seat-board',
       note: 'This track is on the public board. Opens its page.',
     };
   }
@@ -3106,15 +3274,15 @@ function publishAction(listing, published) {
       label: 'Publish this track',
       action: 'publishcourse',
       note: listing.remix
-        ? `Your copy${of}${by}. Goes on the board under a new name. Then you can upload a time.`
-        : 'Put this track on the public board. Then you can upload a time.',
+        ? `Your copy${of}${by}. Goes on the board under a new name. Then you can post a time.`
+        : 'Put this track on the public board. Then you can post a time.',
     };
   }
   if (listing && listing.canUpdateListing && listing.layoutDrift) {
     return {
       label: 'Update this track',
       action: 'publishcourse',
-      note: 'The layout changed. Updating the board will clear posted times, then you can upload a time.',
+      note: 'The layout changed. Updating the board will clear posted times, then you can post a time.',
     };
   }
   if (listing && listing.kind === 'owned') {
@@ -3138,7 +3306,7 @@ function publishAction(listing, published) {
     action: 'publishcourse',
     disabled: true,
     note: listing && listing.kind === 'local'
-      ? 'A track needs a flying order before it can be published. Set one in the track builder.'
+      ? 'A track needs a flying order before it can be published. Set one in the builder.'
       : 'Nothing to publish. Build a track, or pick one from the board.',
   };
 }
@@ -3149,7 +3317,7 @@ function remixAction(listing) {
     return {
       label: 'Edit a copy',
       action: 'remix',
-      note: `Open ${listing.name}${by} in the track builder as your own track, under a new name.`,
+      note: `Open ${listing.name}${by} in the builder as your own track, under a new name.`,
     };
   }
   return {
@@ -3167,7 +3335,7 @@ function editOwnAction(listing) {
     return {
       label: 'Edit this track',
       action: 'editown',
-      note: 'Open this track in the track builder. A rename updates the name on the board. A layout change asks before clearing times.',
+      note: 'Open this track in the builder. A rename updates the name on the board. A layout change asks before clearing times.',
     };
   }
   return {
@@ -3243,6 +3411,9 @@ function courseCardKey(card) {
   if (card.course.kind === 'board' || card.course.kind === 'local') {
     return `${card.course.kind}:${card.course.track.id}`;
   }
+  if (card.course.kind === 'new') {
+    return 'new';
+  }
   return 'current';
 }
 
@@ -3276,7 +3447,7 @@ function courseCardKey(card) {
  * card puts Fly it on screen without moving anything. A double click on the
  * card is the same press: see flyCard.
  */
-function courseCardRows(subject) {
+function courseCardRows(subject, seatRows = []) {
   const board = subject.course.kind === 'board';
   const name = subject.label;
   const rows = [
@@ -3292,14 +3463,21 @@ function courseCardRows(subject) {
         ? `Load ${name} from the board and go straight to the starting blocks. A double click on its card does the same.`
         : `Fly ${name}, straight from the starting blocks. A double click on its card does the same.`,
     },
-    {
-      label: 'Open in the track builder',
-      action: 'card-builder',
-      note: board
-        ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
-        : `Open ${name} in the builder. Nothing is flown.`,
-    },
   ];
+  /* The seated track's own rows, when the card is the seat: Before you fly,
+   * Post a time, Publish, the right Edit, Standings and its page. */
+  if (seatRows.length) {
+    rows.push(...seatRows);
+    rows.push({ label: 'Back to the list', action: 'card-back' });
+    return rows;
+  }
+  rows.push({
+    label: 'Open in the builder',
+    action: 'card-builder',
+    note: board
+      ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
+      : `Open ${name} in the builder. Nothing is flown.`,
+  });
   if (board) {
     rows.push({
       label: 'Standings',
@@ -3307,13 +3485,55 @@ function courseCardRows(subject) {
       note: `Every time posted on ${name}, fastest first, and who flew them. Opens here, not on another site.`,
     });
     rows.push({
-      label: 'Open on the web',
+      label: 'This track on Tracks and times',
       action: 'card-board',
-      note: `The public page for ${name}. A link to send somebody. Opens in a new tab.`,
+      note: `${name} on the public board: every time posted on it, who flew them and their ghosts. A link to send somebody. Opens in a new tab.`,
     });
   }
   rows.push({ label: 'Back to the list', action: 'card-back' });
   return rows;
+}
+
+/*
+ * THE ONE EDIT ROW, which is the right one of three (MENUS-PLAN.md 2.4):
+ * Edit this track for a published track of your own, Edit a copy for
+ * somebody else's, and Open in the builder for a track that lives only in
+ * this browser. Each used to be its own row, two of them greyed out at any
+ * moment, saying in grey what the third was for.
+ */
+function editAction(listing, seat = null) {
+  if (listing && listing.kind === 'owned') {
+    return editOwnAction(listing);
+  }
+  if (listing && listing.canRemix) {
+    return remixAction(listing);
+  }
+  const name = (seat && seat.name) || (listing && listing.name) || 'this track';
+  return {
+    label: 'Open in the builder',
+    action: 'trackbuilder',
+    note: `Opens the builder on ${name}. New in there starts a blank one. ${KEEP_NOTE}`,
+  };
+}
+
+/*
+ * Rows that can be pressed, and the one greyed row that is news rather than
+ * an apology: Time posted says the lap is on the board. A greyed row whose
+ * reason is another row's job ("Publish this one first") is left out, and
+ * the row that does that job says so in its own note.
+ */
+function applicableRows(rows) {
+  return rows.filter((r) => r && (!r.disabled || r.label === 'Time posted'));
+}
+
+function orderedCourses(list, order) {
+  const out = list.slice();
+  if (order === 'newest') {
+    out.sort((a, b) => String(b.publishedUtc || '').localeCompare(String(a.publishedUtc || '')));
+  } else if (order === 'name') {
+    out.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+  }
+  return out;
 }
 
 /* What pressing a course card does, said once for all three kinds of card so
@@ -3437,7 +3657,7 @@ function craftItem(s, midRun) {
   const other = AIRFRAMES.find((a) => a.id !== s.airframe) || af;
   return choice(
     'Aircraft',
-    `${af.blurb} Each aircraft keeps its own tune, PIDs, pack, weight and camera: changing it brings back that machine's as you left them, or its stock ones the first time, and switches the track builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates go with you unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
+    `${af.blurb} Each aircraft keeps its own tune, PIDs, pack, weight and camera: changing it brings back that machine's as you left them, or its stock ones the first time, and switches the builder between a ${other.trackClass === 'micro' ? 'sixty metre field and a living room' : 'living room and a sixty metre field'}. Your own rates go with you unless they are still the stock ones.${midRun ? MID_RUN_WARNING : ''}`,
     AIRFRAME_IDS,
     s.airframe,
     (id) => airframeById(id).name,
@@ -3563,7 +3783,12 @@ function graphicsItem(s, scaleNow) {
     note,
     ['auto', ...GRAPHICS_IDS],
     s.graphicsAuto ? 'auto' : id,
-    (v) => (v === 'auto' ? `Auto (${graphicsLabel(id)})` : graphicsLabel(v)),
+    /* "Auto", not "Auto (Medium)": the longer one broke the segmented row's
+     * 24 character budget, so the row turned into a list on Medium and stayed
+     * segmented on Low and High, changing shape with its own value
+     * (MENUS-PLAN.md 1.40). What Auto is drawing at is the note's first
+     * sentence. */
+    (v) => (v === 'auto' ? 'Auto' : graphicsLabel(v)),
     (v) => {
       if (v === 'auto') {
         s.graphicsAuto = true;
@@ -3652,9 +3877,15 @@ function gpuItem(info) {
       info: true,
     };
   }
+  /* The renderer's own name, without the vendor in brackets after it: the
+   * row's value stops at about half the row, so "Software (Google Inc.
+   * (Google))" was cut to "Software (Google Inc. (..." (MENUS-PLAN.md 1.15).
+   * The note says the whole thing, and so does the row's tooltip. */
+  const short = String(info.display || '').split(' (')[0].trim() || info.display;
   return {
     label: 'GPU',
-    value: info.display,
+    value: short,
+    title: info.display,
     note: info.note,
     info: true,
   };
@@ -3927,7 +4158,7 @@ const WAYS = [
     mode: 'race',
     label: 'Five inch racing',
     art: 'assets/gate/race.jpg',
-    blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish goes to the public leaderboard.',
+    blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish can go on the public board.',
     facts: ['6S', '220 mm', 'The board'],
   },
   {
@@ -3981,7 +4212,7 @@ const WAYS = [
  */
 const BUILDER_CARD = {
   id: 'builder',
-  label: 'Map builder',
+  label: 'Builder',
   art: 'assets/gate/builder.jpg',
   blurb: 'Make your own. A race track for the five inch, a room for the whoop, or a freestyle map of bandos, cranes and named gaps, drawn from above and flown from the same page.',
   facts: ['Tracks', 'Rooms', 'Maps'],
@@ -4201,6 +4432,11 @@ export class Ui {
      * is being fetched to fly, which is the one that says Loading. */
     this.cardPress = null;
     this.flyingCard = null;
+    /* The chosen card to open again when Back returns to the room from the
+     * launch card or Standings, and the card the open sheet is drawn after.
+     * See show and placeCourseSheet. */
+    this.reopenCard = null;
+    this.sheetAfterKey = null;
     this.onAction = null;    /* (action, settings) => void */
     this.onSettings = null;  /* (settings) => void */
     /* () => void. Fly what was just seated from the starting blocks, now if
@@ -4538,6 +4774,10 @@ export class Ui {
      * stick calibration prompts, which have to read over a screen, so the
      * banner is appended after the screens rather than before. */
     this.banner = el('div', 'banner', '');
+    /* And a notice on a menu screen, which is not the banner: see
+     * setMenuNotice. */
+    this.menuNotice = el('div', 'menu-notice', '');
+    this.menuNotice.hidden = true;
     /*
      * THE ONE THING THAT SPEAKS.
      *
@@ -4551,7 +4791,8 @@ export class Ui {
      *
      * Off screen with a clip rather than display:none, because display:none
      * takes a node out of the accessibility tree entirely, which is the
-     * mistake the legacy .hint rule makes and this one must not repeat.
+     * mistake the old hidden hint lines made (deleted, MENUS-PLAN.md 1.42)
+     * and this one must not repeat.
      */
     this.announcer = el('div', 'sr-only', '');
     this.announcer.setAttribute('aria-live', 'polite');
@@ -4594,6 +4835,18 @@ export class Ui {
     });
     this.frameBot.append(this.frameLegend, el('div', 'frame-gap'), this.framePrimary);
     r.append(this.frameTop, this.frameBot);
+    /* A scroll anywhere in the shell can bring the primary row into sight or
+     * take it out of it: see syncPrimaryButton. Captured, because a scroll
+     * event does not bubble. One look per frame. */
+    this.primaryFrame = 0;
+    r.addEventListener('scroll', () => {
+      if (!this.primaryFrame) {
+        this.primaryFrame = requestAnimationFrame(() => {
+          this.primaryFrame = 0;
+          this.syncPrimaryButton();
+        });
+      }
+    }, { capture: true, passive: true });
 
     /* Screens. */
     this.screens = {};
@@ -4668,14 +4921,7 @@ export class Ui {
     this.titleMenu.classList.add('menu-scroll');
     this.titleHelp = titleBlock.help;
     const titleFoot = el('div', 'title-foot');
-    /* Kept, because its keys and its copy change with the state the title
-     * is in: the gate has nothing behind it for Escape to reach and the
-     * menu does. See setTitleHint. */
-    this.titleHint = hintWithKeys(['↑↓', 'Enter'], 'Arrow keys move, Enter selects. A radio banks the quad. Any switch selects.');
-    titleFoot.append(
-      this.titleHint,
-      titleBlock.stage,
-    );
+    titleFoot.append(titleBlock.stage);
     /*
      * The gate's two cards.
      *
@@ -4712,7 +4958,9 @@ export class Ui {
      */
     const howto = el('div', 'screen screen-page screen-howto');
     howto.append(el('h2', null, 'How to fly'));
-    howto.append(el('p', 'howto-lede', 'A quad has no brakes and no wings. Throttle only sets how hard the props push, so the way to slow down or turn is to point the quad somewhere else and push. Fly the pulsing gate: green is the way through, red is its wrong face.'));
+    /* ONE LINE (MENUS-PLAN.md 2.5). The gate colours went to the line under
+     * the keys, with the rest of what a first run needs (see renderHowto). */
+    howto.append(el('p', 'howto-lede', 'No brakes and no wings: to slow down or turn, point the quad somewhere else and push.'));
 
     const howtoTabs = el('div', 'howto-tabs');
     this.howtoTabs = {};
@@ -4752,7 +5000,7 @@ export class Ui {
     const howtoBlock = wrapMenu();
     this.howtoMenu = howtoBlock.menu;
     this.howtoHelp = howtoBlock.help;
-    howto.append(howtoBlock.stage, hintWithKeys(['Esc'], 'Goes back. Arrow keys still move the menu.'));
+    howto.append(howtoBlock.stage);
     this.screens.howto = howto;
     this.howtoSource = touchWanted() ? 'touch' : 'keyboard';
     this.renderHowto();
@@ -4784,22 +5032,32 @@ export class Ui {
     this.trickMenu = trickBlock.menu;
     this.trickMenu.classList.add('menu-scroll');
     this.trickHelp = trickBlock.help;
-    tricks.append(trickBlock.stage, hintWithKeys(['Esc'], 'Goes back. Arrow keys move through the list.'));
+    tricks.append(trickBlock.stage);
     this.screens.tricks = tricks;
     this.trickPlayer = new TrickFilmPlayer(this.trickCanvas);
     this.trickShown = '';
 
+    /*
+     * ABOUT: the credits roll, and every door to the people behind this.
+     *
+     * The rows come BEFORE the roll. Under it they were 1,540 px below the
+     * window on arrival, Partners and Back both, which is what kept
+     * lint:shell red (MENUS-PLAN.md 0.1); and since 2.1 this room also holds
+     * the front page's old Support and FPV wiki rows, which have to be
+     * findable without reading a page of thanks first. The roll is the
+     * content, the rows are the furniture, and furniture goes by the door.
+     */
     const credits = el('div', 'screen screen-page screen-credits');
-    credits.append(el('h2', null, 'Credits'));
+    credits.append(el('h2', null, 'About'));
+    credits.append(el('p', 'rates-lede', 'Who made this, whose work it stands on, and how to reach them.'));
     this.creditsRoll = el('div', 'credits-roll');
     fillCredits(this.creditsRoll, { assetBase: 'assets/credits' });
     const creditsBlock = wrapMenu();
     this.creditsMenu = creditsBlock.menu;
     this.creditsHelp = creditsBlock.help;
     credits.append(
-      this.creditsRoll,
       creditsBlock.stage,
-      hintWithKeys(['Esc'], 'Goes back. Arrow keys still move the menu.'),
+      this.creditsRoll,
     );
     this.screens.credits = credits;
 
@@ -4864,7 +5122,38 @@ export class Ui {
        ordering that only ever applied to the board's half. Yours first
        because the track you were last working on is the one you came here
        to fly; the board's underneath, most flown first. */
-    this.courseStrip.append(el('div', 'strip-label', 'Yours first, then the board, most flown first'));
+    /*
+     * THE ORDER IS A CONTROL, NOT A CAPTION. The label said "most flown
+     * first" about a half the pilot could not reorder, so a pilot looking
+     * for what was published this week had thirty cards to read. Three
+     * chips, the board's own three orders in its words, and the choice is
+     * remembered (settings.courseOrder). They are buttons, so Tab reaches
+     * them; the arrow keys stay on the cards.
+     */
+    const stripHead = el('div', 'strip-head');
+    stripHead.append(el('div', 'strip-label', 'Yours first, then the board'));
+    this.courseOrderChips = el('div', 'strip-order');
+    this.courseOrderChips.setAttribute('role', 'group');
+    this.courseOrderChips.setAttribute('aria-label', "Order of the board's tracks");
+    for (const [id, word] of COURSE_ORDERS) {
+      const chip = el('button', 'order-chip', word);
+      chip.type = 'button';
+      chip.dataset.order = id;
+      chip.addEventListener('click', () => {
+        if (this.settings.courseOrder === id) {
+          return;
+        }
+        this.settings.courseOrder = id;
+        saveSettings(this.settings);
+        if (this.onUiSound) {
+          this.onUiSound('move');
+        }
+        this.renderMenu();
+      });
+      this.courseOrderChips.append(chip);
+    }
+    stripHead.append(this.courseOrderChips);
+    this.courseStrip.append(stripHead);
     this.courseCardHost = el('div', 'map-cards course-cards');
     this.boardNote = el('div', 'board-note', '');
     this.courseStrip.append(this.courseCardHost, this.boardNote);
@@ -4875,10 +5164,16 @@ export class Ui {
     /* Kept, because choosing a card from the keys brings the whole of this
      * into view rather than one row of it. See revealCardList. */
     this.coursesStage = coursesBlock.stage;
+    /* The chosen track's fastest pilots, in the sheet's first column, which
+     * was empty: see paintPodium. */
+    this.coursePodium = el('div', 'sheet-podium');
+    this.coursePodium.hidden = true;
+    this.coursePodium.setAttribute('aria-live', 'polite');
+    this.coursesStage.prepend(this.coursePodium);
+    this.podiumCache = new Map();
     courses.append(
       this.courseStrip,
       coursesBlock.stage,
-      hintWithKeys(['↑↓', 'Enter', 'Esc'], 'Arrow keys move, Enter chooses. Escape goes back. On a radio: pitch to move, roll right to choose.'),
     );
     /* A double click on a track flies it: see cardDoubleClick. The
      * capturing half forgets the last card press on every first press, so
@@ -4896,7 +5191,7 @@ export class Ui {
     /* Freestyle. Same card machinery as Race, different contents, and no
      * publish cluster because nothing here is timed or posted. */
     const freestyle = el('div', 'screen screen-page screen-courses screen-freestyle');
-    freestyle.append(el('h2', null, 'Freestyle'));
+    freestyle.append(el('h2', null, 'Maps'));
     /*
      * The lede used to end "Pick one and fly it", which was the instruction
      * for a screen that offered four worlds, and it said "no board", which
@@ -4909,7 +5204,10 @@ export class Ui {
      * behind the door has to describe the door that is actually open: the
      * town and the quad, with the scoring named as a switch rather than as
      * the point. See DEFAULTS.freestyleScoring. */
-    freestyle.append(el('p', 'rates-lede', 'The whole town, a map of your own from the track builder, or one of the newest maps on the board, and no gates in any of them. Fly one, and this is where the machine you fly it on lives. Gaps, skims and the chase are counted from the first flight; trick names are the switch below and start off, because the part that names what you flew is still being built.'));
+    /* One line (MENUS-PLAN.md 2.5). What is counted, and that trick names
+     * start off, is the Scoring row's note, which says it where the switch
+     * is; the machine is the Quad row's. */
+    freestyle.append(el('p', 'rates-lede', 'Open ground, no gates: the town, your map, or one from the board.'));
     this.freestyleCards = el('div', 'map-cards');
     /*
      * THE BOARD'S MAPS, the Race room's board strip for freestyle: the ten
@@ -4954,7 +5252,7 @@ export class Ui {
      */
     const quad = el('div', 'screen screen-page screen-quad');
     quad.append(el('h2', null, 'Quad'));
-    quad.append(el('p', 'rates-lede', 'Everything about the machine. Carried with every time you post.'));
+    quad.append(el('p', 'rates-lede', 'The aircraft, its tune, the camera and how it flies.'));
     const quadBlock = wrapMenu();
     this.quadMenu = quadBlock.menu;
     this.quadMenu.classList.add('menu-scroll');
@@ -4965,18 +5263,38 @@ export class Ui {
     const quadShowcase = el('div', 'craft-showcase');
     quadShowcase.append(this.craftQuadFrame, this.craftCaption);
     quadBlock.stage.prepend(quadShowcase);
-    quad.append(quadBlock.stage, hintWithKeys(['Esc'], 'Goes back. Changes are already stored. Arrow keys still move the menu.'));
+    quad.append(quadBlock.stage);
     this.screens.quad = quad;
 
     const pilot = el('div', 'screen screen-page screen-pilot');
     pilot.append(el('h2', null, 'Settings'));
-    pilot.append(el('p', 'rates-lede', 'You and your sticks. Rates are here because they are yours: they stay put when you switch tunes.'));
+    pilot.append(el('p', 'rates-lede', 'You, your radio and your rates, the picture and the sound.'));
     const pilotBlock = wrapMenu();
     this.pilotMenu = pilotBlock.menu;
     this.pilotMenu.classList.add('menu-scroll');
     this.pilotHelp = pilotBlock.help;
-    pilot.append(pilotBlock.stage, hintWithKeys(['Esc'], 'Goes back. Changes are already stored. Arrow keys still move the menu.'));
+    pilot.append(pilotBlock.stage);
     this.screens.pilot = pilot;
+
+    /*
+     * ADVANCED, one door down from Settings (MENUS-PLAN.md 2.3).
+     *
+     * Settings had grown back to 33 stops, past the 30 that split it from
+     * Quad on 28 August, and nine of them were the render pipeline's knobs
+     * and the flight log: rows a pilot touches when something is wrong, and
+     * whose own notes say Auto handles them otherwise. A pilot looking for
+     * Volume scrolled past Frame pacing to find it. They live here now,
+     * under the same Settings styling, with Escape back to Settings.
+     */
+    const advanced = el('div', 'screen screen-page screen-pilot screen-advanced');
+    advanced.append(el('h2', null, 'Advanced'));
+    advanced.append(el('p', 'rates-lede', 'For when something is wrong. Auto suits most machines.'));
+    const advancedBlock = wrapMenu();
+    this.advancedMenu = advancedBlock.menu;
+    this.advancedMenu.classList.add('menu-scroll');
+    this.advancedHelp = advancedBlock.help;
+    advanced.append(advancedBlock.stage);
+    this.screens.advanced = advanced;
 
     /*
      * STANDINGS: the board, in the game.
@@ -5002,7 +5320,7 @@ export class Ui {
     this.standingsMenu.classList.add('menu-scroll');
     this.standingsHelp = standingsBlock.help;
     standingsBlock.stage.prepend(this.standingsTable);
-    standings.append(standingsBlock.stage, hintWithKeys(['Esc'], 'Goes back to the track list.'));
+    standings.append(standingsBlock.stage);
     this.screens.standings = standings;
 
     /*
@@ -5034,7 +5352,7 @@ export class Ui {
     this.launchMenu = launchBlock.menu;
     this.launchMenu.classList.add('menu-scroll');
     this.launchHelp = launchBlock.help;
-    launch.append(launchBlock.stage, hintWithKeys(['Enter', 'Esc'], 'Enter flies it. Escape goes back without flying.'));
+    launch.append(launchBlock.stage);
     this.screens.launch = launch;
 
     /*
@@ -5060,7 +5378,10 @@ export class Ui {
     rates.append(el(
       'p',
       'rates-lede',
-      'How far the sticks go. Pick the rate system you think in and type your own numbers: all five of Betaflight\'s are here and the quad flies whichever you choose. Rates belong to you, not to the tune, so they stay put when you switch tunes. A radio in Acro flies this curve; key races start in Angle, which ignores it.',
+      /* One line (MENUS-PLAN.md 2.5). The five systems are the Rates type
+       * row's note, and what a key race does with the curve is the keyboard
+       * Stick path row's. */
+      'How far the sticks turn the quad. They stay when you switch tunes.',
     ));
     this.ratesPanel = mountRatesPanel();
     const ratesBlock = wrapMenu();
@@ -5071,9 +5392,7 @@ export class Ui {
      * Settings. The three column grid is what keeps the rows in the middle
      * of the window whatever is beside them. */
     ratesBlock.stage.prepend(this.ratesPanel.root);
-    const ratesHint = hintWithKeys(['↑↓', '←→', 'Enter', 'Esc'], '');
-    this.ratesHint = ratesHint.querySelector('.hint-copy');
-    rates.append(ratesBlock.stage, ratesHint);
+    rates.append(ratesBlock.stage);
     this.screens.rates = rates;
 
     /*
@@ -5091,11 +5410,13 @@ export class Ui {
      * the running module, so what is on this screen is what is flying.
      */
     const pids = el('div', 'screen screen-page screen-rates screen-pids');
-    pids.append(el('h2', null, 'PIDs'));
+    pids.append(el('h2', null, 'Tune'));
     pids.append(el(
       'p',
       'rates-lede',
-      'How hard the flight controller works. The sliders are Betaflight\'s own, applied by the firmware itself, and they adjust the tune you have loaded from where it ships them; the master multiplier scales everything at once. Each tune keeps its own adjustment. Rates live on their own screen and are untouched by anything here.',
+      /* One line (MENUS-PLAN.md 2.5). What each slider does is its row's
+       * note, the master multiplier's included. */
+      'How hard the flight controller works. Kept for each tune.',
     ));
     this.pidsPanel = mountPidsPanel();
     const pidsBlock = wrapMenu();
@@ -5103,9 +5424,7 @@ export class Ui {
     this.pidsMenu.classList.add('menu-scroll');
     this.pidsHelp = pidsBlock.help;
     pidsBlock.stage.prepend(this.pidsPanel.root);
-    const pidsHint = hintWithKeys(['↑↓', '←→', 'Enter', 'Esc'], '');
-    this.pidsHint = pidsHint.querySelector('.hint-copy');
-    pids.append(pidsBlock.stage, pidsHint);
+    pids.append(pidsBlock.stage);
     this.screens.pids = pids;
 
     /*
@@ -5246,7 +5565,6 @@ export class Ui {
       this.calAxes,
       this.calList,
       calBtns,
-      hintWithKeys(['Esc'], 'Cancels. Nothing is saved until Save mapping.'),
     );
     this.screens.calibrate = calibrate;
     this.calCanSave = false;
@@ -5270,10 +5588,9 @@ export class Ui {
     stickhelp.append(el(
       'p',
       'stickhelp-lede',
-      'Move the stick that is not working, all the way to each end. Each bar is one axis your'
-        + ' radio sends to this browser. If one moves, the sim has your stick and Calibrate sticks'
-        + ' puts it on the right channel. If none does, the stick is not reaching the browser, and'
-        + ' the fix is in the block below.',
+      /* One line (MENUS-PLAN.md 2.5). What a moving bar means is the line
+       * under the bars, which says it about the bar that moved. */
+      'Move the stick that is not working to each end, and watch its bar.',
     ));
     this.stickAxes = el('div', 'cal-axes stickhelp-axes');
     this.stickAxisCells = [];
@@ -5290,7 +5607,6 @@ export class Ui {
       this.stickSay,
       this.stickSteps,
       stickBlock.stage,
-      hintWithKeys(['Esc'], 'Goes back. The sticks do not move the menu here: they are what is being tested.'),
     );
     this.screens.stickhelp = stickhelp;
 
@@ -5316,7 +5632,6 @@ export class Ui {
       this.padHint,
       this.padCards,
       padBtns,
-      hintWithKeys(['Enter', 'Esc'], 'Enter uses the highlighted joystick. Escape is No, or skip if none is highlighted.'),
     );
     this.screens.padpick = padpick;
     this.padCardNodes = new Map();
@@ -5324,12 +5639,14 @@ export class Ui {
     this.padPickReason = 'boot';
     this.padPickPhase = 'wiggle';
 
-    const paused = el('div', 'screen screen-modal');
+    /* screen-paused names it for the checks, which find a screen's list by
+     * its class: without it the shell walk measured nothing here. */
+    const paused = el('div', 'screen screen-modal screen-paused');
     paused.append(el('h2', null, 'Paused'));
     const pausedBlock = wrapMenu();
     this.pausedMenu = pausedBlock.menu;
     this.pausedHelp = pausedBlock.help;
-    paused.append(pausedBlock.stage, hintWithKeys(['Esc'], 'Resumes. Resume is also the first row.'));
+    paused.append(pausedBlock.stage);
     this.screens.paused = paused;
 
     const results = el('div', 'screen screen-results');
@@ -5362,7 +5679,7 @@ export class Ui {
     this.resultsMenu = resultsBlock.menu;
     this.resultsHelp = resultsBlock.help;
     const resultsFoot = el('div', 'results-foot');
-    resultsFoot.append(resultsBlock.stage, hintWithKeys(['Esc'], 'Goes back to the title. Back to title is also a row.'));
+    resultsFoot.append(resultsBlock.stage);
     resultsCopy.append(resultsTop, resultsFoot);
     results.append(resultsCopy);
     /*
@@ -5498,7 +5815,7 @@ export class Ui {
       s.style.display = 'none';
       r.append(s);
     }
-    r.append(this.announcer, this.banner, this.bugChip, this.pauseChip, this.musicDock, this.nameDialog);
+    r.append(this.announcer, this.banner, this.menuNotice, this.bugChip, this.pauseChip, this.musicDock, this.nameDialog);
     this.syncChips();
   }
 
@@ -5600,6 +5917,45 @@ export class Ui {
         field.placeholder = spec.placeholder || spec.label || '';
         field.dataset.key = spec.key;
         box.append(field);
+        /*
+         * ANOTHER SPELLING OF A NAME ALREADY ON THE BOARD (MENUS-PLAN.md
+         * 3.4). The board shows names that differ only by case, spaces,
+         * dots, hyphens or underscores as one pilot, and stores them as
+         * typed; a pilot who posts as "asylum fpv" beside "AsylumFPV" is
+         * told so here, before they post, and can take the spelling that is
+         * there with one press. `known` may be a promise: the post flow
+         * opens the dialog first and asks the board while the pilot types.
+         */
+        if (spec.known) {
+          const hint = el('p', 'name-dialog-hint', '');
+          hint.hidden = true;
+          box.append(hint);
+          let known = [];
+          const fold = (v) => String(v || '').toLowerCase().replace(/[\s._-]+/g, '');
+          const check = () => {
+            const typed = field.value.trim();
+            const f = fold(typed);
+            const hit = f ? known.find((k) => fold(k) === f && k !== typed) : null;
+            hint.hidden = !hit;
+            hint.textContent = '';
+            if (hit) {
+              const use = btn('name-dialog-use', hit);
+              use.title = `Use ${hit}`;
+              use.addEventListener('click', () => {
+                field.value = hit;
+                check();
+                field.focus();
+              });
+              hint.append('This track\'s board already has ', use,
+                '. If that is you, use the same spelling, so your times sit under one name.');
+            }
+          };
+          field.addEventListener('input', check);
+          Promise.resolve(spec.known).then((list) => {
+            known = Array.isArray(list) ? [...new Set(list.filter(Boolean).map(String))] : [];
+            check();
+          }).catch(() => {});
+        }
         inputs.push({ spec, field });
       }
       const row = el('div', 'name-dialog-row');
@@ -5831,7 +6187,7 @@ export class Ui {
    * a small overlay with a field. Resolves to the stored name, or null if
    * they cancel.
    */
-  askName({ title, detail } = {}) {
+  askName({ title, detail, known = null } = {}) {
     return this.askForm({
       title: title || 'Your name',
       detail: detail || 'Posted times and published tracks carry this name. Changing it updates the board for tracks you published from this browser.',
@@ -5845,6 +6201,8 @@ export class Ui {
         autocomplete: 'nickname',
         rules: nameRules(),
         save: writePilotName,
+        /* Names already on the board, or a promise of them: see askForm. */
+        known,
       }],
     }).then((values) => (values ? values.name : null));
   }
@@ -5948,14 +6306,14 @@ export class Ui {
    * that Pause also uses. It stays anyway: see the stylesheet, where the
    * rule is, for what renaming it cost.
    *
-   * Report bug is on every screen but the title. See the comment where it
-   * is built: the corner over the three cards is a first impression and
-   * the corner over everything else is the only visible way to say that
-   * something is broken.
+   * Report bug is on the screens BUG_CHIP_SCREENS names: the run and the
+   * rooms a pilot opens when something is wrong. See the comment where it is
+   * built for why the title has none, and the budget for why the rest of
+   * the rooms have none either.
    */
   syncChips() {
     const dialog = this.nameDialog && !this.nameDialog.hidden;
-    const bug = this.bugChip && !dialog && this.screen !== 'title';
+    const bug = this.bugChip && !dialog && BUG_CHIP_SCREENS.has(this.screen);
     if (this.bugChip) {
       this.bugChip.hidden = !bug;
       this.bugChip.classList.toggle('on-flight', this.screen === 'flight');
@@ -5976,6 +6334,28 @@ export class Ui {
     this.syncMusicDock();
     if (this.screen !== 'flight') {
       this.syncChipFade(false);
+    }
+  }
+
+  /*
+   * HOW MANY CHIPS STAND IN THE TOP RIGHT, for the stylesheet. On a phone
+   * held upright a centred heading and the chips want the same pixels, and
+   * Settings' heading was printed under Report bug and the music dock. The
+   * budget decides which screens have chips at all (BUG_CHIP_SCREENS,
+   * MUSIC_SCREENS); this tells a narrow screen how far down to start.
+   */
+  syncChipRows() {
+    if (!this.root) {
+      return;
+    }
+    const up = (n) => Boolean(n) && !n.hidden;
+    const n = this.screen === 'title' || this.screen === 'flight'
+      ? 0
+      : (up(this.bugChip) ? 1 : 0) + (up(this.musicDock) ? 1 : 0);
+    this.root.classList.toggle('chip-rows-1', n === 1);
+    this.root.classList.toggle('chip-rows-2', n === 2);
+    if (this.musicDock) {
+      this.musicDock.classList.toggle('on-title', this.screen === 'title');
     }
   }
 
@@ -6086,9 +6466,10 @@ export class Ui {
       return;
     }
     const dialog = this.nameDialog && !this.nameDialog.hidden;
+    /* MUSIC_SCREENS, which leaves out calibrate and padpick as this always
+     * did: the wizard owns the sticks there. */
     const hide = dialog
-      || this.screen === 'calibrate'
-      || this.screen === 'padpick'
+      || !MUSIC_SCREENS.has(this.screen)
       || !this.settings.sound;
     this.musicDock.hidden = hide;
     this.musicDock.classList.toggle('on-flight', this.flying());
@@ -6098,6 +6479,7 @@ export class Ui {
     this.musicTitle.textContent = name;
     /* The name, because it ellipsises, and then what the click does. */
     this.musicTitle.title = muted ? `${name}. Click to unmute.` : `${name}. Click to mute.`;
+    this.syncChipRows();
   }
 
   bugSnapshot() {
@@ -6497,6 +6879,19 @@ export class Ui {
    */
   maybeOfferFeel() {
     if (this.settings.feelAsked) {
+      return;
+    }
+    /*
+     * ON THE SECOND RESULTS, NOT THE FIRST (MENUS-PLAN.md 2.8). The first
+     * finished race is the pilot's first time, and the form opened over it.
+     * One more run and they have something to compare the feel against.
+     * Never on its own for a radio or a gamepad: a form wants a keyboard,
+     * and a pilot whose hands are on sticks would meet a modal they cannot
+     * type into. The Flight feel row is one press away for all of them.
+     */
+    this.settings.resultsSeen = Math.min(99, (this.settings.resultsSeen || 0) + 1);
+    saveSettings(this.settings);
+    if (this.settings.resultsSeen < 2 || this.lastInput === 'pad') {
       return;
     }
     /* Let the results screen land first. A record celebration with a form
@@ -6968,7 +7363,7 @@ export class Ui {
           value: seat ? seat.name : 'Choose one',
           action: 'courses',
           note: seat
-            ? `${seat.name}, and every other track. Gated, against the clock, and every time flown here goes to the leaderboard.`
+            ? `${seat.name}, and every other track. Gated, against the clock, and a lap flown here can go on the board.`
             : 'No track is seated yet. Your own tracks, every track the board is offering, and the builder, are in here.',
         };
       /*
@@ -7020,7 +7415,18 @@ export class Ui {
             ? `${seat.name}, levelled off, with the sticks drawn on screen and a prompt at each step.`
             : 'Levelled off, with the sticks drawn on screen and a prompt at each step.',
         }
-        : { label: 'Fly', action: 'fly', primary: true };
+        : {
+          label: 'Fly',
+          action: 'fly',
+          primary: true,
+          /* Which of the two Fly does, said before it is pressed: see
+           * launchCardSeen. */
+          note: seatIsRace(s) && this.seatMatchesMode()
+            ? (launchCardSeen(s)
+              ? `Straight to the starting blocks${seat && seat.name ? ` of ${seat.name}` : ''}, set up as last time. Before you fly is under the track in Tracks.`
+              : 'Before you fly first: the laps, the pack and what this run counts as, then the grid. Once per track each visit.')
+            : undefined,
+        };
       return [
         ...(trouble ? [trouble] : []),
         flyRow,
@@ -7044,11 +7450,17 @@ export class Ui {
          * a door labelled with the name of a place. Restoring it is this
          * comment turned back into a row.
          */
+        /*
+         * THE QUAD ROW NAMES THE QUAD. It showed the tune, so the pause menu
+         * read "Betaflight default" twice, one row above the other, and a
+         * pilot asked what they were flying got the name of a PID file
+         * (MENUS-PLAN.md 1.3). The tune is one row inside, under its name.
+         */
         {
           label: 'Quad',
-          value: tuneById(s.tune).name,
+          value: airframeById(s.airframe).name,
           action: 'quad',
-          note: 'The machine. Tune, PIDs, camera angle, field of view, flight mode and the firmware bench, which is every Betaflight key the module compiles.',
+          note: 'The machine. The aircraft, its tune and PIDs, camera angle, field of view, flight mode and the firmware bench, which is every Betaflight key the module compiles.',
         },
         {
           /*
@@ -7072,27 +7484,33 @@ export class Ui {
            * The row id is built from `action` rather than the label, so
            * this costs no id and nothing that names rows has to move.
            */
+          /*
+           * NO VALUE. It showed the pilot's name, so a pilot who had not set
+           * one read "Settings: Not set" as settings nobody had made
+           * (MENUS-PLAN.md 1.2). A set name is already the Pilot chip in the
+           * top right; Your name inside still says Not set.
+           */
           label: 'Settings',
-          value: readPilotName() || 'Not set',
           action: 'pilot',
-          note: 'You and your radio. Your name, choosing a joystick, Calibrate sticks, rates, graphics, sound and the flight log.',
+          note: 'You and your radio. Your name, choosing a joystick, Calibrate sticks, rates, graphics and sound.',
         },
         { label: 'How to fly', action: 'howto', note: 'The sticks, live, and what the keys do.' },
         {
-          label: 'FPV wiki',
-          action: 'wiki',
-          note: 'The closed loop, the plant, and every Betaflight 4.5.1 key. Opens the wiki on webfpv.org.',
-        },
-        {
-          label: 'Tracks and Statistics',
+          label: 'Tracks and times',
           action: 'leaderboard',
-          note: 'The public page: every published track with its times, and how the site is doing. Opens in a new tab.',
+          note: 'Every published track and map, the times flown on them and who flew them. Opens in a new tab.',
         },
-        { label: 'Support', action: 'support', note: PATREON_NOTE },
+        /*
+         * ABOUT, where Credits, Support and the FPV wiki were three rows of
+         * the front page answering "who made this" (MENUS-PLAN.md 2.1). The
+         * room behind it is the credits roll with those doors, Partners and
+         * Report a bug on it. The action is still `credits`, so the row id,
+         * the #credits address and the checks that name it do not move.
+         */
         {
-          label: 'Credits',
+          label: 'About',
           action: 'credits',
-          note: 'Who made this, who flew it, whose work it stands on, and the partners who back it.',
+          note: 'Who made this and whose work it stands on, the partners who back it, Patreon, the FPV wiki, and reporting a bug.',
         },
         /*
          * THE WAY BACK TO THE GATE, AND IT IS A ROW NOW.
@@ -7116,7 +7534,7 @@ export class Ui {
          * game, and a pilot looking for the other mode or the other machine
          * is looking for the screen that offers both.
          */
-        { label: this.gateLabel(), action: 'mode-gate', note: 'The three cards: five inch racing, whoop racing or freestyle. Changing your mind about any of it starts here.' },
+        { label: this.gateLabel(), action: 'mode-gate', note: 'The cards: five inch racing, whoop racing, freestyle and the builder. Changing your mind about any of it starts here.' },
       ];
     }
     if (this.screen === 'howto') {
@@ -7176,6 +7594,23 @@ export class Ui {
           action: 'partners',
           note: `${PARTNERS.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Opens their page on the board in a new tab.`,
         },
+        { label: 'Support', action: 'support', note: PATREON_NOTE },
+        {
+          label: 'FPV wiki',
+          action: 'wiki',
+          note: 'The closed loop, the plant, and every Betaflight 4.5.1 key. Opens the wiki on webfpv.org.',
+        },
+        /*
+         * A REPORT FROM THE FRONT DOOR, for the one pilot who had none. The
+         * title deliberately carries no bug chip, and a phone has no F8, so
+         * a touch pilot could not report anything without first flying
+         * (MENUS-PLAN.md 1.41). This is that door, one row from the title.
+         */
+        {
+          label: 'Report a bug',
+          action: 'reportbug',
+          note: 'Something wrong, or something to say: the form takes a title and a sentence, and sends the map, graphics and browser with it. F8 opens it from anywhere.',
+        },
         { label: 'Back', action: 'back' },
       ];
     }
@@ -7197,8 +7632,7 @@ export class Ui {
     if (this.screen === 'courses') {
       if (this.coursesLede) {
         const af = airframeById(this.settings.airframe);
-        this.coursesLede.textContent = `Tracks for the ${af.name.toLowerCase()}.`
-          + ' Change the aircraft under Quad to see the other kind.';
+        this.coursesLede.textContent = `Tracks for the ${af.name.toLowerCase()}. Quad changes the aircraft.`;
       }
       const listing = liveListing('custom');
       const loaded = hasLoadedTrack();
@@ -7265,7 +7699,20 @@ export class Ui {
           action: `local:${t.id}`,
         });
       }
-      for (const t of this.boardCourses || []) {
+      /*
+       * BUILD A TRACK IS A CARD NOW, at the end of the pilot's own half
+       * (MENUS-PLAN.md 2.4). It was the first of eight rows under thirty
+       * one cards, two screens down. A card is where a pilot looking at
+       * tracks is looking, and the end of their own half is where a new one
+       * of theirs would appear.
+       */
+      cards.push({
+        label: 'Build a track',
+        note: `Opens the builder on an empty field. Whatever was on its canvas is kept in its Load list. ${KEEP_NOTE}`,
+        course: { kind: 'new' },
+        action: 'trackbuilder-new',
+      });
+      for (const t of orderedCourses(this.boardCourses || [], s.courseOrder)) {
         cards.push({
           label: t.name,
           note: t.designer
@@ -7277,52 +7724,50 @@ export class Ui {
           action: `board:${t.id}`,
         });
       }
-      /* A card the player has chosen owns the list until they go back. The
-       * cards themselves stay, so the strip still reads as where they are. */
+      /*
+       * A CARD THE PLAYER HAS CHOSEN OPENS ITS SHEET, drawn under the card's
+       * own line of the grid (placeCourseSheet), not at the foot of the
+       * page. The seated track's eight rows used to sit under all thirty one
+       * cards, two screens below the card they acted on, three of them
+       * greyed out; they are that card's sheet now, and a row that cannot
+       * apply is not drawn (MENUS-PLAN.md 2.4).
+       */
       const chosen = this.cardSubject
         ? cards.find((c) => c.course && courseCardKey(c) === this.cardSubject)
         : null;
       if (chosen) {
-        return [...cards, ...courseCardRows(chosen)];
+        const seatRows = chosen.course.kind === 'current'
+          ? [
+            {
+              label: 'Before you fly',
+              action: 'card-launch',
+              note: 'Laps, pack charge, flight model, radio link and the ghost: what this run counts as. Opens the launch card, which has its own Fly.',
+            },
+            ...applicableRows([
+              uploadAction(listing, {
+                timePosted: this.timePosted,
+                practice: s.laps === PRACTICE_LAPS,
+              }),
+              publishAction(listing, this.coursePublished),
+            ]),
+            editAction(listing, seat),
+            ...(listing && listing.shareId ? [
+              {
+                label: 'Standings',
+                action: 'standings',
+                note: `Every time posted on ${seat ? seat.name : 'this track'}, fastest first. Opens here.`,
+              },
+              {
+                label: 'This track on Tracks and times',
+                action: 'seat-board',
+                note: 'Its page on the public board, opened on this track. A link to send somebody. Opens in a new tab.',
+              },
+            ] : []),
+          ]
+          : [];
+        return [...cards, ...courseCardRows(chosen, seatRows)];
       }
-      const rows = [
-        {
-          label: loaded ? 'Open in the track builder' : 'Build a track',
-          action: 'trackbuilder',
-          note: loaded
-            ? `Opens the track builder on the track above. New in there starts a blank one. ${KEEP_NOTE}`
-            : `Opens the track builder on an empty field. ${KEEP_NOTE}`,
-        },
-        publishAction(listing, this.coursePublished),
-        uploadAction(listing, {
-          timePosted: this.timePosted,
-          practice: s.laps === PRACTICE_LAPS,
-        }),
-        remixAction(listing),
-        editOwnAction(listing),
-        /*
-         * "Open the board" meant nothing to somebody who had never seen the
-         * board, and it left the game: the page it opened has its own
-         * link back, which reloads the simulator at the title and throws
-         * away whatever was seated. Standings is what a player wanted from
-         * it, and it is a screen in here now.
-         */
-        {
-          label: 'Standings',
-          action: 'standings',
-          note: seat
-            ? `Every time posted on ${seat.name}, fastest first. Opens here.`
-            : 'Every time posted on the track you are flying. Load one first.',
-          disabled: !listing || !listing.shareId,
-        },
-        {
-          label: 'Tracks and Statistics on the web',
-          action: 'leaderboard',
-          note: 'The public page, for sending somebody a link. Everything on it is in here too. Opens in a new tab.',
-        },
-        { label: 'Back', action: 'back' },
-      ];
-      return [...cards, ...rows];
+      return [...cards, { label: 'Back', action: 'back' }];
     }
     /*
      * FREESTYLE. One town and no ceremony.
@@ -7430,11 +7875,12 @@ export class Ui {
          * bench all went out of reach from here. The title and Before you
          * fly both solve this already with a row called Quad valued at the
          * tune's name, and what this row is IS that row. So it is that row.
-         * What you are about to fly is still on it, as the value.
+         * What you are about to fly is still on it, as the value: the
+         * aircraft since 2026-10-01, as on the title (MENUS-PLAN.md 1.3).
          */
         {
           label: 'Quad',
-          value: tuneById(s.tune).name,
+          value: airframeById(s.airframe).name,
           action: 'quad',
           note: `The machine. Its Tune row opens ${SCREEN_TITLES.pids}, where the tune is chosen and Betaflight's own sliders adjust it, and the camera, the flight mode and the firmware bench are there too.`,
         },
@@ -7455,7 +7901,7 @@ export class Ui {
          * a home elsewhere: freestyle IS the other home.
          */
         choice(
-          'Physics model',
+          'Flight model',
           s.flightStyle === 'arcade'
             ? 'Arcade: the ideal quad. No propwash shake, no gyro noise, no build asymmetry. It is a plant flag, so it changes a freestyle flight exactly as much as it changes a race.'
             : 'Expert: the full physics, propwash, gyro noise and build tolerance included. Arcade turns the imperfections off for a friendlier machine. Takes effect on the next flight.',
@@ -7471,9 +7917,9 @@ export class Ui {
          * touched by it and never flown as a map.
          */
         {
-          label: 'Build a freestyle map',
+          label: 'Build a map',
           action: 'mapbuilder',
-          note: 'Opens the track builder on the freestyle canvas. Place buildings, a crane, containers, a skate set and named gaps, then fly it here as Your map.',
+          note: 'Opens the builder on the freestyle canvas. Place buildings, a crane, containers, a skate set and named gaps, then fly it here as Your map.',
         },
         { label: 'Back', action: 'back' },
       ];
@@ -7558,12 +8004,28 @@ export class Ui {
         { label: 'Flight', section: true },
         choice(
           'Flight mode',
-          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. Racing on a keyboard starts in Angle instead, because a key is on or off. Freestyle uses this setting whatever you fly with, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
+          'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
           FLIGHT_MODES,
           s.flightMode === 'angle' ? 'angle' : 'acro',
           (id) => (id === 'angle' ? 'Angle' : 'Acro'),
           (id) => { s.flightMode = id; },
         ),
+        /*
+         * THE KEYBOARD'S OWN MODE, AS A ROW. A race on keys flies
+         * keyRaceMode, not the row above (modeKey in src/main.js), and the
+         * only way to change it was M in flight. So on a keyboard the room
+         * showed Acro selected over a quad captioned ANGLE, and both were
+         * true (MENUS-PLAN.md 1.16). Shown while the keyboard is the stick
+         * path, which is when it decides anything.
+         */
+        ...((!this.padInfo || !this.padInfo.count) && !touchWanted() ? [choice(
+          'Keyboard races',
+          'How a race flies on the keyboard. Angle by default: a key is on or off, so letting go levelling the quad is what makes keys flyable. Acro if you have learned to fly keys on rates. M in flight switches it too, and keeps it.',
+          FLIGHT_MODES,
+          s.keyRaceMode === 'acro' ? 'acro' : 'angle',
+          (id) => (id === 'angle' ? 'Angle' : 'Acro'),
+          (id) => { s.keyRaceMode = id; },
+        )] : []),
         toggle(
           'Launch control',
           'Betaflight race start, off by default. When on, press L on the start line, pitch forward, centre the stick, then punch throttle. The quad holds the angle until you go.',
@@ -7734,61 +8196,18 @@ export class Ui {
           (id) => LINK_PRESETS[id].label,
           (id) => { s.link = id; },
         ),
-        /* The other half of the split, signposted. When you cut a list in
-         * two you owe the reader a line saying where the rest went. */
-        {
-          label: 'Tune, PIDs and the firmware',
-          action: 'quad',
-          note: `Those belong to the machine, not to you, so they are one room over under ${SCREEN_TITLES.quad}. Camera angle and flight mode are there too.`,
-        },
         { label: 'Screen', section: true },
         graphicsItem(s, this.autoScaleNow),
-        gpuItem(this.gpuInfo),
-        choice(
-          'Render scale',
-          'Fewer pixels, then stretched to fit. The one lever that always helps a starved GPU, at the price of sharpness. 100 is native for the preset.',
-          RENDER_SCALES,
-          s.renderScale,
-          (n) => (n >= 100 ? 'Native' : `${n}%`),
-          (n) => { s.renderScale = n; },
-        ),
-        choice(
-          'Frame cap',
-          'Caps how often the world is drawn. A steady 60 reads better than a heaving 90, and it spares the battery. Sticks are still read and the physics still steps every frame; only the picture waits.',
-          FPS_CAPS,
-          s.fpsCap,
-          (n) => (n === 0 ? 'Uncapped' : `${n} fps`),
-          (n) => { s.fpsCap = n; },
-        ),
         /*
-         * THE SHORT PATH TO THE GLASS, as a row because it can tear and
-         * because it is a request a platform may refuse. The note says which
-         * happened on this machine, from what the browser actually granted,
-         * and that a change waits for the next load: see lowLatency in
-         * DEFAULTS and buildShell in src/render/shell.js.
+         * THE DOOR TO THE KNOBS. Render scale, the frame cap, low latency,
+         * predicted view, frame pacing, the input to screen meter and the
+         * flight log, one door down: see the Advanced room's comment.
          */
-        toggle(
-          'Low latency view',
-          lowLatencyNote(s.lowLatency, this.gpuInfo),
-          s.lowLatency,
-          (v) => { s.lowLatency = v; },
-        ),
-        toggle(
-          'Predicted view',
-          s.predictView
-            ? 'On: in flight the view is drawn where the quad will be when the frame reaches the screen, from its speed and rotation, a frame ahead of where it was when the frame began. That takes about a frame off the time between your sticks and the picture. Only the picture moves; the flight, the lap and the physics are the same either way.'
-            : 'Off: the view is drawn where the quad was when the frame began, which the screen shows a frame later.',
-          s.predictView,
-          (v) => { s.predictView = v; },
-        ),
-        choice(
-          'Frame pacing',
-          pacingNote(s),
-          PACING_MODES,
-          s.pacing,
-          (id) => ({ auto: 'Timer with Low', timer: 'Timer, always', display: 'Display, always' }[id]),
-          (id) => { s.pacing = id; },
-        ),
+        {
+          label: 'Advanced',
+          action: 'advanced',
+          note: 'Render scale, frame cap, low latency and predicted view, frame pacing, what reaches the screen how fast, and the flight log. For when something is wrong; Auto looks after the picture otherwise.',
+        },
         toggle(
           'Fullscreen in flight',
           s.fullscreenFly
@@ -7797,9 +8216,6 @@ export class Ui {
           s.fullscreenFly,
           (v) => { s.fullscreenFly = v; },
         ),
-        /* What the pieces above add up to on this machine, measured: see
-         * src/render/latency.js. Read only, like the GPU row. */
-        latencyItem(this.latencyProbe ? this.latencyProbe() : null),
         /*
          * THE SWITCH OVER ALL OF IT: the manga look everywhere, the black
          * outline round the world on Medium and High, and the score's
@@ -7854,7 +8270,6 @@ export class Ui {
          * now, the crosshairs, a fixed mark at the centre of the frame.
          * The note says per shape what it is, like Frame pacing's.
          */
-        { label: 'HUD', section: true },
         choice(
           'Crosshairs',
           {
@@ -7901,6 +8316,63 @@ export class Ui {
           s.focusTone,
           (v) => { s.focusTone = v; },
         ),
+        { label: 'Back', action: 'back' },
+      ];
+    }
+
+    /* ADVANCED: the rows Settings sends here. See the room's comment. */
+    if (this.screen === 'advanced') {
+      return [
+        { label: 'Picture and latency', section: true },
+        gpuItem(this.gpuInfo),
+        choice(
+          'Render scale',
+          'Fewer pixels, then stretched to fit. The one lever that always helps a starved GPU, at the price of sharpness. 100 is native for the preset.',
+          RENDER_SCALES,
+          s.renderScale,
+          (n) => (n >= 100 ? 'Native' : `${n}%`),
+          (n) => { s.renderScale = n; },
+        ),
+        choice(
+          'Frame cap',
+          'Caps how often the world is drawn. A steady 60 reads better than a heaving 90, and it spares the battery. Sticks are still read and the physics still steps every frame; only the picture waits.',
+          FPS_CAPS,
+          s.fpsCap,
+          (n) => (n === 0 ? 'Uncapped' : `${n} fps`),
+          (n) => { s.fpsCap = n; },
+        ),
+        /*
+         * THE SHORT PATH TO THE GLASS, as a row because it can tear and
+         * because it is a request a platform may refuse. The note says which
+         * happened on this machine, from what the browser actually granted,
+         * and that a change waits for the next load: see lowLatency in
+         * DEFAULTS and buildShell in src/render/shell.js.
+         */
+        toggle(
+          'Low latency view',
+          lowLatencyNote(s.lowLatency, this.gpuInfo),
+          s.lowLatency,
+          (v) => { s.lowLatency = v; },
+        ),
+        toggle(
+          'Predicted view',
+          s.predictView
+            ? 'On: in flight the view is drawn where the quad will be when the frame reaches the screen, from its speed and rotation, a frame ahead of where it was when the frame began. That takes about a frame off the time between your sticks and the picture. Only the picture moves; the flight, the lap and the physics are the same either way.'
+            : 'Off: the view is drawn where the quad was when the frame began, which the screen shows a frame later.',
+          s.predictView,
+          (v) => { s.predictView = v; },
+        ),
+        choice(
+          'Frame pacing',
+          pacingNote(s),
+          PACING_MODES,
+          s.pacing,
+          (id) => ({ auto: 'Timer with Low', timer: 'Timer, always', display: 'Display, always' }[id]),
+          (id) => { s.pacing = id; },
+        ),
+        /* What the pieces above add up to on this machine, measured: see
+         * src/render/latency.js. Read only, like the GPU row. */
+        latencyItem(this.latencyProbe ? this.latencyProbe() : null),
         { label: 'Diagnostics', section: true },
         toggle(
           'Flight log',
@@ -7948,8 +8420,8 @@ export class Ui {
         action: 'standings-fly',
         primary: true,
         note: best
-          ? `Loads ${t.name} and takes you to the launch card. The time to beat is ${formatTime(bestMs)} by ${best.name || 'an unnamed pilot'}${room ? ', three laps.' : '.'}`
-          : `Loads ${t.name} and takes you to the launch card. Nobody has posted a time yet, so the first one is yours.`,
+          ? `Loads ${t.name} and goes straight to the starting blocks. The time to beat is ${formatTime(bestMs)} by ${best.name || 'an unnamed pilot'}${room ? ', three laps.' : '.'}`
+          : `Loads ${t.name} and goes straight to the starting blocks. Nobody has posted a time yet, so the first one is yours.`,
       });
       /*
        * Racing a recorded lap is the one thing a standings table is FOR
@@ -7960,15 +8432,15 @@ export class Ui {
       const ghosts = times.filter((x) => x.hasGhost && x.id);
       if (ghosts.length) {
         rows.push({
-          label: 'Race the record',
+          label: 'Chase the record',
           action: 'standings-ghost',
-          note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you. Arms it for the next run on this track.`,
+          note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you, straight from the starting blocks.`,
         });
       }
       rows.push({
-        label: 'Open on the web',
+        label: 'This track on Tracks and times',
         action: 'card-board',
-        note: `The public page for ${t.name}. A link to send somebody. Opens in a new tab.`,
+        note: `${t.name} on the public board, opened on its own page. A link to send somebody. Opens in a new tab.`,
       });
       rows.push({ label: 'Back', action: 'back' });
       return rows;
@@ -7995,12 +8467,15 @@ export class Ui {
             ? `${seat.gates} gates. This is what your time will be measured on.`
             : 'This is what your time will be measured on.',
         },
-        {
-          label: 'Quad',
-          value: tuneById(s.tune).name,
-          action: 'quad',
-          note: `The tune, the PIDs, the camera and the firmware. Opens ${SCREEN_TITLES.quad}. Whatever is loaded there is what this run flies, and it goes to the board with the time.`,
-        },
+        /*
+         * TUNE, NOT QUAD, because the tune is what a run is filed under and
+         * the camera is not (recordKey in src/main.js). The row read "Quad:
+         * Betaflight default" and promised the tune "goes to the board with
+         * the time", which it does not: a posted time carries the name, the
+         * lap, the three lap total, the ghost and the weight, and nothing
+         * else (postTime in src/share/board.js; MENUS-PLAN.md 1.35).
+         */
+        tuneItem(s, false),
         { label: 'What this run counts as', section: true },
         choice(
           'Laps',
@@ -8033,7 +8508,7 @@ export class Ui {
         choice(
           'Radio link',
           s.link === 'perfect'
-            ? 'A perfect link is sharper than any real radio: every frame arrives, exactly on time. Times set on it are marked on the board.'
+            ? 'A perfect link is sharper than any real radio: every frame arrives, exactly on time. Pick a real link to race on what a real radio feels like. The board is not told which link a time was flown on.'
             : `${LINK_PRESETS[s.link].hz} Hz, ${LINK_PRESETS[s.link].delayMs} ms delay, ${LINK_PRESETS[s.link].jitterMs} ms jitter.`,
           Object.keys(LINK_PRESETS),
           s.link,
@@ -8125,30 +8600,28 @@ export class Ui {
         },
         weightItem(s),
         feelItem(),
+        /*
+         * ELSEWHERE IS TWO DOORS AND THE WAY OUT (MENUS-PLAN.md 2.2).
+         *
+         * A pause is for the run: resume it, restart it, fix how it feels,
+         * or leave. Quad went because the two of its doors a pilot pauses
+         * for, Tune and Rates, are already above, and its value was the
+         * same "Betaflight default" as Tune's, one row apart. Graphics is
+         * one door away under Settings. The wiki, Support and Credits went
+         * because a new tab opened mid run is a way to lose the run, and
+         * they are one row from the title in About. At 1600x900 the last
+         * row, the way out, was cut off by the legend; now it is not.
+         */
         { label: 'Elsewhere', section: true },
         {
-          label: 'Quad',
-          value: tuneById(s.tune).name,
-          action: 'quad',
-          note: `PIDs, camera, flight mode and the firmware bench.${MID_RUN_WARNING}`,
-        },
-        {
-          /* Named for what is in it, as on the title, and it reads what the
-           * title's reads: the pilot's name. It used to read the rates, the
-           * same string as the Rates row four rows above it. */
           label: 'Settings',
-          value: readPilotName() || 'Not set',
           action: 'pilot',
           /* Rates are the first thing in this room and they no longer cost
            * the run, so the blanket warning would be wrong more often than
            * right. The rows that still restart a run carry it themselves. */
-          note: 'Your name, your radio, rates, graphics and sound.',
+          note: 'Your name, your radio, graphics and sound.',
         },
-        graphicsItem(s, this.autoScaleNow),
         { label: 'How to fly', action: 'howto' },
-        { label: 'FPV wiki', action: 'wiki', note: 'The plant, the compiled controller, and every catalog key. Opens the wiki on webfpv.org.' },
-        { label: 'Support', action: 'support', note: PATREON_NOTE },
-        { label: 'Credits', action: 'credits', note: 'Who made this, who flew it, and whose work it stands on.' },
         { label: 'Quit to title', action: 'title' },
       ];
     }
@@ -8207,7 +8680,7 @@ export class Ui {
               note: built ? (this.sharedMap ? BOARD_MAP_OFF_BOARD : BUILT_OFF_BOARD) : (nothing
                 ? 'A run with no tricks in it is not a score. Fly one and it appears here.'
                 : (run && run.timed === false
-                  ? 'Free flight has no clock, so there is nothing for a board to compare it against. Switch Run to Scored on the Freestyle screen and fly it again.'
+                  ? 'Free flight has no clock, so there is nothing for a board to compare it against. Set Scoring to Scored run in the Maps room and fly it again.'
                   : (run && run.assisted
                     ? 'This run used the harness hooks, so it is not a flown score and the board will not take it.'
                     /* The weight goes up with the run and the board prints
@@ -8241,9 +8714,9 @@ export class Ui {
             };
           })(),
           {
-            label: 'Open Tracks and Statistics',
+            label: 'Tracks and times',
             action: 'leaderboard',
-            note: 'Every published track, and the times flown on it.',
+            note: 'Every published track and map, and the times flown on them. Opens in a new tab.',
           },
           feelItem(),
           { label: 'Back to title', action: 'title' },
@@ -8256,23 +8729,30 @@ export class Ui {
           { label: 'Back to title', action: 'title' },
         ];
       }
+      /*
+       * SIX ROWS, NOT EIGHT, AND NONE OF THEM GREY (MENUS-PLAN.md, Run
+       * complete). Publish and Edit this track were greyed on most runs,
+       * and the page row was greyed until a track had a page. A row that
+       * cannot apply is not drawn; the one that does the job says why in
+       * its note (Publish: "then you can post a time"). Time posted stays,
+       * greyed, because it is news. One Edit row, the right one of three.
+       */
+      const onBoard = Boolean(listing.shareId || listing.published || this.coursePublished);
       return [
         { label: 'Fly again', action: 'restart', primary: true },
-        uploadAction(listing, {
-          row: this.resultsBoard,
-          timePosted: this.timePosted,
-        }),
-        publishAction(listing, this.coursePublished),
-        remixAction(listing),
-        editOwnAction(listing),
-        {
-          label: 'Open Tracks and Statistics',
-          action: 'leaderboard',
-          disabled: !(listing && (listing.published || listing.shareId || this.coursePublished)),
-          note: listing && listing.name
-            ? `The public page for ${listing.name}.`
-            : 'The public page. A track has to be published before it has one.',
-        },
+        ...applicableRows([
+          uploadAction(listing, {
+            row: this.resultsBoard,
+            timePosted: this.timePosted,
+          }),
+          publishAction(listing, this.coursePublished),
+        ]),
+        editAction(listing, activeCourseSummary()),
+        ...(onBoard ? [{
+          label: 'This track on Tracks and times',
+          action: 'seat-board',
+          note: `${listing.name || 'This track'} on the public board, opened on its own page: every time posted on it and who flew them. Opens in a new tab.`,
+        }] : []),
         feelItem(),
         { label: 'Back to title', action: 'title' },
       ];
@@ -8604,9 +9084,9 @@ export class Ui {
       }
       rows.push(
         {
-          label: 'Every setting',
+          label: 'Firmware bench',
           action: 'fc',
-          note: 'The full Flight controller screen: filters, features and every firmware key, not just the PIDs. Configurator-shaped. No CLI paste.',
+          note: 'The Firmware bench: filters, features and every firmware key, not just the PIDs. Configurator-shaped. No CLI paste.',
         },
         {
           label: 'Back to the tune\'s own values',
@@ -8687,7 +9167,6 @@ export class Ui {
       /* The gate is one question, so the lines that describe a seat the
        * pilot has not chosen to fly yet come off the screen behind it. */
       this.screens.title.classList.toggle('is-gate', gate);
-      this.setTitleHint(gate);
     }
     const host = {
       title: this.titleMenu,
@@ -8698,6 +9177,7 @@ export class Ui {
       courses: this.coursesMenu,
       freestyle: this.freestyleMenu,
       pilot: this.pilotMenu,
+      advanced: this.advancedMenu,
       quad: this.quadMenu,
       launch: this.launchMenu,
       standings: this.standingsMenu,
@@ -8818,9 +9298,11 @@ export class Ui {
         row.append(this.makeStepper(it, i));
       } else if (it.value != null) {
         const val = el('span', 'row-value', it.value);
-        if (it.info) {
-          val.title = it.value;
-        }
+        /* Every plain value can be cut at half the row, a device name, an
+         * adjusted tune or a long track name on a door, so every one carries
+         * its whole text as a tooltip, not only the read only rows
+         * (MENUS-PLAN.md 1.39). An item may name a longer title of its own. */
+        val.title = it.title || it.value;
         row.append(val);
       }
       /* A browser player reaches for the mouse. A menu that only answers
@@ -8867,6 +9349,7 @@ export class Ui {
      * behind the header and the pilot is asked a question they cannot read.
      * Anything shorter than the box gets the top.
      */
+    this.fitMenuHeight();
     host.scrollTop = host.scrollHeight > host.clientHeight ? scroll : 0;
     /* Before syncCursor paints anything: the cursor belongs to a row, not
      * to an index, and this list may have changed length. */
@@ -8885,6 +9368,73 @@ export class Ui {
     }
   }
 
+  /*
+   * A LIST WINDOW USES THE HEIGHT IT HAS (MENUS-PLAN.md 2.3).
+   *
+   * The rooms whose content IS their list capped it with a share of the
+   * viewport, so Settings scrolled 1,691 px of rows through a 464 px window
+   * with 110 px of empty page under it, and on a landscape phone the same
+   * cap left the list running under the command bar. The window now runs
+   * from where the list starts to just above the command bar, measured, so
+   * it is right at every size and whatever the heading above it took. Below
+   * a usable height the room's own CSS cap stands.
+   */
+  fitMenuHeight() {
+    if (typeof window === 'undefined' || !FIT_SCREENS.has(this.screen)) {
+      return;
+    }
+    const screen = this.screens && this.screens[this.screen];
+    /* The pause menu scrolls by its modal's own rule rather than as a
+     * .menu-scroll, whose desktop cap would cut a list that fits. */
+    const box = screen && (screen.querySelector('.menu-scroll')
+      || (this.screen === 'paused' ? this.pausedMenu : null));
+    if (!box) {
+      return;
+    }
+    box.style.maxHeight = '';
+    box.style.minHeight = '';
+    /* Only a list that scrolls itself is fitted. Below 1280 px Quad and
+     * Rates let the PAGE scroll instead (overflow visible on the list), and
+     * a height put on a list that does not clip only draws its rows past
+     * its own border. */
+    if (getComputedStyle(box).overflowY === 'visible') {
+      return;
+    }
+    const top = box.getBoundingClientRect().top;
+    const bar = this.frameBot && !this.frameBot.hidden
+      ? this.frameBot.getBoundingClientRect().height
+      : 0;
+    let room = Math.floor(window.innerHeight - bar - top - 16);
+    /*
+     * A HELP LINE UNDER THE LIST GETS ITS ROOM TOO, where the layout has
+     * stacked it there and the window can spare it: Quad at 1280 by 720
+     * fitted its list to the bar and printed the note for the row under the
+     * cursor beneath the bar. Three lines' worth, and only when the list
+     * keeps about four rows, so a phone, which has neither, is unchanged.
+     */
+    const help = screen.querySelector('.menu-help');
+    if (help && getComputedStyle(help).position !== 'absolute') {
+      const below = help.getBoundingClientRect().top >= box.getBoundingClientRect().bottom - 1;
+      if (below && room - 72 >= 180) {
+        room -= 72;
+      }
+    }
+    if (room >= 160) {
+      /* The phone floor (.menu's min-height of 200 px, which stops a list
+       * being squeezed to nothing) is lowered to what fits: the list is
+       * sized here, so it cannot be squeezed, and a floor above the room
+       * is what put it 16 px under the bar on a phone on its side. */
+      box.style.minHeight = '160px';
+      box.style.maxHeight = `${room}px`;
+      /* max-height is the CONTENT's height, and the list's padding and its
+       * top rule sit outside it. Take back whatever it overshoots by. */
+      const over = Math.ceil(box.getBoundingClientRect().bottom - (window.innerHeight - bar - 8));
+      if (over > 0 && room - over >= 160) {
+        box.style.maxHeight = `${room - over}px`;
+      }
+    }
+  }
+
   /* The curve, redrawn from the settings whenever the menu is rebuilt. Every
    * row on this screen writes a setting and then rebuilds, so this is the one
    * place the picture has to be kept honest. */
@@ -8894,13 +9444,6 @@ export class Ui {
     }
     if (this.screen !== 'rates') {
       return;
-    }
-    if (this.ratesHint) {
-      /* Same sentence the pause menu's row carries, because a pilot who got
-       * here from a paused run needs it on the screen they are editing. */
-      this.ratesHint.textContent = this.returnTo === 'paused'
-        ? 'Arrow keys move, left and right change a value, Enter types one. Escape leaves a field, then goes back. A change reaches the quad at once, and puts it back on the start line.'
-        : 'Arrow keys move, left and right change a value, Enter types one. Escape leaves a field, then goes back. Changes are stored and reach the quad at once.';
     }
     this.ratesPanel.paint(this.settings.rates, this.ratesStick, this.settings.airframe);
   }
@@ -8923,11 +9466,6 @@ export class Ui {
   syncPids() {
     if (!this.pidsPanel || this.screen !== 'pids') {
       return;
-    }
-    if (this.pidsHint) {
-      this.pidsHint.textContent = this.returnTo === 'paused'
-        ? 'Arrow keys move, left and right change a value, Enter types one. Escape leaves a field, then goes back. A change reaches the quad at once, and puts it back on the start line.'
-        : 'Arrow keys move, left and right change a value, Enter types one. Escape leaves a field, then goes back. Changes are stored and reach the quad at once.';
     }
     const s = this.settings;
     const live = this.pidsLive && this.pidsLive.tune === s.tune ? this.pidsLive : null;
@@ -9055,6 +9593,7 @@ export class Ui {
       courses: this.coursesHelp,
       freestyle: this.freestyleHelp,
       pilot: this.pilotHelp,
+      advanced: this.advancedHelp,
       quad: this.quadHelp,
       launch: this.launchHelp,
       standings: this.standingsHelp,
@@ -9830,6 +10369,8 @@ export class Ui {
     const b = btn('drop-btn', it.value);
     b.setAttribute('aria-haspopup', 'listbox');
     b.setAttribute('aria-label', it.label);
+    /* The whole value, for when the button cuts it (MENUS-PLAN.md 1.39). */
+    b.title = String(it.value == null ? '' : it.value);
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this.dropIndex === i) {
@@ -10306,7 +10847,8 @@ export class Ui {
       this.courseCardKey = key;
       this.courseCards = cards.map((it, k) => {
         const i = k + offset;
-        const card = el('div', 'map-card course-card');
+        const fresh = it.course.kind === 'new';
+        const card = el('div', fresh ? 'map-card course-card course-card-new' : 'map-card course-card');
         const shot = el('div', 'map-reel');
         /* A card that carries its own track, as against the seated one,
            whose plan comes from the seat. Both of this screen's sources
@@ -10314,8 +10856,10 @@ export class Ui {
         const listed = it.course.kind === 'board' || it.course.kind === 'local';
         const plan = listed
           ? it.course.track.plan
-          : currentPlan();
-        const canvas = planCanvas(plan, `Plan of ${it.label}`);
+          : (fresh ? null : currentPlan());
+        /* Build a track has no plan to draw. Its picture is a plus on an
+         * empty field, which is what the builder opens on. */
+        const canvas = fresh ? null : planCanvas(plan, `Plan of ${it.label}`);
         /* Said on the picture while the board hands this track over to be
          * flown: see flyCard. Laid over it rather than put beside the name,
          * where a word rewraps the name and the card grows, and every card
@@ -10323,27 +10867,44 @@ export class Ui {
          * that holds still. */
         const wait = el('div', 'course-card-wait', 'Loading');
         wait.hidden = true;
-        shot.append(canvas, wait);
+        if (fresh) {
+          shot.append(el('div', 'course-card-plus', '+'));
+        } else {
+          shot.append(canvas);
+        }
+        shot.append(wait);
         const body = el('div', 'map-card-body');
         const name = el('div', 'map-card-name', it.label);
         const meta = el('div', 'map-card-meta', '');
-        if (listed) {
+        /*
+         * WHO, HOW BIG, AND THE TIME TO BEAT, as three things rather than one
+         * run of words (MENUS-PLAN.md 1.14). They were joined by two spaces,
+         * which a line break or a long name turned into "by Ana 12 gates
+         * record 41.20" and a reader had to find the joins. A middle dot
+         * between the facts, and the record on a line of its own with its
+         * label, because it is the one number on the card a pilot compares.
+         */
+        const record = el('div', 'map-card-record', '');
+        if (fresh) {
+          meta.textContent = 'An empty field in the builder';
+        } else if (listed) {
           const t = it.course.track;
           /* The designer where the board knows one, because the author is
            * whoever published it and on a track brought over from a series
            * those are two different people. */
-          const bits = [byLine(t), `${t.gates} gate${t.gates === 1 ? '' : 's'}`];
+          meta.textContent = [byLine(t), `${t.gates} gate${t.gates === 1 ? '' : 's'}`]
+            .filter(Boolean)
+            .join(' \u00b7 ');
           if (t.recordMs != null) {
-            bits.push(t.recordThree
-              ? `three laps ${formatTime(t.recordMs)}`
-              : `record ${formatTime(t.recordMs)}`);
+            record.textContent = t.recordThree
+              ? `Record, three laps: ${formatTime(t.recordMs)}`
+              : `Record lap: ${formatTime(t.recordMs)}`;
           }
-          meta.textContent = bits.filter(Boolean).join('  ');
         } else {
           const size = fieldSize(plan);
           meta.textContent = [`${it.course.seat.gates} gate${it.course.seat.gates === 1 ? '' : 's'}`, size]
             .filter(Boolean)
-            .join('  ');
+            .join(' \u00b7 ');
         }
         /*
          * NO BADGE OVER THE PICTURE. Shipped, on the board and not on the
@@ -10357,7 +10918,7 @@ export class Ui {
          */
         const tag = el('div', 'map-card-tag', '');
         body.append(name, tag);
-        card.append(shot, body, meta);
+        card.append(shot, body, meta, record);
         card.addEventListener('mousemove', (e) => this.hoverCursor(e, i));
         card.addEventListener('click', (e) => {
           const key = courseCardKey(it);
@@ -10380,6 +10941,13 @@ export class Ui {
       });
       this.paintCoursePlans();
     }
+    if (this.courseOrderChips) {
+      for (const chip of this.courseOrderChips.children) {
+        const on = chip.dataset.order === this.settings.courseOrder;
+        chip.classList.toggle('on', on);
+        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
     this.courseCards.forEach((c, k) => {
       const i = k + offset;
       c.card.classList.toggle('on', i === this.cursor);
@@ -10395,6 +10963,205 @@ export class Ui {
       }
       c.tag.textContent = c.kind === 'current' && this.settings.map === 'custom' ? 'Flying now' : '';
     });
+    this.placeCourseSheet();
+  }
+
+  /*
+   * THE CHOSEN CARD'S SHEET OPENS UNDER ITS OWN LINE OF THE GRID
+   * (MENUS-PLAN.md 2.4), the way a photo library opens a picture: the
+   * cards above stay where they were, the chosen one keeps its place, and
+   * what can be done with it is directly beneath it rather than under all
+   * thirty one cards. The sheet is the room's own menu stage, moved: the
+   * rows, the cursor, the help and the command bar are all the ones every
+   * other screen uses.
+   *
+   * The line is worked out from the card's index and how many cards fit
+   * across, not from where the cards are drawn now, because the sheet
+   * itself breaks the line it is put after: measured with it in place, a
+   * resize would keep the old break for ever.
+   *
+   * With nothing chosen the stage goes back under the strip, where it holds
+   * the room's Back.
+   */
+  placeCourseSheet() {
+    const stage = this.coursesStage;
+    const host = this.courseCardHost;
+    if (!stage || !host || !this.courseStrip) {
+      return;
+    }
+    const cards = this.courseCards || [];
+    const at = this.cardSubject ? cards.findIndex((c) => c.key === this.cardSubject) : -1;
+    if (at < 0) {
+      this.sheetAfterKey = null;
+      stage.classList.remove('is-sheet');
+      stage.style.removeProperty('--notch-x');
+      stage.style.removeProperty('--sheet-w');
+      if (stage.previousElementSibling !== this.courseStrip) {
+        this.courseStrip.after(stage);
+      }
+      return;
+    }
+    const first = cards[0].card;
+    const width = first.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(host).columnGap) || 0;
+    const across = width > 0
+      ? Math.max(1, Math.floor((host.clientWidth + gap + 0.5) / (width + gap)))
+      : 1;
+    const end = Math.min(cards.length - 1, (Math.floor(at / across) + 1) * across - 1);
+    this.sheetAfterKey = cards[end].key;
+    stage.classList.add('is-sheet');
+    /* As wide as a full line of cards, so its rule lines up with the grid
+     * above and below it. Still too wide to share a line with a card. */
+    const span = Math.min(across, cards.length);
+    stage.style.setProperty('--sheet-w', `${Math.round(span * width + (span - 1) * gap)}px`);
+    if (cards[end].card.nextElementSibling !== stage) {
+      cards[end].card.after(stage);
+    }
+    /* The notch points at the card the sheet belongs to. */
+    const sheetBox = stage.getBoundingClientRect();
+    const cardBox = cards[at].card.getBoundingClientRect();
+    stage.style.setProperty('--notch-x', `${Math.round(cardBox.left + cardBox.width / 2 - sheetBox.left)}px`);
+    this.paintPodium();
+  }
+
+  /*
+   * THE TOP THREE, IN THE SHEET (MENUS-PLAN.md 2.4). A pilot choosing a
+   * track wants to know what it takes, and the answer was a screen away
+   * behind Standings. The sheet's first column was empty, so it holds the
+   * fastest three pilots, each once at their best, read from the board when
+   * the card is chosen. Standings is still the door to the whole table.
+   *
+   * Only a track the board holds has times: a track of your own that is
+   * not published shows none, and the column stays empty.
+   */
+  podiumSubject() {
+    if (this.screen !== 'courses' || !this.cardSubject) {
+      return null;
+    }
+    const card = this.subjectCard();
+    if (!card || !card.course) {
+      return null;
+    }
+    const room = airframeById(this.settings.airframe).trackClass === 'micro';
+    if (card.course.kind === 'board') {
+      const t = card.course.track;
+      return { key: `${t.board || ''}|${t.id}`, id: t.id, board: t.board || undefined, room };
+    }
+    if (card.course.kind === 'current') {
+      const listing = liveListing('custom');
+      if (listing && listing.shareId) {
+        const board = listing.board || (this.share && this.share.board) || undefined;
+        return { key: `${board || ''}|${listing.shareId}`, id: listing.shareId, board, room };
+      }
+    }
+    return null;
+  }
+
+  loadPodium() {
+    const subject = this.podiumSubject();
+    if (!subject || this.podiumCache.has(subject.key)) {
+      return;
+    }
+    this.podiumCache.set(subject.key, null);
+    fetchTrackTimes(subject.id, subject.board)
+      .then((times) => {
+        const best = new Map();
+        for (const row of times) {
+          const ms = subject.room ? row.threeMs : row.lapMs;
+          if (!Number.isFinite(ms)) {
+            continue;
+          }
+          const who = String(row.name || '').trim().toLowerCase();
+          const had = best.get(who);
+          if (!had || ms < had.ms) {
+            best.set(who, { name: row.name, ms });
+          }
+        }
+        const rows = [...best.values()].sort((a, b) => a.ms - b.ms).slice(0, 3);
+        this.podiumCache.set(subject.key, { rows });
+      })
+      .catch(() => {
+        this.podiumCache.set(subject.key, { error: true });
+      })
+      .finally(() => {
+        if (this.screen === 'courses') {
+          this.paintPodium();
+        }
+      });
+  }
+
+  paintPodium() {
+    const box = this.coursePodium;
+    if (!box) {
+      return;
+    }
+    const subject = this.podiumSubject();
+    box.textContent = '';
+    box.hidden = !subject;
+    if (!subject) {
+      return;
+    }
+    box.append(el('div', 'sheet-podium-head', subject.room ? 'Fastest three laps' : 'Fastest lap'));
+    const got = this.podiumCache.get(subject.key);
+    if (!got) {
+      box.append(el('div', 'sheet-podium-note', 'Reading the board'));
+      return;
+    }
+    if (got.error) {
+      box.append(el('div', 'sheet-podium-note', 'The board is not answering, so no times.'));
+      return;
+    }
+    if (!got.rows.length) {
+      box.append(el('div', 'sheet-podium-note', 'No times yet. The first one posted is the record.'));
+      return;
+    }
+    const me = (readPilotName() || '').trim().toLowerCase();
+    got.rows.forEach((row, i) => {
+      const line = el('div', 'sheet-podium-row');
+      if (me && String(row.name || '').trim().toLowerCase() === me) {
+        line.classList.add('is-me');
+      }
+      line.append(
+        el('span', 'sheet-podium-rank', String(i + 1)),
+        el('span', 'sheet-podium-name', row.name || 'Unnamed pilot'),
+        el('span', 'sheet-podium-time', formatTime(row.ms)),
+      );
+      box.append(line);
+    });
+  }
+
+  /*
+   * A CHOOSE MUST NOT MOVE THE CARD THAT WAS CHOSEN. Opening one card's
+   * sheet closes another's, and when the other was above it every card
+   * from there down moves up by that sheet's height, under a pointer that
+   * did not move: a second press of a double click then lands on a
+   * different track. So the page is scrolled by however far the card moved,
+   * and the strip never gets shorter while the room is open (a shorter
+   * page scrolled to its foot is moved by the browser, not by us). show()
+   * lets the height go when the room is left.
+   */
+  courseCardTop(key) {
+    const c = (this.courseCards || []).find((x) => x.key === key);
+    return c ? c.card.getBoundingClientRect().top : null;
+  }
+
+  holdCourseStrip() {
+    const strip = this.courseStrip;
+    if (strip) {
+      strip.style.minHeight = `${Math.max(strip.offsetHeight, parseFloat(strip.style.minHeight) || 0)}px`;
+    }
+  }
+
+  keepCardStill(key, before) {
+    const after = this.courseCardTop(key);
+    const page = this.screens && this.screens.courses;
+    if (before == null || after == null || !page) {
+      return;
+    }
+    const moved = after - before;
+    if (Math.abs(moved) >= 1) {
+      page.scrollTop += moved;
+    }
   }
 
   /* A canvas reports no size until it is laid out, so the first paint waits
@@ -10417,6 +11184,9 @@ export class Ui {
      * different points of their own laps at the same moment. */
     const paint = (ms) => {
       for (const c of this.courseCards || []) {
+        if (!c.canvas) {
+          continue;
+        }
         const plan = c.canvas.planData;
         drawIso(c.canvas, plan, ms == null ? {} : { phase: (ms / isoLapMs(plan)) % 1 });
       }
@@ -10692,7 +11462,7 @@ export class Ui {
         const own = ownMapId();
         this.boardMapNote.textContent = list.length
           ? ''
-          : 'No freestyle maps on the board yet. Build one in the track builder and publish it.';
+          : 'No freestyle maps on the board yet. Build one in the builder and publish it.';
         this.relistBoardMaps(pickNewestMaps(list.filter((m) => m.id !== own)));
       })
       .catch(() => {
@@ -10809,7 +11579,7 @@ export class Ui {
     this.show('standings');
     const key = track.id;
     this.standingsLoading = key;
-    fetchTrackTimes(track.id, track.board)
+    fetchTrackTimes(track.id, track.board || undefined)
       .then((times) => {
         if (this.standingsLoading !== key) {
           return;
@@ -11452,6 +12222,18 @@ export class Ui {
 
   show(screen) {
     this.closeDrop();
+    /* In the air by any path, a card's double click and a ?fly=1 link
+     * included, is having flown: see hasFlown. */
+    if (screen === 'flight') {
+      this.firstRun = false;
+      if (!this.settings.hasFlown) {
+        this.settings.hasFlown = true;
+        saveSettings(this.settings);
+      }
+    }
+    if (screen === 'launch') {
+      markLaunchCardSeen(this.settings);
+    }
     /*
      * A STICK HELD THROUGH A SCREEN CHANGE IS NOT A GESTURE ON THE SCREEN
      * IT LANDS ON.
@@ -11509,7 +12291,15 @@ export class Ui {
         this.returnTo = 'title';
       }
     }
+    /* The row being left, read while the screen being left is still whole:
+     * the Tracks room's sheet is closed just below, and its rows go with
+     * it. See the cursor memory further down. */
+    const leaving = this.items()[this.cursor];
     if (this.screen === 'courses' && screen !== 'courses') {
+      /* A sheet that opened a screen which comes back here is open again on
+       * the way back: Before you fly and Standings, and the screens the
+       * launch card itself opens. Anything else starts the room afresh. */
+      this.reopenCard = screen === 'launch' || screen === 'standings' ? this.cardSubject : null;
       /* Nothing draws a thumbnail for a screen nobody is looking at. */
       this.stopReels();
       this.stopCoursePlans();
@@ -11520,9 +12310,17 @@ export class Ui {
       this.lastCardKey = null;
       this.cardPress = null;
       this.flyingCard = null;
-      if (this.coursesStage) {
-        this.coursesStage.style.minHeight = '';
+      if (this.courseStrip) {
+        this.courseStrip.style.minHeight = '';
       }
+      /* The times are read again on the next visit, so one posted since
+       * is in them. Kept for a sheet that is coming straight back. */
+      if (this.podiumCache && !this.reopenCard) {
+        this.podiumCache.clear();
+      }
+    }
+    if (screen === 'title' || screen === 'flight' || screen === 'paused') {
+      this.reopenCard = null;
     }
     /*
      * THE SAME FOR THE FREESTYLE ROOM, where the world cards moved to and
@@ -11577,7 +12375,7 @@ export class Ui {
     if (this.screen === 'pids' && screen !== 'pids' && screen !== 'fc') {
       this.pidsFrom = null;
     }
-    if (this.screen === 'fc' && screen !== 'fc') {
+    if (this.screen === 'fc' && screen !== 'fc' && !(screen === 'rates' && this.ratesFrom === 'fc')) {
       this.fcFrom = null;
     }
     if (this.screen === 'credits' && screen !== 'credits') {
@@ -11605,7 +12403,6 @@ export class Ui {
      * `feature` prefix a dozen times, so a restore could land on the first
      * row that happened to read the same. See stampIds.
      */
-    const leaving = this.items()[this.cursor];
     if (this.screen && leaving && leaving.id) {
       this.cursorMemory[this.screen] = leaving.id;
     }
@@ -11620,6 +12417,12 @@ export class Ui {
      * starting into the same frame that is still painting the room. */
     this.noteInteraction();
     this.screen = screen;
+    if (screen === 'courses' && this.reopenCard) {
+      this.cardSubject = this.reopenCard;
+      this.lastCardKey = this.reopenCard;
+      this.reopenCard = null;
+      this.loadPodium();
+    }
     /* this.screen is already the new one, so items() describes where we are
      * going. Settings opens on its first real row rather than on a heading. */
     this.cursor = this.restoreCursor();
@@ -11803,7 +12606,7 @@ export class Ui {
       return;
     }
     const card = this.items().find((it) => it.course && courseCardKey(it) === key);
-    if (!card) {
+    if (!card || card.course.kind === 'new') {
       return;
     }
     const go = () => {
@@ -11984,6 +12787,7 @@ export class Ui {
         ['Landscape', 'Turn the phone sideways. The pads sit under both thumbs, the way a radio sits in both hands.'],
         ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll on the right pad to flip over. You do not have to time it. Let go, then take off.'],
         ['Pause', 'The Pause chip, top right. Hits bounce. Time is the penalty. Resume, then pitch or roll if you are inverted.'],
+        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
       ]
       : source === 'radio'
       ? [
@@ -11996,6 +12800,7 @@ export class Ui {
         ['Restart', 'R on the keyboard, or a switch on the radio: Settings, Restart switch, then flip it.'],
         ['Acro', 'Hands off holds the attitude you left it in. Every turn has to be flown back out again.'],
         ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll with the right stick to flip over. You do not have to time it. Centre the stick, then take off.'],
+        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
       ]
       : source === 'launch'
         ? [
@@ -12004,7 +12809,7 @@ export class Ui {
           ['Set the angle', 'Throttle at idle. Pitch forward until the OSD reads around 30 to 40 degrees. Centre the stick. The motors hold it.'],
           ['Go', 'Punch throttle past about 20 percent. The hold dumps, the props bite, and you are flying. L again resets it after a launch.'],
           ['Keyboard', 'Up arrow is pitch forward. W is throttle. Launch control switches you to Acro for the hold, then your own mode comes back after you go.'],
-          ['Radio', 'Same sequence as a real board. L is the mode switch. Fine-tune launch_angle_limit and launch_trigger_throttle_percent on the Flight controller screen.'],
+          ['Radio', 'Same sequence as a real board. L is the mode switch. Fine-tune launch_angle_limit and launch_trigger_throttle_percent on the Firmware bench, under Quad.'],
           ['Turtle', 'If you tip over on the blocks, TURTLE MODE takes over. Pitch or roll to flip. You do not have to time it. Centre the stick, then press L and launch again.'],
         ]
       : [
@@ -12014,6 +12819,7 @@ export class Ui {
         ['R, then Escape', 'Back to the start line, and pause.'],
         ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll with the arrow keys to flip over. You do not have to time it. Let go, then take off.'],
         ['F8', 'Report a bug or give feedback. Pauses if you are in the air, then opens the form.'],
+        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
       ];
     for (const [k, v] of rows) {
       this.howtoKeys.append(el('dt', null, k), el('dd', null, v));
@@ -12214,33 +13020,6 @@ export class Ui {
       }
     }
     return this.firstStop(items);
-  }
-
-  setTitleHint(gate) {
-    if (!this.titleHint) {
-      return;
-    }
-    const keys = this.titleHint.querySelector('.hint-keys');
-    const copy = this.titleHint.querySelector('.hint-copy');
-    if (!keys || !copy) {
-      return;
-    }
-    /* The gate is the root: nothing behind it, so no Escape key on the
-     * line. The menu behind it has somewhere to go back to, and the copy
-     * below names it. */
-    const want = gate ? ['←→', 'Enter'] : ['↑↓', 'Enter', 'Esc'];
-    const have = [...keys.children].map((k) => k.textContent);
-    if (have.length !== want.length || want.some((k, i) => have[i] !== k)) {
-      keys.textContent = '';
-      for (const k of want) {
-        keys.append(el('kbd', null, k));
-      }
-    }
-    if (gate) {
-      copy.textContent = 'Left and right choose, Enter opens it. On a radio: pitch to move, roll right to choose.';
-    } else {
-      copy.textContent = 'Arrow keys move, Enter selects, Escape goes back to what to fly. A radio banks the quad. Any switch selects.';
-    }
   }
 
   /*
@@ -12524,7 +13303,7 @@ export class Ui {
       this.resultsNote.textContent = '';
     } else if (this.share && this.share.id) {
       const by = this.share.author ? ` by ${this.share.author}` : '';
-      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} is on the public board. Upload a time under your name to appear on it.`;
+      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} is on the public board. Post a time under your name to appear on it.`;
     } else {
       try {
         const listing = inspectCourse();
@@ -12532,9 +13311,9 @@ export class Ui {
           const of = listing.sourceName ? ` of ${listing.sourceName}` : '';
           this.resultsNote.textContent = `${listing.name} is your copy${of}. Publish it under a new name to put it on the board.`;
         } else if (listing && listing.kind === 'local' && listing.canPublishNew) {
-          this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can upload a time.`;
+          this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can post a time.`;
         } else if (listing && listing.kind === 'owned' && listing.layoutDrift) {
-          this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before uploading a time.`;
+          this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before posting a time.`;
         }
       } catch (e) {
         /* A summary failure must not hide the times. */
@@ -12586,6 +13365,29 @@ export class Ui {
     /* The one automatic offer of the flight feel question, because this is
      * the only place a first race finishes. */
     this.maybeOfferFeel();
+  }
+
+  /*
+   * A NOTICE THAT ARRIVES WHILE A MENU IS UP (MENUS-PLAN.md 1.8). The banner
+   * is the flight's voice: three lines of large amber type a fifth of the
+   * way down, which on a menu was printed over the heading and the lede
+   * ("plug in a radio" across SETTINGS, "Stick mapping saved" across the
+   * room it came back to). On a menu the same words are a small line above
+   * the command bar, read out once like the banner. Called from the frame
+   * loop, so it only touches the page when the words change.
+   */
+  setMenuNotice(text) {
+    const want = text || '';
+    const node = this.menuNotice;
+    if (!node || node.__wfText === want) {
+      return;
+    }
+    node.__wfText = want;
+    node.textContent = want;
+    node.hidden = !want;
+    if (want) {
+      this.announce(want);
+    }
   }
 
   setBanner(text, panelled = false) {
@@ -13108,11 +13910,25 @@ export class Ui {
       this.letterTimer = 0;
       window.addEventListener('resize', () => {
         clearTimeout(this.letterTimer);
-        this.letterTimer = setTimeout(() => this.letterScreen(this.screen), 150);
+        this.letterTimer = setTimeout(() => {
+          this.letterScreen(this.screen);
+          this.fitMenuHeight();
+          /* A narrower window fits fewer cards across, so the open sheet
+           * moves to the end of its card's new line. */
+          if (this.screen === 'courses') {
+            this.placeCourseSheet();
+          }
+          this.syncPrimaryButton();
+        }, 150);
       });
     }
     for (const h of node.querySelectorAll(':scope > h2, h1.wordmark, h2.results-head')) {
       letterHeading(h);
+    }
+    /* A lettered heading can be a different height from its text, so the
+     * list under it is measured again. */
+    if (screen === this.screen) {
+      this.fitMenuHeight();
     }
   }
 
@@ -14299,7 +15115,7 @@ export class Ui {
 
   setGpuInfo(info) {
     this.gpuInfo = info || null;
-    if (this.screen === 'pilot') {
+    if (this.screen === 'pilot' || this.screen === 'advanced') {
       this.renderMenu();
     }
   }
@@ -14372,7 +15188,7 @@ export class Ui {
         label: 'Stick path',
         value: 'Keyboard',
         info: true,
-        note: 'A key is not a stick. Holding one ramps the stick to 34 percent and stays there until about three quarters of a second, then stretches to full at one and a quarter. So the rates below are the rates a RADIO would fly: a tap reaches roughly a third of them, which is why keyboard flight feels firmer and slower to bite than the numbers say. A gamepad or a radio in USB joystick mode gets the whole curve.',
+        note: 'A key is not a stick. Holding one ramps the stick to 34 percent and stays there until about three quarters of a second, then stretches to full at one and a quarter. So the rates below are the rates a RADIO would fly: a tap reaches roughly a third of them, which is why keyboard flight feels firmer and slower to bite than the numbers say. A gamepad or a radio in USB joystick mode gets the whole curve. And a key race starts in Angle, which ignores this curve: Keyboard races under Quad, or M in flight, makes it Acro.',
       }];
     }
     /*
@@ -14533,7 +15349,9 @@ export class Ui {
     if (!a) {
       return;
     }
-    if (this.screen === 'flight') {
+    /* The title and About only: see PATREON_SCREENS. About also has it as
+     * a row, Support, with the note saying what it pays for. */
+    if (!PATREON_SCREENS.has(this.screen)) {
       a.hidden = true;
       return;
     }
@@ -14541,12 +15359,6 @@ export class Ui {
     if (this.screen === 'title') {
       if (a.parentNode !== this.patreonSlot) {
         this.patreonSlot.append(a);
-      }
-      return;
-    }
-    if (this.screen === 'fc') {
-      if (a.parentNode !== this.frameBot || a.nextSibling !== this.framePrimary) {
-        this.frameBot.insertBefore(a, this.framePrimary);
       }
       return;
     }
@@ -14596,7 +15408,7 @@ export class Ui {
     this.root.style.setProperty('--bar-bot', '52px');
 
     this.crumb.textContent = '';
-    const trail = CRUMBS[this.screen] || [SCREEN_TITLES[this.screen] || this.screen];
+    const trail = this.crumbTrail();
     trail.forEach((part, i) => {
       if (i) {
         this.crumb.append(el('span', 'crumb-sep', '/'));
@@ -14628,18 +15440,96 @@ export class Ui {
       this.frameLegend.append(i);
     }
 
-    const primary = this.primaryItem();
-    this.framePrimary.hidden = !primary;
-    if (primary) {
+    this.syncPrimaryButton();
+    /* Rows are drawn after the bars on a change of screen, so look again
+     * once they are. */
+    if (!this.primaryFrame) {
+      this.primaryFrame = requestAnimationFrame(() => {
+        this.primaryFrame = 0;
+        this.syncPrimaryButton();
+      });
+    }
+  }
+
+  /*
+   * THE COMMAND BAR'S BUTTON REPEATS THE SCREEN'S PRIMARY ROW (MENUS-PLAN.md
+   * 2.6), and only where repeating it helps. On touch it is always there:
+   * it is where the thumb is. With a mouse or keys it is there while the row
+   * itself is out of sight, which is the case it was made for (a chosen
+   * track's Fly it under thirty cards), and gone while the row is on screen,
+   * where it was the same word twice, one of them in the corner.
+   */
+  syncPrimaryButton() {
+    if (!this.framePrimary) {
+      return;
+    }
+    const primary = this.screen === 'flight' ? null : this.primaryItem();
+    let show = Boolean(primary);
+    if (show && !touchWanted()) {
+      const node = this.screens && this.screens[this.screen]
+        ? this.screens[this.screen].querySelector('.row-primary')
+        : null;
+      show = !node || !this.rowInSight(node);
+    }
+    if (this.framePrimary.hidden === show) {
+      this.framePrimary.hidden = !show;
+    }
+    if (primary && this.framePrimary.textContent !== primary.label) {
       this.framePrimary.textContent = primary.label;
     }
+  }
+
+  /* Whether a row is wholly in sight: inside the window less both bars, and
+   * inside its own list's window when the list scrolls. */
+  rowInSight(node) {
+    const r = node.getBoundingClientRect();
+    if (!r.height) {
+      return false;
+    }
+    const bars = getComputedStyle(this.root);
+    let top = parseFloat(bars.getPropertyValue('--bar-top')) || 0;
+    let bottom = window.innerHeight - (parseFloat(bars.getPropertyValue('--bar-bot')) || 0);
+    const box = node.closest('.menu-scroll');
+    if (box) {
+      const b = box.getBoundingClientRect();
+      top = Math.max(top, b.top);
+      bottom = Math.min(bottom, b.bottom);
+    }
+    return r.top >= top - 1 && r.bottom <= bottom + 1;
+  }
+
+  /*
+   * THE CRUMB NAMES WHERE ESCAPE GOES. It was fixed text per screen, so Rates
+   * said Settings / Rates when it had been opened from Quad or the pause
+   * menu and Escape went there instead (MENUS-PLAN.md 1.37). The first part
+   * is read off the same pointers back() reads, in the same order; CRUMBS is
+   * the trail when the room was reached from its home.
+   */
+  crumbTrail() {
+    const here = SCREEN_TITLES[this.screen] || this.screen;
+    let from = null;
+    if (this.screen === 'rates' && this.ratesFrom) {
+      from = this.ratesFrom;
+    } else if (this.screen === 'pids' && this.pidsFrom) {
+      from = this.pidsFrom;
+    } else if (this.returnTo === 'paused' && !['paused', 'results', 'title', 'flight'].includes(this.screen)) {
+      from = 'paused';
+    } else if (this.roomFrom && this.roomFrom !== this.screen) {
+      from = this.roomFrom;
+    }
+    if (from && SCREEN_TITLES[from] && from !== 'title') {
+      return [SCREEN_TITLES[from], here];
+    }
+    return CRUMBS[this.screen] || [here];
   }
 
   /* What is loaded, in the top right, so no screen has to be left to find out
    * what the next run will actually fly. */
   contextChips() {
     const out = [];
-    if (this.screen === 'flight' || this.screen === 'fc') {
+    const flying = FLYING_CHIP_SCREENS.has(this.screen);
+    const pilot = PILOT_CHIP_SCREENS.has(this.screen);
+    if (!flying && !pilot) {
       return out;
     }
     /* The course only when the seat is the track world, as on the title's
@@ -14650,8 +15540,13 @@ export class Ui {
     const seat = m.id === 'custom' ? activeCourseSummary() : null;
     /* And a map from the board by its own name, not as Your map. */
     const shared = m.id === 'built' && this.sharedMap ? this.sharedMap.name : '';
-    out.push({ label: 'Flying', value: seat && seat.name ? seat.name : (shared || m.name) });
-    const name = readPilotName();
+    /* Not in the Maps room while the seat is still the race track: a pilot
+     * choosing a map read "Flying" and the name of a race track there
+     * (MENUS-PLAN.md 1.17). */
+    if (flying && !(this.screen === 'freestyle' && m.id === 'custom')) {
+      out.push({ label: 'Flying', value: seat && seat.name ? seat.name : (shared || m.name) });
+    }
+    const name = pilot ? readPilotName() : '';
     if (name) {
       out.push({ label: 'Pilot', value: name });
     }
@@ -14687,7 +15582,12 @@ export class Ui {
       return out;
     }
     const out = [];
-    if (this.cardScreen()) {
+    if (pad && STICKS_BUSY[this.screen]) {
+      /* The sticks are busy here, so the legend says with what rather than
+       * promising Move and Adjust (MENUS-PLAN.md 2.9). The buttons below
+       * still choose and go back. */
+      out.push({ keys: [], text: STICKS_BUSY[this.screen] });
+    } else if (this.cardScreen()) {
       /* Pitch, not roll. pollPad walks a card screen with the pitch axis and
        * treats roll right as choose and roll left as back, which is what the
        * Race room's own hint line has always said; this legend claimed Roll
@@ -14696,7 +15596,8 @@ export class Ui {
     } else {
       out.push({ keys: pad ? ['Pitch'] : ['\u2191', '\u2193'], text: 'Move' });
       const it = this.items()[this.cursor];
-      if (this.rowKind(it) === 'value') {
+      /* Not on the two screens whose roll poses the quad: see posesQuad. */
+      if (this.rowKind(it) === 'value' && !(pad && posesQuad(this))) {
         out.push({ keys: pad ? ['Roll'] : ['\u2190', '\u2192'], text: 'Adjust' });
       }
     }
@@ -14708,8 +15609,15 @@ export class Ui {
     if (this.screen === 'courses' && !pad) {
       out.push({ keys: ['Double click'], text: 'Fly' });
     }
+    /*
+     * BACK IS A BUTTON ON THE BAR, for every voice (MENUS-PLAN.md 1.12).
+     * The bar is the one thing on every screen that never scrolls, so a
+     * pointer can always leave from it: How to fly's own Back row was under
+     * the window at 1280 by 720, and the bench's is behind its tabs. The
+     * keys it names still work as they always did.
+     */
     if (this.screen !== 'title') {
-      out.push({ keys: [pad ? 'B' : 'Esc'], text: 'Back' });
+      out.push({ keys: [pad ? 'B' : 'Esc'], text: 'Back', action: 'back' });
     } else if (!this.onGate()) {
       /* NOT ON THE GATE. The gate is the root and Escape does nothing
        * there, so offering the key is a joke. onGate() is the one
@@ -14752,6 +15660,19 @@ export class Ui {
       const i = items.findIndex((it) => it && it.id === want && this.isStop(it));
       if (i >= 0) {
         return i;
+      }
+    }
+    /*
+     * QUAD OPENS ON A DOOR, NOT ON THE AIRCRAFT (MENUS-PLAN.md 2.9). Its
+     * first row is a two way switch, and a choose on a switch flips it, so
+     * the first press a radio pilot made in the room swapped the aircraft
+     * and the world under them. The first row that opens a screen is the
+     * first stop instead; the switch is one row up.
+     */
+    if (this.screen === 'quad') {
+      const door = items.findIndex((it) => it && this.isStop(it) && this.rowKind(it) === 'navigation');
+      if (door >= 0) {
+        return door;
       }
     }
     /*
@@ -14803,6 +15724,24 @@ export class Ui {
     if (!n) {
       return;
     }
+    /*
+     * THE TRACKS ROOM IS WALKED IN THE ORDER IT IS DRAWN. The open sheet
+     * sits under its card's line of the grid, but its rows come after every
+     * card in items(), so a plain step went from the chosen card to the
+     * next card and from Fly it up to the last card on the page. In drawn
+     * order the line's cards come first, then the sheet, then the cards
+     * below it.
+     */
+    const drawn = this.drawnOrder(items);
+    if (drawn) {
+      const walk = new Set(this.arrowStops(items));
+      const stops = drawn.filter((i) => walk.has(i));
+      if (stops.length) {
+        const at = stops.indexOf(this.cursor);
+        this.setCursor(at < 0 ? stops[0] : stops[(at + dir + stops.length) % stops.length]);
+        return;
+      }
+    }
     let next = (this.cursor + dir + n) % n;
     /* Step over headings and skipped rows. Bounded by n so a list of
      * nothing but headings cannot spin here. */
@@ -14814,6 +15753,28 @@ export class Ui {
       next = (next + dir + n) % n;
     }
     this.setCursor(next);
+  }
+
+  /* The Tracks room's indices in drawn order while a sheet is open, or
+   * null. See move. */
+  drawnOrder(items) {
+    if (this.screen !== 'courses' || !this.cardSubject || !this.sheetAfterKey) {
+      return null;
+    }
+    const cards = [];
+    const rows = [];
+    items.forEach((it, i) => {
+      if (it.course) {
+        cards.push(i);
+      } else if (!it.map) {
+        rows.push(i);
+      }
+    });
+    const end = cards.findIndex((i) => courseCardKey(items[i]) === this.sheetAfterKey);
+    if (end < 0) {
+      return null;
+    }
+    return [...cards.slice(0, end + 1), ...rows, ...cards.slice(end + 1)];
   }
 
   /*
@@ -15000,25 +15961,28 @@ export class Ui {
      * here would have flown it instead, which is the behaviour this whole
      * change exists to remove. */
     if (this.screen === 'courses' && it.course) {
-      this.cardSubject = courseCardKey(it);
+      /* Build a track is a door, not a track: there is nothing to choose
+       * between on it, so a sheet of one row would be friction. */
+      if (it.course.kind === 'new') {
+        if (this.onUiSound) {
+          this.onUiSound('select');
+        }
+        this.act(it.action);
+        return;
+      }
+      const key = courseCardKey(it);
+      /* Where the card is now, so the sheet opening cannot move it out from
+       * under the pointer: see keepCardStill. */
+      const before = this.courseCardTop(key);
+      this.holdCourseStrip();
+      this.cardSubject = key;
       if (this.onUiSound) {
         this.onUiSound('select');
       }
-      /*
-       * THE LIST UNDER THE STRIP MAY GROW, NEVER SHRINK, while this room is
-       * open. Choosing swaps the seat's rows for this card's, usually fewer,
-       * and on a page scrolled to its foot the browser takes a shorter page
-       * off the scroll: measured, choosing the last of thirty cards moved
-       * every card 93 px down under a pointer that had not moved. So the
-       * stage holds the height it had. The room's rows are aligned to its
-       * top (.menu-stage, align-items: start), so what it holds is empty
-       * page below the panel, and show() lets it go when the room is left.
-       */
-      if (this.coursesStage) {
-        this.coursesStage.style.minHeight = `${this.coursesStage.offsetHeight}px`;
-      }
+      this.loadPodium();
       this.renderMenu();
       this.renderCourseCards();
+      this.keepCardStill(key, before);
       /*
        * Land on Fly it, so the quick path stays Enter then Enter.
        *
@@ -15111,10 +16075,11 @@ export class Ui {
    * offered again on the next load to somebody who has already taken it.
    */
   flown() {
-    if (!this.firstRun) {
+    if (!this.firstRun && this.settings.hasFlown) {
       return;
     }
     this.firstRun = false;
+    this.settings.hasFlown = true;
     saveSettings(this.settings);
     this.renderMenu();
   }
@@ -15297,6 +16262,13 @@ export class Ui {
       window.location.href = 'src/trackbuilder/index.html?mode=freestyle';
       return;
     }
+    /* The Tracks room's Build a track card: a blank race canvas, with the
+     * one that was on it kept in the builder's Load list. */
+    if (action === 'trackbuilder-new') {
+      writeBuilderIntent({ kind: 'new' });
+      window.location.href = 'src/trackbuilder/index.html?mode=race';
+      return;
+    }
     /* The gate's fourth card. No ?mode, because nothing on the gate has
      * said which canvas: the builder asks, with the gate's own three
      * pictures. See BUILDER_CARD. */
@@ -15324,6 +16296,19 @@ export class Ui {
      * otherwise the default board. */
     if (action === 'leaderboard') {
       openNamedWindow(boardPageUrl(this.share && this.share.board, this.settings.airframe), BOARD_WINDOW);
+      return;
+    }
+    /*
+     * THE SEATED TRACK'S OWN PAGE ON THE BOARD (MENUS-PLAN.md 5.1). Every
+     * row that said "its page" opened the board's front page, thirty tracks
+     * from the one it named. The board takes ?track= and opens that track's
+     * sheet, so the link says which.
+     */
+    if (action === 'seat-board') {
+      const listing = liveListing('custom');
+      const id = (listing && listing.shareId) || (this.coursePublished && this.coursePublished.id) || '';
+      const board = (listing && listing.board) || (this.share && this.share.board);
+      openNamedWindow(boardPageUrl(board, this.settings.airframe, id ? { track: id } : {}), BOARD_WINDOW);
       return;
     }
     if (action === 'reportbug') {
@@ -15362,10 +16347,29 @@ export class Ui {
      * they belong to, so none of them has to guess at the seat.
      */
     if (action === 'card-back') {
+      const key = this.cardSubject;
+      const before = this.courseCardTop(key);
       this.cardSubject = null;
       this.renderMenu();
       this.renderCourseCards();
+      this.keepCardStill(key, before);
+      if (this.courseStrip) {
+        this.courseStrip.style.minHeight = '';
+      }
       this.setCursor(this.cardCursor());
+      return;
+    }
+    /*
+     * BEFORE YOU FLY, from the seated track's sheet: the launch card, which
+     * says what a run on it counts as and has its own Fly. The card belongs
+     * to the room here, so its Back comes back to the room with the same
+     * sheet open (see reopenCard in show).
+     */
+    if (action === 'card-launch') {
+      this.seatCraftForCourse();
+      this.roomFrom = 'courses';
+      this.returnTo = 'title';
+      this.show('launch');
       return;
     }
     /*
@@ -15405,14 +16409,14 @@ export class Ui {
       return;
     }
     if (action === 'standings-fly') {
-      /* Seat it, then go on to the launch card, which is what the row
-       * promises. openBoardCourse on its own lands on the title, which is
-       * right when the track was picked from the list and wrong here. */
+      /* Seat it, then the starting blocks: a press that names a track flies
+       * it, the way its card's Fly it does (MENUS-PLAN.md 2.7). The grid
+       * waits for the world, through the same onFlySeated flyCard uses. */
       const t = this.standingsFor;
       if (t && t.id) {
         this.openBoardCourse(t.id, () => {
-          if (seatIsRace(this.settings)) {
-            this.act('fly');
+          if (seatIsRace(this.settings) && this.onFlySeated) {
+            this.onFlySeated();
           }
         });
       }
@@ -15437,8 +16441,8 @@ export class Ui {
         this.onStandingsGhost(t, top);
       }
       this.openBoardCourse(t.id, () => {
-        if (seatIsRace(this.settings)) {
-          this.act('fly');
+        if (seatIsRace(this.settings) && this.onFlySeated) {
+          this.onFlySeated();
         }
       });
       return;
@@ -15447,7 +16451,10 @@ export class Ui {
      * the track it is showing is the subject. */
     if (action === 'card-board' && this.screen === 'standings') {
       if (this.standingsFor) {
-        openNamedWindow(boardPageUrl(this.standingsFor.board, this.settings.airframe), BOARD_WINDOW);
+        openNamedWindow(
+          boardPageUrl(this.standingsFor.board, this.settings.airframe, { track: this.standingsFor.id }),
+          BOARD_WINDOW,
+        );
       }
       return;
     }
@@ -15465,7 +16472,10 @@ export class Ui {
         return;
       }
       if (action === 'card-board') {
-        openNamedWindow(boardPageUrl(card.course.track.board, this.settings.airframe), BOARD_WINDOW);
+        openNamedWindow(
+          boardPageUrl(card.course.track.board, this.settings.airframe, { track: card.course.track.id }),
+          BOARD_WINDOW,
+        );
         return;
       }
       this.openInBuilder(card);
@@ -15632,7 +16642,7 @@ export class Ui {
      */
     if (action === 'howto' || action === 'pilot' || action === 'quad'
       || action === 'courses' || action === 'freestyle' || action === 'credits'
-      || action === 'tricks' || action === 'stickhelp') {
+      || action === 'tricks' || action === 'stickhelp' || action === 'advanced') {
       /*
        * A room opened FROM another room remembers which, so Back is the way
        * you came rather than a jump to the title. Only from a real room,
@@ -15641,7 +16651,13 @@ export class Ui {
       this.roomFrom = ROOM_PARENTS.has(this.screen) && this.screen !== action
         ? this.screen
         : null;
-      this.returnTo = this.screen === 'paused' ? 'paused' : 'title';
+      /* A room opened from a room inside a paused run is still inside that
+       * run. This used to reset to the title, so Paused, Settings, Stick
+       * help, Escape, Escape quit the run instead of going back to it. */
+      this.returnTo = this.screen === 'paused'
+        || (this.screen !== 'title' && this.returnTo === 'paused')
+        ? 'paused'
+        : 'title';
       this.show(action);
       return;
     }
@@ -15708,6 +16724,11 @@ export class Ui {
     }
     if (action === 'fly' && seatIsRace(this.settings)) {
       this.returnTo = this.screen === 'paused' ? 'paused' : 'title';
+      /* The card once per track per visit: see launchCardSeen. */
+      if (launchCardSeen(this.settings)) {
+        this.act('launch-go');
+        return;
+      }
       this.show('launch');
       return;
     }
@@ -15727,10 +16748,14 @@ export class Ui {
        * From the flight controller's signpost row, returnTo is left alone:
        * it may be carrying a paused run two screens up, and this row must
        * not be the reason Escape quits it. */
-      if (this.screen === 'pilot' || this.screen === 'quad') {
+      if (this.screen === 'pilot' || this.screen === 'quad' || this.screen === 'fc') {
         /* Both rooms carry a Rates row: Settings has the real one, Quad has a
          * signpost saying rates are not the machine's. Escape goes back to
-         * whichever one was used, or the signpost is a one way door. */
+         * whichever one was used, or the signpost is a one way door. The
+         * bench's "Open the Rates screen" is the same kind of signpost, and
+         * Escape used to land on the title from it (MENUS-PLAN.md 1.37), so
+         * it comes back to the bench, draft and all: fcFrom survives the trip
+         * in show(), as pidsFrom survives a trip to the bench. */
         this.ratesFrom = this.screen;
       } else {
         this.ratesFrom = null;
@@ -15742,9 +16767,11 @@ export class Ui {
       return;
     }
     if (action === 'pids') {
-      /* Same going-back contract as Rates, for the same reason. */
-      if (this.screen === 'quad') {
-        this.pidsFrom = 'quad';
+      /* Same going-back contract as Rates, for the same reason. The launch
+       * card's Tune row comes back to the launch card, which is the moment
+       * a pilot opened it from: Escape used to land them on the title. */
+      if (this.screen === 'quad' || this.screen === 'launch') {
+        this.pidsFrom = this.screen;
       } else {
         this.pidsFrom = null;
         this.returnTo = this.screen === 'paused' ? 'paused' : 'title';
@@ -16286,9 +17313,28 @@ export class Ui {
      * fire on the screen that comes back.
      */
     if (this.nameDialog && !this.nameDialog.hidden) {
+      /*
+       * BACK CLOSES A DIALOG, once the sticks have been seen at rest since
+       * it opened (MENUS-PLAN.md 2.9). A radio pilot could not answer the
+       * name prompt, a confirm or the feel form at all, and the form used to
+       * open on its own. Only Back, and only as Escape: the dialog's own
+       * key handler takes it, so a form with typing in it asks before it
+       * throws the typing away, exactly as Escape does. Never select, which
+       * could send a form or confirm a question with a flick.
+       */
+      const rest = !now.up && !now.down && !now.left && !now.right && !now.select && !now.back;
+      if (!this.dialogPadArmed) {
+        this.dialogPadArmed = rest;
+      } else if ((now.back && !this.padPrev.back) || (now.left && !this.padPrev.left)) {
+        this.dialogPadArmed = false;
+        this.nameDialog.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', code: 'Escape', bubbles: true, cancelable: true,
+        }));
+      }
       this.padPrev = now;
       return;
     }
+    this.dialogPadArmed = false;
     if (this.screen === 'calibrate') {
       if (now.back && !this.padPrev.back) {
         this.act('calibrate-cancel');
@@ -16347,9 +17393,53 @@ export class Ui {
     if (this.screen === 'stickhelp' && this.padInfo && !this.padInfo.buttons && !this.padInfo.hasSelect) {
       now.select = false;
     }
-    if (this.screen === 'quad' || (this.screen === 'title' && !this.onGate()) || this.screen === 'rates' || this.screen === 'pids' || this.screen === 'fc' || this.screen === 'stickhelp') {
+    /*
+     * A LIST OPEN IN PLACE TAKES THE PAD ON EVERY SCREEN (MENUS-PLAN.md
+     * 2.9). It used to sit below the guard that follows, so on the six
+     * screens the guard covers a list opened with a button could be neither
+     * stepped nor closed from the radio. Nothing is posed or measured while
+     * a list is open over it.
+     */
+    if (this.dropEl) {
+      if (now.up && !this.padPrev.up) {
+        this.moveDrop(-1);
+      }
+      if (now.down && !this.padPrev.down) {
+        this.moveDrop(1);
+      }
+      if ((now.right && !this.padPrev.right) || (now.select && !this.padPrev.select)) {
+        this.confirmDrop();
+      }
+      if ((now.left && !this.padPrev.left) || (now.back && !this.padPrev.back)) {
+        this.closeDrop();
+        if (this.onUiSound) {
+          this.onUiSound('back');
+        }
+      }
+      this.padPrev = now;
+      return;
+    }
+    /*
+     * PITCH MOVES THE CURSOR ON THE TITLE AND IN QUAD (MENUS-PLAN.md 2.9),
+     * the rule every other menu already has. They pose the quad, and the
+     * pose is roll and yaw as much as pitch, so roll stays out: roll right
+     * is choose and roll left is back everywhere else, and a pose would
+     * press them. Before this a radio on the title could fly and nothing
+     * else, because a cursor it could not move sat on Fly.
+     */
+    if (posesQuad(this)) {
+      if (now.up && !this.padPrev.up) {
+        this.move(-1);
+      }
+      if (now.down && !this.padPrev.down) {
+        this.move(1);
+      }
+    }
+    if (posesQuad(this) || STICKS_BUSY[this.screen]) {
       /*
-       * The STICKS stay out, for the reasons above. The BUTTONS do not.
+       * Roll stays out on the two that pose the quad and every stick stays
+       * out on the busy four (STICKS_BUSY), for the reasons above. The
+       * BUTTONS do not.
        *
        * The guard used to swallow everything except select on the title,
        * and the pause menu is fully stick navigable and carries rows into
@@ -16400,25 +17490,6 @@ export class Ui {
      * cycles it: see the segmented branch in select().
      */
     const rollAdjusts = Boolean(it && it.adjust) && !this.cardScreen();
-    if (this.dropEl) {
-      if (now.up && !this.padPrev.up) {
-        this.moveDrop(-1);
-      }
-      if (now.down && !this.padPrev.down) {
-        this.moveDrop(1);
-      }
-      if ((now.right && !this.padPrev.right) || (now.select && !this.padPrev.select)) {
-        this.confirmDrop();
-      }
-      if ((now.left && !this.padPrev.left) || (now.back && !this.padPrev.back)) {
-        this.closeDrop();
-        if (this.onUiSound) {
-          this.onUiSound('back');
-        }
-      }
-      this.padPrev = now;
-      return;
-    }
     if (now.up && !this.padPrev.up) {
       this.move(-1);
     }

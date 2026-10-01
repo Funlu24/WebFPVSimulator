@@ -372,7 +372,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
     src: src('andagain.jpg'),
     name: 'andAgainFPV',
     nameNode: makerMark,
-    note: 'Built this simulator, the track builder, and the public board. Orchestrated a horde of Grok and Claude along the way.',
+    note: 'Built this simulator, the builder, and the public board. Orchestrated a horde of Grok and Claude along the way.',
     channel: 'https://www.youtube.com/@andAgainFPV',
     handle: 'youtube.com/@andAgainFPV',
   }));
@@ -422,7 +422,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   const tracks = section('The track language', '');
   const tdBody = el('p');
   tdBody.append(
-    document.createTextNode('The track builder is inspired by '),
+    document.createTextNode('The builder is inspired by '),
     link('https://trackdraw.app/', 'Track Draw'),
     document.createTextNode(', from the Dutch drone gods at '),
     link('https://dutchdronesquad.nl/', 'Dutch Drone Squad'),

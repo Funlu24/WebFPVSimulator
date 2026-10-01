@@ -156,7 +156,7 @@ export const CUSTOM_TUNE = {
    * shipped tune off a list that should not have shown it. */
   airframe: null,
   name: 'Your edits',
-  note: 'The dump you saved on the Flight controller screen, every field of it.',
+  note: 'The dump you saved on the Firmware bench, every field of it.',
 };
 
 export function tuneById(id) {

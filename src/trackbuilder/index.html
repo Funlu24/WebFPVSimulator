@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  index.html: the track builder's page.
+  index.html: the Builder's page, where tracks and maps are made.
 
   A SEPARATE PAGE, ON PURPOSE. The simulator's own page boots a WASM physics
   module, a Three.js world and a 1000 Hz fixed step loop; the builder needs
@@ -32,7 +32,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Track Builder, WebFPV</title>
+    <title>Builder, WebFPV</title>
     <!--
       THE SCRIPTS OF THE DEPLOY THIS PAGE CAME FROM, ALWAYS: see src/fresh.js,
       and the same lines at the top of the simulator's index.html. This page
@@ -70,21 +70,21 @@
       rendered a picture. The image is the simulator's own card, because the
       thing a builder link leads to is a course flown in that simulator.
     -->
-    <meta name="description" content="Draw an FPV race track gate by gate, fly it in the browser, and publish it to the public board. No install, no account." />
+    <meta name="description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times. No install, no account." />
     <link rel="canonical" href="https://webfpv.org/sim/src/trackbuilder/index.html" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebFPV" />
     <meta property="og:url" content="https://webfpv.org/sim/src/trackbuilder/index.html" />
-    <meta property="og:title" content="WebFPV track builder" />
-    <meta property="og:description" content="Draw a race track gate by gate, fly it in the browser, and publish it to the public board." />
+    <meta property="og:title" content="WebFPV Builder" />
+    <meta property="og:description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times." />
     <meta property="og:image" content="https://webfpv.org/sim/og.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="WebFPV track builder" />
-    <meta name="twitter:description" content="Draw a race track gate by gate, fly it in the browser, and publish it to the public board." />
+    <meta name="twitter:title" content="WebFPV Builder" />
+    <meta name="twitter:description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times." />
     <meta name="twitter:image" content="https://webfpv.org/sim/og.png" />
     <meta name="theme-color" content="#0f150f" />
     <!--
@@ -296,6 +296,51 @@
       }
       #tb-keep a.patreon svg { width: 14px; height: 14px; display: block; }
       #tb-keep a.patreon:hover { box-shadow: inset 0 0 0 1px #FF424D; color: var(--cream); }
+      /* Folded away once this browser has saved something: see placeKeep in
+         app.js. The strip is a flex box, which outranks the attribute. */
+      #tb-keep[hidden] { display: none; }
+
+      /*
+       * THE NOTICE, FOLDED: a quiet line beside Save that keeps the strip's
+       * sakura dot, so it reads as the same fact and not as a new control.
+       * It is a button because a press says the whole sentence, which is the
+       * only way a touched screen can read a title.
+       */
+      .tb-kept {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s2);
+        flex: 0 0 auto;
+        padding: var(--s1) var(--s2);
+        border: 0;
+        border-radius: var(--r-chip);
+        background: transparent;
+        color: var(--dim);
+        font: inherit;
+        font-size: var(--t-small);
+        white-space: nowrap;
+        cursor: help;
+      }
+      .tb-kept::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--sakura);
+      }
+      .tb-kept:hover { color: var(--slate); background: var(--lift); }
+      .tb-kept[hidden] { display: none; }
+      /* Patreon, at the foot of More once the strip it stood on is folded. */
+      .tb-more-menu a.patreon {
+        display: flex;
+        align-items: center;
+        gap: var(--s2);
+        margin-top: var(--s1);
+        border-top: 1px solid var(--rule);
+        border-radius: 0 0 var(--r-chip) var(--r-chip);
+        text-decoration: none;
+      }
+      .tb-more-menu a.patreon svg { width: 13px; height: 13px; flex: none; }
 
       /* ---------------- top bar ---------------- */
 
@@ -393,6 +438,7 @@
        * Duplicate, Import, Export and Delete were effectively unreadable.
        */
       .tb-more-item {
+        white-space: nowrap;
         border: 0;
         background: transparent;
         border-radius: var(--r-chip);
@@ -674,6 +720,9 @@
         color: var(--amber);
         align-self: flex-end;
       }
+      /* The whoop canvas's millimetres, after its inches: the other unit, in
+         small print, as on its card. */
+      #tb-readout small { color: var(--dim); font-size: var(--t-micro); }
       .tb-keys {
         display: flex;
         flex-wrap: wrap;
@@ -839,17 +888,20 @@
       #tb-inspector { flex: 1 1 40%; }
       #tb-sequence { flex: 1 1 30%; }
       #tb-results { flex: 1 1 30%; }
-      /* A map has no flying order, so its panel shrinks to the one line that
-         says so and the inspector, which on a map carries a style picker and
-         a column of sizes, takes the room. app.js sets the class. */
+      /* A map has no flying order, so it has no Flying order panel: it was a
+         panel whose only content was that a map has none (MENUS-PLAN.md
+         1.26). The inspector, which on a map carries a style picker and a
+         column of sizes, takes the room. app.js sets the class. */
       body.tb-map #tb-inspector { flex: 1 1 62%; }
-      body.tb-map #tb-sequence { flex: 0 0 auto; }
+      body.tb-map #tb-sequence { display: none; }
       body.tb-map #tb-results { flex: 1 1 38%; }
       /* A hint for a gesture a map does not have: nothing on a map has a
          face to flip. */
       body.tb-map [data-race-only] { display: none; }
       /* The 3D view's own gestures, said only while it is the view. */
       body:not(.tb-in-3d) [data-3d-only] { display: none; }
+      /* And the plan's, said only while it is. */
+      body.tb-in-3d [data-2d-only] { display: none; }
 
       /* ---------------- palette ---------------- */
 
@@ -914,6 +966,38 @@
       /* A tool with no hotkey keeps its chip, empty and fainter, so the
          labels in a group still start on one line. */
       .tb-tool-key.none { background: var(--lift); }
+      /* The label, and under it a part's note when it has one. */
+      .tb-tool-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+      .tb-tool-note {
+        font-size: var(--t-micro);
+        line-height: 1.2;
+        color: var(--dim);
+      }
+      .tb-tool.on .tb-tool-note { color: rgba(15, 21, 15, 0.7); }
+
+      /*
+       * BUILD IN 2D: the five inch and map palettes while the 3D preview is up,
+       * where a click places nothing. The tools are quieted, and still take a
+       * press, which opens 2D with that tool in hand (pickTool in app.js).
+       */
+      .tb-preview-note { display: none; }
+      body.tb-in-3d:not(.tb-whoop) .tb-preview-note {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s2);
+        margin: 0 0 var(--s4);
+        padding: var(--s3);
+        border-radius: var(--r-ctl);
+        background: var(--raised);
+        box-shadow: inset 0 0 0 1px var(--edge);
+        font-size: var(--t-small);
+        line-height: 1.45;
+        color: var(--slate);
+      }
+      .tb-preview-note strong { color: var(--cream); font-size: var(--t-label); }
+      .tb-preview-note .tb-btn { align-self: flex-start; padding: var(--s1) var(--s3); }
+      body.tb-in-3d:not(.tb-whoop) #tb-palette .tb-tool { opacity: 0.5; }
+      body.tb-in-3d:not(.tb-whoop) #tb-palette .tb-tool:hover { opacity: 1; }
 
       /* ---------------- panels ---------------- */
 
@@ -1021,6 +1105,22 @@
       /* Emitted on most inspector fields and hidden here, not in JS. Drop
          this line and a unit prints after every number. */
       .tb-field-suffix { display: none; }
+      /* Except the whoop canvas's millimetres under an inch field, which are
+         the other unit in small print (lengthField in ui.js). */
+      .tb-field-suffix.tb-field-mm {
+        display: block;
+        color: var(--dim);
+        font: var(--t-micro) / 1.2 var(--mono);
+      }
+      /* A field the dialog is asking for: Publish's name, until it has one. */
+      .tb-field input[aria-invalid="true"] { border-color: var(--bad); }
+      .tb-help.tb-ask {
+        margin-top: 0;
+        padding-left: var(--s2);
+        border-left: 2px solid var(--bad);
+        color: var(--cream);
+      }
+      .tb-help.tb-ask[hidden] { display: none; }
 
       .tb-grid2, .tb-grid3 { display: grid; gap: 0 var(--s3); align-items: end; }
       .tb-grid2 { grid-template-columns: 1fr 1fr; }
@@ -1266,7 +1366,9 @@
       /* On a whoop canvas a name wraps onto a second line instead of being cut to
          "Tall ...": a pole flown six times is six rows, and they have to be told apart. */
       body.tb-whoop .tb-seq-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
-      .tb-seq-face { color: var(--dim); font-size: var(--t-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tb-seq-face { color: var(--dim); font-size: var(--t-micro); line-height: 1.4; overflow-wrap: anywhere; }
+      /* Turned by hand, on the pass's own line after which way it is flown. */
+      .tb-badge-inline { display: inline-block; margin-left: var(--s1); padding: 0 3px; font-size: 8.5px; vertical-align: 1px; }
       /* The amber wash under a selected row lifts the ground and drops --dim
          to 3.48:1, on the one line the row exists to tell you about. Slate
          over the same wash is 4.79:1. */
@@ -1284,6 +1386,8 @@
       .tb-stat-label { color: var(--slate); font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       /* These really are instruments, so they keep amber. */
       .tb-stat-value { flex: none; color: var(--amber); font-size: var(--t-label); font-weight: 600; }
+      /* The other unit, in small print under the figure. */
+      .tb-stat-small { display: block; text-align: right; color: var(--dim); font-size: var(--t-micro); font-weight: 400; }
 
       .tb-warn { list-style: none; margin: 0; padding: 0; }
       .tb-warn li {
@@ -1336,7 +1440,15 @@
       .tb-load-row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--rule); }
       .tb-load-row:last-child { border-bottom: 0; }
       .tb-load-name { flex: 1; min-width: 0; color: var(--cream); overflow: hidden; text-overflow: ellipsis; }
-      .tb-load-meta { color: var(--dim); font-size: var(--t-micro); }
+      .tb-load-meta { color: var(--dim); font-size: var(--t-micro); line-height: 1.5; }
+      .tb-load-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      /* What kind of document a row is: the one word on it that is not a
+         figure, set like the inspector's headings. */
+      .tb-load-kind { color: var(--slate); font-weight: 600; letter-spacing: 0.04em; }
+      .tb-load-row .tb-btn { flex: none; }
+      .tb-load-gone .tb-load-name { color: var(--dim); font-style: italic; }
+      .tb-load-others { margin-top: var(--s4); padding-top: var(--s3); border-top: 1px solid var(--rule); }
+      .tb-load-others .tb-btn { margin-left: var(--s2); padding: var(--s1) var(--s3); }
 
       /* ---------------- toast and modal ---------------- */
 
@@ -1392,6 +1504,9 @@
         overflow-y: auto;
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
       }
+      /* Focused when it opens (modal in app.js), which is not a thing to draw a
+         ring round: the ring is for the controls inside it. */
+      .tb-modal:focus { outline: none; }
       .tb-modal h2 {
         margin: 0 0 var(--s4);
         padding-bottom: var(--s3);
@@ -1656,23 +1771,78 @@
        * is exactly as it was.
        */
       #tb-main { position: relative; }
+      /*
+       * UNDER THE DIALOGS, which are 20: it was 30, so at 1024 wide an open
+       * drawer was painted over a dialog's buttons. Over the room's own
+       * overlays, which are 4 to 6. Closed, it is hidden as well as slid away,
+       * after the slide, so Tab cannot walk into fields nobody can see.
+       */
       body.tb-whoop #tb-side {
         position: absolute;
-        z-index: 30;
+        z-index: 15;
         top: var(--s3);
         right: var(--s3);
         bottom: var(--s3);
         width: 340px;
         transform: translateX(calc(100% + var(--s5)));
-        transition: transform 0.18s ease;
+        visibility: hidden;
+        transition: transform 0.18s ease, visibility 0s linear 0.18s;
         box-shadow: -10px 0 30px rgba(0, 0, 0, 0.45);
       }
-      body.tb-whoop.tb-drawer #tb-side { transform: none; }
+      body.tb-whoop.tb-drawer #tb-side {
+        transform: none;
+        visibility: visible;
+        transition: transform 0.18s ease, visibility 0s;
+      }
+      /*
+       * THE DRAWER'S OWN CLOSE BUTTON, at its top right corner over the first
+       * panel's heading. It had none, and its only toggle was under it
+       * (MENUS-PLAN.md 1.18). Only where the side column is a drawer.
+       */
+      .tb-drawer-x { display: none; }
+      body.tb-whoop .tb-drawer-x {
+        position: absolute;
+        z-index: 2;
+        top: 5px;
+        right: 5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 1px solid var(--edge);
+        border-radius: var(--r-ctl);
+        background: var(--panel);
+        color: var(--slate);
+        font: 400 18px/1 var(--ui-font);
+        cursor: pointer;
+      }
+      body.tb-whoop .tb-drawer-x:hover { color: var(--cream); background: var(--raised); }
+      /* The heading under it keeps its words clear of it. */
+      body.tb-whoop #tb-inspector > h3:first-child { padding-right: 34px; }
+      /*
+       * THE ROOM'S OVERLAYS STAND CLEAR OF THE OPEN DRAWER, so its toggle on
+       * the lap bar, Build sheet beside it, the line at the foot and the keys
+       * are never under it. --tb-cover is how much of the stage it takes; the
+       * card reads the same from app.js (drawerCover). A screen too narrow to
+       * leave a room beside it keeps the drawer over the room, closed by its
+       * own button: see the phone block at the foot.
+       */
+      @media (min-width: 700px) {
+        body.tb-whoop.tb-drawer #tb-stage { --tb-cover: calc(340px + var(--s3)); }
+      }
+      body.tb-whoop #tb-lapbar { right: calc(var(--s4) + var(--tb-cover, 0px)); }
+      body.tb-whoop #tb-coach,
+      body.tb-whoop #tb-empty { left: calc((100% - var(--tb-cover, 0px)) / 2); }
+      body.tb-whoop #tb-status { padding-right: calc(var(--s3) + var(--tb-cover, 0px)); }
       #tb-card, #tb-coach, #tb-empty, #tb-lapbar { display: none; }
       body.tb-whoop #tb-lapbar { display: flex; }
       body.tb-whoop #tb-coach:not([hidden]),
       body.tb-whoop #tb-empty:not([hidden]),
       body.tb-whoop #tb-card:not([hidden]) { display: block; }
+      /* The five inch canvas's way in from empty, too (renderEmpty in ui.js). */
+      body:not(.tb-map) #tb-empty:not([hidden]) { display: block; }
       /* The two hints the room has no use for: a line to drag, a pipe to pick. */
       body.tb-whoop [data-classic] { display: none; }
       body:not(.tb-whoop) [data-whoop] { display: none; }
@@ -1700,6 +1870,7 @@
       .tb-lap-fig b { color: var(--cream); font-weight: 600; font-family: var(--mono); }
       .tb-lap-fig.good b { color: var(--mint); }
       .tb-lap-fig.bad b { color: #ffb347; }
+      .tb-lap-fig small { color: var(--dim); font-size: var(--t-micro); font-family: var(--mono); }
       .tb-lap-gap { flex: 1; }
       #tb-lapbar .tb-btn { padding: 4px 10px; }
 
@@ -1928,13 +2099,14 @@
       /* ---------------- touch ---------------- */
 
       /*
-       * The whoop room is worked with fingers as well as a mouse (edit3d.js has
-       * the gestures), so the browser must not take them: no page scroll, no
-       * pinch zoom of the whole page, no text selection or callout from a long
-       * press, on the drawing itself. Only the whoop canvas: the others are
-       * exactly as they were.
+       * The drawing is worked with fingers as well as a mouse (edit3d.js has
+       * the room's gestures, view2d.js the plan's two finger slide and pinch),
+       * so the browser must not take them: no page scroll, no pinch zoom of the
+       * whole page, no text selection or callout from a long press, on the
+       * drawing itself. Every canvas now: the plan learned the fingers too
+       * (MENUS-PLAN.md 4.4).
        */
-      body.tb-whoop #tb-stage canvas {
+      #tb-stage canvas {
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
@@ -1993,6 +2165,239 @@
         .tb-keys > .tb-touch-hint { display: inline; }
       }
 
+      /* ---------------- a phone ---------------- */
+
+      /*
+       * UNDER 500 PX IN EITHER DIRECTION (MENUS-PLAN.md 4.4). This page said
+       * phones were out of scope, and at 390 by 844 the drawing was 0 px wide
+       * with nine of the bar's controls past the right edge, where the page's
+       * overflow: hidden put them out of reach. Now the drawing gets the
+       * screen: the palette and the side column are drawers opened from the
+       * bar (Tools and Details), the storage strip is gone, the bar's second
+       * row and its quieter buttons fold into More, and what is left on the
+       * bar is what a thumb reaches for: the drawers, the name, Undo, Redo,
+       * Load, More and Fly. A portrait phone takes the bar in two rows, a
+       * landscape one in one. PHONE_QUERY in app.js is the same query.
+       */
+      .tb-phone-only, .tb-bar-turn, .tb-tools-x { display: none; }
+      @media (max-width: 499.98px), (max-height: 499.98px) {
+        #tb-keep, #tb-keep[hidden] { display: none; }
+
+        #tb-topbar {
+          position: relative;
+          flex-wrap: wrap;
+          gap: var(--s2);
+          padding: var(--s2) var(--s3);
+        }
+        #tb-topbar .tb-zone { display: contents; }
+        #tb-topbar .tb-title,
+        #tb-topbar .tb-class,
+        #tb-topbar .tb-new,
+        #tb-topbar .tb-save,
+        #tb-topbar .tb-kept,
+        #tb-topbar .tb-view-group,
+        #tb-topbar .tb-show-group,
+        #tb-topbar .tb-listing,
+        #tb-topbar .tb-publish,
+        #tb-topbar .tb-back { display: none !important; }
+        #tb-topbar .tb-phone-only { display: inline-flex; align-items: center; }
+        /* The tool in hand, by name, in the colour of a thing placed
+           (syncToolsBtn in app.js). A long name is cut, never the bar. */
+        #tb-topbar .tb-tools-btn.tb-in-hand:not(.on) {
+          display: inline-block;
+          max-width: 9em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--mint);
+          border-color: rgba(125, 255, 180, 0.6);
+        }
+        /* One row, held sideways: the drawers at the two ends, as they open. */
+        .tb-tools-btn { order: 1; }
+        #tb-topbar .tb-name { order: 2; flex: 1 1 110px; min-width: 64px; }
+        .tb-undo-group { order: 3; }
+        .tb-file-group { order: 4; }
+        .tb-more { order: 6; margin-left: auto; }
+        .tb-details-btn { order: 7; }
+        #tb-topbar .tb-primary { order: 8; }
+
+        /* The drawing is the screen. */
+        #tb-main { padding: 0; gap: 0; }
+        #tb-stage, #tb-stage canvas { border-radius: 0; }
+
+        /* The palette, a drawer from the left. */
+        #tb-palette {
+          position: absolute;
+          z-index: 15;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: min(300px, 86vw);
+          border-radius: 0 var(--r-panel) var(--r-panel) 0;
+          transform: translateX(-105%);
+          visibility: hidden;
+          transition: transform 0.18s ease, visibility 0s linear 0.18s;
+          box-shadow: 10px 0 30px rgba(0, 0, 0, 0.45);
+        }
+        body.tb-tools #tb-palette {
+          transform: none;
+          visibility: visible;
+          transition: transform 0.18s ease, visibility 0s;
+        }
+        .tb-tools-x, body.tb-whoop .tb-drawer-x, .tb-drawer-x {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          border: 1px solid var(--edge);
+          border-radius: var(--r-ctl);
+          background: var(--panel);
+          color: var(--slate);
+          font: 400 22px/1 var(--ui-font);
+          cursor: pointer;
+        }
+        .tb-tools-x { position: sticky; top: 0; z-index: 2; margin: 0 0 var(--s2) auto; }
+        /* Held at the drawer's top right however far it is scrolled, over the
+           corner of the first panel rather than in a row of its own: the
+           negative margin under it gives the panel its row back. */
+        .tb-drawer-x, body.tb-whoop .tb-drawer-x {
+          position: sticky;
+          z-index: 2;
+          top: 0;
+          flex: none;
+          align-self: flex-end;
+          margin: var(--s1) var(--s1) calc(-44px - var(--s1) - var(--s3)) 0;
+        }
+        #tb-inspector > h3:first-child { padding-right: 52px; }
+
+        /* The side column, a drawer from the right, on every canvas. */
+        #tb-side, body.tb-whoop #tb-side {
+          position: absolute;
+          z-index: 15;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: min(340px, 92vw);
+          padding: var(--s2);
+          background: var(--deep);
+          /* One scroll for the whole drawer. Three panels sharing a phone's
+             height each scrolled a window of their own a hundred pixels tall,
+             the inspector cut off at its second field. */
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          transform: translateX(105%);
+          visibility: hidden;
+          transition: transform 0.18s ease, visibility 0s linear 0.18s;
+          box-shadow: -10px 0 30px rgba(0, 0, 0, 0.45);
+        }
+        body.tb-drawer #tb-side, body.tb-whoop.tb-drawer #tb-side {
+          transform: none;
+          visibility: visible;
+          transition: transform 0.18s ease, visibility 0s;
+        }
+        #tb-side > .tb-panel, body.tb-map #tb-side > .tb-panel { flex: none; overflow: visible; }
+        /* Over the drawing, which it dims, not beside it: nothing on the stage
+           makes room for it here, unlike a bigger screen's whoop drawer. */
+        body.tb-whoop.tb-drawer #tb-stage { --tb-cover: 0px; }
+        /* An open drawer dims the drawing under it, and a tap there closes it
+           (app.js), rather than placing or selecting through it. */
+        body.tb-tools #tb-stage::after,
+        body.tb-drawer #tb-stage::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 12;
+          background: rgba(8, 13, 20, 0.45);
+        }
+
+        /* More, from the bar's right, as tall as the screen allows. */
+        .tb-more { position: static; }
+        .tb-more-menu {
+          left: auto;
+          right: var(--s3);
+          top: calc(100% - 2px);
+          /* The screen under the bar, whichever height the bar is: fitTopBar
+             in app.js measures it. A portrait bar is two rows, and a whoop
+             canvas's More is long enough to have run off the foot. */
+          max-height: calc(100vh - var(--tb-top-h, 89px) - 12px);
+          max-height: calc(100dvh - var(--tb-top-h, 89px) - 12px);
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          min-width: 13em;
+        }
+        /* In the order buildPhoneMenu put them in, which is the order the
+           arrow keys walk. */
+        .tb-more-menu .tb-phone-only { display: block; }
+        .tb-more-menu .tb-more-seg.tb-phone-only { display: flex; }
+        .tb-more-menu [hidden] { display: none !important; }
+        /* A rule above each of the menu's own groups. */
+        .tb-more-menu [data-phone="new"],
+        .tb-more-menu [data-phone="view"],
+        .tb-more-menu [data-phone="logos"],
+        .tb-more-menu [data-phone="back"],
+        .tb-more-menu .tb-more-item:not(.tb-phone-only):not(.tb-more-seg-btn):not(.patreon) {
+          border-top: 1px solid var(--rule);
+          border-radius: 0;
+        }
+        .tb-more-menu .tb-more-item:not(.tb-phone-only):not(.tb-more-seg-btn):not(.patreon) ~ .tb-more-item:not(.tb-phone-only):not(.patreon) { border-top: 0; }
+        .tb-more-item { min-height: 40px; }
+
+        /* The lap bar keeps the lap. Its two buttons are on the bar already,
+           as Details and in More, and on a phone they made it four rows. */
+        #tb-lapbar .tb-lap-sheet, #tb-lapbar [data-drawer] { display: none; }
+        body.tb-whoop #tb-lapbar { left: var(--s2); right: var(--s2); gap: var(--s1) var(--s3); padding: var(--s2) var(--s3); }
+
+        #tb-toast { max-width: calc(100vw - 24px); bottom: 52px; }
+        .tb-modal { padding: var(--s4) var(--s4) var(--s4); max-height: 88vh; }
+      }
+      /*
+       * TOO SMALL EVEN FOR THAT: under 300 px either way the drawing would be
+       * a strip, so the page says so plainly over it, and the bar keeps Fly
+       * and Load. Under the drawers and the dialogs, which still open.
+       */
+      #tb-small { display: none; }
+      @media (max-width: 299.98px), (max-height: 299.98px) {
+        #tb-small {
+          display: flex;
+          position: absolute;
+          inset: 0;
+          z-index: 14;
+          align-items: center;
+          justify-content: center;
+          margin: 0;
+          padding: var(--s4);
+          background: var(--deep);
+          color: var(--cream);
+          text-align: center;
+          font-size: var(--t-body);
+          line-height: 1.45;
+        }
+      }
+      /* A portrait phone: two rows, the drawers and the name above, the
+         buttons a thumb works with below. */
+      @media (max-width: 499.98px) {
+        .tb-tools-btn { order: 1; }
+        #tb-topbar .tb-name { order: 2; }
+        .tb-details-btn { order: 3; }
+        .tb-bar-turn { display: block; order: 4; flex: 0 0 100%; height: 0; }
+        .tb-undo-group { order: 5; }
+        .tb-file-group { order: 6; }
+        .tb-more { order: 7; }
+        #tb-topbar .tb-primary { order: 8; }
+        #tb-topbar .tb-primary .tb-long { display: none; }
+      }
+      /*
+       * Choices inside More: the canvas and the view, as rows of segments, and
+       * a switch's state as a tick, which is how a menu says a thing is on.
+       */
+      /* No display here: a phone's block shows them, and nothing else does. */
+      .tb-more-seg { gap: 2px; padding: var(--s1); }
+      .tb-more-seg .tb-more-item { flex: 1 1 0; text-align: center; padding: var(--s2) var(--s1); }
+      .tb-more-seg .tb-more-item.on { color: var(--deep); background: var(--sakura); font-weight: 600; }
+      .tb-more-item[aria-checked="true"]:not(.tb-more-seg-btn)::after { content: " \2713"; color: var(--amber); }
+
       /* ---------------- reduced motion ---------------- */
 
       /*
@@ -2013,9 +2418,11 @@
     <div id="tb-app">
       <header id="tb-topbar"></header>
       <div id="tb-keep">
+        <!-- The sentence after the bold is app.js's, in the canvas's own noun
+             (placeKeep): a map's notice says maps. -->
         <p>
           <strong>This browser only.</strong>
-          Tracks you build stay here. Clearing the browser, or opening another device, starts you from nothing. Publish a track to put it on the public board.
+          <span id="tb-keep-text">Tracks you build stay here. Clearing the browser, or opening another device, starts you from nothing. Publish a track to put it on the board.</span>
         </p>
       </div>
       <main id="tb-main">
@@ -2029,15 +2436,23 @@
           <div id="tb-empty" hidden></div>
           <div id="tb-coach" hidden></div>
           <div id="tb-lapbar"></div>
+          <!-- The honest line for a screen too small even for the phone
+               layout (MENUS-PLAN.md 4.4). The bar above it still works. -->
+          <p id="tb-small">This screen is too small to build on: the Builder needs 300 pixels each way. Fly and Load on the bar above still work.</p>
           <div id="tb-status">
-            <span id="tb-readout">0.00, 0.00 m</span>
+            <span id="tb-readout"></span>
             <!--
               The same hints that used to be one 226 character sentence. A
               key set as a key is found by looking rather than by reading,
               which is what a hint at the foot of a working canvas is for.
             -->
             <span class="tb-keys">
-              <span class="tb-touch-hint" data-whoop>Tap a gate to select it. Drag it to move it. Two fingers slide, pinch and twist the room.</span>
+              <!-- What a finger does, in place of the keys a touched screen
+                   has none of: the room, a plan, and the five inch and map
+                   preview, each its own. -->
+              <span class="tb-touch-hint" data-whoop data-3d-only>Tap a gate to select it. Drag it to move it. Two fingers slide, pinch and twist the room.</span>
+              <span class="tb-touch-hint" data-2d-only>Tap a tool, then tap the plan to place it. Drag a piece to move it, or empty ground to select several. Two fingers slide and pinch the plan.</span>
+              <span class="tb-touch-hint" data-classic data-3d-only>One finger turns the preview round. Tap a piece to select it.</span>
               <span><kbd>Wheel</kbd>zoom</span>
               <span><kbd>Mid</kbd>pan</span>
               <span><kbd>Click</kbd>select</span>
@@ -2053,14 +2468,16 @@
               <span data-race-only><kbd>X</kbd>flip face</span>
               <span data-race-only data-3d-only data-classic><kbd>Drag line</kbd>bend it</span>
               <span data-race-only data-3d-only data-classic><kbd>Click pipe</kbd>pick a side</span>
-              <span data-classic><kbd>V</kbd>2D and 3D</span>
-              <span data-whoop><kbd>V</kbd>room and plan</span>
+              <span><kbd>V</kbd>2D and 3D</span>
               <span><kbd>Del</kbd>remove</span>
               <span><kbd>Ctrl Z</kbd>undo</span>
             </span>
           </div>
         </div>
         <aside id="tb-side">
+          <!-- Shown where this column is a drawer (the whoop canvas, and a
+               phone): see .tb-drawer-x. -->
+          <button type="button" id="tb-side-x" class="tb-drawer-x" aria-label="Close the panel" title="Close the panel. Esc">&times;</button>
           <section id="tb-inspector" class="tb-panel"></section>
           <section id="tb-sequence" class="tb-panel"></section>
           <section id="tb-results" class="tb-panel"></section>

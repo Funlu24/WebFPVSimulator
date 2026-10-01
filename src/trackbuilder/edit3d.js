@@ -501,11 +501,12 @@ export class RoomEditor {
   hover(e) {
     const v = this.view;
     const h = this.host;
-    /* Where the pointer is on the ground, in the status line, as the plan says it: a point on a plan dimensioned in
-     * metres is read off, not worked out. A hall's room has never said, and is left as it was. */
-    const under = h.isWhoopRace() ? null : v.levelPoint(e.clientX, e.clientY, 0);
-    if (under) {
-      h.onHoverWorld(under);
+    /* The readout at the foot says where on the floor the pointer is, in the
+     * room as on the plan: it sat at nought while the room was up, the one
+     * number on the canvas that was not about anything. */
+    const floor = v.levelPoint(e.clientX, e.clientY, 0);
+    if (floor) {
+      h.onHoverWorld(floor);
     }
     if (h.armed === 'ruler') {
       this.rulerHover(e);

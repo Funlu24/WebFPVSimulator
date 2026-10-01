@@ -324,6 +324,7 @@
     'src/trackbuilder/view2d.js',
     'src/trackbuilder/view3d.js',
     'src/trackbuilder/warnings.js',
+    'src/trackbuilder/words.js',
     'src/ui/chasehud.js',
     'src/ui/credits.js',
     'src/ui/fc.js',

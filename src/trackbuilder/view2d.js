@@ -484,6 +484,10 @@ export class View2D {
     this.pointer = null;        /* world position of the cursor, or null */
     this.drag = null;
     this.band = null;
+    /* The fingers on the plan, by pointer id, and the pair they make when
+     * there are two: see beginPinch. */
+    this.touches = new Map();
+    this.pinch = null;
     this.hover = null;
     this.bind();
   }
@@ -651,7 +655,7 @@ export class View2D {
     cv.addEventListener('pointerdown', (e) => this.onDown(e));
     cv.addEventListener('pointermove', (e) => this.onMove(e));
     cv.addEventListener('pointerup', (e) => this.onUp(e));
-    cv.addEventListener('pointercancel', () => this.onCancel());
+    cv.addEventListener('pointercancel', (e) => this.onCancel(e));
     cv.addEventListener('pointerleave', () => { this.pointer = null; this.host.requestDraw(); });
     cv.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
   }
@@ -678,6 +682,37 @@ export class View2D {
     this.canvas.setPointerCapture(e.pointerId);
     const world = this.toWorld(p.x, p.y);
 
+    /*
+     * FINGERS (MENUS-PLAN.md 4.4). One finger does what the mouse does. A
+     * second finger takes over: whatever the first was doing is put back, and
+     * the pair slides the plan with their middle and zooms it with the
+     * distance between them, which is what a plan on a phone is expected to
+     * do and what the room already does. The finger left when one lifts has no
+     * gesture to go on with, because a gesture begins with a press.
+     */
+    if (e.pointerType === 'touch') {
+      if (e.isPrimary) {
+        this.touches.clear();
+        this.pinch = null;
+      }
+      this.touches.set(e.pointerId, p);
+      if (this.touches.size === 2) {
+        this.beginPinch();
+        return;
+      }
+      if (this.touches.size > 2) {
+        return;
+      }
+      /* A tool under a finger places when the finger lifts without moving,
+       * not when it lands: the first finger of a pinch is not a placement. A
+       * finger dragged with a tool armed slides the plan instead, except the
+       * wall, which a finger drags out as the mouse does. */
+      if (this.host.armed && this.host.armed !== 'wall' && e.button === 0) {
+        this.drag = { kind: 'tap', start: p, last: p, moved: false, alt: e.altKey };
+        return;
+      }
+    }
+
     /* Middle button, or right button, pans. Right also cancels an armed
      * palette tool, which is the fastest way to stop placing; a road half
      * laid is put away first, and the tool with it on a second press. */
@@ -697,19 +732,6 @@ export class View2D {
       return;
     }
 
-    /* THE ROAD TOOL lays a node a click, and the road lands as one edit
-     * when it is finished: on its first node to close it, on its last to
-     * leave it open (a double click lands there twice), or with Enter. */
-    if (this.host.armed === 'road') {
-      this.host.draftClick(world, this.host.snap(world, e.altKey), NODE_PX / this.cam.scale);
-      return;
-    }
-    /* A vehicle goes on the road nearest the click. */
-    if (this.host.armed === 'vehicle') {
-      this.host.dropVehicle(world, SNAP_PX / this.cam.scale);
-      return;
-    }
-
     /* A five inch wall is dragged out along the ground, from the bay that is flown first to the last, as it is in
      * the room; a click lays three. */
     if (this.host.armed === 'wall') {
@@ -720,10 +742,8 @@ export class View2D {
       return;
     }
 
-    /* An armed palette tool places on click and stays armed, so ten gates
-     * are ten clicks. */
     if (this.host.armed) {
-      this.host.placeAt(this.host.snap(world, e.altKey, { type: this.host.armed }));
+      this.armedPress(world, e.altKey);
       return;
     }
 
@@ -807,9 +827,86 @@ export class View2D {
     };
   }
 
+  /*
+   * A press with a tool in hand, from the mouse at once and from a finger as it
+   * lifts. THE ROAD TOOL lays a node a click, and the road lands as one edit
+   * when it is finished: on its first node to close it, on its last to leave
+   * it open (a double click lands there twice), or with Enter. A vehicle goes
+   * on the road nearest the click. Any other armed palette tool places on
+   * click and stays armed, so ten gates are ten clicks.
+   */
+  armedPress(world, alt) {
+    if (this.host.armed === 'road') {
+      this.host.draftClick(world, this.host.snap(world, alt), NODE_PX / this.cam.scale);
+      return;
+    }
+    if (this.host.armed === 'vehicle') {
+      this.host.dropVehicle(world, SNAP_PX / this.cam.scale);
+      return;
+    }
+    this.host.placeAt(this.host.snap(world, alt, { type: this.host.armed }));
+  }
+
+  /* A second finger: what the first was doing is put back, and the pair is
+   * the camera from here on (movePinch). */
+  beginPinch() {
+    const d = this.drag;
+    if (d && ['move', 'rotate', 'node', 'slide'].includes(d.kind)) {
+      this.host.revertEdit();
+    }
+    this.drag = null;
+    this.band = null;
+    const [a, b] = [...this.touches.values()];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    this.pinch = {
+      spread: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      scale: this.cam.scale,
+      world: this.toWorld(mid.x, mid.y),
+    };
+    this.host.requestDraw();
+  }
+
+  /* The pair's spread is the zoom, and the point that was between them stays
+   * between them, wherever they slide. */
+  movePinch() {
+    const [a, b] = [...this.touches.values()];
+    if (!a || !b) {
+      return;
+    }
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const spread = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    this.cam.scale = clamp(this.pinch.scale * (spread / this.pinch.spread), MIN_SCALE, MAX_SCALE);
+    const now = this.toWorld(mid.x, mid.y);
+    this.cam.x += this.pinch.world.x - now.x;
+    this.cam.y += this.pinch.world.y - now.y;
+    this.host.requestDraw();
+  }
+
   onMove(e) {
     const p = this.localPoint(e);
     this.pointer = this.toWorld(p.x, p.y);
+
+    if (e.pointerType === 'touch') {
+      if (this.touches.has(e.pointerId)) {
+        this.touches.set(e.pointerId, p);
+      }
+      if (this.pinch) {
+        this.movePinch();
+        return;
+      }
+      if (this.drag && this.drag.kind === 'tap') {
+        if (!this.drag.moved && Math.hypot(p.x - this.drag.start.x, p.y - this.drag.start.y) < 8) {
+          return;
+        }
+        /* A finger dragged with a tool in hand slides the plan. */
+        this.drag.moved = true;
+        this.cam.x -= (p.x - this.drag.last.x) / this.cam.scale;
+        this.cam.y += (p.y - this.drag.last.y) / this.cam.scale;
+        this.drag.last = p;
+        this.host.requestDraw();
+        return;
+      }
+    }
 
     if (!this.drag) {
       const hit = this.pickAt(p.x, p.y);
@@ -899,6 +996,26 @@ export class View2D {
   }
 
   onUp(e) {
+    if (e && e.pointerType === 'touch') {
+      this.touches.delete(e.pointerId);
+      if (this.pinch) {
+        /* The pair is over when either lifts, and the finger left has no
+         * gesture: see beginPinch. */
+        if (this.touches.size < 2) {
+          this.pinch = null;
+        }
+        return;
+      }
+      const d = this.drag;
+      if (d && d.kind === 'tap') {
+        this.drag = null;
+        if (!d.moved) {
+          this.armedPress(this.toWorld(d.start.x, d.start.y), d.alt);
+        }
+        this.host.requestDraw();
+        return;
+      }
+    }
     if (!this.drag) {
       return;
     }
@@ -931,7 +1048,13 @@ export class View2D {
     }
   }
 
-  onCancel() {
+  onCancel(e) {
+    if (e && e.pointerType === 'touch') {
+      this.touches.delete(e.pointerId);
+      if (this.touches.size < 2) {
+        this.pinch = null;
+      }
+    }
     if (this.drag && ['move', 'rotate', 'node', 'slide'].includes(this.drag.kind)) {
       this.host.cancelEdit();
     }
@@ -1089,6 +1212,13 @@ export class View2D {
     ctx.fillStyle = C.rulerText;
     ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
 
+    /* The whoop canvas measures in inches from the middle of the room, as its
+     * card, its drawer and its readout do (MENUS-PLAN.md 4.2a). */
+    if (this.host.isWhoopRace()) {
+      this.drawInchRulers(ctx, doc);
+      return;
+    }
+
     let step = doc.field.gridSize;
     while (step * this.cam.scale < 44) {
       step *= step === doc.field.gridSize ? 5 : 2;
@@ -1121,6 +1251,49 @@ export class View2D {
     ctx.textAlign = 'center';
     ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillText('m', RULER / 2, RULER / 2);
+  }
+
+  /*
+   * The rulers of a room: a tick at every round number of inches out from the
+   * middle, nought in the middle, at the smallest step that leaves the labels
+   * room to be read. The ticks are counted out from the middle, not from the
+   * corner, because that is where nought is.
+   */
+  drawInchRulers(ctx, doc) {
+    const IN = 0.0254;
+    const steps = [1, 2, 3, 6, 12, 24, 36, 60, 120, 240, 480];
+    const step = steps.find((s) => s * IN * this.cam.scale >= 44) ?? steps[steps.length - 1];
+    const along = (span, mid, at, axis) => {
+      const k0 = Math.ceil(-mid / (step * IN));
+      const k1 = Math.floor((span - mid) / (step * IN));
+      for (let k = k0; k <= k1; k += 1) {
+        at(mid + k * step * IN, `${k * step}`, axis);
+      }
+    };
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    along(doc.field.width, doc.field.width / 2, (x, label) => {
+      const p = this.toScreen({ x, y: 0 });
+      if (p.x < RULER + 8 || p.x > this.w - 4) {
+        return;
+      }
+      ctx.fillText(label, p.x, RULER / 2);
+      ctx.fillRect(Math.round(p.x), RULER - 4, 1, 4);
+    });
+    along(doc.field.depth, doc.field.depth / 2, (y, label) => {
+      const p = this.toScreen({ x: 0, y });
+      if (p.y < RULER + 8 || p.y > this.h - 4) {
+        return;
+      }
+      ctx.save();
+      ctx.translate(RULER / 2, p.y);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+      ctx.fillRect(RULER - 4, Math.round(p.y), 4, 1);
+    });
+    ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.fillText('in', RULER / 2, RULER / 2);
   }
 
   drawElement(ctx, el, numbers) {

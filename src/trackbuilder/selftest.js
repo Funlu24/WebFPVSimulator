@@ -42,7 +42,7 @@ import {
   addToSequence, addNextLevel, sequenceLabel, faceLabel, bendIndexFor, bendLineAt, gateNumbers,
   neighboursOf, pinFacesAt, sequenceNumbers, removeElement, removeFromSequence,
 } from './sequence.js';
-import { applyFigure, matchingFigure, defaultFigure, upgradeStackedFigures } from './figures.js';
+import { applyFigure, matchingFigure, defaultFigure, upgradeStackedFigures, figuresFor } from './figures.js';
 import {
   buildPath, elevationProfile, sequencedElementCount, knotForSeq, markerSquare, passYawOf,
 } from './path.js';
@@ -72,7 +72,7 @@ import { envelopeFor, GATE_OPENING_DEFAULT, PIPE_OD as CUBE_PIPE_OD, inches } fr
 import {
   RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE,
 } from './geometry.js';
-import { FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor } from './elements.js';
+import { FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf } from './elements.js';
 import { PRESETS } from './presets.js';
 import { ELEMENTS, PALETTE_ORDER, GATE_FLAG_H, flagSideOf, flagSideSigns, elementByKey, elementHeight,
   virtualApertureDims, countElementsByType, formatElementCounts,
@@ -137,13 +137,19 @@ import {
   inspectCourse, layoutFingerprint, publishCurrentCourse, publishedTags, rememberPublish,
   suggestRemixName, tagsToSend,
 } from '../share/listing.js';
-import { readBind, readEditKey, writeBind } from '../share/session.js';
-import { publishTrack, partsTheBoardDoesNotKnow, unknownPartsSentence, BOARD_UNKNOWN_TYPES } from '../share/board.js';
+import { readBind, readEditKey, writeBind, writeBuilderIntent, takeBuilderIntent } from '../share/session.js';
+import {
+  publishTrack, partsTheBoardDoesNotKnow, unknownPartsSentence, BOARD_UNKNOWN_TYPES, TRACK_TAGS, tagsForClass,
+} from '../share/board.js';
 import { planFromDocument, PLAN_SHAPE, isoApertures, isoShapes } from '../share/plan.js';
 import {
-  keepDisplaced, readAutosave, shipTracks, listTracks, loadTrack, trackExists,
+  keepDisplaced, readAutosave, shipTracks, listTracks, loadTrack, trackExists, saveTrack, deleteTrack, savedTrack, restoreTrack, librarySize,
 } from './storage.js';
 import { FIVE_INCH_PRESETS } from './presets5.js';
+import {
+  CANVAS_WORDS, CANVAS_ORDER, canvasOf, wordsFor, simulatorLink, isPlaceholderName, changedAgo, exactDate,
+  rowsForCanvas, errorSentence,
+} from './words.js';
 import { FPV_FLOOR_CLEAR, FPV_NEAR_CLEAR, fpvLensClear } from '../render/lens.js';
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -10213,6 +10219,248 @@ function suiteFiveInchRoom() {
   }
 }
 
+/*
+ * THE MENUS PLAN'S BUILDER HALF (MENUS-PLAN.md 1.18 to 1.26, Stage 4 and 5.2),
+ * where it is pure: what each canvas calls things and where its way back goes,
+ * the names Publish refuses, the times Load gives, which saved documents each
+ * canvas lists, one letter for one tool on each canvas, the tags a whoop track
+ * is offered, the five inch share link, and the simulator's 'new' intent. The
+ * dialogs, the drawers and the phone are in scripts/builder-flow-check.js and
+ * scripts/device-check.js.
+ */
+async function suiteMenus() {
+  console.log('\nthe builder menus');
+  const full = createTrack('Five', 'full');
+  const whoop = createTrack('Room', 'micro');
+  const map = createTrack('Plot', 'full', 'freestyle');
+
+  /* ---- the three canvases' words (4.1) ---- */
+  check('the canvas switch says Five inch, Whoop and Freestyle, in that order',
+    CANVAS_ORDER.map((c) => CANVAS_WORDS[c].label).join('|') === 'Five inch|Whoop|Freestyle');
+  check('and each button is titled with what it makes',
+    CANVAS_ORDER.every((c) => /^A /.test(CANVAS_WORDS[c].makes)) && /race track/.test(CANVAS_WORDS.full.makes)
+    && /whoop track/.test(CANVAS_WORDS.micro.makes) && /freestyle map/.test(CANVAS_WORDS.freestyle.makes));
+  check('a five inch track, a whoop track and a map are each on their own canvas',
+    canvasOf(full) === 'full' && canvasOf(whoop) === 'micro' && canvasOf(map) === 'freestyle');
+  check('the inspector heads the ground Field, Room and Plot',
+    [full, whoop, map].map((d) => wordsFor(d).area).join('|') === 'Field|Room|Plot');
+  const lawn = createTrack('Lawn', 'full', 'freestyle');
+  lawn.scene = { ...lawn.scene, ground: 'grass' };
+  const yard = createTrack('Yard', 'full', 'freestyle');
+  yard.scene = { ...yard.scene, ground: 'concrete' };
+  check('a logo is painted on the grass of a field, the floor of a room, and the ground of a map that has no grass',
+    wordsFor(full).ground === 'grass' && wordsFor(whoop).ground === 'floor' && wordsFor(yard).ground === 'ground',
+    [full, whoop, yard].map((d) => wordsFor(d).ground).join(', '));
+  check('and on the grass of a map whose ground is a lawn', wordsFor(lawn).ground === 'grass');
+  check('a map is a map in a sentence, and a track a track',
+    wordsFor(map).noun === 'map' && wordsFor(full).noun === 'track' && wordsFor(whoop).noun === 'track');
+
+  /* ---- the way back, and Fly (1.24, 5.2a) ---- */
+  check('Back to the simulator from a five inch track: the custom track, on the five inch, not flying',
+    simulatorLink(full) === '../../index.html?map=custom&craft=5inch', simulatorLink(full));
+  check('from a whoop track: the custom track, on the whoop',
+    simulatorLink(whoop) === '../../index.html?map=custom&craft=whoop65', simulatorLink(whoop));
+  check('from a map: the built map, on the five inch',
+    simulatorLink(map) === '../../index.html?map=built&craft=5inch', simulatorLink(map));
+  check('no way back carries fly=1, and Fly is the same address with it',
+    [full, whoop, map].every((d) => !/fly=/.test(simulatorLink(d)) && simulatorLink(d, { fly: true }) === `${simulatorLink(d)}&fly=1`));
+
+  /* ---- the names Publish refuses (4.3) ---- */
+  const refused = ['Untitled track', 'Untitled map', 'untitled  TRACK', '  Untitled map  ', '', '   ', null, undefined];
+  check('Publish refuses a new document\'s own name in any case or spacing, and no name at all',
+    refused.every((n) => isPlaceholderName(n)), refused.filter((n) => !isPlaceholderName(n)).map(String).join(', '));
+  const named = ['Ladder Loop', 'Untitled', 'Untitled tracks', 'My untitled track', 'Untitled track 2', 'Map'];
+  check('and takes any real name, even one with the word in it', named.every((n) => !isPlaceholderName(n)),
+    named.filter((n) => isPlaceholderName(n)).join(', '));
+  check('the names a new track and a new map are given are both refused',
+    [createTrack(undefined, 'full'), createTrack(undefined, 'micro'), createTrack(undefined, 'full', 'freestyle')].every((d) => isPlaceholderName(d.name)),
+    createTrack(undefined, 'full', 'freestyle').name);
+
+  /* ---- Load's times (1.21) ---- */
+  const now = Date.parse('2026-10-01T12:00:00Z');
+  const ago = (seconds) => changedAgo(new Date(now - seconds * 1000).toISOString(), now);
+  const said = {
+    10: 'just now', 60: 'a minute ago', 300: '5 minutes ago', 3600: 'an hour ago', 7200: '2 hours ago',
+    86400: 'yesterday', [2 * 86400]: '2 days ago', [7 * 86400]: 'a week ago', [14 * 86400]: '2 weeks ago',
+    [45 * 86400]: 'a month ago', [400 * 86400]: 'a year ago', [800 * 86400]: '2 years ago',
+  };
+  const wrong = Object.entries(said).filter(([sec, words]) => ago(Number(sec)) !== words)
+    .map(([sec, words]) => `${sec} s: ${ago(Number(sec))}, not ${words}`);
+  check('Load says when a row changed the way a person says it', wrong.length === 0, wrong.join('; '));
+  check('a clock a little behind says just now, not a time in the future', ago(-90) === 'just now', ago(-90));
+  check('and a stamp that is not a date says nothing', changedAgo('not a date', now) === '' && changedAgo(undefined, now) === '');
+  check('the row\'s title has the whole date', /29 September 2026/.test(exactDate('2026-09-29T12:00:00Z')), exactDate('2026-09-29T12:00:00Z'));
+  check('and nothing for a stamp that is not one', exactDate('nonsense') === '');
+
+  /* ---- an error inside a line of ours ---- */
+  check('a browser\'s own words for a request that never arrived add nothing, and are left out',
+    ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.', new TypeError('Failed to fetch')].every((e) => errorSentence(e) === ''));
+  check('any other message is a sentence, with its full stop',
+    errorSentence(new Error('The board did not answer within 8 s.')) === 'The board did not answer within 8 s.'
+    && errorSentence(new Error('The board is asleep')) === 'The board is asleep.' && errorSentence(null) === '');
+
+  /* ---- the tags a whoop track is offered (decision 17) ---- */
+  const tagIds = (cls) => tagsForClass(cls).map((t) => t.id);
+  check('a whoop track is not offered Small field or Big field',
+    !tagIds('micro').includes('micro') && !tagIds('micro').includes('big'), tagIds('micro').join(','));
+  check('a five inch track is offered both', tagIds('full').includes('micro') && tagIds('full').includes('big'));
+  check('and every other tag is offered on both canvases',
+    TRACK_TAGS.filter((t) => !t.classes).every((t) => tagIds('micro').includes(t.id) && tagIds('full').includes(t.id)));
+
+  /* ---- one letter, one tool (1.20, 4.2a) ---- */
+  const keysOf = (cls, mode) => [
+    ...paletteItems(cls, mode).map((d) => [d.key, d.id]),
+    ...(cls === 'micro' && mode === 'race' ? WHOOP_TOOLS.map((t) => [t.key, t.id]) : []),
+  ].filter(([k]) => k);
+  for (const [name, cls, mode] of [['five inch', 'full', 'race'], ['whoop', 'micro', 'race'], ['map', 'full', 'freestyle']]) {
+    const seen = new Map();
+    const twice = [];
+    for (const [k, id] of keysOf(cls, mode)) {
+      if (seen.has(k)) {
+        twice.push(`${k}: ${seen.get(k)} and ${id}`);
+      }
+      seen.set(k, id);
+    }
+    check(`no letter arms two tools on the ${name} canvas`, twice.length === 0, twice.join('; '));
+    check(`P is never a piece's letter on the ${name} canvas, because P is Show line`, !seen.has('P'), seen.get('P'));
+  }
+  const fullKeys = new Map(keysOf('full', 'race').map(([k, id]) => [id, k]));
+  const whoopKeys = new Map(keysOf('micro', 'race').map(([k, id]) => [id, k]));
+  const moved = [...fullKeys].filter(([id, k]) => whoopKeys.has(id) && whoopKeys.get(id) !== k)
+    .map(([id, k]) => `${id}: ${k} and ${whoopKeys.get(id)}`);
+  check('a tool on both race canvases keeps its letter', moved.length === 0, moved.join('; '));
+  const mapKeys = new Map(keysOf('full', 'freestyle').map(([k, id]) => [id, k]));
+  check('Ground logo is O on all three canvases',
+    fullKeys.get('groundLogo') === 'O' && whoopKeys.get('groundLogo') === 'O' && mapKeys.get('groundLogo') === 'O');
+  check('and the whoop\'s Fly order is N', WHOOP_TOOLS.find((t) => t.id === 'route')?.key === 'N');
+  check('F frames the selection on the whoop canvas, so no whoop tool has it', !keysOf('micro', 'race').some(([k]) => k === 'F'));
+
+  /* ---- the whoop's names in counts (4.2b) ---- */
+  const room = createTrack('Counted', 'micro');
+  place(room, 'diveGate', 5, 6);
+  place(room, 'diveGate', 6, 6);
+  check('a whoop track\'s count says horizontal gate, as its palette does',
+    /horizontal gate/i.test(formatElementCounts(countElementsByType(room.elements, 'micro'))) && labelOf('diveGate', 'micro') === 'Horizontal gate',
+    formatElementCounts(countElementsByType(room.elements, 'micro')));
+  check('and a five inch track\'s says dive gate', /dive gate/i.test(formatElementCounts(countElementsByType(room.elements, 'full'))));
+
+  /* ---- the five inch share link (4.2b) ---- */
+  const here = dirname(fileURLToPath(import.meta.url));
+  const jsonDir = join(here, '..', '..', 'tracks', 'json');
+  let fives = 0;
+  const lost = [];
+  for (const f of readdirSync(jsonDir).filter((n) => n.endsWith('.json'))) {
+    const doc = normalize(JSON.parse(readFileSync(join(jsonDir, f), 'utf8'))).doc;
+    if (trackClassOf(doc) !== 'full') {
+      continue;
+    }
+    fives += 1;
+    const back = await decodeTrack(await encodeTrack(doc));
+    if (!back || serialize(back) !== serialize(doc)) {
+      lost.push(f);
+    }
+  }
+  check(`every five inch track that ships comes back byte for byte through a share link (${fives} read)`,
+    fives >= 10 && lost.length === 0, lost.join(', '));
+  const every = createTrack('Every piece', 'full');
+  let at = 4;
+  for (const def of paletteItems('full')) {
+    if (def.id === 'groundLogo') {
+      continue;
+    }
+    place(every, def.id, at, at % 8 ? 10 : 24, { text: def.id === 'label' ? 'Start <here> "now"' : undefined });
+    at += 4;
+  }
+  for (const el of every.elements) {
+    if (isSequenceable(el)) {
+      addToSequence(every, el.id, 0);
+    }
+  }
+  const figured = every.elements.filter((el) => figuresFor(el).length > 1);
+  for (const el of figured) {
+    const figs = figuresFor(el);
+    applyFigure(every, el.id, figs[figs.length - 1].id);
+  }
+  every.branding = {
+    ...every.branding,
+    logos: [{ id: 'logo-1', image: `data:image/png;base64,${'iVBORw0KGgo'.repeat(40)}`, name: 'sponsor.png' }],
+  };
+  place(every, 'groundLogo', 30, 30);
+  const plain = normalize(JSON.parse(JSON.stringify(toPlain(every)))).doc;
+  const everyBack = await decodeTrack(await encodeTrack(every));
+  check('a five inch track with every piece on its palette, its figures and a sponsor logo comes back byte for byte',
+    everyBack && serialize(everyBack) === serialize(plain) && everyBack.branding.logos.length === 1
+    && everyBack.elements.length === every.elements.length && figured.length >= 2,
+    `${every.elements.length} pieces, ${figured.length} with figures`);
+  const link = await trackLink(plain, 'https://example.test/src/trackbuilder/index.html');
+  const viaHash = await docFromHash(link.slice(link.indexOf('#')));
+  check('and More\'s Copy share link is the address with #track=, which opens it again',
+    link.startsWith('https://example.test/src/trackbuilder/index.html#track=') && viaHash && serialize(viaHash) === serialize(plain));
+
+  /* ---- Load, canvas by canvas, and Delete's Undo (1.21) ---- */
+  const hadStore = globalThis.localStorage;
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k) => {
+      store.delete(k);
+    },
+  };
+  try {
+    const five = createTrack('Field one', 'full');
+    place(five, 'gate', 10, 10);
+    const five2 = createTrack('Field two', 'full');
+    const hall = createTrack('Hall one', 'micro');
+    place(hall, 'gate', 5, 6);
+    const plot = createTrack('Plot one', 'full', 'freestyle');
+    check('nothing saved yet', librarySize() === 0);
+    saveTrack(five);
+    saveTrack(five2);
+    saveTrack(hall);
+    saveTrack(plot);
+    check('four saved', librarySize() === 4);
+    const fiveList = listTracks('full', 'race');
+    check('a saved row says which race canvas it is for',
+      fiveList.find((t) => t.id === five.id)?.trackClass === 'full' && fiveList.find((t) => t.id === hall.id)?.trackClass === 'micro');
+    const onFive = rowsForCanvas(fiveList, 'full');
+    check('the five inch canvas lists the five inch tracks and not the whoop one',
+      onFive.rows.some((t) => t.id === five.id) && onFive.rows.some((t) => t.id === five2.id) && !onFive.rows.some((t) => t.id === hall.id),
+      onFive.rows.map((t) => t.name).join(', '));
+    check('and says one is on the other canvas', onFive.others === 1, String(onFive.others));
+    const onWhoop = rowsForCanvas(listTracks('micro', 'race'), 'micro');
+    const shipped = onWhoop.rows.filter((t) => t.preset).length;
+    check('the whoop canvas lists the whoop track and the whoop tracks that ship, and not the five inch ones',
+      onWhoop.rows.some((t) => t.id === hall.id) && !onWhoop.rows.some((t) => t.id === five.id || t.id === five2.id) && shipped >= 8,
+      `${onWhoop.rows.length} rows, ${shipped} shipped`);
+    check('and says two are on the five inch canvas', onWhoop.others === 2, String(onWhoop.others));
+    check('the shipped whoop rows are all whoop tracks', onWhoop.rows.filter((t) => t.preset).every((t) => t.trackClass === 'micro'));
+    const onMap = rowsForCanvas(listTracks('full', 'freestyle'), 'freestyle');
+    check('the freestyle canvas lists the map and the maps that ship, and no track',
+      onMap.rows.some((t) => t.id === plot.id) && onMap.rows.every((t) => t.id !== five.id && t.id !== hall.id) && onMap.others === 0);
+    const before = listTracks('full', 'race').find((t) => t.id === five.id);
+    const raw = savedTrack(five.id);
+    deleteTrack(five.id);
+    check('Delete takes it out of Load', !listTracks('full', 'race').some((t) => t.id === five.id) && librarySize() === 3);
+    restoreTrack(raw);
+    const after = listTracks('full', 'race').find((t) => t.id === five.id);
+    check('and Undo puts it back as it was, with its own time, not now',
+      Boolean(after) && after.modifiedUtc === before.modifiedUtc && after.mix === before.mix && librarySize() === 4,
+      after ? `${after.modifiedUtc} against ${before.modifiedUtc}` : 'not back');
+    check('what Delete keeps for Undo is a copy, and a document that is not there keeps nothing',
+      raw && raw !== savedTrack(five.id) && savedTrack('trk-nothing') === null);
+
+    /* ---- the simulator's Build a track (2.4): a 'new' intent ---- */
+    check('the simulator\'s Build a track writes a new intent', writeBuilderIntent({ kind: 'new' }) === true);
+    const taken = takeBuilderIntent();
+    check('the builder takes it, once', taken && taken.kind === 'new' && takeBuilderIntent() === null, JSON.stringify(taken));
+  } finally {
+    globalThis.localStorage = hadStore;
+  }
+}
+
 async function main() {
   if (process.argv.includes('--emit')) {
     process.stdout.write(serialize(demoTrack()));
@@ -10273,6 +10521,7 @@ async function main() {
   suiteImportFpv();
   suiteFiveInchParts();
   suiteFiveInchRoom();
+  await suiteMenus();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
 }

@@ -447,7 +447,7 @@ export class FcSession {
         {
           label: 'Save and restart the run',
           action: 'fc-save-restart',
-          note: 'Save writes the dump through sim_init, which resets the craft. That is the same as changing a rate today. Escape cancels and stays here.',
+          note: 'Save writes the dump through sim_init, which resets the craft and puts it back on the start line. Escape cancels and stays here.',
         },
         {
           label: 'Wait until the result screen',
@@ -704,7 +704,7 @@ export class FcSession {
       });
       rows.push({
         label: 'ANGLE',
-        note: 'On or off, same sim_set_angle_mode as Flight mode in Settings. A real board uses an AUX range. Races on keys start in Angle; M switches.',
+        note: 'On or off, same sim_set_angle_mode as Flight mode in Quad. A real board uses an AUX range. Races on keys start in Angle; M switches.',
         sw: true,
         on: angle,
         value: angle ? 'On' : 'Off',
@@ -714,7 +714,7 @@ export class FcSession {
       });
       rows.push({
         label: 'LAUNCH CONTROL',
-        note: 'On or off, same Launch control in Settings. L on the keyboard is the mode switch on the start line. A real board uses an AUX range.',
+        note: 'On or off, same as Launch control in Quad. L on the keyboard is the mode switch on the start line. A real board uses an AUX range.',
         sw: true,
         on: this.getLaunchControl(),
         value: this.getLaunchControl() ? 'On' : 'Off',
@@ -794,7 +794,7 @@ export class FcSession {
         rows.push({
           label: 'Motor test',
           value: 'Unavailable',
-          note: 'Motor test uses sim_motor_override on the title, never mid-race. Open Flight controller from Settings on the title.',
+          note: 'Motor test uses sim_motor_override on the title, never mid-race. Open the Firmware bench from Quad on the title.',
           info: true,
           disabled: true,
           rowClass: 'row-grey',

@@ -199,6 +199,13 @@
          reads over any background. */
       .osd { position: absolute; inset: 0; }
       .osd.dim { opacity: 0.4; }
+      /* Paused on a short window, the PAUSED lettering and the lap clock want
+         the same pixels, and the clock was printed through the heading
+         (MENUS-PLAN.md 1.9). The corners stay: the pack is what a pilot
+         pauses to read. */
+      @media (max-height: 760px) {
+        .osd.dim .osd-top { display: none; }
+      }
       /* contain: layout style on the two blocks whose numbers change in
          flight, so a new number lays out its own block and nothing around
          it. */
@@ -1579,6 +1586,23 @@
         max-width: min(92vw, 22em);
       }
 
+      /* A notice that arrives while a menu is up (setMenuNotice in
+         src/ui/ui.js, MENUS-PLAN.md 1.8): a line above the command bar, not
+         the flight's banner across the heading. After the screens in the
+         page, so it is drawn over them. */
+      .menu-notice {
+        position: absolute; left: 50%; bottom: calc(var(--bar-bot) + 14px);
+        transform: translateX(-50%);
+        max-width: min(640px, calc(100vw - 32px));
+        padding: 9px 16px 10px; border-radius: 4px;
+        background: rgba(12, 18, 14, 0.95); color: var(--cream);
+        border-left: 3px solid var(--amber);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        font-size: 14px; line-height: 1.45; white-space: pre-line;
+        pointer-events: none;
+      }
+      .menu-notice[hidden] { display: none; }
+
       /* Screens. */
       .screen {
         position: absolute; inset: 0; pointer-events: none;
@@ -1873,9 +1897,11 @@
         .fc-tabs { flex: 0 0 8.5em; }
         .fc-wordmark { font-size: 16px; }
       }
+      /* Never under the status bar: on a phone on its side 7vh is 27 px and
+         the room's lettering sat on its own crumb (MENUS-PLAN.md 1.10). */
       .screen-maps {
         justify-content: flex-start;
-        padding-top: 7vh;
+        padding-top: max(7vh, calc(var(--bar-top) + 4px));
       }
       .screen h1, .wordmark {
         margin: 0; font-size: clamp(44px, 8vw, 104px); font-weight: 800;
@@ -2281,6 +2307,12 @@
        * before anything is comfortable. Stacking at 1100 meant a 1180 px
        * tablet in landscape got three columns that did not fit.
        */
+      /* Stacked on a short window, the square picture took 360 px of a 720
+         px window and the list under it showed two rows. The picture gives
+         up its square there, as it already does on a phone. */
+      @media (max-width: 1280px) and (max-height: 820px) {
+        .screen-quad .craft-showcase-frame { aspect-ratio: auto; height: clamp(120px, 24vh, 220px); }
+      }
       @media (max-width: 1280px) {
         .screen-quad .menu-stage { grid-template-columns: minmax(0, 1fr); }
         .screen-quad .craft-showcase {
@@ -2421,6 +2453,21 @@
       }
       .screen-title .menu-help:empty {
         padding: 0;
+      }
+      /* On a short wide window the help line goes beside the list, on a
+         panel of its own. Above the list, where a taller window has room for
+         it, it was printed over the best lap line at 1280 by 720, and the
+         Fly row's note is up on arrival (MENUS-PLAN.md 1.10 and 2.7). */
+      @media (max-height: 800px) and (min-width: 900px) {
+        .screen-title .menu-help {
+          left: calc(100% + 22px); right: auto; bottom: auto; top: 0;
+          width: min(21em, 28vw);
+          padding: 10px 14px 11px;
+          border-radius: 4px;
+          background: rgba(12, 18, 14, 0.8);
+          box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        }
+        .screen-title .menu-help:empty { display: none; }
       }
       /*
        * The handoff between the two blocks of body copy in this column.
@@ -2710,6 +2757,11 @@
         .row, .drop-opt, .fc-tab { min-height: 44px; }
         .step, .row-num, .sw-seg { min-height: 44px; }
         .frame-primary { height: 44px; }
+        /* Side by side, decrease on the left: stacked, two 44 px arrows made
+           one row as tall as two, and the pause menu showed Ghost and little
+           else on a phone on its side. */
+        .row .step-col { flex-direction: row-reverse; gap: 6px; }
+        .row .step { min-width: 44px; font-size: 11px; }
       }
 
       .row {
@@ -3377,7 +3429,6 @@
         /* The note moved under the list in this layout, so the hint no
            longer needs the full gap: at 900 by 760 the longest note pushed
            it three pixels below the fold. */
-        .screen-rates .hint { margin-top: 12px; }
         /* Narrow enough to clear the music dock and the bug chip, which are
            fixed to the top right corner and sit over any screen. At 48em the
            last words of this sentence went under them. */
@@ -3447,10 +3498,46 @@
         .screen-quad .rates-lede {
           max-width: none;
         }
-        .screen-rates > h2,
-        .screen-quad > h2 {
-          margin-top: 76px;
+      }
+      /*
+       * BELOW THE CHIPS, ON A NARROW WINDOW, and only where there are chips.
+       * Rates and Quad used to start 76 px down for the bug chip and the
+       * music dock; neither has any since the chrome budget (MENUS-PLAN.md
+       * 2.6), and the screens that do (Settings, the pause menu, results,
+       * Advanced, Stick help) had none of the room. syncChipRows in
+       * src/ui/ui.js counts them. On the title the dock stood on the
+       * wordmark, so a phone hears its music from Settings instead.
+       */
+      /* A PHONE ON ITS SIDE SHOWED ONE TITLE ROW: Fly, and Track half under
+         the command bar, while the field above them was empty. The plan's
+         measure was four (MENUS-PLAN.md, How done is measured). The list
+         takes the column under the wordmark, clear of the bar, and scrolls
+         inside it; the help line, which had no room above it and was drawn
+         over the wordmark, steps aside, as every row's note is also one
+         press away in the room the row opens. */
+      @media (max-height: 520px) and (min-width: 600px) {
+        .screen-title:not(.is-gate) { padding-bottom: calc(1.4vh + var(--bar-bot)); }
+        .screen-title:not(.is-gate) .title-foot { flex: 1 1 auto; margin-top: 8px; }
+        .screen-title:not(.is-gate) .title-foot .menu-stage {
+          display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
         }
+        .screen-title:not(.is-gate) .title-foot .menu-scroll { max-height: none; flex: 1 1 auto; min-height: 0; }
+        .screen-title:not(.is-gate) .title-foot .menu-help { display: none; }
+      }
+      /* A phone held upright has the height the title's 32vh cap was written
+         against a landscape phone to save: it showed Fly, Track and half of
+         Quad under 350 px of empty field. Five rows there, and the field
+         still has the top third. */
+      @media (max-width: 600px) and (min-height: 640px) {
+        .screen-title .title-foot .menu-scroll { max-height: min(calc(52vh - var(--bars)), 26em); }
+        /* Clear of the command bar, as the gate already is: the list's last
+           row was under it. */
+        .screen-title:not(.is-gate) { padding-bottom: calc(2vh + var(--bar-bot)); }
+      }
+      @media (max-width: 640px) {
+        .chip-rows-1 .screen:not(.screen-title) { padding-top: calc(2vh + var(--bar-top) + 40px); }
+        .chip-rows-2 .screen:not(.screen-title) { padding-top: calc(2vh + var(--bar-top) + 76px); }
+        .music-dock.on-title { display: none; }
       }
       /* A short window spends its height on the curve and the rows: the
          lede is the one thing here that repeats what the row notes say, and
@@ -3469,21 +3556,7 @@
            is a shape, not a table: it survives being short far better than
            the rows survive being cut. */
         .rates-graph-wrap { height: clamp(100px, 14vh, 140px); }
-        .screen-rates .hint { margin-top: 8px; }
       }
-      /* Superseded by the command bar, which says the same thing in the same
-         place on every screen. Kept in the DOM so the screens that build one
-         do not need surgery.
-
-         IT USED TO SAY "and so a screen reader still finds the text", which
-         was not true of the rule underneath it: display:none removes a node
-         from the accessibility tree in every browser, so all fourteen hints
-         were read by nobody. They are hidden from everybody now, which is at
-         least honest, and the command bar carries the same words visibly.
-         The pattern for text that IS meant to be heard and not seen is
-         .sr-only below. */
-      .hint { display: none; }
-
       /* Off screen, not gone: the clip keeps the node in the accessibility
          tree, which is the whole difference between this and the rule above.
          One user, the announcer that says a lap finished. */
@@ -3497,27 +3570,6 @@
         clip-path: inset(50%);
         white-space: nowrap;
         border: 0;
-      }
-      .hint-legacy {
-        display: flex; align-items: center; gap: 12px;
-        margin-top: 22px; min-height: 1.4em; max-width: 42em;
-        font-size: 13px; color: rgba(235, 230, 215, 0.6); letter-spacing: 0.02em; text-align: center;
-        pointer-events: none;
-      }
-      .screen-modal .hint {
-        margin-left: auto;
-        margin-right: auto;
-        color: rgba(235, 230, 215, 0.8);
-      }
-      .title-foot .hint {
-        margin-top: 0; text-align: left; max-width: none;
-      }
-      .hint-keys { display: inline-flex; gap: 4px; flex: 0 0 auto; }
-      .hint kbd {
-        font-family: inherit; font-size: 11px; font-weight: 650;
-        padding: 2px 7px; border-radius: 3px;
-        border: 1px solid rgba(235, 230, 215, 0.35);
-        color: #e8e2d0; background: rgba(20, 28, 22, 0.55);
       }
       .screen-calibrate {
         pointer-events: auto;
@@ -3870,7 +3922,13 @@
           padding: 0 8px 8px;
           border-left: none;
         }
-        .title-foot .hint { text-align: left; max-width: none; }
+        /* The Tracks room's help belongs to its sheet, under the rows. Floated
+           above the stage as the Maps room floats it, it was drawn over the
+           line of cards the sheet had just opened under. */
+        .screen-courses .menu-help {
+          position: static;
+          padding: 10px 6px 0;
+        }
         .craft-showcase {
           width: min(420px, 88vw);
           align-self: center;
@@ -3893,8 +3951,7 @@
         .screen-title .brand-sub,
         .screen-title .brand-best,
         .screen-title .keep-note,
-        .screen-title .wiki-teaser,
-        .screen-title .title-foot .hint {
+        .screen-title .wiki-teaser {
           display: none;
         }
         /* Under 520 px of height the menu barely fits. The tag is all
@@ -4119,7 +4176,7 @@
          cursor's scrollIntoView drives this one. */
       .screen-courses {
         justify-content: flex-start;
-        padding-top: 4vh;
+        padding-top: max(4vh, calc(var(--bar-top) + 4px));
         /* Clear of the command bar, which .screen's own padding promised
            every screen and this rule took back: scrolled to its foot, the
            page left a chosen card's last row under the bar. */
@@ -4187,6 +4244,116 @@
       }
       .board-note:empty { display: none; }
 
+      /* The strip's head: what the two halves are, and the order of the
+         board's half as three chips (settings.courseOrder). */
+      .strip-head {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+        gap: 6px 14px; margin: 10px 0 2px;
+      }
+      .strip-head .strip-label { margin: 0; }
+      .strip-order { display: flex; gap: 6px; pointer-events: auto; }
+      .order-chip {
+        font: inherit; font-size: 12px; letter-spacing: 0.03em;
+        padding: 3px 11px 4px; border-radius: 999px; cursor: pointer;
+        color: var(--slate); background: rgba(16, 22, 17, 0.72);
+        border: 1px solid rgba(244, 236, 214, 0.18);
+      }
+      .order-chip:hover { color: var(--cream); border-color: rgba(232, 168, 184, 0.6); }
+      .order-chip.on {
+        color: var(--deep); background: var(--sakura); border-color: var(--sakura);
+        font-weight: 700;
+      }
+      .order-chip:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
+
+      /* The record, on its own line under who and how big: the one number on
+         a card a pilot compares (MENUS-PLAN.md 1.14). */
+      .map-card-record {
+        margin-top: -6px; padding: 0 14px 12px;
+        color: var(--cream); font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .map-card-record:empty { display: none; }
+
+      /* Build a track: an empty field with a plus on it, which is what the
+         builder opens on. Dashed, because it is a place for a track rather
+         than a track. */
+      .course-card-new { border-top-style: dashed; }
+      .course-card-new .map-reel {
+        display: flex; align-items: center; justify-content: center;
+        background-color: #0b1119;
+        background-image:
+          linear-gradient(rgba(157, 179, 200, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(157, 179, 200, 0.07) 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+      .course-card-plus {
+        display: flex; align-items: center; justify-content: center;
+        width: 64px; height: 64px; border-radius: 50%;
+        border: 2px dashed rgba(125, 255, 180, 0.55);
+        color: var(--mint); font-size: 40px; font-weight: 300; line-height: 1;
+      }
+      .course-card-new.on .course-card-plus { border-style: solid; }
+
+      /*
+       * THE CHOSEN CARD'S SHEET (placeCourseSheet in src/ui/ui.js): the
+       * room's own menu, moved to the line under the chosen card's line of
+       * the grid. A full line to itself, a mint rule across the top with a
+       * notch over the card it belongs to, in the mint the chosen card
+       * wears, so the two read as one thing.
+       */
+      /* A line to itself whatever its width: the margins take the rest of
+         the line, so no card can sit beside it on a wide window with few
+         cards. */
+      .course-cards > .menu-stage.is-sheet {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: var(--sheet-w, 100%);
+        max-width: 100%;
+        margin: 4px calc((100% - min(100%, var(--sheet-w, 100%))) / 2) 8px;
+        padding: 2px 0 16px;
+        position: relative;
+        border-top: 1px solid rgba(125, 255, 180, 0.5);
+        background: linear-gradient(rgba(125, 255, 180, 0.07), rgba(125, 255, 180, 0) 140px);
+      }
+      .course-cards > .menu-stage.is-sheet::before {
+        content: '';
+        position: absolute; top: -9px;
+        left: calc(var(--notch-x, 50%) - 9px);
+        border-left: 9px solid transparent; border-right: 9px solid transparent;
+        border-bottom: 9px solid rgba(125, 255, 180, 0.5);
+      }
+      .course-cards > .menu-stage.is-sheet .menu { margin-top: 14px; }
+      /* The chosen track's top three, in the sheet's first column, which was
+         empty (paintPodium in src/ui/ui.js). Off on a phone, where the sheet
+         is one column and the rows come first. */
+      .sheet-podium { display: none; }
+      .course-cards > .menu-stage.is-sheet .sheet-podium:not([hidden]) {
+        display: block; grid-column: 1; grid-row: 1;
+        justify-self: end; align-self: start;
+        margin: 26px 30px 0 0; width: min(15em, 100%);
+        pointer-events: auto;
+      }
+      .sheet-podium-head {
+        margin-bottom: 6px; padding-bottom: 6px;
+        border-bottom: 1px solid rgba(232, 168, 184, 0.22);
+        font-size: 11px; font-weight: 700; letter-spacing: 0.16em;
+        text-transform: uppercase; color: var(--sakura);
+      }
+      .sheet-podium-row {
+        display: grid; grid-template-columns: 1.3em minmax(0, 1fr) auto;
+        gap: 10px; align-items: baseline;
+        padding: 5px 0; font-size: 14px; color: var(--cream);
+      }
+      .sheet-podium-rank { color: var(--slate); font-variant-numeric: tabular-nums; }
+      .sheet-podium-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sheet-podium-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+      .sheet-podium-row:nth-child(2) .sheet-podium-time { color: var(--mint); }
+      .sheet-podium-row.is-me .sheet-podium-name { color: var(--sakura); }
+      .sheet-podium-note { font-size: 13px; line-height: 1.5; color: var(--slate); }
+      @media (max-width: 860px) {
+        .course-cards > .menu-stage.is-sheet .sheet-podium:not([hidden]) { display: none; }
+      }
+
       /*
        * How to fly. A CONTROL, NOT AN ESSAY.
        *
@@ -4238,6 +4405,19 @@
       .howto-keys dt { color: var(--cream); font-size: 15px; font-weight: 600; margin-top: 12px; }
       .howto-keys dt:first-child { margin-top: 0; }
       .howto-keys dd { margin: 2px 0 0; color: var(--slate); font-size: 14px; line-height: 1.5; }
+      /* TWO COLUMNS OF KEYS ON A WIDE WINDOW, so the screen's one row is on
+         it (MENUS-PLAN.md 1.12): in one column at 1600 by 900 the list ran
+         the page 145 px past the window and Back was under it. A key stays
+         with its line. */
+      @media (min-width: 1180px) {
+        /* Beside the sticks, never under them: the keys give up width
+           before the row wraps. */
+        .howto-body { flex-wrap: nowrap; }
+        .howto-keys { columns: 2; column-gap: 36px; flex: 0 1 52em; max-width: 52em; min-width: 0; }
+        .howto-keys dt { break-after: avoid; }
+        .howto-keys dd { break-inside: avoid; padding-bottom: 2px; }
+        .howto-keys dt:first-child, .howto-keys dt { margin-top: 0; padding-top: 10px; }
+      }
       .howto-mode {
         max-width: 52em; margin: 20px auto 0;
         color: rgba(235, 230, 215, 0.62);
@@ -4669,17 +4849,12 @@
         .maker-mark { font-size: 24px; }
         .credit-copy h4 { font-size: 17px; }
       }
+      /* About's rows sit above the roll (MENUS-PLAN.md 0.1) in the shared
+         three column stage, so the note for the row under the cursor is
+         beside it, as in every other room, rather than under it. */
       .screen-credits .menu-stage {
-        width: min(760px, 94vw);
-        margin: 12px auto 0;
-        display: block;
+        margin: 6px auto 18px;
       }
-      .screen-credits .menu {
-        min-width: 0;
-        width: 100%;
-        margin-top: 0;
-      }
-      .screen-credits .hint { margin-left: auto; margin-right: auto; }
 
       .screen-modal { background: rgba(12, 18, 14, 0.72); }
 
@@ -4985,6 +5160,13 @@
       @media (pointer: coarse) and (max-height: 520px) {
         .screen-results .row { box-sizing: border-box; }
       }
+      /* And every list, for the same reason: a 44 px target with 20 px of
+         padding on top of it showed two and a half rows of Settings or the
+         pause menu on a phone on its side. Counting the padding inside the
+         44 shows four, and every target is still 44. */
+      @media (pointer: coarse) and (max-height: 520px) {
+        .menu .row { box-sizing: border-box; }
+      }
       /* A narrower phone on its side leaves the page under 150 px wide, a
          postage stamp: there it is not drawn, and Save share card is the
          page at its full size. */
@@ -5194,6 +5376,17 @@
       .name-dialog-err {
         min-height: 1.3em; margin: 0 0 10px; color: #ff8f8f; font-size: 12px;
       }
+      /* Another spelling of a name already on the board (askForm in
+         src/ui/ui.js, MENUS-PLAN.md 3.4): said under the field, with the
+         spelling that is there as a button that takes it. */
+      .name-dialog-hint { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--slate); }
+      .name-dialog-hint[hidden] { display: none; }
+      .name-dialog-use {
+        font: inherit; font-weight: 700; color: var(--mint);
+        background: none; border: 0; padding: 0; cursor: pointer;
+        text-decoration: underline; text-underline-offset: 2px;
+      }
+      .name-dialog-use:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
       /* The door from the bug form to the flight feel form: a sentence that
          acts like a link, not a second primary button, because it leaves
          the form rather than submitting it. */

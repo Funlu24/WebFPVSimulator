@@ -5,7 +5,8 @@
  * It is small on purpose. A course designer wants one question answered at a
  * glance, "does this track climb and dive or is it flat", and a chart with a
  * legend and a tooltip and a zoom would answer it worse. So: one line, one
- * ground reference, the extremes labelled, and the axes in metres.
+ * ground reference, the extremes labelled, and the axes in the canvas's
+ * unit: metres, or on a whoop canvas inches up and feet along.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -28,7 +29,10 @@ const PAD_R = 8;
 const PAD_T = 10;
 const PAD_B = 18;
 
-export function drawProfile(canvas, profile) {
+/* `imperial` is a whoop canvas, which is measured in inches (MENUS-PLAN.md
+ * 4.2a): its chart is inches up and feet along, where a five inch field's is
+ * metres both ways. */
+export function drawProfile(canvas, profile, { imperial = false } = {}) {
   const rect = canvas.getBoundingClientRect();
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = Math.max(1, Math.round(rect.width));
@@ -98,21 +102,21 @@ export function drawProfile(canvas, profile) {
   ctx.lineWidth = 1.6;
   ctx.stroke();
 
-  /* Axis labels. Metres on both, because everything in this tool is. */
+  /* Axis labels, in the one unit the canvas is measured in. */
   ctx.fillStyle = '#7f95ab';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${hi.toFixed(1)}`, PAD_L - 4, sy(hi));
+  ctx.fillText(imperial ? `${Math.round(hi / 0.0254)}` : `${hi.toFixed(1)}`, PAD_L - 4, sy(hi));
   ctx.fillText('0', PAD_L - 4, sy(0));
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('0 m', PAD_L, h - PAD_B + 3);
+  ctx.fillText(imperial ? '0 ft' : '0 m', PAD_L, h - PAD_B + 3);
   ctx.textAlign = 'right';
-  ctx.fillText(`${profile.length.toFixed(0)} m`, w - PAD_R, h - PAD_B + 3);
+  ctx.fillText(imperial ? `${Math.round(profile.length / 0.3048)} ft` : `${profile.length.toFixed(0)} m`, w - PAD_R, h - PAD_B + 3);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#9db3c8';
-  ctx.fillText('height', 2, 1);
+  ctx.fillText(imperial ? 'height, in' : 'height', 2, 1);
 
   ctx.restore();
 }

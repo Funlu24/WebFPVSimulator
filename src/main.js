@@ -4543,7 +4543,9 @@ export async function boot({ loading, bootStart, mapId }) {
      * longer exists, and would have failed silently: show() on an unknown
      * name displays no node and leaves the previous screen's rows behind.
      */
-    const STAY_SCREENS = ['pilot', 'quad', 'launch', 'rates', 'paused', 'title', 'credits'];
+    /* 'advanced' holds Render scale and the frame cap, both settings
+     * changes that can land here (MENUS-PLAN.md 2.3). */
+    const STAY_SCREENS = ['pilot', 'advanced', 'quad', 'launch', 'rates', 'paused', 'title', 'credits'];
     const stayScreen = STAY_SCREENS.includes(ui.screen) ? ui.screen : null;
     const stayMode = keepPlace ? mode : 'title';
     swapInFlight = true;
@@ -5568,7 +5570,7 @@ export async function boot({ loading, bootStart, mapId }) {
      * mix is not a leaderboard. */
     if (runStyle === 'arcade') {
       notice = {
-        text: 'Arcade laps stay off the public board.\nSwitch Flight style to Expert and fly it again.',
+        text: 'Arcade laps stay off the public board.\nSwitch Flight model to Expert and fly it again.',
         untilMs: performance.now() + 3600,
       };
       return;
@@ -5587,7 +5589,7 @@ export async function boot({ loading, bootStart, mapId }) {
     const trackId = listing && listing.shareId;
     if (!trackId || !listing.canPostTime) {
       notice = { text: listing && listing.layoutDrift
-        ? 'Update this track on the board before uploading a time.'
+        ? 'Update this track on the board before posting a time.'
         : 'This track is not on the public board yet.', untilMs: performance.now() + 2800 };
       return;
     }
@@ -5631,14 +5633,22 @@ export async function boot({ loading, bootStart, mapId }) {
           text: 'Practice laps stay off the public board.\nSet Laps to 1, 3 or 5 and fly it again.',
           untilMs: performance.now() + 3600,
         }
-        : { text: 'No clean lap to upload.', untilMs: performance.now() + 2800 };
+        : { text: 'No clean lap to post.', untilMs: performance.now() + 2800 };
       return;
     }
     let name = readPilotName();
     if (!name) {
+      /* The names already on this track's board, read while the pilot
+       * types, so the dialog can say when a new name is another spelling
+       * of one of them (MENUS-PLAN.md 3.4). A board that does not answer
+       * costs the hint and nothing else. */
+      const known = fetchTrackTimes(trackId, listing.board || undefined)
+        .then((times) => times.map((t) => t.name))
+        .catch(() => []);
       name = await ui.askName({
         title: 'Your name',
         detail: 'A time on the public board needs a name. It stays in this browser.',
+        known,
       });
     }
     if (!name) {
@@ -5730,13 +5740,13 @@ export async function boot({ loading, bootStart, mapId }) {
       const roomTime = view.trackClass === 'micro' && Number.isFinite(threeFrom) ? threeFrom : null;
       notice = {
         text: view.trackClass === 'micro' && roomTime == null
-          ? `Uploaded ${name}'s lap, ${formatTime(fastest)}.${atWeight} A RaceGOW time on the board is three laps in a row, and this run does not have that yet.${healed}`
-          : `Uploaded ${name}, ${formatTime(roomTime != null ? roomTime : fastest)}.${rank}${atWeight}${withGhost}${healed}`,
+          ? `Posted ${name}'s lap, ${formatTime(fastest)}.${atWeight} A RaceGOW time on the board is three laps in a row, and this run does not have that yet.${healed}`
+          : `Posted ${name}, ${formatTime(roomTime != null ? roomTime : fastest)}.${rank}${atWeight}${withGhost}${healed}`,
         untilMs: performance.now() + 3600,
       };
       ui.markTimePosted(posted);
     } catch (e) {
-      notice = { text: `Could not upload that time.\n${e.message ?? e}`, untilMs: performance.now() + 3600 };
+      notice = { text: `Could not post that time.\n${e.message ?? e}`, untilMs: performance.now() + 3600 };
     }
   }
 
@@ -6596,8 +6606,9 @@ export async function boot({ loading, bootStart, mapId }) {
    * mapped channels drive the cursor, which lets roll adjust a value. When
    * they have not, any axis at all moves the cursor, because the way to
    * calibrate is a menu item and a wrong axis guess would otherwise lock
-   * the player out of it. Settings ignores this: the sticks pose the
-   * airframe there, and the cursor is mouse and keyboard only.
+   * the player out of it. Quad and the title pose the airframe with the
+   * sticks, so there only pitch moves the cursor; Rates, Tune, the bench and
+   * Stick help use the sticks for what they show. See pollPad in ui.js.
    */
   function padNav() {
     const btn = input.padMenuButtons();
@@ -9286,6 +9297,9 @@ export async function boot({ loading, bootStart, mapId }) {
     if (queuedPick) {
       openPadPick(queuedPick);
     }
+    /* A notice while a menu is up is the menu's, not the banner's: see
+     * setMenuNotice. The banner below only ever says it in flight. */
+    ui.setMenuNotice(notice && nowWall < notice.untilMs && ui.isModal() ? notice.text : '');
     if (ui.screen === 'padpick') {
       const pick = input.padPickView();
       if (pick) {
@@ -9315,7 +9329,7 @@ export async function boot({ loading, bootStart, mapId }) {
       && ui.screen === 'flight'
     ) {
       ui.setBanner(turtleBannerText(), true);
-    } else if (notice && nowWall < notice.untilMs && !(launchNow > 0) && !crashflipOn) {
+    } else if (notice && nowWall < notice.untilMs && !(launchNow > 0) && !crashflipOn && !ui.isModal()) {
       ui.setBanner(notice.text);
     } else if (ui.isModal()) {
       /* A banner is a flight message. Any screen that is up owns the

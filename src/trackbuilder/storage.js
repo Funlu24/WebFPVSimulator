@@ -134,10 +134,15 @@ export function listTracks(cls = activeTrackClass(), mode = 'race') {
       id: doc.id,
       name: doc.name,
       modifiedUtc: doc.modifiedUtc,
-      mix: formatElementCounts(countElementsByType(doc.elements)),
+      mix: formatElementCounts(countElementsByType(doc.elements, doc.trackClass)),
       sequence: doc.sequence.length,
       preset,
       credit: doc.credit,
+      /* Which race canvas it belongs to, so the builder's Load lists a five
+       * inch track on the five inch canvas and a whoop track on the whoop's
+       * (rowsForCanvas in ./words.js). The simulator's Track room reads the
+       * class off the loaded document itself and ignores this. */
+      trackClass: doc.trackClass === 'micro' ? 'micro' : 'full',
     };
   };
   /* A map lists with maps and a track with tracks: the Load list of one
@@ -204,6 +209,33 @@ export function deleteTrack(id) {
   /* Nothing shipped can be deleted, because nothing shipped is ever in the
    * library: a preset opens as a copy under a new id. */
   return writeJson(LIBRARY_KEY, lib);
+}
+
+/*
+ * A saved document exactly as the library holds it, or null: what Load's
+ * Undo puts back after a Delete. Not loadTrack, which normalises and hands a
+ * shipped track back as a copy; and put back by restoreTrack rather than
+ * saveTrack, which would stamp it as changed now and move it to the top of
+ * the list it was deleted from.
+ */
+export function savedTrack(id) {
+  const raw = readLibrary()[id];
+  return raw ? JSON.parse(JSON.stringify(raw)) : null;
+}
+
+export function restoreTrack(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.id) {
+    return false;
+  }
+  const lib = readLibrary();
+  lib[raw.id] = raw;
+  return writeJson(LIBRARY_KEY, lib);
+}
+
+/* Whether this browser has a document of its own in the library: what the
+ * builder's storage notice reads to know it has been read once. */
+export function librarySize() {
+  return Object.keys(readLibrary()).length;
 }
 
 export function trackExists(id) {
