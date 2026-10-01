@@ -6297,6 +6297,28 @@ export class Ui {
   }
 
   /*
+   * HOW MANY CHIPS STAND IN THE TOP RIGHT, for the stylesheet. On a phone
+   * held upright a centred heading and the chips want the same pixels, and
+   * Settings' heading was printed under Report bug and the music dock. The
+   * budget decides which screens have chips at all (BUG_CHIP_SCREENS,
+   * MUSIC_SCREENS); this tells a narrow screen how far down to start.
+   */
+  syncChipRows() {
+    if (!this.root) {
+      return;
+    }
+    const up = (n) => Boolean(n) && !n.hidden;
+    const n = this.screen === 'title' || this.screen === 'flight'
+      ? 0
+      : (up(this.bugChip) ? 1 : 0) + (up(this.musicDock) ? 1 : 0);
+    this.root.classList.toggle('chip-rows-1', n === 1);
+    this.root.classList.toggle('chip-rows-2', n === 2);
+    if (this.musicDock) {
+      this.musicDock.classList.toggle('on-title', this.screen === 'title');
+    }
+  }
+
+  /*
    * THE FLIGHT CHIPS FADE (POLISH-PLAN.md item 12; the owner, 2026-09-27:
    * "yes fade the chips too"). A real feed carries the OSD and nothing
    * else, so the music dock, Report bug and Pause go after about three
@@ -6416,6 +6438,7 @@ export class Ui {
     this.musicTitle.textContent = name;
     /* The name, because it ellipsises, and then what the click does. */
     this.musicTitle.title = muted ? `${name}. Click to unmute.` : `${name}. Click to mute.`;
+    this.syncChipRows();
   }
 
   bugSnapshot() {

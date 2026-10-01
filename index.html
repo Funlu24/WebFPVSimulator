@@ -3498,10 +3498,30 @@
         .screen-quad .rates-lede {
           max-width: none;
         }
-        .screen-rates > h2,
-        .screen-quad > h2 {
-          margin-top: 76px;
-        }
+      }
+      /*
+       * BELOW THE CHIPS, ON A NARROW WINDOW, and only where there are chips.
+       * Rates and Quad used to start 76 px down for the bug chip and the
+       * music dock; neither has any since the chrome budget (MENUS-PLAN.md
+       * 2.6), and the screens that do (Settings, the pause menu, results,
+       * Advanced, Stick help) had none of the room. syncChipRows in
+       * src/ui/ui.js counts them. On the title the dock stood on the
+       * wordmark, so a phone hears its music from Settings instead.
+       */
+      /* A phone held upright has the height the title's 32vh cap was written
+         against a landscape phone to save: it showed Fly, Track and half of
+         Quad under 350 px of empty field. Five rows there, and the field
+         still has the top third. */
+      @media (max-width: 600px) and (min-height: 640px) {
+        .screen-title .title-foot .menu-scroll { max-height: min(calc(52vh - var(--bars)), 26em); }
+        /* Clear of the command bar, as the gate already is: the list's last
+           row was under it. */
+        .screen-title:not(.is-gate) { padding-bottom: calc(2vh + var(--bar-bot)); }
+      }
+      @media (max-width: 640px) {
+        .chip-rows-1 .screen:not(.screen-title) { padding-top: calc(2vh + var(--bar-top) + 40px); }
+        .chip-rows-2 .screen:not(.screen-title) { padding-top: calc(2vh + var(--bar-top) + 76px); }
+        .music-dock.on-title { display: none; }
       }
       /* A short window spends its height on the curve and the rows: the
          lede is the one thing here that repeats what the row notes say, and
