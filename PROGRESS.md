@@ -62560,3 +62560,173 @@ was added or removed under src/, so src/fresh.js and index.html are unchanged; t
 
 The modules are still served with cache-control public, max-age=14400, s-maxage=300, so a returning pilot's
 browser can hold the old files for up to four hours; a hard reload gets the new ones at once.
+
+## 2026-10-01 | board | The fixed tickets closed with notes, and the 22 open feel reports closed wontfix
+
+Board only. Nothing in this repository changed but this entry: no code, no plant, no module ABI and no build.
+
+### The ask
+
+"close the fixed tickets and all flight feel tickets", said after this pass's fixes were on main and live. Taken
+as every ticket whose fix is live on webfpv.org/sim, this pass's and the last pass's (bug-d1d3f4fb, bug-453fb074
+and bug-fe9215c0 had been live since 30 September and were still open), and every open ticket of kind feel.
+
+### Read before writing
+
+`?status=open` and `?status=in_progress` from the server, not the capped listing: 41 open and none in progress,
+22 of them feel. One ticket is new since the last summary, bug-f5ed55e4, "Jumper t20 left stick
+malfunctioning" at 05:03 UTC; it is not fixed and was not touched. Each ticket was fetched by id
+immediately before its own write and checked still open, still its kind, and still without a note. The files the
+notes cite were re-hashed on the live site just before the first write: stickhelp.js, ui.js, main.js, dump.js,
+input.js, touchsticks.js, audio.js and collide.js, 8 of 8 equal to origin/main at 831b724.
+
+### Eleven tickets, each with a note
+
+Written with POST /board/api/bugs/<id> { status, resolution }, no token, each HTTP 200 and each read back equal
+to the text below character for character. Nine are fixed. The two DJI controllers are WONTFIX, with a note:
+the page now explains the fault, but for a DJI controller nothing makes yaw arrive on a phone, and bug-338cd29b
+(an OpenTX radio on Android, four axes, yaw dead) was closed wontfix on 27 September for the same kind of
+reason. The three EdgeTX and OpenTX radios are fixed in the sense bug-616cc604 was: "Answered, and the sim now
+says it too", with a recipe that should work and has not been confirmed on a phone. Either reading is
+defensible and one POST changes any of them.
+
+bug-f42ae325, fixed, 05:53:47 UTC:
+
+    Answered, and the sim now says it too (commit 9687cbe). Chrome on Android passes on only four of a
+    radio's channels: 1 and 2, one of 3 and 4, and one of 5 and 6. Most radios send throttle on 3 and yaw
+    on 4, and on your LR3PRO it was yaw that never arrived. Nothing in a web page can bring a dropped
+    channel back. The fix is on the radio. Make a copy of the model you use for the sim (channel 5 is
+    often the arm switch), and in the copy, on the Mixes page, clear channels 5 and 6 and give each of
+    them one line with Rud as the source. Chrome keeps one of those two, so the stick comes through on it.
+    Then reload the sim and run Settings, Calibrate sticks. It should work on any EdgeTX or OpenTX radio,
+    but nobody has confirmed it on a phone yet, so please send a report from Settings, Stick help, whether
+    it works or not. On a computer the sim sees every channel.
+
+bug-b2de5239, fixed, 05:53:49 UTC:
+
+    Answered, and the sim now says it too (commit 9687cbe). Chrome on Android passes on only four of a
+    radio's channels: 1 and 2, one of 3 and 4, and one of 5 and 6. Most radios send throttle on 3 and yaw
+    on 4, and on your Zorro it was yaw that never arrived. Nothing in a web page can bring a dropped
+    channel back. The fix is on the radio. Make a copy of the model you use for the sim (channel 5 is
+    often the arm switch), and in the copy, on the Mixes page, clear channels 5 and 6 and give each of
+    them one line with Rud as the source. Chrome keeps one of those two, so the stick comes through on it.
+    Then reload the sim and run Settings, Calibrate sticks. It should work on any EdgeTX or OpenTX radio,
+    but nobody has confirmed it on a phone yet, so please send a report from Settings, Stick help, whether
+    it works or not. On a computer the sim sees every channel.
+
+bug-8acd3b2f, fixed, 05:53:51 UTC:
+
+    Answered, and the sim now says it too (commit 9687cbe). Chrome on Android passes on only four of a
+    radio's channels: 1 and 2, one of 3 and 4, and one of 5 and 6. Most radios send throttle on 3 and yaw
+    on 4. Over USB your Pocket lost yaw, and over Bluetooth you lost throttle instead. Nothing in a web
+    page can bring a dropped channel back. The fix is on the radio. Make a copy of the model you use for
+    the sim (channel 5 is often the arm switch), and in the copy, on the Mixes page, clear channels 5 and
+    6 and give each of them one line with the stick that is missing (Rud for yaw, Thr for throttle) as the
+    source. Chrome keeps one of those two, so the stick comes through on it. Then reload the sim and run
+    Settings, Calibrate sticks. It should work on any EdgeTX or OpenTX radio, but nobody has confirmed it
+    on a phone yet, so please send a report from Settings, Stick help, whether it works or not. On a
+    computer the sim sees every channel.
+
+bug-abaabdde, wontfix, 05:53:52 UTC:
+
+    Closed without a fix in the page, because the fault is in how Chrome on Android reads the controller,
+    and the sim now says so (commit 9687cbe). Chrome on Android passes on only four of a controller's
+    channels and drops the rest, and on your DJI controller one of the dropped ones is yaw. A radio
+    running EdgeTX or OpenTX can move the missing stick onto a channel Chrome keeps, but a DJI controller
+    cannot change its channels, so on a phone there is no way round it yet. On a computer the sim sees
+    every channel, so it should work there. That it worked the first time you opened the sim is worth
+    knowing: if it works on the phone again, please send a report right then from Settings, Stick help, so
+    we can see what changed.
+
+bug-da8c8d0e, wontfix, 05:53:54 UTC:
+
+    Closed without a fix in the page, because the fault is in how Chrome on Android reads the controller,
+    and the sim now says so (commit 9687cbe). Chrome on Android passes on only four of a controller's
+    channels and drops the rest, and on your DJI controller the left stick's yaw is one of the dropped
+    ones. A radio running EdgeTX or OpenTX can move the missing stick onto a channel Chrome keeps, but a
+    DJI controller cannot change its channels, so on a phone there is no way round it yet. On a computer
+    the sim sees every channel, so it should work there. Brave is built on Chrome and reads controllers
+    the same way, which is why it did the same.
+
+bug-ddfe1c6d, fixed, 05:53:57 UTC:
+
+    Fixed, live now (commit 1fe8e43). Three things were putting your camera back to 30 degrees and 85.
+    Flying your map from the builder opens the sim with craft=5inch in the address, and that link set the
+    five inch up again with its stock camera every time it loaded, reloads included. A lens of 95, the
+    whoop's stock one, was taken for the whoop's and reset at every load. And changing to the whoop and
+    back kept nothing. Each aircraft now keeps its own camera, tune, PIDs, pack and weight, and gets them
+    back when you return to it. Changing to the whoop still moves you to racing, because the whoop has no
+    freestyle world. Reload first (Ctrl+Shift+R if it still behaves the old way), then set your camera
+    once more: a value already lost cannot come back. If it still forgets, please send another report.
+
+bug-693b9ed4, fixed, 05:53:59 UTC:
+
+    Fixed, live now (commit 1fe8e43). The Flight controller screen had one save slot for both aircraft, so
+    saving on the whoop replaced the five inch's tune, and the PID sliders were shared between them as
+    well. Each aircraft now has its own saved tune (Your edits) and its own PIDs, and changing aircraft
+    brings each one's back. Your earlier five inch tune was overwritten before this change and cannot be
+    recovered, so it needs saving once more. Reload first (Ctrl+Shift+R if it looks unchanged). If one
+    aircraft's tune still disappears when you save the other, please send another report.
+
+bug-f06287ff, fixed, 05:54:01 UTC:
+
+    Fixed, live now (commit 19c79d7). The wizard had not stopped: it was waiting for your throttle to go
+    back to the bottom, and it did not say so. Your report shows the BETAFPV's throttle sitting near the
+    middle with your hand off it, so it springs back, and after you held it down at the first step,
+    letting go of the left stick for yaw sent it up. The screen now says what it is waiting for, with the
+    throttle's reading, and the yaw step says to keep the throttle down. So hold the throttle at the
+    bottom through the steps, and on the last step, if the throttle reads above zero with your hand off
+    it, press T or Throttle zero is here to set zero where it rests. Reload first (Ctrl+Shift+R).
+    Assigning axes by hand has been passed on as an idea. If it still stops, please send another report
+    from the calibration screen.
+
+bug-d1d3f4fb, fixed, 05:54:04 UTC:
+
+    Fixed, live now (commit 71e06c8). On a laptop with a touchscreen the sim put up the thumb sticks and
+    then listened only to them, so the keys moved nothing. Now a stick key (W, A, S, D or the arrows)
+    takes the sticks and puts the thumb sticks away, and touching the screen brings them back. Reload
+    first (Ctrl+Shift+R if it still behaves the old way). If the keys still do nothing, please send
+    another report from the menu.
+
+bug-453fb074, fixed, 05:54:06 UTC:
+
+    Fixed, live now (commit 075f331). A browser can pause a page's sound by itself, for example when the
+    output device changes or the computer sleeps, and the sim never asked for it back, so it stayed silent
+    until a reload. It now asks again when that happens, and on your next key, click or return to the tab.
+    Reload first (Ctrl+Shift+R). We could not tell what paused it on your Mac, so if the sound stops
+    again, please send a report right then: it now records what the sound is doing.
+
+bug-fe9215c0, fixed, 05:54:07 UTC:
+
+    Fixed, live now (commit 2e038bd). After a crash the quad was set down at the nearest clear spot, which
+    could be a centimetre from a wall, so the first touch of the sticks leaned it into the wall and it
+    stuck and stuttered there. It is now set down with room around it, usually about half a metre from
+    where it crashed. Reload first (Ctrl+Shift+R). We measured the set down on a built map and did not
+    reproduce your crash itself, so if it still sticks to a wall, please send a report right after it
+    happens.
+
+The reporters' emails are in none of these notes and not in this file.
+
+### The 22 feel tickets, wontfix, no note
+
+wontfix with an empty resolution, which is how the sweeps of the 19th, 21st, 24th and 30th closed theirs.
+Written 05:54:14 to 05:54:46 UTC, each read back as wontfix, resolution empty, kind still feel: 22 of 22,
+none skipped, none failed. All 22 were open; none was in progress.
+
+    bug-6d03f20f bug-05711ba5 bug-871a50a9 bug-bf855ae3 bug-e12e680b bug-c0315206 bug-24139bb1
+    bug-1235c064 bug-d50ab7c7 bug-df264021 bug-c2fa0782 bug-dd1d1585 bug-54e4412d bug-fe858ced
+    bug-0746cdb8 bug-b45921e8 bug-57807eca bug-3ec4363f bug-81680c8e bug-db952432 bug-63382285
+    bug-cb391569
+
+### Still open, and why
+
+    bug-52a66f69  pitch not reaching the sim   Firefox on Linux, a calibrated Pocket whose pitch axis
+                                               never moved; worth a second report, as on 30 September
+    bug-a18b2ed9  the French phone report      the low latency canvas lead, untested by the pilot
+    bug-cddc182a  flicker                      the same lead
+    bug-abfeffe6  HDZero                       the radio was sending values no joystick sends
+    bug-47e0e9ee, bug-1e3a3a1b                 the browser lists no pad on Windows
+    bug-2b2b44aa  crashing unforgiving         the owner's design question
+    bug-f5ed55e4  Jumper T20 left stick        new at 05:03 UTC, not yet looked at
+
+To reverse any of these, POST https://webfpv.org/board/api/bugs/<id> with { "status": "open", "resolution": "" }.
