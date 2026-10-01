@@ -63477,3 +63477,34 @@ the build, and `git diff --stat vendor/betaflight` is empty.
 - **Two of my new checks were wrong, not the code:** element ids are reused, so "the old waypoints are gone" is a
   question about the objects and not their ids; and a track built by hand has the builder's names, not the preset's,
   so the acceptance run picks pieces by where they stand.
+
+### The board, after the push
+
+Main went from 558533c to b734c8b as a fast forward (fetched first; `git merge-base` answered 558533c, so nothing was
+rewritten), and the live site served the six changed builder files byte for byte about a minute later, the pages
+stamped 15:25 UTC, so `src/fresh.js` gives a returning browser the new modules.
+
+The track on the board was then updated in place, through the builder's own Update the board, driven in headless
+Chromium from this tree with the board bridged through Node as before (method, path and status logged, never a
+body, because a body holds the edit key). The browser that published it this morning was the session's own, so
+what it kept was put back: the edit key from the scratchpad, and the bind `rememberPublish` writes, rebuilt from the
+board's own copy of the published document, so that the bar said Update board and the dialog said what it says to
+an owner ("The layout changed. Updating the board will clear posted times"), with Race track still ticked. The track
+had no times, checked twice, the second time straight before the update.
+
+    rehearsal    the deployed board (570ea3d) on 127.0.0.1 with a scratch file: the published document posted to it,
+                 then updated with that key: the same id, 10 gates and 29 elements, the tag kept, the card redrawn,
+                 one track on the board
+    dry run      production, reads only: the published document fetched for the bind, the dialog opened, not sent
+    the real one POST /api/tracks 200 (an update: the same id), the document fetched back for the card 200, POST the
+                 card 200
+
+What is on the board now: **trk-0921884e**, the same link, "Drone Nationals 2026 qualifier" by Mat, designed by Wilf,
+tagged Race track, 10 gates and 29 elements, updated 15:29:37 UTC with its first publish time kept, a new card (75
+kB), 45 tracks on the board and one of them this. Its document, read back, is the shipped track exactly, with only
+the order of keys inside `dims` changed by the board's store, and it is a closed 169.4 m lap in the builder. A
+crawler given the link gets the same title and the new card's address (`card?v=` the card's time), so a link
+preview that was taken this morning is asked for afresh.
+
+One more thing went wrong: a `pkill -f` meant for the rehearsal board matched the shell running it and took the
+rest of that command with it. Nothing had been sent; the board was stopped by its process id instead.
