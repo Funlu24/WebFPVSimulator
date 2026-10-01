@@ -1,0 +1,358 @@
+# The 5 inch builder: build in 3D, and speak the track's language
+
+A plan for the owner, 1 October 2026. It is written to be argued with. Section 8
+lists the decisions it takes on the owner's behalf, and how to reverse each one.
+
+Status is kept at the top and updated as stages land. Nothing below is started
+until its row in section 5 says so.
+
+## 0. What was asked
+
+In the owner's words: "we need to overhaul the 5 inch track builder. I tried to
+build the attached track and found issues. I couldn't get a gate with a flag on
+top and define easily the flight path to spiral down, the gates beside each
+other were hard to place. I gave up getting a spiral down with the flagged gate.
+the wall with the flags on top I had to hack together a gate. I couldn't get a
+gate with double top flags at all."
+
+Four asks: a gap analysis of every element that cannot be made easily, with a
+design for each fix; a UI and UX review ("the current building system is hard,
+the grid isn't easily read and the top down building makes it hard to
+understand"); a plan to improve the builder, and the work done; and, at the end,
+the attached track buildable very easily.
+
+The attached track is the 2026 Mission Foods Australian Drone Nationals Official
+Qualifying Track, designed by the 2025 National Champion, Wilf. It is a plan of
+a 40 by 29 m layout on a 5 m and 1 m grid, with a rules box (the hurdle at least
+1 m high and its flags 4 m apart, the up gate at most 45 degrees with its lower
+edge at least 1.5 m up, best three consecutive laps) and a materials list: 7
+gates, 9 flags, 1 hurdle, 1 dive gate.
+
+This is the same complaint the owner made of the whoop builder on 29 September
+("i find the top down buidling of ours very hard to understand and build a
+track"), and WHOOP-BUILDER-PLAN.md answered it for the whoop canvas: build in 3D,
+keep the brain. The 5 inch canvas never got that. Most of this plan is bringing
+it the same way, plus the parts the diagram needs that neither canvas has.
+
+## 1. The diagram, decoded
+
+The plan shows each piece drawn in oblique: its height runs along its own normal
+on the page, so a gate looks like two long white bars with a red board across
+them and the flags at the far ends. Read that way, the diagram's own
+dimensions all land on whole metres, which is the check that the reading is
+right: 13 + 10 + 15 = 38 down the left, and 13, 15, 20, 29 and 5 across the
+bottom. The counts agree with the materials list (7 gates, 9 flags, 1 hurdle,
+1 dive gate).
+
+Positions are metres in the diagram's frame: x east from the left dashed line,
+y north from the bottom one. The gates stand about 2 m between uprights on the
+page.
+
+| Piece | Where | What it is | Flags |
+| --- | --- | --- | --- |
+| Start and finish gate | 15, 14, faces east | A plain gate. The lap's first pass and its close. | 0 |
+| Lower left gate | 0, 14, faces east | A gate flown twice: through, round the flag, through again. | 2, one on each upright |
+| Left middle gate | 0, 24, faces east | A gate with a loop round its flag. | 1 |
+| Wall | posts at x 13, 15, 17, 19 on y 38 | Three gates side by side sharing four posts, flown as a weave: the east bay south, the middle bay north, the west bay south. | 1, on the east end post |
+| Right gate | 25, 30, faces east | Through east, a clockwise loop of about 1 m round its south post, through east again. | 2 |
+| Up gate | legs at x 27 and 29 on y 38, leaning north | Flown north and up, then the line goes over the top and back west to the wall. The rules call it the up gate and the materials list the dive gate: one piece. | 0 |
+| Hurdle | x 20 to 24 on y 23 | A board at least 1 m high, flown over, flags 4 m apart at its ends. Not a gate: nothing scores on it. | 2 |
+| Turn flag | 0, 0 | A flag the line turns round. | 1 |
+
+Lap order, from the start gate: start, over the hurdle, right gate (twice, with
+its loop), up gate, the wall as a weave (east bay, middle bay, west bay), left
+middle gate (with its loop), lower left gate, the turn flag, the lower left gate
+again, and back to the start. That is eleven passes through gates, one turn
+round a flag, and two loops, for 7 gates, 9 flags, 1 hurdle and 1 dive gate.
+
+The loops are one metre or so round an upright, which is the diagram being
+brutal on purpose. The builder's curvature warning will say so, and it is
+advisory, so the track will carry a handful of `tight-corner` notes by design.
+
+The track runs from about x minus 2.6 to 30 and y minus 1.3 to 42.4 once the
+loops are counted, so it is placed 5 m in from the field's corner, in a field
+about 45 by 55 m.
+
+## 2. What the builder says today, piece by piece
+
+"Can" means the document and the game can hold it. "Click" means a person can
+make it by pointing. The first is the model, the second is the tool, and the
+gap is almost always the second.
+
+I checked this by building the track from a script with today's primitives
+(`mission0` in the session scratchpad, not committed). It came out as 12 passes
+and five warnings: two `unsequenced` (the hurdle's flags), two `reversal`, and a
+0.13 m `tight-corner` where the right gate is flown twice in a row. So the
+model holds most of the track. What it cannot do is let a person get there.
+
+| What the track needs | Model | Click | The gap | The fix |
+| --- | --- | --- | --- | --- |
+| A gate with a flag on top | yes, `flaggedGate` | no | The Header flag chooser (left, right, both, on top) is nine blocks down a 1424 px inspector seen through a 291 px window, about 960 px below the top. | Flags are one row of chips on the gate's own card, and a gate can lose or gain its flags there. |
+| Two flags, one on each upright | yes, `flagSide: both` | no | The same buried chooser. This is the "double top flags" that could not be found. Also the mast stands on the header board's end, 0.43 m outboard of the upright, because the board is wider than the gate. | The chips, plus a plain gate dress whose board ends at the uprights, so the flag is on the post. |
+| Gates side by side sharing posts | yes, `unbuiltSides` | no | One gate per click on a 1 m grid, a 1.56 m pitch the grid cannot hit, and nothing that sets the shared posts. The whoop canvas has a Row tool, but it is whoop only, plain gates, 30 in, three at most. In the world every gate carries 0.42 m sleeves and a 2.67 m header board, so a row of today's gates overlaps itself. | A Wall tool: drag along the floor, get N bays at the pitch that makes the shared posts meet in the world, the flags where you choose, and the whole wall moves as one. Plain gate dress so the boards sit end to end. |
+| Flying the wall as a weave | partly | no | The face rule reads a direction off the chord to the next gate, and along a wall the chord is square to every gate, so every pass is undecided or the same way. A weave needs each pass flipped by hand. | When consecutive passes go through gates side by side facing the same way, they alternate. The first takes the side the line arrives from. |
+| A hurdle | as a barrier, plus two flags | no | A barrier has no flags, the two flags stand outside the order and raise two `unsequenced` warnings, and nothing pins the line over the bar. The 2022 GQ import modelled one as a bare barrier. | A Hurdle tool: a low board with masts at its ends, one piece, with the line pinned over it. No new document type. |
+| An up gate | yes, `diveGate` with a tilt | awkward | The dive gate defaults to flat, 4.57 m up and 7 by 6 ft. An up gate is 45 degrees or less, 1.5 m up at the lowest edge. Both are in the inspector under Tilt and Sill height, and nothing says which numbers are the rule. | An Up gate on the palette with those numbers. |
+| The same gate flown twice | yes | no | There is no Fly again on the 5 inch canvas: it is whoop only. "Add to the track" appears only for a gate that is not in the order. The lower left gate and the right gate cannot be made. | The Fly order tool and the lap strip, on the 5 inch canvas. |
+| A loop or spiral round a post | yes, as waypoints | no | Only by dragging the line out into waypoints one at a time, and two passes of one opening in a row put two knots in one place (0.13 m radius). Spiral down exists only for a triple stack. | A Loop button on a pass: right or left, round the post on that side, written as ordinary waypoints you can drag. |
+| A turn round a flag | yes, `flag` marker | yes | None. | None. |
+| Dimensions as drawn | yes | awkward | X and Y are fields in the same buried inspector, the grid is a 1 m wash with a 10 m major, and there is nothing that measures. | A grid that reads (1 m, 5 m with numbers), live distances, a Ruler, and coordinates on the card. |
+| A field the size of the track | yes | awkward | The default field is 60 by 40 m. This track needs about 47 m of depth. | A field control that says what the track needs, and Fit that frames the track. |
+
+## 3. UI and UX review
+
+Each finding was seen in the running page (headless Chromium, 1600 by 900) or
+read in the code, and says which.
+
+1. **The view that can build cannot be read.** A gate is a bar 25 px wide on a
+   60 by 40 m plan, a flag is a 4 px dot, and the racing line is a sparse dash.
+   The track is a few marks on a dark rectangle. (Seen.)
+2. **The view that can be read cannot build.** The 3D view selects and drags
+   height, but a press on the ground orbits, nothing is placed in it, and at its
+   opening distance a gate is 40 px and its flags are not visible. (Seen, and
+   `view3d.js` header.)
+3. **The grid does not read.** The one metre lines are 10 percent white on navy
+   and the ten metre lines 22 percent. The competition diagram's own grid is 1 m
+   and 5 m, with the 5 m lines heavy. The ruler labels step by 5 and 10 and the
+   field has no labels inside it. (`view2d.js` 1015 and 83.)
+4. **The inspector is a 291 px window onto a 1424 px form.** Every control a
+   flagged gate has is in one scrolling column: name, size presets, X, Y, yaw,
+   tilt, five dimensions, four frame sides, the header flag, then its place in
+   the order. There is no scroll cue. (Measured: scroll height 1424, client
+   height 291.)
+5. **A control the track needs is hidden.** The flag chooser, with the "both"
+   that was asked for, exists and works. It is the single most important thing
+   this report found, because it means the "double top flags at all" was not a
+   missing part but a missing signpost.
+6. **The model's words are on the buttons.** Yaw, Sill height, Flip face, and a
+   flying order row with two buttons labelled `X` and `-`. (`ui.js` 536, 1708;
+   the whoop plan, finding 4.)
+7. **A gate cannot be flown twice.** Only the whoop canvas has Fly again, the
+   strip, and the Fly order tool. The model allows it (`sequence.js` 46). One
+   button was left off. (`ui.js` 1873, `app.js` 990.)
+8. **The flight path has one control and it is the order.** Heading and face are
+   derived from the chord to the neighbours. That is right for a flowing track and
+   wrong for a wall, a slalom or a loop, where the chord is square to the gate or
+   zero. There is no way to say "loop round this post".
+9. **Gates turn by themselves.** A new gate takes the heading the line gives it
+   and every edit re-derives it, so a layout that is square to the compass, like
+   this one, drifts as it is built. (The whoop plan's finding 3, still true here.)
+10. **The scale is not said.** The document holds the published sizes and the
+    world builds every gate 15 percent larger (`GATE_SCALE`, `src/game/track.js`
+    104). Nothing in the builder says that two gates which look 2 m apart will
+    overlap in the world.
+11. **It does not fit a tablet.** The same shared layout as the whoop: the
+    drawing area is 0 px wide at 390 px and 320 px at 820 px. (The whoop plan,
+    finding 8. Not re-measured here.)
+
+What is good and stays: the document and the reader that never throws, the
+derived racing line and its warnings, undo, autosave, branding, Publish, Fly this
+track, the lap GIF and the board card.
+
+## 4. The design
+
+### 4.1 Principles
+
+1. **A control the track needs is on the thing it controls.** Flags are on the
+   gate, not in a form.
+2. **What the diagram can say, the palette can say.** Wall, hurdle, up gate and
+   flag gate are palette items.
+3. **The flight path is clicked out, not derived and fought.** A person points at
+   the gates in the order they are flown. The tool works out the rest, and the
+   rest is changeable.
+4. **Build where you can see it.** The 3D view builds, as the whoop's room does,
+   and Plan is a camera angle.
+5. **Compose from what exists.** No new document types. No new default `dims`
+   keys on an existing type (the board's layout hash covers every `dims` key, so
+   one would clear the times on every republished track that holds the type).
+   Only optional fields that are written when set. No physics, module ABI or
+   build change.
+
+### 4.2 The parts
+
+**Flags, as chips.** One row on the card of any gate, stack or hurdle: None,
+Left, Right, Both, Top. Choosing one changes the piece's type where it must
+(a gate and a flagged gate are two types, a stack and a flagged double likewise)
+and keeps its place, heading, size and flying order. This replaces the buried
+chooser, which stays in the inspector.
+
+**A plain gate dress.** An optional `style: "plain"` on an aperture, written
+only when set. It means: no printed sleeves, a header board exactly as wide as
+the frame. The pennant mast then stands on the upright, because the board ends
+there. Every existing gate is the MultiGP dress and is untouched. A new gate on
+the 5 inch canvas is still the MultiGP dress unless it is made a wall bay or is
+set plain.
+
+**The Wall.** A tool, key `K`. Drag along the floor and the bays appear under the
+pointer, two to six. It lays ordinary gates, plain, one `group`, the shared
+uprights taken away with `unbuiltSides`, each facing across the wall. The pitch
+is the world's: `GATE_SCALE` times one opening plus one tube, so that the posts
+meet where the game builds them. The builder draws document sizes and the world
+15 percent larger, so in the builder the bays show a gap of about a quarter of a
+metre and in the world they meet. The Wall says so in its coach line. The flags
+are a choice made while laying it (the same chips): none, either end, both ends.
+The wall is one piece for select, move, turn, copy and remove, because a group
+already is.
+
+Publishing: the simulator refuses any `group` as a cube. A wall in which every
+gate is in the flying order loses nothing when the board drops the grouping, so
+the refusal is narrowed to a group with a gate that no pass goes through, which
+is the cube. `partsTheBoardDoesNotKnow` in `src/share/board.js`, with its tests.
+
+**The Hurdle.** A tool, key `U`. A barrier, low and thin (4 m by 0.1 m by 1 m by
+default), with an optional `flagSide` and mast height on the barrier itself,
+written only when the barrier has flags, so no existing barrier changes. The
+flags are the same pennants a gate carries, at the ends of the board. One
+element, one inspector, one colour on the plan. Not in the flying order, because
+a hurdle is not a gate, but the Fly order tool pins the line over its middle with
+a waypoint when it is clicked, which is how the lap goes over it.
+
+**The Up gate.** A palette item, a `diveGate` with a 45 degree tilt, its lower
+edge 1.5 m up and a 2 m wide opening, the rule in the diagram. A preset, not a
+type.
+
+### 4.3 The flight path
+
+**Fly order.** A tool, key `O`, on the 5 inch canvas as on the whoop. Click the
+pieces in the order they are flown; click a piece again for another pass;
+Backspace takes the last pass off. The lap strip along the foot shows the passes
+and lights the gate when the pointer is on a chip.
+
+**The weave rule.** In `faces.js`, where the chord to the neighbours is square to
+a gate (or zero) the direction is no longer left undecided or set the same way:
+when the previous pass is through a gate standing beside this one and facing the
+same way, this pass goes the opposite way, and when it is the first of such a
+run it goes away from the side the line arrives from. A wall then weaves when its
+bays are clicked in order, and Reverse (X) still flips any pass.
+
+**Loop.** On the card of a pass, Loop right and Loop left. A loop goes round the
+upright on that side, clockwise for the right and anticlockwise for the left, at
+the distance from that upright to the gate's middle, so the circle passes through
+the gate's centre. It is written as three ordinary waypoints in the flying order
+after the pass, at the opening's height, each draggable. Undo takes the loop
+away as one step. Nothing is stored that the document does not already know.
+
+### 4.4 Building in 3D
+
+The room editor of the whoop canvas (`edit3d.js`, the card, the lap strip, the
+coach line, the tags and arrows in `view3d.js`) becomes the 5 inch canvas's
+editor too. The gate on `isWhoopRace()` splits in two: what is about building in
+3D, which both classes get, and what is about RaceGOW, which stays. Of the 46
+call sites most are scale safe. The ones that are not carry inch constants and
+get metre ones:
+
+| Whoop constant | 5 inch value |
+| --- | --- |
+| Row ghost 0.3556 m, pair slot 30 in | The wall's pitch |
+| Magnet radius 3 in | About 0.5 m |
+| Shift nudge 6 in, frame minimum 1.4 m | 5 m, 12 m |
+| Turn step 90 degrees | 15 degrees, Alt for free |
+| Card, coach and tags in inches | Metres, centimetres to hand |
+| Camera radius 0.6 to 60 m | 8 to 140 m |
+| Replace menu from the micro palette | From the 5 inch palette |
+
+The canvas opens in 3D once Three.js has arrived and falls back to the plan if it
+does not, as the whoop's does. The 2D plan stays, one key away (V), and is
+improved (4.5). Freestyle maps and the whoop canvas are not changed.
+
+### 4.5 A grid that reads, and a plan you can build in
+
+Plan and room share one grid drawing: 1 m lines, 5 m lines heavier and numbered,
+10 m lines heavier again, at a contrast that reads on the dark field. Gates are
+drawn at their true width with a post at each upright and their flags as flags,
+and hover shows the position of the pointer and the distance to the last gate.
+The Ruler and live distances while placing come across from the whoop in metres.
+X and Y are on the card. The field gets a Fit to track and a size row that
+says what the track needs.
+
+### 4.6 The Mission Foods track, as the acceptance test
+
+It ships as a 5 inch preset, generated by a script from a short list (so the
+numbers can be argued with), credited to its designer by name. No logos: they are
+the sponsor's marks and not ours to ship. Then a browser check builds the same
+track from an empty canvas with pointer and keyboard only, and compares the two.
+See 7.
+
+## 5. Stages, in build order
+
+| Stage | What | Status |
+| --- | --- | --- |
+| 0 | Plan, baselines, this document | in progress |
+| 1 | The parts: plain gate dress, barrier flags (hurdle), the wall layout, the loop, the weave rule, the narrowed publish refusal. Model, game, tests. | not started |
+| 2 | Flags as chips, Fly order and Fly again on the 5 inch canvas, the inspector put in order. | not started |
+| 3 | Build in 3D on the 5 inch canvas. | not started |
+| 4 | The grid and the plan. | not started |
+| 5 | The Mission track: preset, generator, the acceptance run, overlay. | not started |
+| 6 | Docs, schema, PROGRESS, preload, checks, push. | not started |
+
+Each stage ends green on `node src/trackbuilder/selftest.js` and is committed.
+
+## 6. What does not change, and what could break
+
+- `schemaVersion` stays 3. Every new field is optional and written only when set,
+  so every existing document serialises to the bytes it did. The selftest checks
+  that for the shipped presets and the ten saved 5 inch tracks.
+- The physics, the module ABI and the build. Every solid added is a capsule or an
+  axis aligned box through the existing calls. `git diff --stat vendor/betaflight`
+  stays empty.
+- The board service is not edited and does not need to be deployed first. The
+  fields it does not know it keeps, serves and hashes, which is the right
+  behaviour for new fields. A track with a hurdle shows it to the board as a
+  barrier.
+- The whoop and freestyle canvases. Their behaviour is the regression to watch:
+  1773 checks and the whoop flow check are the net.
+- What could break: the gate dress (a header board narrower on a plain gate);
+  the weave rule (it changes the face of a pass nobody has pinned, in a layout
+  with a gate flown beside another, so it is applied only where the old rule left
+  the face undecided); and the room editor on a 60 m field (picking at a
+  distance, camera ranges).
+
+## 7. How it is checked
+
+1. `node src/trackbuilder/selftest.js`, which runs in about three seconds, with
+   a section for each new rule: the plain dress, barrier flags, the wall layout
+   and its pitch in the world, the weave rule, the loop, the narrowed refusal, and
+   round trips.
+2. A differential on the existing tracks: every shipped preset and every saved
+   5 inch track serialises to the same bytes and builds the same course
+   (`courseFromDocument`) as before.
+3. A browser check, `scripts/builder-flow-check.js`, with 5 inch cases: place by
+   click, flags by chip, a wall by drag, Fly order by click, a loop, and the whole
+   Mission track from empty with the number of actions counted.
+4. The track against the diagram: every piece within 0.1 m of its diagram
+   position and the right type, heading and flags; and the derived racing line
+   laid over the diagram's yellow line, with the RMS distance printed.
+5. Pictures with `scripts/shots.js` for the pilot to look at.
+
+`npm run verify` is not needed: nothing in the plant, the module, the build or
+the control loop changes. That is stated in PROGRESS.md with the run log.
+
+## 8. Decisions taken on the owner's behalf
+
+Each is the plan's answer, in force until the owner says otherwise.
+
+1. **The 5 inch canvas builds in 3D**, as the whoop's does, with the plan one
+   key away. Reverse: leave `buildsIn3D` false for the full class.
+2. **Plain gate dress** is an option on a gate, not the new default. The MultiGP
+   dress with its sleeves stays what a new gate is.
+3. **A wall is a `group`**, and the publish refusal narrows to a group with a gate
+   that no pass goes through.
+4. **A hurdle is a barrier with flags**, not a new type, so the board needs
+   nothing.
+5. **A loop is waypoints**, not a new field, so it is the same in the board's copy
+   as in ours.
+6. **A row's pitch is the world's**, not the document's, so posts meet where the
+   game builds them. The cost is a quarter metre of gap in the builder's own
+   preview.
+7. **Keys.** K wall, U hurdle, M ruler, O fly order. O shadows Ground logo, as it
+   does on the whoop canvas; Ground logo stays on its palette entry without a
+   letter.
+8. **No logos** on the Mission preset.
+9. **Gate dimensions on the Mission preset** are chosen so the world builds a bay
+   2 m between uprights, which is what the diagram draws.
+
+## 9. Not in this plan
+
+A club profile with free gate sizes, hoops, tables and cubes on the 5 inch
+canvas, a build sheet for a field, glb or Velocidrone export, WebXR, and the
+board's own copy of any of this. Each is a different ask.
