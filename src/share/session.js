@@ -405,10 +405,12 @@ export function writePostedBest(trackId, lapMs) {
 
 /*
  * What the simulator asks the builder to do on arrival: 'remix' opens a
- * copy of the seated board track and 'edit' opens the pilot's own. Those
- * are the only kinds written. A 'new' went with the simulator's New button
- * on 17 August and the builder no longer reads one. Only the kind is
- * stored: which canvas to open is the address's to say, with ?mode=.
+ * copy of the seated board track, 'edit' opens the pilot's own, and 'new'
+ * opens a blank canvas, keeping whatever was seated in Load. 'new' went
+ * with the simulator's New button on 17 August and came back on 1 October
+ * with the Tracks room's Build a track card (MENUS-PLAN.md 2.4); the
+ * builder reads it in adoptIncomingShare. Only the kind is stored: which
+ * canvas to open is the address's to say, with ?mode=.
  */
 export function writeBuilderIntent(intent) {
   if (!intent || typeof intent !== 'object') {

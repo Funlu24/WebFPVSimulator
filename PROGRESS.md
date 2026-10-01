@@ -62672,3 +62672,240 @@ nothing beyond "go".
     noun-lint         PASS, 295 files (run by the builder's research agent)
     not run           npm run verify (no code changed), shots.js (the scratch rig took the pictures),
                       lint:devices, lint:input, check:builder (nothing they cover changed)
+
+## 2026-10-01 | ui, shell, checks, builder, board | The menus streamlined, all five stages of MENUS-PLAN.md (the owner's ask)
+
+The owner, after the review above: "Complete all stages following your suggestions for all. Ensure the final
+system is world class uiux and initiative." So every stage of MENUS-PLAN.md is done here, the ten calls in its
+"For the owner" taken as recommended unless this entry says otherwise, across the simulator, the builder and the
+board. The simulator's work is on `ccr-cfd60e7e-7w2588` in this repository, the builder's was merged into it,
+and the board's is on the branch of the same name in WebFPVSimulator-LeaderBoard. Nothing went to main on
+either side.
+
+### The owner's calls, as taken (2026-10-01, "following your suggestions for all")
+
+1. **The glossary**, as written: Tracks and times for the board, Builder for the page, Post for sending a time,
+   The town, Chase for racing a ghost, Flight model, Firmware bench, Tune, and Tracks and Maps for the rooms.
+2. **About** replaces Credits on the title, with Partners, Support, the FPV wiki and Report a bug in it (1.41).
+3. **Graphics left the pause menu**; Settings is one door away.
+4. and 9. **Before you fly, refined.** The plan's 9 said every way of flying a track shows the card the first time
+   in a session. The owner has asked three times for the other half: the builder's Fly this track "straight to
+   the starting blocks not the initial menu" (2026-09-25 and 2026-09-26) and a double click on a track "to start
+   racing it" (2026-09-27). So the rule is: a press that names a track flies it (its card's Fly it, a double
+   click, the builder's Fly this track, the board's Fly this track, Standings' Fly this track and Chase the
+   record), and the title's Fly, which names nothing, shows Before you fly the first time a track is flown in a
+   tab, and goes to the grid after that. The seated track's sheet in Tracks has a Before you fly row for every
+   other time.
+5. **Each pilot's best** on the board's podiums and sheets, with "All N times" one press away.
+6. **Untitled tracks already on the board are left as they are**; the builder refuses a new publish without a
+   name (see the builder's section).
+7. **The chrome budget** as proposed, with one addition: Report bug is on the plan's screens (the pause, results,
+   Settings and Stick help) and also in flight, where the owner tuned its fade on 2026-09-27, and on Advanced,
+   Calibrate and Choose joystick, which a pilot opens because something is wrong. The music dock stays in flight
+   too, for the same fade.
+8. **The radio, in part.** Pitch moves the cursor on the title and in Quad, where roll is left to the pose; on
+   Rates, Tune, the bench and Stick help the legend says what the sticks are busy with and the buttons choose and
+   go back. **Not built: a held roll that hands the sticks back.** On Stick help a held stick at its stop is the
+   test itself, and on Rates a pilot holding a stick to read the curve would leave the screen. Left for the
+   owner.
+10. **What a posted time carries**: the copy was fixed, so nothing promises the board the tune, the link or the
+    flight model. Whether the board should receive them is still the owner's call.
+
+### What changed in the simulator
+
+- **Names and values (Stage 1).** Every room has one name in the crumb, the heading and its door. Settings has no
+  value; Quad shows the aircraft and Tune the tune. Flight model, The town, Post, Chase the record, Firmware bench,
+  Builder. The crumb is built from the same pointers Escape uses, so it says where Escape goes. Calibrate and
+  Choose joystick have crumbs. Every cut value has a tooltip, the GPU row shows the renderer's short name, and
+  Graphics reads Auto. Keyboard races is a row in Quad, so the picture and the Flight mode row stop disagreeing.
+- **The title (2.1)**: eight rows, Fly, Track, Quad, Settings, How to fly, Tracks and times, About, What to fly.
+  The Fly row says which of the two it will do. First flight is keyed on having flown, not on having answered the
+  gate, so a reload no longer loses it (1.43); old saved settings count as having flown.
+- **The pause menu (2.2)**: twelve items by the plan's count, headings included, and nine stops in the shell walk
+  of a fresh browser. Resume, Restart run, Ghost, the feel section (Tune, Rates, Weight, Flight feel), Settings,
+  How to fly, Quit to title, with the builder row and the trouble row only when they apply.
+- **Settings and Advanced (2.3)**: the render and latency knobs and the flight log moved one door down to
+  Advanced, "for when something is wrong". Settings went from 33 stops to 24, and every fitted list window ends
+  above the command bar.
+- **Tracks (2.4).** Choosing a track opens its sheet under the card's own line of the grid, with a notch at the
+  card: the fastest three pilots, Fly it, then the rows that apply. The seated track's eight rows are its sheet's
+  now, with the one right Edit row, and a row that cannot apply is not drawn. Build a track is a card. The board's
+  half orders by Most flown, Newest or A to Z, remembered. The chosen card never moves under the pointer, the
+  arrows walk the room in drawn order, and Back from the launch card or Standings comes back to the same sheet
+  and row. Card metadata reads "by X · N gates" with the record on its own labelled line (1.14).
+- **Ledes (2.5)**: one line each, the detail moved to the row it explains.
+- **The chrome budget (2.6).** Report bug, music, Patreon, the Flying and Pilot chips each appear where they are
+  about the screen, and the bar's Fly button shows on touch, and on a desktop only while the primary row is out
+  of sight. The bar's Back is a button for every voice.
+- **Layout (1.8 to 1.13).** A notice raised on a menu is a line above the command bar, not the flight banner
+  across the heading. The paused lap clock is hidden on short windows. Headings clear the status bar on a phone,
+  rows on a phone on its side count their padding inside the 44 px target, and touch steppers sit side by side.
+  How to fly's keys run in two columns beside the sticks, and its Back is on the screen at 1600x900. The hidden
+  hint lines are gone (1.42). Race results are six rows, nothing grey but Time posted, and the Total row clears
+  the menu. On short wide windows the title's help sits beside the list and Quad's picture gives up its square.
+- **The feel question (2.8)** waits for the second results and never opens on its own for a radio pilot. Back
+  closes a dialog once the sticks have been seen at rest, through the dialog's own Escape (2.9).
+- **Deep links (5.1).** Every row that names a track opens its own page on the board (`?track=`).
+- **Found on the way**: the generic room path reset the pause chain, so Paused, Settings, Stick help, Escape,
+  Escape quit the run; fixed. Standings for a seat with no recorded board asked this page's own origin; it asks
+  the default board now.
+
+### The board (WebFPVSimulator-LeaderBoard, branch ccr-cfd60e7e-7w2588, 18 commits on 4935604)
+
+Done by a subagent in that repository and reviewed here before it was pushed.
+
+- **One name (3.1).** The page, its title, eyebrow, footer, partners page and inbox link say Tracks and times;
+  the tabs are Tracks and Maps; "Remix in the builder" is "Open in the builder". The board's noun lint fails on
+  any visible Tracks and Statistics, Tracks and Times or leaderboard, and checks the page names itself the same
+  way in all four places (5.4).
+- **A phone's first screen (3.2).** At 360x780 the masthead went from 424 px to 78 and the first track card from
+  y=942, off the screen, to y=300, wholly on it. The counters move to the foot, the filters sit behind one Filter
+  button with a count, and the spine keeps the mark and Open the simulator.
+- **Each pilot's best, one name per pilot (3.3, 3.4).** Podiums and sheets rank each pilot's best, with "All N
+  times" under the table; names that differ only by case, spaces, dots, hyphens or underscores are one pilot, for
+  display only. Podium places held twice by one pilot: 19 of 27 five inch tracks and 4 of 8 whoop tracks before, 0
+  after. The simulator's posting dialog says when a new name is another spelling of one already there.
+- **The aircraft switch scopes everything (3.5)**, tags nobody uses are hidden (1.27), Admin and Site statistics
+  moved to the footer (1.28), the dead credits overlay and its boot work are gone (1.29), the hidden spine is out
+  of the tab order and focus rings are back (1.30), the sheet and statistics styles are scoped (1.31), the counts
+  say what they count (1.32), a sheet's Close, Escape and Back agree (1.33), and the table has real headers and a
+  caption (1.34). Whoop tables fit at 360 (3.7).
+- **The joins.** Fly this track carries `fly=1`, so it goes to the starting blocks like Fly this map (3.6). The
+  simulator's credits open in a tab of their own (5.3). The track list is fetched again when the tab comes back,
+  at most once a minute, so a time posted in the simulator shows without a reload (5.3a).
+- **The bug inbox fails closed** (found during the review). With BUGS_TOKEN unset, reading or updating tickets
+  needed nothing. Now it needs an admin sign in or the token. **Before this is deployed, either set BUGS_TOKEN on
+  the Render service and give it to whatever reads tickets as a bearer, or have them use BOARD_ADMIN_TOKEN:
+  agents here have read production tickets with no header, and they will get 401.** Filing a ticket is unchanged.
+- **Checks there**: `npm test` all passed, one skip that needs BOARD_SELFTEST_PASSWORD as before; lint:nouns
+  PASS; lint:licence, all 29 files carry the notice. And this repository's `lint:board` passed against that
+  branch's server.
+- **Left there**: `public/credits.js` and `public/credits/` are no longer loaded and were kept, because the
+  board's CLAUDE.md describes that roll and giving the board its own roll back is open. The Maps tab's toolbar is
+  not folded behind Filter on a phone (its first card is already on screen). Whoop column headers take two lines,
+  and the inbox token placeholder is cut at 360.
+
+### The builder (src/trackbuilder, merged as 8f6487c)
+
+Done by a subagent in an isolated worktree on a branch of its own, eight commits on 831b724, then merged here
+without conflict. It hit a usage limit partway through its last step and was resumed after the reset; its commits
+were already in the worktree and nothing was lost.
+
+- **The drawer and the menus (1.18, 1.19, 1.23).** The whoop drawer has its own close button, Escape closes it
+  before it lets go of a selection, and its toggle and the card's close button are never covered. More is a menu:
+  Escape closes it and returns focus, the arrow keys and Home and End walk it. Path left the palette and Show line
+  stayed on the bar, so nothing is one switch twice.
+- **One letter per tool (1.20).** Fly order moves from O to N, because Ground logo has O on all three canvases.
+  The whoop letters H, T and W stay, as the owner asked on 2026-09-30. The selftest checks, per canvas, that no
+  letter is used twice and shared tools keep theirs.
+- **Load and Publish (1.21, 1.22, 4.3).** Each canvas lists its own tracks with their kind and age, and counts
+  the other canvas's with a Show it button. Delete leaves an Undo in the row. There is no Board address field in
+  either Publish dialog (`?board=` still works). Publish refuses Untitled track and Untitled map in any case or
+  spacing and says why, in the same dialog.
+- **The joins (1.24, 5.2, 5.2a).** Back to the simulator names the world and the aircraft
+  (`../../index.html?map=custom|built&craft=5inch|whoop65`, never `fly=1`), so the simulator opens on its title
+  with the work seated. After Publish the link is "This track on Tracks and times" or "This map on Tracks and
+  times", through the third argument of `boardPageUrl`. And the Tracks room's **Build a track** card writes a
+  `new` intent: the builder opens a blank canvas of the address's mode, an empty seat with no prompt, and a seat
+  with work in it is kept in Load first. Checked here on the merged tree, in a real page: the card opens the
+  Builder, and Back to the simulator lands on the title with the five inch and the track seated.
+- **Words and units (1.25, 1.26, 4.1, 4.2, 4.2a to c, 4.3a).** The page is the Builder, the switch reads Five
+  inch, Whoop and Freestyle, the inspector says Field, Room or Plot, and the banner speaks for its canvas and
+  collapses to "Saved in this browser" after the first save. The freestyle canvas lost its empty Flying order
+  panel. The views are 2D | 3D (3D | 2D on the whoop) with V between them, and picking a tool in the 3D preview
+  switches to 2D with it in hand. The whoop canvas reads in inches from the room's centre, with millimetres in
+  small print. An empty five inch canvas offers "Start from a track on the board". A canvas switch says what
+  undo and the simulator will do now. Pieces the board cannot hold yet are marked so, and a whoop track is not
+  offered Small field or Big field (`src/share/board.js`, the one file outside the builder it was allowed).
+- **A phone (4.4).** Under 500 px in either dimension the palette and inspector are drawers behind Tools and
+  Details, with a close button and a scrim; the second bar folds into More; the drawing gets 390x759 upright and
+  844x346 on its side, and two fingers pan and pinch the 2D plan. Under 300 px a plain "too small to build on".
+- **A reload (4.5).** Measured first on 831b724: a `?track=` link, edited and reloaded, came back as the link's
+  version with the edits pushed into Load, and a `?share=` copy asked "Open a copy" again. Now `?track=` is
+  dropped once read, `?share=` once the board has answered, and a broken `?track=` says so.
+- **Checks there**: `check:clip` 1826 passed, 0 failed (53 new); `check:builder` PASS, 556 checks over 48 cases,
+  ten of them new; `lint:devices` PASS, with the whoop drawer at two laptop sizes and all three canvases at 390x844
+  and 844x390 with touch. Existing flow cases that changed, because the plan changed what they test, none
+  loosened: three blocked, views, picture, fly order, a cube flown through other faces, furniture, a hoop and a
+  hex gate.
+- **Not done, for the owner or later**: fractional inches on whoop pieces (positions snap from the room's corner,
+  so a piece can read -42.9 in from the centre, and snapping from the centre would move placement in every
+  existing room); pinch zoom in the five inch and map 3D preview on touch; the phone drawers are modal, so on a
+  landscape phone the room cannot be tapped while Details is open; the board's own `validate.js` may want the same
+  tag classes.
+
+### Checks that changed, and why
+
+- **`lint:shell`** opens the screens a pilot passes on every run at 1600x900, 1280x720 and 844x390 with touch,
+  and asserts on arrival that the primary row can be pressed without a scroll and that a way out is on screen;
+  the hang under the command bar is a budget per window (0.2). It walks Advanced. It now measures the pause menu,
+  which it never could: the screen had no `screen-paused` class, so every number for it was a zero from an
+  empty query. It checks every row that opens the board is called Tracks and times (5.4). The tuning path,
+  the pause menu's builder row, the gate's fourth card and the room return walk name today's labels and doors.
+- **The baseline was re-recorded down**, every number an improvement or a first measurement: About 1518 px below
+  the window to 0 (0.1, the red check from the entries above), How to fly 123 to 0, Settings' overflow 1227 to
+  634, Rates 440 to 338, Tune 154 to 52, the bench 3613 to 3599, the trick list 1649 to 1605. Stick help on a
+  phone 144 to 124 after its lede was cut.
+- **`lint:nouns`** fails on the glossary's retired names as well as a visible "course" (0.3), and skips agents'
+  worktrees under `.claude`. One argued exception: racegow-lattice.js's generated header.
+- **`lint:input`** reads a radio notice raised on Settings from the menu notice it is said in now (1.8), and
+  the gate's fourth card as Builder. No threshold moved.
+- **`lint:board`** reaches Standings through the seated card's sheet, reads Chase the record, and asks that Fly
+  it be reachable without a scroll, the row or the bar, rather than always on the bar.
+- **`lint:input` again, after the merge**: it pinned the builder's switch as `5 inch`, which the builder now
+  says as Five inch (4.1). Updated with its reason; no threshold moved. The builder's agent was not allowed to
+  edit that file, so the follow-up was mine.
+
+### What went wrong
+
+- **The shell walk was blind on the pause menu** for as long as it has existed (above). Found because the fold
+  pass reported 0 rows seen there.
+- **My own fold check failed every desktop screen** on its first run: it looked the primary row up with
+  `indexOf` in an `items()` array, and `items()` builds new objects on every call. The photographs disagreed, so
+  the check was wrong, not the product.
+- **A sticky Back on How to fly** covered the keys at 1280x720. Replaced by the bar's Back button.
+- **The Fly row's new note** landed on the best lap line on the title at 1280x720. Moved beside the list on short
+  windows.
+- **Fitting lists to the window** first ran 16 px under the bar on a phone (the 200 px floor won over the cap),
+  and then capped Quad and Rates below 1280 px, where the page scrolls and the list does not clip, so rows drew
+  past the list's border. Both fixed; the fold pass would have caught the first, and the photographs caught the
+  second.
+- **A touch stepper rule lost to a later rule** of the same specificity, so the arrows stayed stacked on the
+  first try.
+- **Smaller slips, caught before commit**: a Node constant used inside a browser template in the shell check, an
+  escaped quote that broke a template in the board check, 'credits' briefly added to ROOM_PARENTS, Advanced first
+  built as a screen named graphics, the Keyboard races row first keyed on `padInfo.using`, which is the string
+  Keyboard, and the hasFlown default that would have marked every returning pilot new until a migration was
+  added.
+- **The noun lint walked the builder agent's worktree** inside `.claude/` and reported its old copy of ui.js.
+- **A `cd` into that worktree** moved this session's working directory there for one command. Nothing in it was
+  touched, and every later command named the main checkout by its full path.
+- **The stop hook flagged `.claude/worktrees/` as untracked.** It is the builder's whole second checkout. I did not
+  commit it: it is excluded in this checkout's local `.git/info/exclude` instead, and the branch comes in by merge.
+- **`lint:board` could not find the board.** It looks for a sibling directory spelled WebFPVSimulator-LeaderBoard,
+  and the clone here is spelled webfpvsimulator-leaderboard. A symlink outside the repository made it run. It
+  did not touch the repository, and the check passed against the board branch's server.
+- **The builder's agent could not know the simulator's `session.js` comment** said a `new` intent was never read,
+  and left it. Corrected here, with the one in `input-check.js`.
+
+### Checks
+
+All of these on the merged tree, 8f6487c and the follow-ups after it:
+
+    lint:shell        PASS at 1600x900, with the fold pass at three windows and the board door names
+    lint:input        all 220 passed
+    lint:devices      PASS
+    lint:responsive   PASS
+    lint:board        PASS, against the board branch's server on 127.0.0.1
+    lint:fc           33 of 33 traces clean
+    lint:presets      4 of 4 clean
+    lint:preload      up to date
+    lint:nouns        PASS, 13 retired names, one argued exception
+    check:clip        1826 passed, 0 failed
+    check:builder     PASS
+    link:selftest     all passed (run before the merge; nothing in it moved)
+    board repo        npm test all passed, one skip that needs BOARD_SELFTEST_PASSWORD; lint:nouns PASS;
+                      lint:licence, all 29 files carry the notice
+    not run           npm run verify: nothing here touches physics, the plant, the module ABI or the build.
+                      main.js changed only where a notice is drawn. shots.js: the scratch rig took the
+                      pictures, at 1600x900, 1280x720, 844x390 with touch and 390x844.

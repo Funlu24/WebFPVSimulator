@@ -2198,14 +2198,16 @@ async function builderChooserPages() {
     const picked = await page.evaluate(CHOOSER_STATE).then(JSON.parse);
     check('Enter on Freestyle is the switch\'s Freestyle: the map canvas, and the bar says so',
       !picked.choosing && picked.canvas === 'freestyle' && picked.bar.join() === 'Freestyle', JSON.stringify(picked));
+    /* Five inch, the switch's words since MENUS-PLAN.md 4.1: it read 5 inch
+     * beside Whoop and Freestyle, the only one of the three in figures. */
     const pressed = await page.evaluate(`(() => { const b = [...document.querySelectorAll('.tb-class-btn')]
-      .find((x) => x.textContent === '5 inch');
+      .find((x) => x.textContent === 'Five inch');
       if (!b) { return false; }
       b.click();
       return true; })()`).catch(() => false);
     const back = await page.evaluate(CHOOSER_STATE).then(JSON.parse);
     check('the switch in the bar is still there and still changes it back',
-      pressed && back.canvas === 'full' && back.bar.join() === '5 inch' && !back.choosing, JSON.stringify(back));
+      pressed && back.canvas === 'full' && back.bar.join() === 'Five inch' && !back.choosing, JSON.stringify(back));
     await page.evaluate('(() => { location.reload(); return 1; })()').catch(() => {});
     await page.until('!!window.trackBuilder', 60000).catch(() => {});
     const reloaded = await page.evaluate(CHOOSER_STATE).then(JSON.parse);

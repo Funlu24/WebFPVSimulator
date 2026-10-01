@@ -1,5 +1,17 @@
 # Menus: a review, and a plan to streamline and fine tune
 
+> **Status, 2026-10-01.** Every stage below is built, on branch
+> `ccr-cfd60e7e-7w2588` in this repository (simulator and builder) and in
+> WebFPVSimulator-LeaderBoard (the board). Nothing is on main in either. The
+> PROGRESS.md entry of the same date says what was built, how the owner's ten
+> calls were taken, what the checks showed and what went wrong. Not built:
+> the held roll that hands the sticks back (2.9, M); on the builder, fractional
+> inches on whoop pieces, pinch zoom in the 3D preview on touch, and phone
+> drawers that are modal; on the board, folding the Maps toolbar behind Filter
+> on a phone. Before the board is deployed, set `BUGS_TOKEN` on the Render
+> service or give whatever reads tickets the admin token: the inbox fails
+> closed now.
+
 The owner asked on 2026-10-01: "The menu systems through the game, map
 builders and tracks and times page have grown in complexity over the last
 month. Please undertake a full uiux review of the menu systems and make a
