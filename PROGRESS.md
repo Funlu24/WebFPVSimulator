@@ -62536,3 +62536,16 @@ assign axes by hand is a feature for the owner; the check step's R and M already
   lint:input run today and in the other session's run of main's tip. Five runs of that section alone under two
   busy CPU loops passed 40 of 40, so it is not root caused. Its samples now carry the craft's mode, landed and
   the screen, so the next failure says whether the quad was flying. Nothing was loosened.
+
+### The owner's answer, 2026-10-01, and the push to main
+
+"push to main", after the summary above: what was fixed, what was left open and why, the lead on the Android
+flicker that two pilots could test in a minute, and the verification scale asked for, which was not chosen. So
+nothing beyond the checks listed under Tests was run, and nobody has flown any of it yet. Nothing was written to
+the board: bug-ddfe1c6d, bug-693b9ed4, bug-f06287ff and the four Android yaw tickets stay open there until the
+owner asks for them to be closed, which is the practice once a fix is live.
+
+main had not moved from f745664, fetched and checked just before the push, and the merge base with the branch
+was f745664 itself, so it goes to main as a fast-forward of ccr-07e2c12d-fuvn2z: the Android copy (9687cbe),
+the per aircraft settings and edits (1fe8e43), the wizard's hint (19c79d7), the entry above (e4ecc76) and this
+record, with no merge commit, no rebase and no force.
