@@ -193,6 +193,21 @@ export function exactDate(iso) {
 }
 
 /*
+ * AN ERROR'S OWN WORDS, AS A SENTENCE IN A LINE OF OURS, or nothing. A
+ * browser's words for a request that never arrived ("Failed to fetch", "Load
+ * failed", "NetworkError when attempting to fetch resource.") say nothing the
+ * line round them does not, and with no full stop of their own they ran on
+ * into the next sentence: "Failed to fetch Your own tracks are in Load".
+ */
+export function errorSentence(e) {
+  const text = String((e && e.message) || e || '').trim();
+  if (!text || /^(failed to fetch|load failed|networkerror\b|typeerror: failed to fetch)/i.test(text)) {
+    return '';
+  }
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/*
  * WHICH SAVED DOCUMENTS A CANVAS'S LOAD LISTS. listTracks in ./storage.js
  * already keeps maps and tracks apart; this keeps the five inch's and the
  * whoop's apart too, because a whoop track opened from the five inch canvas

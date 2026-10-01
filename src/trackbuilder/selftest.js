@@ -140,7 +140,7 @@ import {
 } from './storage.js';
 import {
   CANVAS_WORDS, CANVAS_ORDER, canvasOf, wordsFor, simulatorLink, isPlaceholderName, changedAgo, exactDate,
-  rowsForCanvas,
+  rowsForCanvas, errorSentence,
 } from './words.js';
 import { FPV_FLOOR_CLEAR, FPV_NEAR_CLEAR, fpvLensClear } from '../render/lens.js';
 
@@ -9578,6 +9578,13 @@ async function suiteMenus() {
   check('and a stamp that is not a date says nothing', changedAgo('not a date', now) === '' && changedAgo(undefined, now) === '');
   check('the row\'s title has the whole date', /29 September 2026/.test(exactDate('2026-09-29T12:00:00Z')), exactDate('2026-09-29T12:00:00Z'));
   check('and nothing for a stamp that is not one', exactDate('nonsense') === '');
+
+  /* ---- an error inside a line of ours ---- */
+  check('a browser\'s own words for a request that never arrived add nothing, and are left out',
+    ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.', new TypeError('Failed to fetch')].every((e) => errorSentence(e) === ''));
+  check('any other message is a sentence, with its full stop',
+    errorSentence(new Error('The board did not answer within 8 s.')) === 'The board did not answer within 8 s.'
+    && errorSentence(new Error('The board is asleep')) === 'The board is asleep.' && errorSentence(null) === '');
 
   /* ---- the tags a whoop track is offered (decision 17) ---- */
   const tagIds = (cls) => tagsForClass(cls).map((t) => t.id);

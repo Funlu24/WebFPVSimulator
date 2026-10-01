@@ -72,7 +72,7 @@ import {
 /* What each canvas calls things, and the address back to the simulator. */
 import {
   CANVAS_WORDS, CANVAS_ORDER, canvasOf, wordsFor, simulatorLink, isPlaceholderName, changedAgo, exactDate,
-  rowsForCanvas,
+  rowsForCanvas, errorSentence,
 } from './words.js';
 /* The yard Your map flies while the map seat is empty, and the showpiece
  * built on it, the yard with a drift course and a tandem, listed in Load
@@ -657,7 +657,7 @@ export class App {
         } catch (e) {
           /* Left in the address, so a reload asks the board again: a board
            * that was asleep is the usual reason, and it wakes. */
-          this.toast(`Could not open that published track. ${e.message || e} Reload to try again.`);
+          this.toast(['Could not open that published track.', errorSentence(e), 'Reload to try again.'].filter(Boolean).join(' '));
           return;
         }
         /* Read: a reload from here on is the author reloading their copy. */
@@ -3049,7 +3049,7 @@ export class App {
       if (!shown.box.isConnected) {
         return;
       }
-      status.textContent = `The board could not be reached, so its tracks cannot be listed. ${e.message || ''} Your own tracks are in Load, and ${fromNothing}`.replace(/\s+/g, ' ');
+      status.textContent = ['The board could not be reached, so its tracks cannot be listed.', errorSentence(e), `Your own tracks are in Load, and ${fromNothing}`].filter(Boolean).join(' ');
       const again = document.createElement('button');
       again.type = 'button';
       again.className = 'tb-btn';
@@ -3060,10 +3060,9 @@ export class App {
       load.className = 'tb-btn';
       load.textContent = 'Load';
       load.addEventListener('click', () => this.openLoad());
-      const row = document.createElement('div');
-      row.className = 'tb-row-btns';
-      row.append(again, load);
-      list.append(row);
+      /* On the dialog's own row, beside Close, rather than a second row of
+       * buttons above it. */
+      shown.close.before(again, load);
       return;
     }
     /* The dialog may have been closed while the board answered. */
@@ -3111,7 +3110,7 @@ export class App {
         } catch (e) {
           open.disabled = false;
           open.textContent = 'Open a copy';
-          status.textContent = `"${t.name}" could not be fetched from the board. ${e.message || ''}`.trim();
+          status.textContent = [`"${t.name}" could not be fetched from the board.`, errorSentence(e)].filter(Boolean).join(' ');
         }
       });
       row.append(name, open);
