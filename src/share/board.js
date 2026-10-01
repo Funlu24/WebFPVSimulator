@@ -194,12 +194,29 @@ function usableBoardOrigin(origin) {
  * the airframe id, so whichever the caller holds is fine. Omitted entirely
  * when nothing is passed, so a link built without one leaves the board on
  * whatever the visitor chose last.
+ *
+ * `subject` names the one track or map the link is about, as { track } or
+ * { map }, and the board opens that sheet: it turns ?track=id and ?map=id
+ * into its own #track= and #map= before it routes (adoptSharedLink in the
+ * board's public/app.js). Every row that says "This track on Tracks and
+ * times" passes one. Before 2026-10-01 none could, so a row promising "the
+ * public page for" a track opened the board's front page (MENUS-PLAN.md 5.1).
  */
-export function boardPageUrl(origin, craft) {
+export function boardPageUrl(origin, craft, subject = {}) {
   const base = usableBoardOrigin(origin)
     || usableBoardOrigin(boardOrigin())
     || defaultBoardOrigin();
-  return craft ? `${base}/?craft=${encodeURIComponent(craft)}` : `${base}/`;
+  const params = new URLSearchParams();
+  if (craft) {
+    params.set('craft', craft);
+  }
+  if (subject && subject.track) {
+    params.set('track', subject.track);
+  } else if (subject && subject.map) {
+    params.set('map', subject.map);
+  }
+  const query = params.toString();
+  return query ? `${base}/?${query}` : `${base}/`;
 }
 
 /*
