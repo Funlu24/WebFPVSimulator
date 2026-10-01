@@ -31,7 +31,7 @@
  */
 
 import {
-  ELEMENTS, KIND, PATH_TOGGLE, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, countElementsByType,
+  ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, countElementsByType,
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
   applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
   elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits,
@@ -59,6 +59,10 @@ import { isRoomType, clampRoomSize, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../prop
  * inspectors: the same answers the plan draws and the physics is handed. */
 import { roadOf } from '../maps/built/road.js';
 import { DRIFT } from '../maps/built/traffic.js';
+/* What each canvas calls its ground and its documents. */
+import { wordsFor, CANVAS_WORDS } from './words.js';
+/* The parts a track cannot be published with yet, marked on the palette. */
+import { BOARD_UNKNOWN_TYPES } from '../share/board.js';
 
 /* The small mark a chip on the lap strip wears for the piece it is a pass of. */
 const CHIP_KINDS = {
@@ -72,11 +76,14 @@ const CHIP_KINDS = {
 const KMH = 3.6;
 
 /*
- * THE WORDS OF A WHOOP CANVAS. The panels were written in the model's words,
- * and a pilot who has never seen the tool does not know what a sill is, or
- * that Yaw is which way a gate faces, or what a face flipped is for. On a whoop
- * canvas each is said the way a person building the track says it. The model,
- * the file and the five inch canvas keep theirs.
+ * THE PLAIN WORDS. The panels were written in the model's words, and a pilot
+ * who has never seen the tool does not know what a sill is, or that Yaw is
+ * which way a gate faces, or what a face flipped is for. The whoop canvas
+ * learned to say each the way a person building the track says it, and the
+ * five inch and the map say them the same way now (MENUS-PLAN.md 4.2b): one
+ * piece is not called two things on two canvases. A room has a floor and the
+ * other two have the ground, which is the one word that differs (say). The
+ * model and the file keep theirs.
  */
 const WHOOP_WORDS = {
   'Sill height': 'Height off floor',
@@ -95,6 +102,7 @@ const WHOOP_WORDS = {
 /* Inches, because the rules and the pipe are in them, with the millimetres
  * beside; the document stays in metres. */
 const IN = 0.0254;
+const FT = 0.3048;
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
 
 function el(tag, cls, text) {
@@ -371,8 +379,14 @@ export class Panels {
     this.paletteClass = cls;
     this.paletteMode = mode;
     this.paletteButtons = new Map();
-    this.pathButton = null;
 
+    /* A phone's palette is a drawer, with its own close button; the
+     * stylesheet shows it only there. */
+    const close = button('×', 'tb-tools-x', () => this.host.closeTools(), 'Close the palette. Esc');
+    close.setAttribute('aria-label', 'Close the palette');
+    host.append(close);
+    /* Shown only while the five inch or map preview is up: see previewNote. */
+    host.append(this.previewNote());
     if (mode === 'freestyle') {
       this.buildFreestylePalette(host, cls);
       return;
@@ -383,15 +397,12 @@ export class Panels {
     const extra = el('div', 'tb-group');
     extra.append(el('h3', null, 'Extra'));
 
+    const place = CANVAS_WORDS[cls === 'micro' ? 'micro' : 'full'].place;
+    const ground = CANVAS_WORDS[cls === 'micro' ? 'micro' : 'full'].ground;
     for (const def of paletteItems(cls)) {
-      const b = el('button', 'tb-tool');
-      b.type = 'button';
-      b.title = def.note;
-      /* A table, a chair and a banner have no key of their own: the letters ran
-       * out. They keep an empty chip so the labels still line up. */
-      b.append(el('span', def.key ? 'tb-tool-key' : 'tb-tool-key none', def.key || ''), el('span', 'tb-tool-label', labelOf(def.id, cls)));
-      b.addEventListener('click', () => this.host.arm(def.id));
-      this.paletteButtons.set(def.id, b);
+      const b = this.toolButton(def.id, def.key, labelOf(def.id, cls), def.id === 'groundLogo'
+        ? `A sponsor logo painted on the ${ground}. Pick which of the logos it wears, and its size, in the inspector.`
+        : def.note);
       (def.group === 'track' ? track : extra).append(b);
     }
 
@@ -401,26 +412,69 @@ export class Panels {
       tools = el('div', 'tb-group');
       tools.append(el('h3', null, 'Tools'));
       for (const t of WHOOP_TOOLS) {
-        const b = el('button', 'tb-tool');
-        b.type = 'button';
-        b.title = t.note;
-        b.append(el('span', 'tb-tool-key', t.key), el('span', 'tb-tool-label', t.label));
-        b.addEventListener('click', () => this.host.arm(t.id));
-        this.paletteButtons.set(t.id, b);
-        tools.append(b);
+        tools.append(this.toolButton(t.id, t.key, t.label, t.note));
       }
     }
 
-    const pathBtn = el('button', 'tb-tool');
-    pathBtn.type = 'button';
-    pathBtn.title = PATH_TOGGLE.note;
-    pathBtn.append(el('span', 'tb-tool-key', PATH_TOGGLE.key), el('span', 'tb-tool-label', PATH_TOGGLE.label));
-    pathBtn.addEventListener('click', () => this.host.togglePath());
-    this.pathButton = pathBtn;
-    extra.append(pathBtn);
-
+    /*
+     * NO PATH HERE. The palette had a Path toggle that was the bar's Show line
+     * a second time, and it stayed lit while the line showed, like an armed
+     * tool that was not armed (MENUS-PLAN.md 1.23). Show line on the bar is
+     * the one switch, and P is still its key.
+     */
     host.append(...(tools ? [track, tools, extra] : [track, extra]));
-    host.append(el('p', 'tb-help', 'Press a key or click a tool, then click the field. The tool stays armed, so ten gates are ten clicks. Escape or right click puts it away.'));
+    host.append(el('p', 'tb-help', `Press a key or click a tool, then click the ${place}. The tool stays armed, so ten gates are ten clicks. Escape or right click puts it away.`));
+  }
+
+  /*
+   * BUILD IN 2D. On the five inch and map canvases the 3D view is a preview: a
+   * click there places nothing, and the palette used to look exactly as armed
+   * and ready as it does in 2D (MENUS-PLAN.md 4.2). While the preview is up the
+   * tools are quieted and this says where building happens; a tool picked
+   * anyway opens 2D with it in hand (pickTool in app.js). The stylesheet shows
+   * it, by body.tb-in-3d, and never on the whoop canvas, whose 3D is the tool.
+   */
+  previewNote() {
+    const box = el('div', 'tb-preview-note');
+    box.append(
+      el('strong', null, 'Build in 2D'),
+      el('span', null, 'The 3D view is a preview. Pick a tool and 2D opens with it in hand.'),
+      button('Back to 2D', 'tb-btn', () => this.host.show2d(), 'The plan, where pieces are placed. V'),
+    );
+    return box;
+  }
+
+  /*
+   * ONE TOOL ON THE PALETTE: its key, its name, and on a whoop canvas, for the
+   * parts the board does not know yet, a line saying so (MENUS-PLAN.md 4.3a).
+   * The author learned that a table, a hoop or a cube could not be published
+   * only by pressing Publish with one placed; said here, it is learned before
+   * it is placed. BOARD_UNKNOWN_TYPES in src/share/board.js is the list, and
+   * the line goes when the board learns them and that list is emptied.
+   */
+  toolButton(id, key, label, note) {
+    const b = el('button', 'tb-tool');
+    b.type = 'button';
+    b.dataset.tool = id;
+    /* A tool with no key of its own (the letters ran out) keeps an empty chip,
+     * so the labels still line up. */
+    b.append(el('span', key ? 'tb-tool-key' : 'tb-tool-key none', key || ''));
+    /* The label alone in its own span, which is what anything finding a tool
+     * by its name reads; the note stands under it, beside it in the markup. */
+    const words = el('span', 'tb-tool-words');
+    words.append(el('span', 'tb-tool-label', label));
+    const notOnBoard = BOARD_UNKNOWN_TYPES.includes(id) || id === 'cube';
+    if (notOnBoard) {
+      b.classList.add('tb-tool-local');
+      words.append(el('span', 'tb-tool-note', 'Not on the board yet'));
+      b.title = `${note} Not on the board yet: a track with one flies and shares as a link, and cannot be published until the board learns it.`;
+    } else {
+      b.title = note;
+    }
+    b.append(words);
+    b.addEventListener('click', () => this.host.pickTool(id));
+    this.paletteButtons.set(id, b);
+    return b;
   }
 
   /*
@@ -452,16 +506,14 @@ export class Panels {
     extra.append(el('h3', null, 'Extra'));
     groups.set('extra', extra);
 
+    const ground = wordsFor(this.host.doc).ground;
     for (const def of paletteItems(cls, 'freestyle')) {
-      const b = el('button', 'tb-tool');
-      b.type = 'button';
-      b.title = def.note;
       /* Three assets have no key of their own: the digits and the free
        * letters ran out before the list did. They keep an empty chip so the
        * labels still line up. */
-      b.append(el('span', def.key ? 'tb-tool-key' : 'tb-tool-key none', def.key || ''), el('span', 'tb-tool-label', def.label));
-      b.addEventListener('click', () => this.host.arm(def.id));
-      this.paletteButtons.set(def.id, b);
+      const b = this.toolButton(def.id, def.key, def.label, def.id === 'groundLogo'
+        ? `A sponsor logo painted on the ${ground}. Pick which of the logos it wears, and its size, in the inspector.`
+        : def.note);
       (groups.get(paletteGroupOf(def)) ?? course).append(b);
     }
     for (const div of groups.values()) {
@@ -475,9 +527,7 @@ export class Panels {
   renderPalette() {
     for (const [id, b] of this.paletteButtons) {
       b.classList.toggle('on', this.host.armed === id);
-    }
-    if (this.pathButton) {
-      this.pathButton.classList.toggle('on', this.host.pathVisible);
+      b.setAttribute('aria-pressed', this.host.armed === id ? 'true' : 'false');
     }
     /* What the pointer does now is said by the coach line, and whether the card
      * shows changes the moment a tool is armed or put away. */
@@ -485,6 +535,7 @@ export class Panels {
     this.renderCard();
     this.renderEmpty();
     this.renderLapBar();
+    this.host.syncToolsBtn?.();
   }
 
   /* ---------------- render entry point ---------------- */
@@ -531,9 +582,14 @@ export class Panels {
 
   /* ---------------- inspector ---------------- */
 
-  /* A word, in the whoop canvas's own where it has one. */
+  /* A word, in the plain words where there is one: off the floor in a room,
+   * off the ground on a field or a plot. */
   say(word) {
-    return this.host.isWhoopRace() ? (WHOOP_WORDS[word] ?? word) : word;
+    const plain = WHOOP_WORDS[word];
+    if (!plain) {
+      return word;
+    }
+    return this.host.isWhoopRace() ? plain : plain.replace('off floor', 'off the ground');
   }
 
   field(key, label, value, onCommit, opts = {}) {
@@ -601,9 +657,60 @@ export class Panels {
     });
     row.append(input);
     if (opts.suffix) {
-      row.append(el('span', 'tb-field-suffix', opts.suffix));
+      /* A field's unit is in its label and the suffix is hidden, except the
+       * millimetres the whoop canvas prints under an inch field, which are the
+       * other unit in small print and are shown wherever they are. */
+      row.append(el('span', opts.mm ? 'tb-field-suffix tb-field-mm' : 'tb-field-suffix', opts.suffix));
     }
     return row;
+  }
+
+  /*
+   * ONE UNIT AND ONE ORIGIN ON A CANVAS (MENUS-PLAN.md 4.2a).
+   *
+   * The whoop canvas gave one piece in three ways: its card in inches from the
+   * middle of the room, the drawer in metres from a corner, and the readout in
+   * metres. A pilot in a hall with a tape measure reads inches, and the middle
+   * of the room is where the game puts a track, so the card's way is the
+   * canvas's way: every length of a piece in inches, every place in inches
+   * from the middle, and the millimetres under each in small print. The other
+   * two canvases are in metres from the corner, as their rulers are. The
+   * document is in metres from the corner whatever is shown.
+   */
+  inches() {
+    return this.host.isWhoopRace();
+  }
+
+  /* A length field: metres on a field or a plot, inches over millimetres in a
+   * room. `onCommit` is handed metres either way. */
+  lengthField(key, label, metres, onCommit, opts = {}) {
+    if (!this.inches()) {
+      return this.field(key, label, metres, onCommit, {
+        suffix: 'm', step: opts.step, places: opts.places, min: opts.min, max: opts.max,
+      });
+    }
+    return this.field(key, `${this.say(label)} (in)`, metres / IN, (val) => onCommit(round6(val * IN)), {
+      step: opts.stepIn ?? 1,
+      places: opts.placesIn ?? 1,
+      min: opts.min != null ? opts.min / IN : undefined,
+      max: opts.max != null ? opts.max / IN : undefined,
+      suffix: `${Math.round(metres * 1000)} mm`,
+      mm: true,
+    });
+  }
+
+  /* X or Y of a piece: from the corner in metres, or from the middle of the
+   * room in inches. `onCommit` is handed the document's own coordinate. */
+  placeField(key, axis, element, onCommit) {
+    const doc = this.host.doc;
+    const at = element.position[axis];
+    if (!this.inches()) {
+      return this.field(key, axis.toUpperCase(), at, onCommit, { suffix: 'm' });
+    }
+    const mid = axis === 'x' ? doc.field.width / 2 : doc.field.depth / 2;
+    return this.field(key, `${axis.toUpperCase()} (in)`, (at - mid) / IN, (val) => onCommit(round6(mid + val * IN)), {
+      step: 1, places: 1, suffix: `${Math.round((at - mid) * 1000)} mm`, mm: true,
+    });
   }
 
   renderInspector() {
@@ -612,7 +719,10 @@ export class Panels {
     const doc = this.host.doc;
     const ids = [...this.host.selection];
 
-    host.append(el('h3', null, ids.length === 1 ? 'Element' : (ids.length ? `${ids.length} selected` : 'Field')));
+    /* With nothing selected the panel is about the ground everything stands
+     * on, named the canvas's way: a field, a room or a plot. It said Field on
+     * all three (MENUS-PLAN.md 4.1). */
+    host.append(el('h3', null, ids.length === 1 ? 'Element' : (ids.length ? `${ids.length} selected` : wordsFor(doc).area)));
 
     if (ids.length === 0) {
       this.renderFieldSettings(host, doc);
@@ -688,17 +798,17 @@ export class Panels {
     const flat = def.kind === KIND.DECAL || standsOnGround(doc, element);
     const grid = el('div', flat ? 'tb-grid2' : 'tb-grid3');
     grid.append(
-      this.field(`x-${element.id}`, 'X', element.position.x, (val) => {
+      this.placeField(`x-${element.id}`, 'x', element, (val) => {
         this.host.edit('move', (d) => { elementById(d, element.id).position.x = val; });
-      }, { suffix: 'm' }),
-      this.field(`y-${element.id}`, 'Y', element.position.y, (val) => {
+      }),
+      this.placeField(`y-${element.id}`, 'y', element, (val) => {
         this.host.edit('move', (d) => { elementById(d, element.id).position.y = val; });
-      }, { suffix: 'm' }),
+      }),
     );
     if (!flat) {
-      grid.append(this.field(`z-${element.id}`, 'Base', element.position.z, (val) => {
+      grid.append(this.lengthField(`z-${element.id}`, 'Base', element.position.z, (val) => {
         this.host.edit('height', (d) => { elementById(d, element.id).position.z = val; });
-      }, { suffix: 'm' }));
+      }));
     }
     host.append(grid);
 
@@ -714,7 +824,7 @@ export class Panels {
        * the terms the task uses: zero is a vertical gate, 90 is flown
        * straight down through.
        */
-      host.append(this.field(`pitch-${element.id}`, 'Tilt', element.pitch * DEG, (val) => {
+      host.append(this.field(`pitch-${element.id}`, this.inches() ? 'Tilt (degrees)' : 'Tilt', element.pitch * DEG, (val) => {
         this.host.edit('tilt', (d) => {
           const e2 = elementById(d, element.id);
           e2.pitch = Math.max(-90, Math.min(90, val)) * RAD;
@@ -746,7 +856,10 @@ export class Panels {
         continue;
       }
       const isCount = key === 'levels' || key === 'pads';
-      dims.append(this.field(`dim-${element.id}-${key}`, shape !== 'square' && key === 'clearW' ? (shape === 'circle' ? 'Diameter' : 'Across the points') : (DIM_LABELS[key] ?? key), element.dims[key], (val) => {
+      const label = shape !== 'square' && key === 'clearW' ? (shape === 'circle' ? 'Diameter' : 'Across the points') : (DIM_LABELS[key] ?? key);
+      /* A count is a count on every canvas; a length is in the canvas's unit. */
+      const make = isCount ? this.field.bind(this) : this.lengthField.bind(this);
+      dims.append(make(`dim-${element.id}-${key}`, label, element.dims[key], (val) => {
         this.host.edit('resize', (d) => {
           const e2 = elementById(d, element.id);
           /* Furniture is held to what a room can have; everything else may be
@@ -843,7 +956,8 @@ export class Panels {
     /* A marker nobody has turned shows the way its square sits, which is
      * what a typed heading turns it from: see shownYaw in app.js. */
     const yaw = this.host.shownYaw ? this.host.shownYaw(element) : element.yaw;
-    host.append(this.field(`yaw-${element.id}`, 'Yaw', yaw * DEG, (val) => {
+    /* Turn, in degrees, said as the card says it on the whoop canvas. */
+    host.append(this.field(`yaw-${element.id}`, this.inches() ? 'Turn (degrees)' : 'Yaw', yaw * DEG, (val) => {
       this.host.setElementYaw(element.id, val * RAD);
     }, { suffix: 'deg', step: quarter ? 90 : 5, places: 1 }));
     if (quarter) {
@@ -1284,10 +1398,13 @@ export class Panels {
   renderDecalLogoPicker(host, doc, element) {
     host.append(el('h3', null, 'Which logo'));
     const logos = logosOf(doc);
+    /* Grass on a field, the floor in a room and whatever the plot is paved
+     * with on a map: see wordsFor. */
+    const w = wordsFor(doc);
     if (!logos.length) {
-      host.append(el('p', 'tb-help', 'This track carries no sponsor logos yet. Add one under Sponsor logos, and every footprint on the grass can wear it.'));
+      host.append(el('p', 'tb-help', `This ${w.noun} carries no sponsor logos yet. Add one under Sponsor logos, and every footprint on the ${w.ground} can wear it.`));
       host.append(button('Sponsor logos', 'tb-btn', () => this.host.openLogo(),
-        'Upload up to five sponsors\u2019 logos for this track'));
+        `Add up to five sponsors\u2019 logos to this ${w.noun}`));
       return;
     }
     const current = logoForDecal(doc, element);
@@ -1313,7 +1430,7 @@ export class Panels {
     host.append(grid);
     host.append(el('p', 'tb-help', current
       ? `${current.name || `Logo ${logos.indexOf(current) + 1}`}, fitted inside the ${show(element.dims.width, 1)} by ${show(element.dims.depth, 1)} m footprint above. Resize the footprint to match its shape and it fills more of it.`
-      : 'The logo this footprint named is no longer on the track. Pick one, or the grass stays plain.'));
+      : `The logo this footprint named is no longer on the ${w.noun}. Pick one, or the ${w.ground} stays plain.`));
   }
 
   /* What a preset says its size is for the shape it would be given: "28 x 28 in" for a gate, "28 in across"
@@ -1394,21 +1511,25 @@ export class Panels {
     const base = element.position.z;
     const top = base + elementHeight(def, element.dims);
     if (levels.length > 1) {
-      host.append(el('p', 'tb-help', 'Level spacing is the rise from one opening to the next, sill to sill. Two openings share one frame tube, so the natural spacing is the opening height plus the tube, which is what a preset sets.'));
+      host.append(el('p', 'tb-help', `${this.say('Level spacing')} is the rise from one opening to the next, sill to sill. Two openings share one frame tube, so the natural spacing is the opening height plus the tube, which is what a preset sets.`));
     }
+    /* In the canvas's unit: see lengthField. */
+    const u = this.inches() ? ' in' : ' m';
+    const n = (m) => (this.inches() ? show(m / IN, 1) : show(m, 2));
     const sills = levels
-      .map((ap, i) => `${i + 1}: sill ${show(base + ap.sillH, 2)} m, centre ${show(base + ap.centerH, 2)} m`)
+      .map((ap, i) => `${i + 1}: sill ${n(base + ap.sillH)}${u}, centre ${n(base + ap.centerH)}${u}`)
       .join('. ');
     const shape = apertureShapeOf(element);
     const one = shape === 'circle'
-      ? `One round opening ${show(element.dims.clearW, 2)} m across`
+      ? `One round opening ${n(element.dims.clearW)}${u} across`
       : (shape === 'hex'
-        ? `One six sided opening ${show(element.dims.clearW, 2)} m across the points and ${show(element.dims.clearH, 2)} m across the flats`
-        : `One opening ${show(element.dims.clearW, 2)} by ${show(element.dims.clearH, 2)} m`);
+        ? `One six sided opening ${n(element.dims.clearW)}${u} across the points and ${n(element.dims.clearH)}${u} across the flats`
+        : `One opening ${n(element.dims.clearW)} by ${n(element.dims.clearH)}${u}`);
+    const ground = this.inches() ? 'the floor' : 'the ground';
     const what = levels.length > 1
-      ? `${levels.length} openings of ${show(element.dims.clearW, 2)} by ${show(element.dims.clearH, 2)} m. ${sills}.`
-      : `${one}, centre ${show(base + levels[0].centerH, 2)} m above the ground.`;
-    host.append(el('p', 'tb-fig-blurb', `${what} Top of the structure ${show(top, 2)} m.`));
+      ? `${levels.length} openings of ${n(element.dims.clearW)} by ${n(element.dims.clearH)}${u}. ${sills}.`
+      : `${one}, centre ${n(base + levels[0].centerH)}${u} above ${ground}.`;
+    host.append(el('p', 'tb-fig-blurb', `${what} Top of the structure ${n(top)}${u}.`));
   }
 
   /*
@@ -1486,7 +1607,7 @@ export class Panels {
       el('span', 'tb-card-title', title),
     );
     if (seq.overridden || element.yawOverridden) {
-      head.append(el('span', 'tb-badge', 'overridden'));
+      head.append(el('span', 'tb-badge', this.say('set')));
     }
     card.append(head);
 
@@ -1497,7 +1618,8 @@ export class Panels {
       const sel = el('select');
       sel.dataset.tbkey = `lvl-${seq.id}`;
       levels.forEach((ap, i) => {
-        const opt = el('option', null, `${levelName(element, i)}, centre ${show(element.position.z + ap.centerH, 2)} m`);
+        const centre = element.position.z + ap.centerH;
+        const opt = el('option', null, `${levelName(element, i)}, centre ${this.inches() ? `${show(centre / IN, 1)} in` : `${show(centre, 2)} m`}`);
         opt.value = String(i);
         if (i === (seq.apertureIndex ?? 0)) {
           opt.selected = true;
@@ -1513,14 +1635,14 @@ export class Panels {
 
     if (kindOf(element) === KIND.MARKER) {
       card.append(el('p', 'tb-help', 'The green square is the space you have to fly through. Drag the round handle on the plan to swing it anywhere round the marker, all the way round. Flip side sends it to the opposite side, and Re-derive hands it back to the automatic rule, which is the outside of the turn.'));
-      card.append(this.field(`clr-${seq.id}`, 'Clearance', seq.clearance ?? 0, (val) => {
+      card.append(this.lengthField(`clr-${seq.id}`, 'Clearance', seq.clearance ?? 0, (val) => {
         this.host.edit('clearance', (d) => {
           const s2 = d.sequence.find((x) => x.id === seq.id);
           if (s2) {
             s2.clearance = Math.max(0, val);
           }
         });
-      }, { suffix: 'm', step: 0.1 }));
+      }, { step: 0.1, min: 0 }));
     }
 
     const row = el('div', 'tb-row-btns');
@@ -1553,21 +1675,26 @@ export class Panels {
      */
     {
       const micro = trackClassOf(doc) === 'micro';
-      host.append(el('h3', null, 'Track'));
       const line = el('p', 'tb-help');
-      line.append(el('strong', null, micro ? 'RaceGOW micro' : 'Full size'));
+      line.append(el('strong', null, CANVAS_WORDS[micro ? 'micro' : 'full'].kind));
       line.append(document.createTextNode(micro
-        ? ': a 65 mm whoop in a room. Gates 24 to 28 in, adjacent gates 30 in centre to centre, and the whole track inside 4 by 6 ft at the smallest gate, scaled up with them. Grid is one inch.'
-        : ': a 5 inch quad on a field. MultiGP gate sizes, grid in metres.'));
+        ? ': RaceGOW, for a 65 mm whoop in a room. Gates 24 to 28 in, adjacent gates 30 in centre to centre, and the whole track inside 4 by 6 ft at the smallest gate, scaled up with them. Every piece is measured in inches from the middle of the room, and the grid is one inch.'
+        : ': a five inch quad on a field. MultiGP gate sizes, and every piece measured in metres from the corner of the field.'));
       host.append(line);
     }
-    host.append(el('h3', null, 'Field'));
+    /* Size, not Field a second time: the panel's own heading already names
+     * the ground, the canvas's way. */
+    host.append(el('h3', null, 'Size'));
     const grid = el('div', 'tb-grid3');
+    const micro = trackClassOf(doc) === 'micro';
     grid.append(
-      this.field('field-w', 'Width', doc.field.width, (val) => {
+      /* A room's walls are said in metres even on the whoop canvas, where a
+       * piece is in inches: a hall is ten by twelve metres to the people who
+       * book it, and 394 by 472 in is nobody's room. The label says which. */
+      this.field('field-w', micro ? 'Width (m)' : 'Width', doc.field.width, (val) => {
         this.host.edit('field', (d) => { d.field.width = Math.max(5, val); });
       }, { suffix: 'm', step: 1 }),
-      this.field('field-d', 'Depth', doc.field.depth, (val) => {
+      this.field('field-d', micro ? 'Depth (m)' : 'Depth', doc.field.depth, (val) => {
         this.host.edit('field', (d) => { d.field.depth = Math.max(5, val); });
       }, { suffix: 'm', step: 1 }),
       /*
@@ -1575,13 +1702,16 @@ export class Panels {
        * of which are a MultiGP field's. A RaceGOW grid is ONE INCH, 0.0254,
        * because every dimension their rules publish is a whole number of
        * inches and a metric grid would put none of them on a line. The floor
-       * has to come down for that to be typeable at all.
+       * has to come down for that to be typeable at all, and on the whoop
+       * canvas it is read in inches, as every length of a piece is.
        */
-      this.field('field-g', 'Grid', doc.field.gridSize, (val) => {
-        this.host.edit('field', (d) => { d.field.gridSize = Math.max(0.005, val); });
-      }, trackClassOf(doc) === 'micro'
-        ? { suffix: 'm', step: 0.0254, places: 4 }
-        : { suffix: 'm', step: 0.5 }),
+      micro
+        ? this.lengthField('field-g', 'Grid', doc.field.gridSize, (val) => {
+          this.host.edit('field', (d) => { d.field.gridSize = Math.max(0.005, val); });
+        }, { stepIn: 0.5, min: 0.005 })
+        : this.field('field-g', 'Grid', doc.field.gridSize, (val) => {
+          this.host.edit('field', (d) => { d.field.gridSize = Math.max(0.005, val); });
+        }, { suffix: 'm', step: 0.5 }),
     );
     host.append(grid);
 
@@ -1590,9 +1720,9 @@ export class Panels {
       this.host.edit('settings', (d) => { d.settings.tangentScale = Math.max(0.01, val); });
     }, { step: 0.02, places: 3 }));
     host.append(el('p', 'tb-help', 'How long the spline tangents are, as a fraction of the gap to the next knot. About a third draws a circular arc through a right angle. Higher bulges the line wide, lower squares off the corners.'));
-    host.append(this.field('set-radius', 'Warn under radius', doc.settings.minCurveRadius, (val) => {
+    host.append(this.lengthField('set-radius', 'Warn under radius', doc.settings.minCurveRadius, (val) => {
       this.host.edit('settings', (d) => { d.settings.minCurveRadius = Math.max(0.1, val); });
-    }, { suffix: 'm', step: 0.5 }));
+    }, { step: 0.5, stepIn: 1, min: 0.1 }));
     host.append(this.field('set-samples', 'Samples per segment', doc.settings.samplesPerSegment, (val) => {
       this.host.edit('settings', (d) => { d.settings.samplesPerSegment = Math.max(4, Math.round(val)); });
     }, { step: 4, places: 0 }));
@@ -1604,7 +1734,6 @@ export class Panels {
    * freestyle is not offered on the whoop.
    */
   renderPlotSettings(host, doc) {
-    host.append(el('h3', null, 'Map'));
     const line = el('p', 'tb-help');
     line.append(el('strong', null, 'Freestyle map'));
     line.append(document.createTextNode(': a place to fly, with no track through it. Built from the town’s own assets, flown on a five inch, and every solid you place is solid in the air.'));
@@ -1638,7 +1767,8 @@ export class Panels {
     host.append(el('p', 'tb-help', TIME_HELP[scene.time]));
     choose('Ground', SCENE_GROUNDS, GROUND_LABELS, scene.ground, 'ground');
     host.append(el('p', 'tb-help', GROUND_HELP[scene.ground]));
-    host.append(el('h3', null, 'Plot'));
+    /* Size, as on the other canvases: the panel's heading is Plot already. */
+    host.append(el('h3', null, 'Size'));
     const grid = el('div', 'tb-grid3');
     grid.append(
       this.field('field-w', 'Width', doc.field.width, (val) => {
@@ -1661,9 +1791,8 @@ export class Panels {
     const host = this.nodes.sequence;
     host.textContent = '';
     const doc = this.host.doc;
+    /* A map has no flying order, and no panel for one: see the stylesheet. */
     if (docModeOf(doc) === 'freestyle') {
-      host.append(el('h3', null, 'Flying order'));
-      host.append(el('p', 'tb-help', 'A map has no flying order. Fly it any way you like: the gates on it are furniture, and the named gaps are there to be found.'));
       return;
     }
     /* Gates and markers are counted, waypoints are said apart: a waypoint
@@ -1698,16 +1827,20 @@ export class Panels {
       if (seq.entry === 0) {
         face.classList.add('bad');
       }
+      /* Turned by hand is a fact about the pass, so it is said on the pass's
+       * own line rather than beside the name, where its fourteen capitals took
+       * the width the name needed and a name such as "Round the frame pole"
+       * wrapped into four lines. */
+      if (seq.overridden) {
+        face.append(el('span', 'tb-badge tb-badge-inline', this.say('set')));
+      }
       body.append(face);
       li.append(body);
-      if (seq.overridden) {
-        li.append(el('span', 'tb-badge', this.say('set')));
-      }
-      /* Two buttons with a letter and a dash on them, on every row, said in words
-       * on a whoop canvas. */
-      const whoopRows = this.host.isWhoopRace();
-      li.append(button(whoopRows ? 'Reverse' : 'X', 'tb-mini', (e) => { e.stopPropagation(); this.host.flipFace(seq.id); }, 'Flip the face or the pass side'));
-      li.append(button(whoopRows ? 'Remove' : '-', 'tb-mini tb-danger', (e) => { e.stopPropagation(); this.host.removeSequenceEntry(seq.id); }, 'Take it out of the order'));
+      /* Two buttons that said X and a dash on every row, X being the key that
+       * flips a face and reading as "remove" to anybody who did not know it.
+       * Words on every canvas now, as the whoop canvas already had them. */
+      li.append(button('Reverse', 'tb-mini', (e) => { e.stopPropagation(); this.host.flipFace(seq.id); }, 'Flip the face or the pass side. X'));
+      li.append(button('Remove', 'tb-mini tb-danger', (e) => { e.stopPropagation(); this.host.removeSequenceEntry(seq.id); }, 'Take it out of the order'));
 
       li.addEventListener('click', () => {
         if (element) {
@@ -1821,7 +1954,7 @@ export class Panels {
     actions.append(
       copyBtn,
       removeBtn,
-      button('More', 'tb-btn', () => this.host.toggleDrawer(true), 'Everything else about it: the frame, the flag, how a stack is flown'),
+      button('More', 'tb-btn', (e) => this.host.toggleDrawer(true, { from: e.currentTarget, keys: e.detail === 0 }), 'Everything else about it: the frame, the flag, how a stack is flown'),
     );
     const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
     close.setAttribute('aria-label', 'Let go of it');
@@ -2047,6 +2180,10 @@ export class Panels {
     const w = card.offsetWidth;
     const h = card.offsetHeight;
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    /* The open drawer takes the right of the stage, and the card, its close
+     * button above all, keeps out from under it (MENUS-PLAN.md 1.18). */
+    const cover = this.host.drawerCover ? this.host.drawerCover() : 0;
+    rect = { width: Math.max(w + 20, rect.width - cover), height: rect.height };
     /* The first place that does not sit on the piece the card is about: beside
      * it on the right, beside it on the left, above it, below it. The clear
      * space is what the pilot is looking at, so where none is left the card is
@@ -2198,7 +2335,7 @@ export class Panels {
     const add = el('button', armed ? 'tb-chip tb-chip-add on' : 'tb-chip tb-chip-add', '+');
     add.type = 'button';
     add.setAttribute('aria-label', 'Fly order: click the pieces in the order you fly them');
-    add.title = 'Fly order (O). Click the pieces in the order you fly them: a click on a piece again is another pass through it.';
+    add.title = 'Fly order (N). Click the pieces in the order you fly them: a click on a piece again is another pass through it.';
     add.tabIndex = stop === 'add' ? 0 : -1;
     add.addEventListener('focus', () => takeStop(add));
     add.addEventListener('keydown', (e) => { walk(e, add); });
@@ -2263,9 +2400,12 @@ export class Panels {
     const gates = [...gateNumbers(doc).values()].filter((n) => n != null).length;
     const reuse = reuseOf(doc);
     const bad = (this.host.warnings ?? []).filter((w) => w.level === 'warn').length;
-    const fig = (label, value, tone) => {
+    const fig = (label, value, tone, small = '') => {
       const f = el('span', tone ? `tb-lap-fig ${tone}` : 'tb-lap-fig');
       f.append(el('span', null, label), el('b', null, value));
+      if (small) {
+        f.append(el('small', null, small));
+      }
       return f;
     };
     /* Nothing to fly, nothing to show: a lone plus on an empty room is a tool for a lap
@@ -2273,7 +2413,9 @@ export class Panels {
     const anything = doc.sequence.length > 0 || doc.elements.some((e) => isSequenceable(e));
     bar.append(
       ...(anything ? [this.lapStrip()] : []),
-      fig('Length', path ? `${path.length.toFixed(1)} m, ${(path.length / 0.3048).toFixed(0)} ft` : '0 m'),
+      /* Feet, as the room's pieces are inches, and the metres in small print
+       * (MENUS-PLAN.md 4.2a). It was "35.0 m, 115 ft", two units at one size. */
+      fig('Length', path ? `${Math.round(path.length / FT)} ft` : '0 ft', '', path ? `${path.length.toFixed(1)} m` : ''),
       /* Passes are not gates: Track 8 is 14 pieces flown 29 times, and "Gates 29" was wrong about
        * the room it stood in. Said as it is once a piece is flown more than once. */
       reuse.passes > reuse.pieces ? fig('Passes', `${reuse.passes} on ${reuse.pieces} pieces`) : fig('Gates', String(gates)),
@@ -2283,8 +2425,8 @@ export class Panels {
       ...(this.host.armed === 'route' && doc.sequence.length
         ? [button('Start over', 'tb-btn', () => this.host.startOrderOver(), 'Empty the flying order and begin it again, waypoints included. One undo brings it back')]
         : []),
-      button('Build sheet', 'tb-btn', () => this.host.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy'),
-      button('Flying order', 'tb-btn', () => this.host.toggleDrawer(), 'The order the gates are flown in, every warning, and the elevation profile'),
+      button('Build sheet', 'tb-btn tb-lap-sheet', () => this.host.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy'),
+      this.drawerToggle(),
     );
     this.renderPassFocus();
     if (held && held.isConnected && held !== document.activeElement) {
@@ -2295,6 +2437,22 @@ export class Panels {
        * whoever took it out has said where the keyboard goes. */
       this.stripNode.querySelector(heldAs === 'add' ? '.tb-chip-add' : `[data-seq="${heldAs}"]`)?.focus({ preventScroll: true });
     }
+  }
+
+  /*
+   * THE LAP BAR'S FLYING ORDER, which opens and closes the drawer and says which
+   * it will do. While the drawer is open the bar stands clear of it (the
+   * stylesheet's --tb-cover), so this button is never under the thing it
+   * closes, and it is lit, as an open panel's switch is.
+   */
+  drawerToggle() {
+    const open = Boolean(this.host.drawerOpen);
+    const b = button('Flying order', open ? 'tb-btn on' : 'tb-btn', (e) => this.host.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
+      open ? 'Close the panel with the flying order, the warnings and the profile. Esc' : 'The order the gates are flown in, every warning, and the elevation profile');
+    b.dataset.drawer = '';
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    b.setAttribute('aria-controls', 'tb-side');
+    return b;
   }
 
   /* One line at the foot of the room, while a track is still a few gates, saying
@@ -2325,16 +2483,30 @@ export class Panels {
         ? 'Tap the floor to put a cube down: five gates in one piece, flown straight through along the way it faces. The tool stays armed. Tap Cube again to put it away.'
         : 'Click the floor to put a cube down: five gates in one piece, flown straight through along the way it faces. The tool stays armed. Right click or Esc puts it away.';
     } else if (this.host.isWhoopRace() && (this.host.armed === 'row' || this.host.armed === 'ruler')) {
+      /* A finger has no right button and no Esc: on a touch screen the tool is
+       * put away where it was taken from, which on a phone is behind Tools. */
+      const away = this.host.onPhone() ? ' Put it away from Tools.' : ' Tap it again on the left to put it away.';
       text = this.host.armed === 'row'
-        ? 'Drag along the floor to lay a row of two or three gates, 30 in apart. One click lays a pair. Right click or Esc puts the tool away.'
-        : 'Click two points to measure between them. A click near a gate or a pole takes its middle. Right click or Esc puts the ruler away.';
+        ? (touched
+          ? `Drag along the floor to lay a row of two or three gates, 30 in apart. One tap lays a pair.${away}`
+          : 'Drag along the floor to lay a row of two or three gates, 30 in apart. One click lays a pair. Right click or Esc puts the tool away.')
+        : (touched
+          ? `Tap two points to measure between them. A tap near a gate or a pole takes its middle.${away}`
+          : 'Click two points to measure between them. A click near a gate or a pole takes its middle. Right click or Esc puts the ruler away.');
     } else if (this.host.isWhoopRace() && (doc.elements.length || this.host.armed) && gates < 3) {
+      const phone = this.host.onPhone();
       if (this.host.armed) {
-        text = 'Click the floor to place it. The tool stays armed, so a second click places another. Right click or Esc puts it away.';
+        text = touched
+          ? `Tap the floor to place it. The tool stays in hand, so a second tap places another.${phone ? ' Put it away from Tools.' : ' Tap it again on the left to put it away.'}`
+          : 'Click the floor to place it. The tool stays armed, so a second click places another. Right click or Esc puts it away.';
       } else if (this.host.selection.size) {
-        text = 'Drag it to move it. Drag the ring at its foot to turn it. The arrow keys nudge it.';
+        text = touched
+          ? 'Drag it to move it. Drag the ring at its foot to turn it.'
+          : 'Drag it to move it. Drag the ring at its foot to turn it. The arrow keys nudge it.';
       } else {
-        text = 'Click a gate to select it. Drag empty floor to look round. Pick a tool on the left to place more.';
+        text = touched
+          ? `Tap a gate to select it. Drag empty floor to look round. ${phone ? 'Tools has the pieces to place more.' : 'Pick a tool on the left to place more.'}`
+          : 'Click a gate to select it. Drag empty floor to look round. Pick a tool on the left to place more.';
       }
     }
     coach.hidden = !text;
@@ -2349,17 +2521,43 @@ export class Panels {
     if (!box) {
       return;
     }
-    /* Not once a tool is armed: the coach line says what to do then. */
-    const show = this.host.isWhoopRace() && this.host.doc.elements.length === 0 && !this.host.armed;
+    /*
+     * Not once a tool is armed: the coach line says what to do then. Not on a
+     * map, and not over the five inch's 3D preview, where nothing is placed.
+     * The five inch canvas has one too now (MENUS-PLAN.md 4.2b): a first
+     * author met an empty grid and a paragraph at the foot of the palette,
+     * and Load had no five inch track to start from. Its way in is the board,
+     * whose five inch tracks are the converted race tracks, opened as a copy
+     * the way Remix opens one, so there is no second copy shipped here to
+     * drift from the one people race.
+     */
+    const doc = this.host.doc;
+    const whoop = this.host.isWhoopRace();
+    const field = !whoop && docModeOf(doc) !== 'freestyle' && this.host.mode === '2d';
+    const show = (whoop || field) && doc.elements.length === 0 && !this.host.armed;
     box.hidden = !show;
     box.textContent = '';
     if (!show) {
       return;
     }
+    /* Where the tools are and what a finger does: a phone's palette is a
+     * drawer behind Tools on the bar, and a touch screen is tapped. */
+    const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const first = (place) => (this.host.onPhone()
+      ? `Open Tools and pick a gate, then tap the ${place}.`
+      : `Pick a gate on the left, then ${touched ? 'tap' : 'click'} the ${place}.`);
+    if (whoop) {
+      box.append(
+        el('p', null, first('floor')),
+        el('p', 'tb-help', 'Or start from a finished RaceGOW track and move a gate.'),
+        button('Start from a RaceGOW track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The eight tracks of RaceGOW5, to open and change'),
+      );
+      return;
+    }
     box.append(
-      el('p', null, 'Pick a gate on the left, then click the floor.'),
-      el('p', 'tb-help', 'Or start from a finished RaceGOW track and move a gate.'),
-      button('Start from a RaceGOW track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The eight tracks of RaceGOW5, to open and change'),
+      el('p', null, first('field')),
+      el('p', 'tb-help', 'Or start from a track on the board, and make it yours.'),
+      button('Start from a track on the board', 'tb-btn tb-primary', () => this.host.openBoardStarters(), 'The five inch tracks on Tracks and times, each opened as your own copy'),
     );
   }
 
@@ -2386,12 +2584,23 @@ export class Panels {
       return;
     }
 
+    /* A whoop canvas in feet and inches, with the metres in small print, as
+     * everything else on it is (MENUS-PLAN.md 4.2a). */
+    const inches = this.host.isWhoopRace();
+    const bend = path.tightest && Number.isFinite(path.tightest.radius) ? path.tightest.radius : null;
     const stats = el('div', 'tb-stats');
     stats.append(
-      stat('Length', `${path.length.toFixed(1)} m`),
+      inches
+        ? stat('Length', `${Math.round(path.length / FT)} ft`, `${path.length.toFixed(1)} m`)
+        : stat('Length', `${path.length.toFixed(1)} m`),
       stat('In the order', String(doc.sequence.length)),
-      stat('Tightest radius', path.tightest && Number.isFinite(path.tightest.radius)
-        ? `${path.tightest.radius.toFixed(2)} m` : 'straight'),
+      /* Bend, not radius: "Tightest radius" was cut to "Tightest ra..." beside
+       * its own value in a 320 px column. */
+      bend == null
+        ? stat('Tightest bend', 'straight')
+        : inches
+          ? stat('Tightest bend', `${(bend / IN).toFixed(1)} in`, `${Math.round(bend * 1000)} mm`)
+          : stat('Tightest bend', `${bend.toFixed(2)} m`),
       stat('Lap', path.closed ? 'closes' : 'open'),
     );
     host.append(stats);
@@ -2422,7 +2631,7 @@ export class Panels {
     const foot = el('div', 'tb-profile-foot');
     foot.append(el('h3', null, 'Elevation'), this.nodes.profile);
     host.append(foot);
-    drawProfile(this.nodes.profile, elevationProfile(path));
+    drawProfile(this.nodes.profile, elevationProfile(path), { imperial: inches });
   }
 
   /*
@@ -2473,8 +2682,10 @@ export class Panels {
   }
 }
 
-function appendTypeStats(host, doc, heading = 'On the field') {
-  const rows = countElementsByType(doc.elements);
+/* Headed with where the pieces stand, the canvas's way: on the field, in the
+ * room, on the plot. */
+function appendTypeStats(host, doc, heading = trackClassOf(doc) === 'micro' ? 'In the room' : `On the ${wordsFor(doc).place}`) {
+  const rows = countElementsByType(doc.elements, trackClassOf(doc));
   if (!rows.length) {
     return;
   }
@@ -2486,8 +2697,15 @@ function appendTypeStats(host, doc, heading = 'On the field') {
   host.append(stats);
 }
 
-function stat(label, value) {
+/* `small` is the same figure in the other unit, in small print under it: a
+ * whoop canvas says feet and inches and gives the metres there (MENUS-PLAN.md
+ * 4.2a). */
+function stat(label, value, small = '') {
   const d = el('div', 'tb-stat');
-  d.append(el('span', 'tb-stat-label', label), el('span', 'tb-stat-value', value));
+  const v = el('span', 'tb-stat-value', value);
+  if (small) {
+    v.append(el('small', 'tb-stat-small', small));
+  }
+  d.append(el('span', 'tb-stat-label', label), v);
   return d;
 }
