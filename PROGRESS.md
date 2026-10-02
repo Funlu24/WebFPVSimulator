@@ -63985,3 +63985,60 @@ left alone, because a review's findings are written down whether or not they wer
 
 Nothing new needs your word. The board was read, not written. The earlier entry's list still stands, the
 `BUGS_TOKEN` rotation and the stale `lint:input` line among it.
+
+## 2026-10-02 | builder, input | The merge with main and the push to main (the owner's ask)
+
+The owner: "push to main". Nothing here changes the physics, the plant, the module ABI or the build, and
+`git diff --stat vendor/betaflight` is empty.
+
+### The merge
+
+Fetched first. `git merge-base HEAD origin/main` answered 3d6fe3a, where this branch left main, and main had four
+commits since: the owner's catalogue in the builder (figures, sections, the hurdle family, handed stacks and a launch
+gate), its write up, its `src/fresh.js` and its push. So origin/main was merged into this branch, the way the five
+inch builder branch was merged before (2ac68a6), and the push to main is a fast forward: nothing rewritten, nothing
+forced.
+
+Two conflicts, each where both sides added to the same place:
+
+- **`src/trackbuilder/app.js`**: an import each on the same line, `clone.js` here and `flightpaths.js` on main. Both
+  kept.
+- **`PROGRESS.md`**: two entries each at the foot. Main's first, because they reached main first, then this
+  branch's.
+
+Ten files changed on both sides merged as text by themselves: the builder's app, ui, model, elements, warnings,
+schema, self test and page, and `src/fresh.js`. A clean text merge was once the wrong merge in this repository (the
+2026-10-01 entry above), so the merged tree was checked whole and not only at the conflicts. The two lines meet less
+than the file list suggests: main's work is on the race canvases (five inch pieces, a pass's `wrap`) and this
+branch's is on the map (Duplicate, sink, stand on end, the hollow chimney and the turbine) and the input path. Read
+where they share a function: Control D in the key handler, the inspector's imports, and `normalize`, which gained a
+pass's `wrap` on one side and an asset's pitch, sink floor and `fitDims` on the other, in different blocks.
+
+`src/fresh.js` came out of the merge right: 250 served, main's 249 and `clone.js`.
+
+### Checks, on the merged tree
+
+    self test         node src/trackbuilder/selftest.js: 2253 passed, 0 failed, so main's checks and this
+                      branch's run together (main's own entry says 2139 on its tree, and this branch had 2063)
+    props-check       node scripts/props-check.js: all passed; --selftest: all passed
+    flow check        npm run check:builder: PASS, 639 checks, 0 failed, the merged builder driven in
+                      headless Chromium, main's new cases for its catalogue among them
+    input-selftest    all 380 passed
+    lint:preload      up to date, boot 127 modules, city 75, built 33; 250 served
+    check:fresh       18 passed, 0 failed
+    lint:nouns        PASS
+    lint:presets      4 of 4 presets clean
+    mission-preset    node scripts/mission-preset.js --check: clean
+    parse             node --check on app.js, ui.js, warnings.js, elements.js and model.js, the builder files
+                      the merge wrote, because no Node check imports app.js or ui.js
+    not run           npm run verify (no physics, plant, ABI or build change); shots.js; lint:input, which has
+                      the one stale line recorded above and reads nothing the merge changed
+
+### For the owner
+
+- **The landing page vendors eight of the files this push changes** (`place.js`, `catalog.js`, `industrial.js`,
+  `kit.js`, `solids.js`, `types.js`, `elements.js`, `model.js`), copied from simulator commit 0e1b0cf. Its lint holds
+  its copies to its own manifest, so nothing there breaks, and they stay as they are until somebody runs
+  `node scripts/vendor.js ../WebFPVSimulator` there. Not done: the yard it draws uses none of this work. The board
+  vendors only the lettering and the roster, which this does not touch.
+- Neither of the other two repositories had anything on its branch to push.
