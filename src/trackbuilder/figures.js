@@ -64,7 +64,15 @@ export const FIGURES = {
     label: 'Split-S',
     hint: 'Two gates. Through the top, invert, back through the bottom the other way. A triple skips the middle.',
   },
+  revSplitS: {
+    id: 'revSplitS',
+    label: 'Reverse Split-S',
+    hint: 'Two gates. Through the bottom, up and over the front in a half loop, back through the top the other way. A triple skips the middle.',
+  },
 };
+
+/* The figures that go round the side of the structure, which is the way they turn: left or right. */
+export const HANDED_FIGURES = ['spiralUp', 'spiralDown'];
 
 export function defaultFigure(el) {
   return aperturesOf(el).length >= 2 ? 'spiralUp' : 'single';
@@ -85,6 +93,11 @@ export function figureBlurb(el, figureId) {
       ? 'Two gates. Through the top, flip, back through the bottom the other way.'
       : 'Two gates. Through the top, flip, back through the bottom. The middle hole does not count.';
   }
+  if (figureId === 'revSplitS') {
+    return n === 2
+      ? 'Two gates. Through the bottom, up and over in a half loop, back through the top the other way.'
+      : 'Two gates. Through the bottom, up and over in a half loop, back through the top. The middle hole does not count.';
+  }
   return n > 1
     ? 'One gate. Only the hole you pick below counts; the rest are just the frame.'
     : '';
@@ -95,7 +108,7 @@ export function figuresFor(el) {
   if (n < 2) {
     return [FIGURES.single];
   }
-  const out = [FIGURES.spiralUp, FIGURES.splitS];
+  const out = [FIGURES.spiralUp, FIGURES.splitS, FIGURES.revSplitS];
   if (n >= 3) {
     out.push(FIGURES.spiralDown);
   }
@@ -119,20 +132,22 @@ export function levelName(el, index) {
  * The openings and faces a figure writes, given which way the FIRST pass
  * should go. approach +1 is along the structure's normal.
  */
-export function figurePlan(el, figureId, approach = 1) {
+export function figurePlan(el, figureId, approach = 1, hand = 'left') {
   const n = aperturesOf(el).length;
   const sign = approach < 0 ? -1 : 1;
+  /* A wrap is written only where it is not the default, so a spiral to the left is the plan it always was. */
+  const side = hand === 'right' ? { wrap: 'right' } : {};
   if (figureId === 'spiralUp' && n >= 2) {
     const out = [];
     for (let i = 0; i < n; i += 1) {
-      out.push({ apertureIndex: i, entry: sign });
+      out.push({ apertureIndex: i, entry: sign, ...(i > 0 ? side : {}) });
     }
     return out;
   }
   if (figureId === 'spiralDown' && n >= 3) {
     const out = [];
     for (let k = 0; k < n; k += 1) {
-      out.push({ apertureIndex: n - 1 - k, entry: k % 2 === 0 ? sign : -sign });
+      out.push({ apertureIndex: n - 1 - k, entry: k % 2 === 0 ? sign : -sign, ...(k > 0 ? side : {}) });
     }
     return out;
   }
@@ -140,6 +155,13 @@ export function figurePlan(el, figureId, approach = 1) {
     return [
       { apertureIndex: n - 1, entry: sign },
       { apertureIndex: 0, entry: -sign },
+    ];
+  }
+  if (figureId === 'revSplitS' && n >= 2) {
+    /* Up and over the front: the loop out is the author's word, because two neighbouring levels would otherwise be a spiral. */
+    return [
+      { apertureIndex: 0, entry: sign },
+      { apertureIndex: n - 1, entry: -sign, wrap: 'over' },
     ];
   }
   return [{ apertureIndex: 0, entry: sign }];
@@ -158,6 +180,10 @@ function plansMatch(seqs, plan) {
       return false;
     }
     if (got !== plan[i].entry) {
+      return false;
+    }
+    /* How it is reached from the pass before: what the plan says, or nothing, which is the default. */
+    if ((seqs[i].wrap ?? null) !== (plan[i].wrap ?? null)) {
       return false;
     }
   }
@@ -262,13 +288,23 @@ export function matchingFigureOf(el, seqs) {
   }
   const approach = seqs[0].entry === -1 ? -1 : 1;
   const offered = new Set(figuresFor(el).map((f) => f.id));
-  const order = ['splitS', 'spiralUp', 'spiralDown', 'single'].filter((id) => offered.has(id));
+  const order = ['splitS', 'revSplitS', 'spiralUp', 'spiralDown', 'single'].filter((id) => offered.has(id));
   for (const id of order) {
-    if (plansMatch(seqs, figurePlan(el, id, approach))) {
-      return id;
+    for (const hand of ['left', 'right']) {
+      if (plansMatch(seqs, figurePlan(el, id, approach, hand))) {
+        return id;
+      }
     }
   }
   return null;
+}
+
+/*
+ * WHICH WAY A SPIRAL TURNS, read off its passes: 'right' when its second pass says the line goes round the right of the
+ * structure, 'left' otherwise, which is also what a spiral that never said has always been.
+ */
+export function figureHandOf(seqs) {
+  return seqs.length > 1 && seqs[1].wrap === 'right' ? 'right' : 'left';
 }
 
 export function matchingFigure(doc, el) {
@@ -327,7 +363,7 @@ export function figureCue(doc, el, seq) {
  * Rewrite this element's run in the flying order to match a figure.
  * Returns true when it did.
  */
-export function applyFigure(doc, elementId, figureId) {
+export function applyFigure(doc, elementId, figureId, opts = {}) {
   const el = elementById(doc, elementId);
   if (!el || kindOf(el) !== KIND.APERTURE) {
     return false;
@@ -357,18 +393,23 @@ export function applyFigure(doc, elementId, figureId) {
   const insertAt = run.length ? run[0].i : doc.sequence.length;
   const keepLevel = run[0]?.s.apertureIndex ?? 0;
   const approach = run[0]?.s.entry === -1 ? -1 : 1;
+  /* The way a spiral turns is kept when the figure is laid again, and chosen when it is asked for. */
+  const hand = opts.hand ?? figureHandOf(run.map((row) => row.s));
   for (let k = run.length - 1; k >= 0; k -= 1) {
     doc.sequence.splice(run[k].i, 1);
   }
   const plan = figureId === 'single'
     ? [{ apertureIndex: Math.min(keepLevel, aperturesOf(el).length - 1), entry: approach }]
-    : figurePlan(el, figureId, approach);
+    : figurePlan(el, figureId, approach, hand);
   /* Insert one at a time so newSequenceId sees the previous id. Building
    * the batch off to the side reused sq-N for every pass. */
   let at = insertAt;
   for (const step of plan) {
     const entry = createSequenceEntry(doc, elementId, step.apertureIndex);
     entry.entry = step.entry;
+    if (step.wrap) {
+      entry.wrap = step.wrap;
+    }
     entry.overridden = figureId !== 'single';
     doc.sequence.splice(at, 0, entry);
     at += 1;
@@ -404,9 +445,11 @@ export function wrapBetween(el, seqA, seqB, cls = TRACK_CLASS_DEFAULT) {
   const i0 = seqA.apertureIndex ?? 0;
   const i1 = seqB.apertureIndex ?? 0;
   const n = aperturesOf(el).length;
-  const leap = Math.abs(i0 - i1) > 1 || (n === 2 && i0 > i1);
+  /* The author's word on it, when there is one: round the left of the structure, round the right, or over the front. */
+  const said = seqB.wrap;
+  const leap = said === 'over' || (said !== 'left' && said !== 'right' && (Math.abs(i0 - i1) > 1 || (n === 2 && i0 > i1)));
   const reach = tuningFor(cls).stackWrap;
-  const offset = leap ? scale(normalize(travel), reach) : scale(leftOf(travel), reach);
+  const offset = leap ? scale(normalize(travel), reach) : scale(leftOf(travel), reach * (said === 'right' ? -1 : 1));
   const pos = add(mid, offset);
   const tangent = normalize(sub(b, a), travel);
   return { pos, tangent };

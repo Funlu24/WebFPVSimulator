@@ -1611,11 +1611,33 @@ export const FIVE_INCH_PIECES = [
     note: 'A gate leaning at 45 degrees with its lower edge 1.5 m up, flown up through. It is a dive gate with those numbers, which are the rule the Drone Nationals plan gives its up gate.',
   },
   {
+    id: 'launchGate',
+    label: 'Launch gate',
+    key: '',
+    after: 'diveGate',
+    note: 'A horizontal gate 15 ft up, flown UP through from below: the dive gate the other way round. It comes with the line to fly it, a pull up from level to vertical on the way in and a push over on the way out, as waypoints you can drag or take out.',
+  },
+  {
     id: 'hurdle',
     label: 'Hurdle',
     key: 'U',
     after: 'barrier',
     note: 'A board 4 m long and 1 m high with a flag at each end, flown over. One piece, and not a gate: nothing scores on it, and the lap is pinned over the middle of it.',
+  },
+  {
+    id: 'barHurdle',
+    label: 'Bar hurdle',
+    key: '',
+    after: 'barrier',
+    note: 'A bar 10 ft wide, 5 ft up, on two legs: flown over it, skimming it, or under it between the legs. One piece, and not a gate: the lap is pinned over (or under) the middle of it, and the card says which.',
+  },
+  {
+    id: 'run',
+    label: 'Section',
+    key: 'J',
+    /* After the flagged gate, where the wall is, and below it: a piece stands after an element, and the wall is not one. */
+    after: 'flaggedGate',
+    note: 'A section laid in one click: a straight, a sweeper, a hairpin, a chicane, esses, a step sequence, a flag slalom or a Dutch 8, as many pieces as you ask for, flown in order. Pick the shape under the tool, then click where it starts. They are ordinary pieces afterwards.',
   },
 ];
 

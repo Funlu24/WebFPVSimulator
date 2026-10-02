@@ -79,6 +79,11 @@ import { isRoomType, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
  */
 export const SCHEMA_VERSION = 3;
 
+/* How a pass of a stacked gate is reached from the one before it on the same stack: round the left of it as flown, round
+ * the right, or over the front in a loop (figures.js). The default, when none is said, is left for neighbouring
+ * levels and over the front for a leap. */
+export const WRAPS = ['left', 'right', 'over'];
+
 /* The whoop room before it grew to 10 by 12 m, the only other size it has
  * ever had: see the migration at the foot of normalize(). */
 const OLD_ROOM = Object.freeze({ width: 5, depth: 6 });
@@ -1179,6 +1184,11 @@ export function normalize(raw) {
       clearance = Math.max(0, num(rawSeq.clearance, owner?.dims?.clearance ?? def.dims.clearance));
     }
 
+    /* HOW THE LINE GETS HERE FROM THE PASS BEFORE, when that was another opening of the same stack: round its left,
+     * round its right, or looping out over the front. Written only when it was said, so a document that never
+     * said keeps the bytes it had, and a reader that does not know the word flies the default wrap. */
+    const wrap = def.kind === KIND.APERTURE && WRAPS.includes(rawSeq.wrap) ? rawSeq.wrap : null;
+
     doc.sequence.push({
       id,
       elementId,
@@ -1187,6 +1197,7 @@ export function normalize(raw) {
       passSide,
       clearance,
       overridden: bool(rawSeq.overridden),
+      ...(wrap ? { wrap } : {}),
     });
   }
 
@@ -1384,6 +1395,7 @@ export function toPlain(doc) {
       passSide: s.passSide ?? null,
       clearance: s.clearance == null ? null : num(s.clearance),
       overridden: Boolean(s.overridden),
+      ...(WRAPS.includes(s.wrap) ? { wrap: s.wrap } : {}),
     })),
   };
 }

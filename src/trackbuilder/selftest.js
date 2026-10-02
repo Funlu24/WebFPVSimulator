@@ -42,7 +42,7 @@ import {
   addToSequence, addNextLevel, sequenceLabel, faceLabel, bendIndexFor, bendLineAt, gateNumbers,
   neighboursOf, pinFacesAt, sequenceNumbers, removeElement, removeFromSequence,
 } from './sequence.js';
-import { applyFigure, matchingFigure, defaultFigure, upgradeStackedFigures, figuresFor } from './figures.js';
+import { applyFigure, matchingFigure, defaultFigure, upgradeStackedFigures, figuresFor, figureHandOf, wrapBetween } from './figures.js';
 import {
   buildPath, elevationProfile, sequencedElementCount, knotForSeq, markerSquare, passYawOf,
 } from './path.js';
@@ -66,13 +66,31 @@ import {
   wallOf, wallFlagsOf, setWallFlags, wallIsWoven, setWallWeave, reverseWall, flyOver,
   partGhosts, setWallSize, wallSizeOf,
   WALL_MIN, WALL_DEFAULT, WALL_MAX, HURDLE, SPIRAL, ROUND_NAME, roundFlagOf, removeSpiral,
+  BAR_HURDLE, HURDLE_LINES, HURDLE_SIZES, hurdleAngleOf, hurdleLineOf, hurdleSizeOf, hurdleTop, placeBarHurdle, setHurdleAngle,
+  setHurdleLine, setHurdleSize,
 } from './parts.js';
+import {
+  MANOEUVRES, SIZE_IDS, SIZE_FACTOR, FIGURE_BASE, baseFor, curveOf, figureName, isFigureName, netOf,
+  parseFigureName, placeCurve, specOf,
+} from './manoeuvres.js';
+import {
+  aroundOf, applyAround, applyInto, applyLeg, applyPowerLoopGate, applyThen, applyTurnaround, clearAround, clearInto,
+  clearThen, figureHolding, intoOf, placeLaunchGate, placeSection, thenOf,
+} from './flightpaths.js';
+import { GLYPH_H, GLYPH_W, figureGlyph } from './glyphs.js';
+import {
+  RUN_SHAPES, RUN_SPACINGS, SWEEP_RADII, HAIRPIN_RADII, placeRun, placeRunPoints, runBaseFor, runGhosts, runPieceOf, runPoints,
+  runSpecOf,
+} from './runs.js';
 import { scaleOf, say } from './scale.js';
 import { envelopeFor, GATE_OPENING_DEFAULT, PIPE_OD as CUBE_PIPE_OD, inches } from './racegow.js';
 import {
-  RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE,
+  RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE, leftOf,
 } from './geometry.js';
-import { FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf } from './elements.js';
+import {
+  FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf,
+  FIVE_INCH_PIECES, FIVE_INCH_TOOLS, toolByKey,
+} from './elements.js';
 import { PRESETS } from './presets.js';
 import { ELEMENTS, PALETTE_ORDER, GATE_FLAG_H, flagSideOf, flagSideSigns, elementByKey, elementHeight,
   virtualApertureDims, countElementsByType, formatElementCounts,
@@ -9995,7 +10013,7 @@ function suiteFiveInchParts() {
     check('flying over a hurdle adds a waypoint a metre over its top, in the order, and takes nothing from the board',
       doc.elements.length === n + 1 && near(wp.position.z, 2) && near(wp.position.x, 22) && doc.sequence.at(-1).elementId === wp.id
       && elementById(doc, id).type === 'barrier');
-    check('and what is not a barrier is not flown over', flyOver(doc, start.id) === null && flyOver(doc, 'el-nope') === null);
+    check('and what is not a hurdle or a gate is not flown over', flyOver(doc, place(doc, 'flag', 30, 30).id) === null && flyOver(doc, 'el-nope') === null);
   }
 
   /* ---- the room's numbers, and a field's magnets, ruler and frame ---- */
@@ -10079,6 +10097,1124 @@ function suiteFiveInchParts() {
  * shipped Nationals track stand on, which are pure and so are run here. What a pointer does with them is
  * scripts/builder-flow-check.js's.
  */
+/* ------------------------------------------------------------------ */
+/* The figures of the owner's catalogue                                */
+/* ------------------------------------------------------------------ */
+
+function suiteManoeuvres() {
+  console.log('\nmanoeuvres: the shapes a line is made of');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const finite = (c) => c.points.every((p) => [p.u, p.v, p.w, p.tu, p.tv, p.tw].every(Number.isFinite));
+  const handed = MANOEUVRES.filter((m) => m.hand);
+
+  /* ---- the catalogue itself ---- */
+  const ids = MANOEUVRES.map((m) => m.id).join(' ');
+  check('the catalogue is the owner\'s fourteen, in the owner\'s order',
+    ids === 'straight hop turn climb descend splitS revSplitS loop corkscrew dive launch slalom fig8 matty', ids);
+  check('every one has a label and a hint a card can say, and the names a pilot knows it by',
+    MANOEUVRES.every((m) => m.label && m.hint && Array.isArray(m.also)));
+
+  /* ---- every figure, every size, both classes ---- */
+  {
+    let bad = 0;
+    let total = 0;
+    for (const cls of ['full', 'micro']) {
+      for (const m of MANOEUVRES) {
+        for (const size of SIZE_IDS) {
+          const specs = [{ id: m.id, size }];
+          if (m.hand) {
+            specs.push({ id: m.id, size, hand: 'right' });
+          }
+          if (m.degs) {
+            for (const deg of m.degs) {
+              specs.push({ id: m.id, size, deg, hand: 'left' }, { id: m.id, size, deg, hand: 'right' });
+            }
+          }
+          if (m.sense) {
+            specs.push({ id: m.id, size, sense: 'down' });
+          }
+          if (m.count) {
+            for (const count of m.count) {
+              specs.push({ id: m.id, size, count });
+            }
+          }
+          if (m.bias) {
+            for (const bias of ['none', 'left', 'right', 'up', 'down']) {
+              specs.push({ id: m.id, size, bias });
+            }
+          }
+          for (const raw of specs) {
+            total += 1;
+            const c = curveOf(raw, cls);
+            if (!c.points.length || !finite(c) || !c.end) {
+              bad += 1;
+            }
+          }
+        }
+      }
+    }
+    check('every manoeuvre, at every size and on both classes of track, has a curve of finite points and an end', bad === 0 && total > 250, `${bad} of ${total}`);
+  }
+
+  /* ---- names ---- */
+  {
+    let ok = 0;
+    let total = 0;
+    for (const m of MANOEUVRES) {
+      const specs = [{ id: m.id }];
+      for (const size of SIZE_IDS) {
+        for (const hand of m.hand ? ['left', 'right'] : [undefined]) {
+          for (const deg of m.degs ?? [undefined]) {
+            for (const sense of m.sense ? ['up', 'down'] : [undefined]) {
+              for (const count of m.count ?? [undefined]) {
+                for (const bias of m.bias ? ['none', 'left', 'right', 'up', 'down'] : [undefined]) {
+                  for (const again of [undefined, 'back through', 'back through reversed']) {
+                    specs.push({ id: m.id, size, hand, deg, sense, count, bias, again });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      for (const raw of specs) {
+        total += 1;
+        const spec = specOf(raw);
+        const name = figureName(spec);
+        const back = parseFigureName(name);
+        if (back && JSON.stringify(back) === JSON.stringify(spec) && figureName(back) === name) {
+          ok += 1;
+        }
+      }
+    }
+    check('a figure\'s name reads back to the figure, exactly, for every manoeuvre in every spelling', ok === total && total > 400, `${ok} of ${total}`);
+    check('the names are the owner\'s words',
+      figureName({ id: 'turn', hand: 'left', deg: 180 }) === 'Turn left 180'
+      && figureName({ id: 'climb', hand: 'right', deg: 360, size: 'wide' }) === 'Climbing turn right 360, wide'
+      && figureName({ id: 'corkscrew', hand: 'left', sense: 'up' }) === 'Corkscrew left up'
+      && figureName({ id: 'slalom', hand: 'right', count: 4 }) === 'Slalom right x4'
+      && figureName({ id: 'straight', bias: 'left' }) === 'Exit left'
+      && figureName({ id: 'hop' }) === 'Hop' && figureName({ id: 'hop', sense: 'down' }) === 'Dip'
+      && figureName({ id: 'loop', again: 'back through' }) === 'Power loop, back through',
+      [figureName({ id: 'turn' }), figureName({ id: 'loop', again: 'back through' })].join(' | '));
+    const notFigures = ['', 'Gate', 'Waypoint', 'Over the hurdle', 'Hurdle', 'Dive gate', 'Launch gate', 'Turn 3', 'Turn left',
+      'Turn left 91', 'Climbing turn', 'Exit sideways', 'Slalom x', 'Round the flag', 'turn left 180', 'Turn left 180 ', null, undefined];
+    check('a name that is nearly a figure\'s and is not one is not read as one, so a waypoint a person named is left alone',
+      notFigures.every((n) => !isFigureName(n)), notFigures.filter((n) => isFigureName(n)).join(' | '));
+  }
+
+  /* ---- mirror images ---- */
+  {
+    let same = 0;
+    let total = 0;
+    for (const cls of ['full', 'micro']) {
+      for (const m of handed) {
+        for (const deg of m.degs ?? [undefined]) {
+          const a = curveOf({ id: m.id, hand: 'left', deg, sense: 'up' }, cls);
+          const b = curveOf({ id: m.id, hand: 'right', deg, sense: 'up' }, cls);
+          total += 1;
+          const mirrored = a.points.length === b.points.length && a.points.every((p, i) => {
+            const q = b.points[i];
+            return near(p.u, q.u, 1e-9) && near(p.v, -q.v, 1e-9) && near(p.w, q.w, 1e-9)
+              && near(p.tu, q.tu, 1e-9) && near(p.tv, -q.tv, 1e-9) && near(p.tw, q.tw, 1e-9);
+          });
+          if (mirrored) {
+            same += 1;
+          }
+        }
+      }
+    }
+    check('left and right are mirror images, point for point and tangent for tangent, for every handed manoeuvre', same === total && total > 10, `${same} of ${total}`);
+  }
+
+  /* ---- sizes and classes ---- */
+  {
+    const r = (size, cls) => {
+      const c = curveOf({ id: 'turn', hand: 'left', deg: 180, size }, cls);
+      return c.end.v / 2;
+    };
+    check('a tight turn is smaller than a standard one and a wide one larger, by the factors the sizes say',
+      near(r('tight', 'full'), FIGURE_BASE.full.radius * SIZE_FACTOR.tight, 1e-9)
+      && near(r('standard', 'full'), FIGURE_BASE.full.radius, 1e-9)
+      && near(r('wide', 'full'), FIGURE_BASE.full.radius * SIZE_FACTOR.wide, 1e-9));
+    check('a whoop\'s turn is a fraction of a field\'s', r('standard', 'micro') < r('standard', 'full') / 5 && near(r('standard', 'micro'), baseFor('micro').radius, 1e-9));
+    const forced = curveOf({ id: 'turn', hand: 'left', deg: 180, radius: 1.25 }, 'full');
+    check('a radius given outright overrides the size, which is how a turn is made to go round a particular flag', near(forced.end.v / 2, 1.25, 1e-9));
+  }
+
+  /* ---- what each one does ---- */
+  {
+    const R = FIGURE_BASE.full.radius;
+    const turn = (deg, hand = 'left') => netOf(curveOf({ id: 'turn', hand, deg }, 'full'));
+    check('a turn goes as far round as it says: a quarter, a half, and a whole orbit that comes out facing the way it went in',
+      near(Math.abs(turn(90).turn), Math.PI / 2, 1e-9) && near(Math.abs(turn(180).turn), Math.PI, 1e-9)
+      && near(Math.cos(turn(360).turn), 1, 1e-9));
+    check('a left turn ends on the left and a right turn on the right, a diameter across for a half turn',
+      turn(180, 'left').v > 0 && turn(180, 'right').v < 0 && near(Math.abs(turn(180).v), 2 * R, 1e-9));
+    {
+      /* Every point of a turn is on its circle, which is what makes it a turn and not a bend. */
+      const c = curveOf({ id: 'turn', hand: 'left', deg: 360 }, 'full');
+      const lead = c.lead;
+      const off = c.points.filter((p) => p.u !== lead || p.v !== 0).map((p) => Math.abs(Math.hypot(p.u - lead, p.v - R) - R));
+      check('the points of an orbit are on a circle of the radius, a radius clear of the piece it comes from',
+        Math.max(...off) < 1e-9 && lead >= R, `${Math.max(...off)} lead ${lead}`);
+    }
+    const net = (id, extra = {}) => netOf(curveOf({ id, ...extra }, 'full'));
+    check('a climbing turn gains height as it goes round and a descending turn loses the same',
+      near(net('climb', { deg: 180 }).w, 0.6 * R, 1e-9) && near(net('descend', { deg: 180 }).w, -0.6 * R, 1e-9)
+      && near(net('climb', { deg: 360 }).w, 1.2 * R, 1e-9) && net('turn', { deg: 180 }).w === 0);
+    check('a split-S ends a diameter below where it began, going back; a reverse split-S a diameter above',
+      near(net('splitS').w, -2 * R, 1e-9) && near(Math.abs(net('splitS').turn), Math.PI, 1e-9)
+      && near(net('revSplitS').w, 2 * R, 1e-9) && near(Math.abs(net('revSplitS').turn), Math.PI, 1e-9));
+    {
+      const c = curveOf({ id: 'loop' }, 'full');
+      const top = Math.max(...c.points.map((p) => p.w));
+      check('a power loop climbs a diameter and comes back to the height and the heading it started with',
+        near(top, 2 * R, 1e-9) && near(netOf(c).w, 0, 1e-9) && near(Math.cos(netOf(c).turn), 1, 1e-9));
+    }
+    {
+      const up = curveOf({ id: 'corkscrew', hand: 'left', sense: 'up' }, 'full');
+      const down = curveOf({ id: 'corkscrew', hand: 'left', sense: 'down' }, 'full');
+      const right = curveOf({ id: 'corkscrew', hand: 'right', sense: 'up' }, 'full');
+      const firstMove = (c) => c.points.find((p) => Math.abs(p.w) > 1e-6);
+      check('a corkscrew rolls up first or down first, and ends level on the line it began on',
+        firstMove(up).w > 0 && firstMove(down).w < 0 && near(netOf(up).v, 0, 1e-9) && near(netOf(up).w, 0, 1e-9)
+        && near(netOf(down).w, 0, 1e-9));
+      check('a corkscrew to the left stays on the left of the line and one to the right on the right',
+        Math.min(...up.points.map((p) => p.v)) > -1e-9 && Math.max(...right.points.map((p) => p.v)) < 1e-9);
+    }
+    {
+      const dive = curveOf({ id: 'dive' }, 'full');
+      const launch = curveOf({ id: 'launch' }, 'full');
+      const drop = FIGURE_BASE.full.drop;
+      check('a dive ends its drop lower, level, and a launch its climb higher, level',
+        near(netOf(dive).w, -drop, 1e-6) && near(netOf(launch).w, drop, 1e-6)
+        && near(dive.end.tw, 0, 1e-9) && near(launch.end.tw, 0, 1e-9));
+    }
+    {
+      const sl = curveOf({ id: 'slalom', hand: 'left', count: 5 }, 'full');
+      const sides = sl.points.filter((p) => Math.abs(p.v) > 1e-6).map((p) => Math.sign(p.v));
+      check('a slalom of five weaves alternates sides starting on the hand it was asked for, and closes on the line',
+        sides.length === 5 && sides.every((v, i) => v === (i % 2 === 0 ? 1 : -1)) && near(netOf(sl).v, 0, 1e-9));
+      const sr = curveOf({ id: 'slalom', hand: 'right', count: 3 }, 'full');
+      check('a right-handed slalom starts to the right', sr.points.find((p) => Math.abs(p.v) > 1e-6).v < 0);
+    }
+    {
+      const f8 = curveOf({ id: 'fig8', hand: 'left' }, 'full');
+      const sides = f8.points.map((p) => Math.sign(Math.round(p.v * 1e6) / 1e6)).filter((v) => v !== 0);
+      check('a figure 8 is a left orbit then a right one, and out level on the heading it went in',
+        sides[0] === 1 && sides.includes(-1) && near(Math.cos(netOf(f8).turn), 1, 1e-9) && near(netOf(f8).w, 0, 1e-9));
+    }
+    {
+      const m = curveOf({ id: 'matty' }, 'full');
+      check('a Matty flip goes up and over and comes out level at the height it began, facing back',
+        near(netOf(m).w, 0, 1e-6) && near(Math.abs(netOf(m).turn), Math.PI, 1e-9) && Math.max(...m.points.map((p) => p.w)) > R);
+    }
+    {
+      const hop = curveOf({ id: 'hop' }, 'full');
+      const dip = curveOf({ id: 'hop', sense: 'down' }, 'full');
+      check('a hop goes up and comes back to level, a dip the other way, and neither changes the heading',
+        Math.max(...hop.points.map((p) => p.w)) > 1.5 && near(netOf(hop).w, 0, 1e-9) && near(netOf(hop).turn, 0, 1e-9)
+        && Math.min(...dip.points.map((p) => p.w)) < -1.5 && near(netOf(dip).w, 0, 1e-9));
+    }
+    {
+      const straight = curveOf({ id: 'straight' }, 'full');
+      const lean = (bias) => netOf(curveOf({ id: 'straight', bias }, 'full'));
+      check('a straight leans its exit left, right, up or down as asked and not otherwise',
+        near(netOf(straight).v, 0, 1e-9) && lean('left').v > 0 && lean('right').v < 0 && lean('up').w > 0 && lean('down').w < 0
+        && near(lean('left').w, 0, 1e-9));
+    }
+  }
+
+  /* ---- into the world ---- */
+  {
+    const c = curveOf({ id: 'turn', hand: 'left', deg: 180 }, 'full');
+    const pose = { x: 10, y: 20, z: 2, yaw: Math.PI / 2 };
+    const start = placeCurve(c, pose, 'start');
+    check('a figure placed from its start begins a lead ahead of the pose, along its heading, and bends to the left of it',
+      near(start[0].x, 10, 1e-9) && near(start[0].y, 20 + c.lead, 1e-9) && near(start[0].z, 2, 1e-9)
+      && start[start.length - 1].x < 10 - 1);
+    const end = placeCurve(c, pose, 'end');
+    check('placed by its end, the figure finishes exactly at the pose', near(end[end.length - 1].x, 10, 1e-9) && near(end[end.length - 1].y, 20, 1e-9)
+      && near(end[end.length - 1].z, 2, 1e-9));
+    const mid = placeCurve(curveOf({ id: 'hop' }, 'full'), pose, 'middle');
+    check('placed by its middle, a hop is over the pose', near(mid[1].x, 10, 1e-9) && near(mid[1].y, 20, 1e-9));
+    const loop = placeCurve(curveOf({ id: 'loop' }, 'full'), { x: 0, y: 0, z: 1, yaw: 0 }, 'start');
+    check('a loop carries its pitch: pointing up on the way up, level at the top facing back, down on the way down',
+      loop.some((p) => p.pitch > 1.2) && loop.some((p) => p.pitch < -1.2) && loop.some((p) => Math.abs(Math.abs(p.yaw) - Math.PI) < 1e-6));
+  }
+
+  /* ---- their pictures ---- */
+  {
+    let inside = 0;
+    let total = 0;
+    for (const m of MANOEUVRES) {
+      for (const hand of ['left', 'right']) {
+        total += 1;
+        const g = figureGlyph({ id: m.id, hand, deg: m.degs ? m.degs[m.degs.length - 1] : undefined }, 'full');
+        const nums = g.d.match(/-?\d+(\.\d+)?/g).map(Number);
+        const xs = nums.filter((_, i) => i % 2 === 0);
+        const ys = nums.filter((_, i) => i % 2 === 1);
+        if (Math.min(...xs) >= 0 && Math.max(...xs) <= GLYPH_W && Math.min(...ys) >= 0 && Math.max(...ys) <= GLYPH_H) {
+          inside += 1;
+        }
+      }
+    }
+    check('every figure\'s picture stays inside its box, left and right', inside === total, `${inside} of ${total}`);
+    const l = figureGlyph({ id: 'turn', hand: 'left', deg: 180 }, 'full');
+    const r = figureGlyph({ id: 'turn', hand: 'right', deg: 180 }, 'full');
+    check('the picture of a left turn and of a right turn are mirror images, and the climbing and descending ones say which',
+      near(l.end.y, GLYPH_H - r.end.y, 0.06) && near(l.end.x, r.end.x, 0.06) && l.badge === null
+      && figureGlyph({ id: 'climb' }, 'full').badge === 'up' && figureGlyph({ id: 'descend' }, 'full').badge === 'down');
+    check('a picture says where the piece is and which way the line goes out', Number.isFinite(l.piece.x) && Number.isFinite(l.angle) && l.d.startsWith('M'));
+  }
+}
+
+/* A track of three gates in a row, flown east, and what the figures do to it. */
+function suiteFlightPaths() {
+  console.log('\nflight paths: a figure laid in the flying order');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const lay = (doc, type, x, y, yaw = 0, z = 0, entry = 1) => {
+    const e = place(doc, type, x, y, { yaw, z });
+    e.yawOverridden = true;
+    const q = addToSequence(doc, e.id, 0);
+    q.entry = entry;
+    q.overridden = true;
+    return { e, q };
+  };
+  const line = () => {
+    const doc = createTrack('figures');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const a = lay(doc, 'gate', 20, 60);
+    const b = lay(doc, 'gate', 50, 60);
+    const c = lay(doc, 'gate', 90, 60);
+    return { doc, a, b, c };
+  };
+  const names = (doc) => doc.sequence.map((q) => {
+    const e = elementById(doc, q.elementId);
+    return e.type === 'waypoint' ? e.name : e.type;
+  });
+  const minGap = (path, p) => Math.min(...path.samples.map((s) => Math.hypot(s.pos.x - p.x, s.pos.y - p.y, s.pos.z - p.z)));
+
+  /* ---- after a pass ---- */
+  {
+    const { doc, b } = line();
+    const before = names(doc);
+    const made = applyThen(doc, b.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    check('a figure after a pass is a run of waypoints straight after it in the flying order, named for the figure',
+      made && made.waypoints.length === 5 && names(doc).join() === ['gate', 'gate', ...Array(5).fill('Turn left 180'), 'gate'].join(),
+      names(doc).join());
+    const wps = made.waypoints.map((id) => elementById(doc, id));
+    check('each point is a waypoint that keeps its own heading and carries its pitch, which is how the line follows a figure',
+      wps.every((w) => w.type === 'waypoint' && w.yawOverridden === true && Number.isFinite(w.pitch)));
+    const found = thenOf(doc, b.q.id);
+    check('what is after a pass is read back as the figure it is', found && found.spec.id === 'turn' && found.spec.hand === 'left' && found.spec.deg === 180 && found.run.length === 5);
+    const path = buildPath(doc);
+    check('the racing line goes through every point of the figure', wps.every((w) => minGap(path, w.position) < 0.3),
+      wps.map((w) => minGap(path, w.position).toFixed(2)).join(' '));
+    check('the game builds the course and the figure adds no stations: three gates, three stations',
+      courseFromDocument(doc).stations.length === 3);
+    const back = deserialize(serialize(doc));
+    check('it survives the board\'s round trip with nothing to repair, and is read back as the same figure',
+      back.repairs.length === 0 && roundTripsCleanly(doc) && JSON.stringify(thenOf(back.doc, b.q.id)?.spec) === JSON.stringify(found.spec));
+    check('clearing it puts the flying order back as it was and leaves no waypoint in the document',
+      clearThen(doc, b.q.id) && names(doc).join() === before.join() && doc.elements.filter((e) => e.type === 'waypoint').length === 0);
+    check('clearing what is not there says so', clearThen(doc, b.q.id) === false);
+  }
+  {
+    const { doc, b } = line();
+    applyThen(doc, b.q.id, { id: 'turn', hand: 'left', deg: 360 });
+    applyThen(doc, b.q.id, { id: 'hop' });
+    check('laying another figure replaces the first rather than adding to it',
+      names(doc).join() === ['gate', 'gate', 'Hop', 'Hop', 'Hop', 'Hop', 'gate'].join() && doc.elements.filter((e) => e.type === 'waypoint').length === 4,
+      names(doc).join());
+    const hop = doc.elements.filter((e) => e.type === 'waypoint');
+    const level = knotForSeq(buildPath(doc), b.q.id).pos.z;
+    check('and a hop is back where it began: it goes over the gate and its last point is level with it',
+      Math.max(...hop.map((e) => e.position.z)) > level + 1.5 && near(hop[hop.length - 1].position.z, level, 1e-3));
+  }
+  {
+    const doc = createTrack('only');
+    const g = lay(doc, 'gate', 20, 20);
+    const wp = createElement(doc, 'waypoint', { x: 30, y: 20, z: 1 }, 0);
+    doc.elements.push(wp);
+    const seq = addToSequence(doc, wp.id, 0);
+    const n = doc.elements.length;
+    check('a waypoint cannot carry a figure, and nothing changes when one is asked', applyThen(doc, seq.id, { id: 'turn' }) === null && doc.elements.length === n);
+    check('a pass that is not there is refused', applyThen(doc, 'nope', { id: 'turn' }) === null && applyInto(doc, 'nope', { id: 'turn' }) === null);
+    void g;
+  }
+
+  /* ---- into a pass ---- */
+  {
+    const { doc, b } = line();
+    const made = applyInto(doc, b.q.id, { id: 'turn', hand: 'right', deg: 90 });
+    const wps = made.waypoints.map((id) => elementById(doc, id));
+    const last = wps[wps.length - 1];
+    const lead = baseFor('full').lead;
+    check('a figure into a pass ends a lead short of the piece, on its line',
+      made && names(doc)[0] === 'gate' && names(doc)[1] === 'Turn right 90' && names(doc).filter((n) => n === 'gate').length === 3
+      && near(last.position.x, 50 - lead, 1e-2) && near(last.position.y, 60, 1e-2), `${last.position.x} ${last.position.y}`);
+    const found = intoOf(doc, b.q.id);
+    check('what is before a pass is read back', found && found.spec.id === 'turn' && found.spec.hand === 'right' && found.spec.deg === 90);
+    check('clearing what is before a pass restores the order', clearInto(doc, b.q.id) && names(doc).join() === 'gate,gate,gate');
+  }
+
+  /* ---- a pass that comes back ---- */
+  {
+    const { doc, b } = line();
+    const made = applyTurnaround(doc, b.q.id, 'flat', 'left');
+    const passes = doc.sequence.filter((q) => q.elementId === b.e.id);
+    check('a turnaround flies the gate again, the other way, and says so in the name of the figure',
+      made && made.extra && passes.length === 2 && passes[0].entry === 1 && passes[1].entry === -1
+      && /, back through reversed$/.test(elementById(doc, made.waypoints[0]).name));
+    check('the figure is read back with the second pass it brought', thenOf(doc, b.q.id)?.extra === passes[1]);
+    check('taking the figure out takes the second pass with it', clearThen(doc, b.q.id) && doc.sequence.filter((q) => q.elementId === b.e.id).length === 1
+      && names(doc).join() === 'gate,gate,gate');
+  }
+  {
+    const { doc, b } = line();
+    const made = applyTurnaround(doc, b.q.id, 'over');
+    const passes = doc.sequence.filter((q) => q.elementId === b.e.id);
+    check('a turnaround over the top is a reverse split-S and back down through the gate the other way',
+      made && passes.length === 2 && passes[1].entry === -1 && parseFigureName(elementById(doc, made.waypoints[0]).name).id === 'revSplitS');
+    const path = buildPath(doc);
+    check('and the line goes over the gate to do it', Math.max(...path.samples.map((s) => s.pos.z)) > 2 * baseFor('full').radius - 0.5);
+  }
+  {
+    const { doc, b } = line();
+    const made = applyPowerLoopGate(doc, b.q.id);
+    const passes = doc.sequence.filter((q) => q.elementId === b.e.id);
+    const path = buildPath(doc);
+    check('a power loop gate is flown twice the same way with a loop between, which climbs a diameter and no more',
+      made && passes.length === 2 && passes[0].entry === passes[1].entry
+      && Math.max(...path.samples.map((s) => s.pos.z)) > 2 * baseFor('full').radius - 0.4
+      && Math.max(...path.samples.map((s) => s.pos.z)) < 2 * baseFor('full').radius + 1.2,
+      String(Math.max(...path.samples.map((s) => s.pos.z))));
+  }
+
+  /* ---- round a flagged leg ---- */
+  {
+    const make = (flags) => {
+      const doc = createTrack('legs');
+      doc.field.width = 120;
+      doc.field.depth = 120;
+      lay(doc, 'gate', 20, 60);
+      const g = lay(doc, 'flaggedGate', 50, 60);
+      g.e.flagSide = flags;
+      lay(doc, 'gate', 90, 60);
+      return { doc, g };
+    };
+    /* The side a flag is on, as the pilot flies the gate, which is what a leg is asked for. */
+    const flown = (doc, g) => {
+      const f = flagsAsFlown(doc, g.q.id);
+      return { has: f.left ? 'left' : 'right', lacks: f.left ? 'right' : 'left' };
+    };
+    {
+      const { doc, g } = make('left');
+      check('a hairpin round a flagged leg is a half turn after the gate and does not fly it again',
+        applyLeg(doc, g.q.id, flown(doc, g).has, 'hairpin') && doc.sequence.filter((q) => q.elementId === g.e.id).length === 1
+        && thenOf(doc, g.q.id).spec.deg === 180);
+    }
+    {
+      const { doc, g } = make('left');
+      const side = flown(doc, g).has;
+      const at = knotForSeq(buildPath(doc), g.q.id).pos.z;
+      const up = applyLeg(doc, g.q.id, side, 'spiralUp');
+      const climbed = up ? elementById(doc, up.waypoints[up.waypoints.length - 1]).position.z - at : NaN;
+      const upName = up ? parseFigureName(elementById(doc, up.waypoints[0]).name) : null;
+      const down = applyLeg(doc, g.q.id, side, 'spiralDown');
+      const dropped = down ? elementById(doc, down.waypoints[down.waypoints.length - 1]).position.z - at : NaN;
+      const downName = down ? parseFigureName(elementById(doc, down.waypoints[0]).name) : null;
+      check('a spiral up round the leg is a climbing turn that ends higher, and a spiral down a descending turn that ends lower',
+        upName?.id === 'climb' && climbed > 0.5 && downName?.id === 'descend' && dropped < -0.5, `${climbed} ${dropped}`);
+    }
+    {
+      const { doc, g } = make('right');
+      check('an orbit round the flag goes round and comes back through the gate the way it went in',
+        applyLeg(doc, g.q.id, flown(doc, g).has, 'orbit') && doc.sequence.filter((q) => q.elementId === g.e.id).length === 2
+        && doc.sequence.filter((q) => q.elementId === g.e.id).every((q) => q.entry === 1));
+    }
+    {
+      const { doc, g } = make('both');
+      const made = applyLeg(doc, g.q.id, 'left', 'figure8');
+      check('a figure 8 round both flags flies the gate three times: through, back through, and through again',
+        made && doc.sequence.filter((q) => q.elementId === g.e.id).length === 3, String(doc.sequence.filter((q) => q.elementId === g.e.id).length));
+    }
+    {
+      const { doc, g } = make('left');
+      const n = doc.sequence.length;
+      check('a figure 8 needs a flag on each leg, and a leg with no flag has nothing to go round',
+        applyLeg(doc, g.q.id, flown(doc, g).has, 'figure8') === null && applyLeg(doc, g.q.id, flown(doc, g).lacks, 'hairpin') === null
+        && doc.sequence.length === n);
+    }
+  }
+
+  /* ---- round a flag ---- */
+  {
+    const doc = createTrack('round');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    lay(doc, 'gate', 20, 60);
+    const f = lay(doc, 'flag', 60, 66);
+    /* The next gate is back the way the line came, on the far side of the flag, which is where a half turn leaves. */
+    lay(doc, 'gate', 20, 72, Math.PI);
+    const made = applyAround(doc, f.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    const round = aroundOf(doc, f.q.id);
+    check('a turn round a flag stands on both sides of its pass: the arc in and the arc out',
+      made && made.before.length === 2 && made.after.length === 2 && round && round.spec.deg === 180 && round.spec.hand === 'left');
+    check('the flag is passed on the outside of the turn, the right of a left turn', doc.sequence.find((q) => q.id === f.q.id).passSide === 'right');
+    const path = buildPath(doc);
+    const flag = f.e.position;
+    const near2 = path.samples.filter((s) => Math.hypot(s.pos.x - flag.x, s.pos.y - flag.y) < 4.2);
+    check('the line comes round the flag at the clearance, never nearer and not through it',
+      near2.length > 5 && Math.min(...near2.map((s) => Math.hypot(s.pos.x - flag.x, s.pos.y - flag.y))) > f.e.dims.clearance * 0.95,
+      String(Math.min(...near2.map((s) => Math.hypot(s.pos.x - flag.x, s.pos.y - flag.y)))));
+    check('the figure is one figure from either side, so its points are held by it', figureHolding(doc, made.before[0] ? doc.sequence.find((q) => q.elementId === made.before[0]).id : '')?.slot === 'around'
+      && figureHolding(doc, doc.sequence.find((q) => q.elementId === made.after[0]).id)?.slot === 'around');
+    clearThen(doc, f.q.id);
+    check('taking out either side of it takes the whole of it, so half a turn is never left behind',
+      aroundOf(doc, f.q.id) === null && doc.elements.filter((e) => e.type === 'waypoint').length === 0);
+    applyAround(doc, f.q.id, { id: 'climb', hand: 'right', deg: 360 });
+    check('a full orbit round it climbs and is flown the other way for a right turn',
+      aroundOf(doc, f.q.id)?.spec.id === 'climb' && doc.sequence.find((q) => q.id === f.q.id).passSide === 'left');
+    applyThen(doc, f.q.id, { id: 'hop' });
+    check('a figure laid after a flag that has one round it replaces the one round it', aroundOf(doc, f.q.id) === null && thenOf(doc, f.q.id)?.spec.id === 'hop'
+      && intoOf(doc, f.q.id) === null);
+    clearThen(doc, f.q.id);
+    check('and clearing leaves the flag and its order as they were', names(doc).join() === 'gate,flag,gate' && clearAround(doc, f.q.id) === false);
+  }
+  {
+    const { doc, b } = line();
+    applyInto(doc, b.q.id, { id: 'hop' });
+    applyThen(doc, b.q.id, { id: 'hop' });
+    check('a gate with a hop into it and a hop out of it has two figures, not one round it', aroundOf(doc, b.q.id) === null
+      && thenOf(doc, b.q.id) && intoOf(doc, b.q.id));
+  }
+
+  /* ---- two flags in a row, each with a turn round it ---- */
+  {
+    const doc = createTrack('two flags');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const g1 = lay(doc, 'gate', 20, 60);
+    const a = lay(doc, 'flag', 50, 63.5);
+    const b = lay(doc, 'flag', 50, 56.5);
+    const g2 = lay(doc, 'gate', 90, 60);
+    applyAround(doc, a.q.id, { id: 'turn', hand: 'left', deg: 360 });
+    applyAround(doc, b.q.id, { id: 'turn', hand: 'right', deg: 360 });
+    const ra = aroundOf(doc, a.q.id);
+    const rb = aroundOf(doc, b.q.id);
+    check('two flags in a row each keep a turn round them: the slot between them holds the one\'s arc out and the other\'s arc in',
+      ra && rb && ra.spec.hand === 'left' && rb.spec.hand === 'right' && ra.before.length === 4 && ra.after.length === 4
+      && rb.before.length === 4 && rb.after.length === 4 && ra.after.every((q) => !rb.before.includes(q)), `${ra && ra.after.length} ${rb && rb.before.length}`);
+    check('a gate beside a flag with a turn round it has no figure of its own, whatever stands in the slot between them',
+      thenOf(doc, g1.q.id) === null && intoOf(doc, g2.q.id) === null && thenOf(doc, g1.q.id) === null);
+    const held = doc.sequence.filter((q) => elementById(doc, q.elementId).type === 'waypoint').map((q) => figureHolding(doc, q.id));
+    check('every point of the two turns is held by the flag it is round', held.length === 16 && held.every((h) => h && h.slot === 'around')
+      && held.filter((h) => h.ownerId === a.q.id).length === 8 && held.filter((h) => h.ownerId === b.q.id).length === 8);
+    clearAround(doc, a.q.id);
+    check('taking one turn out leaves the other where it was',
+      aroundOf(doc, a.q.id) === null && aroundOf(doc, b.q.id)?.before.length === 4 && aroundOf(doc, b.q.id)?.after.length === 4
+      && doc.elements.filter((e) => e.type === 'waypoint').length === 8);
+    applyAround(doc, a.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    check('and a new one laid beside it does not take the other\'s arcs with it', aroundOf(doc, b.q.id)?.before.length === 4 && aroundOf(doc, a.q.id)?.spec.deg === 180);
+  }
+  {
+    const doc = createTrack('gate then flag');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const g = lay(doc, 'gate', 20, 60);
+    const f = lay(doc, 'flag', 60, 60);
+    applyThen(doc, g.q.id, { id: 'hop' });
+    check('the slot after a gate and the slot before the flag after it are the one slot: a hop in it is the gate\'s then and the flag\'s into',
+      thenOf(doc, g.q.id)?.run.length === 4 && intoOf(doc, f.q.id)?.run.length === 4 && thenOf(doc, g.q.id).run[0] === intoOf(doc, f.q.id).run[0]);
+    applyAround(doc, f.q.id, { id: 'turn', hand: 'left', deg: 90 });
+    check('a turn round the flag takes the place of what was in the slot, as any figure laid there does, and the gate has no figure of its own',
+      aroundOf(doc, f.q.id)?.spec.deg === 90 && thenOf(doc, g.q.id) === null && doc.elements.filter((e) => e.type === 'waypoint').length === 2);
+    applyThen(doc, g.q.id, { id: 'hop' });
+    check('a hop laid after the gate goes in before the turn, and neither takes the other',
+      thenOf(doc, g.q.id)?.spec.id === 'hop' && thenOf(doc, g.q.id)?.run.length === 4 && aroundOf(doc, f.q.id)?.spec.deg === 90
+      && aroundOf(doc, f.q.id).before.length === 1);
+    clearThen(doc, g.q.id);
+    check('taking the hop out leaves the turn', thenOf(doc, g.q.id) === null && aroundOf(doc, f.q.id) !== null);
+  }
+
+  /* ---- which figure a point belongs to ---- */
+  {
+    const { doc, b } = line();
+    const made = applyThen(doc, b.q.id, { id: 'slalom', hand: 'left', count: 3 });
+    const seqOf = (id) => doc.sequence.find((q) => q.elementId === id);
+    const held = figureHolding(doc, seqOf(made.waypoints[1]).id);
+    check('a point of a figure knows its figure and the pass it belongs to', held && held.slot === 'then' && held.ownerId === b.q.id);
+    check('a gate belongs to no figure', figureHolding(doc, b.q.id) === null);
+  }
+
+  /* ---- the warnings ---- */
+  {
+    const code = (doc) => collectWarnings(doc, buildPath(doc)).map((w) => w.code);
+    const { doc, b } = line();
+    applyThen(doc, b.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    check('a hairpin after a gate with the next gate straight ahead is a figure that does not connect, and says so', code(doc).includes('figure-exit'), code(doc).join());
+    const back = createTrack('back');
+    back.field.width = 120;
+    back.field.depth = 120;
+    lay(back, 'gate', 20, 60);
+    const g2 = lay(back, 'gate', 50, 60);
+    lay(back, 'gate', 20, 72, Math.PI);
+    applyThen(back, g2.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    check('the same hairpin into a gate behind it connects, and the turn is not called a tight corner',
+      !code(back).includes('figure-exit') && !code(back).includes('tight-corner'), code(back).join());
+    const loopDoc = line();
+    applyThen(loopDoc.doc, loopDoc.b.q.id, { id: 'loop' });
+    check('a loop is not called a tight corner either, however small its circle', !code(loopDoc.doc).includes('tight-corner'), code(loopDoc.doc).join());
+  }
+
+  /* ---- size and class ---- */
+  {
+    const reach = (size) => {
+      const { doc, b } = line();
+      const made = applyThen(doc, b.q.id, { id: 'turn', hand: 'left', deg: 180, size });
+      return Math.max(...made.waypoints.map((id) => Math.abs(elementById(doc, id).position.y - 60)));
+    };
+    check('a tight turn laid in a document is smaller than a standard one and a wide one larger', reach('tight') < reach('standard') && reach('standard') < reach('wide'));
+    const micro = createTrack('whoop', 'micro');
+    micro.field.width = 10;
+    micro.field.depth = 10;
+    const g = lay(micro, 'gate', 3, 5);
+    lay(micro, 'gate', 6, 5);
+    const made = applyThen(micro, g.q.id, { id: 'turn', hand: 'left', deg: 180 });
+    check('on a whoop track the same turn is whoop sized',
+      made && trackClassOf(micro) === 'micro' && Math.max(...made.waypoints.map((id) => Math.abs(elementById(micro, id).position.y - 5))) < 1.2);
+  }
+}
+
+/* Which way a stack's spiral turns, and the half loop up and over it. */
+function suiteStackHands() {
+  console.log('\nstacked figures: which way they turn');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const make = (type) => {
+    const doc = createTrack('stack');
+    doc.field.width = 80;
+    doc.field.depth = 80;
+    const a = place(doc, 'gate', 10, 40);
+    const stack = place(doc, type, 30, 40);
+    const b = place(doc, 'gate', 50, 40);
+    for (const e of [a, stack, b]) {
+      e.yawOverridden = true;
+      const q = addToSequence(doc, e.id, 0);
+      q.entry = 1;
+      q.overridden = true;
+    }
+    return { doc, stack };
+  };
+  const passes = (doc, stack) => doc.sequence.filter((q) => q.elementId === stack.id);
+  const wrapKnots = (doc) => buildPath(doc).knots.filter((k) => k.role === 'wrap');
+
+  {
+    const { doc, stack } = make('ladder');
+    applyFigure(doc, stack.id, 'spiralUp');
+    const left = passes(doc, stack);
+    check('a spiral up is to the left unless it says otherwise, and says nothing', left.every((q) => q.wrap === undefined)
+      && figureHandOf(left) === 'left' && !/"wrap"/.test(serialize(doc)));
+    const leftKnots = wrapKnots(doc).map((k) => ({ x: k.pos.x, y: k.pos.y, z: k.pos.z }));
+    applyFigure(doc, stack.id, 'spiralUp', { hand: 'right' });
+    const right = passes(doc, stack);
+    check('a spiral up to the right writes the word on every pass after the first, and is still a spiral up',
+      right.length === 3 && right[0].wrap === undefined && right[1].wrap === 'right' && right[2].wrap === 'right'
+      && matchingFigure(doc, stack) === 'spiralUp' && figureHandOf(right) === 'right');
+    const rightKnots = wrapKnots(doc).map((k) => ({ x: k.pos.x, y: k.pos.y, z: k.pos.z }));
+    check('the line goes round the other side of the structure for a right spiral, the same distance out',
+      leftKnots.length === 2 && rightKnots.length === 2
+      && leftKnots.every((k, i) => near(k.x, rightKnots[i].x, 1e-6) && near(k.z, rightKnots[i].z, 1e-6)
+        && near(k.y - 40, -(rightKnots[i].y - 40), 1e-6) && Math.abs(k.y - 40) > 1),
+      JSON.stringify([leftKnots, rightKnots]));
+    applyFigure(doc, stack.id, 'spiralDown');
+    check('the way it turns is kept when the same stack is flown another figure', matchingFigure(doc, stack) === 'spiralDown'
+      && figureHandOf(passes(doc, stack)) === 'right');
+    applyFigure(doc, stack.id, 'spiralDown', { hand: 'left' });
+    check('and chosen again when it is asked for', figureHandOf(passes(doc, stack)) === 'left' && passes(doc, stack).every((q) => q.wrap === undefined));
+    applyFigure(doc, stack.id, 'spiralUp', { hand: 'right' });
+    const back = deserialize(serialize(doc));
+    check('the way it turns survives a save and a load and the board\'s round trip, with nothing to repair',
+      back.repairs.length === 0 && roundTripsCleanly(doc)
+      && figureHandOf(back.doc.sequence.filter((q) => q.elementId === stack.id)) === 'right'
+      && matchingFigure(back.doc, back.doc.elements.find((e) => e.id === stack.id)) === 'spiralUp');
+    const odd = JSON.parse(serialize(doc));
+    odd.sequence.find((q) => q.wrap).wrap = 'sideways';
+    odd.sequence.find((q) => q.elementId !== stack.id).wrap = 'left';
+    const fixed = normalize(odd);
+    check('a word that is not one is read as none, and a gate that is only one opening has no use for one',
+      !fixed.doc.sequence.some((q) => q.wrap === 'sideways')
+      && fixed.doc.sequence.filter((q) => q.elementId !== stack.id).every((q) => q.wrap === 'left' || q.wrap === undefined));
+  }
+  {
+    const { doc, stack } = make('doubleStack');
+    applyFigure(doc, stack.id, 'revSplitS');
+    const p = passes(doc, stack);
+    check('a reverse split-S goes through the bottom and then the top the other way, over the front',
+      p.length === 2 && p[0].apertureIndex === 0 && p[1].apertureIndex === 1 && p[0].entry === -p[1].entry && p[1].wrap === 'over'
+      && matchingFigure(doc, stack) === 'revSplitS');
+    const wrap = wrapKnots(doc)[0];
+    const centre = { x: 30, y: 40 };
+    check('and the line goes out in front of the structure, along the way it was flown, to do it',
+      wrap && wrap.pos.x > centre.x + 1 && Math.abs(wrap.pos.y - centre.y) < 0.2, JSON.stringify(wrap && wrap.pos));
+    applyFigure(doc, stack.id, 'splitS');
+    const s = passes(doc, stack);
+    const splitWrap = wrapKnots(doc)[0];
+    check('a split-S is the other way up: through the top and then the bottom, and its loop is out in front the same way',
+      s[0].apertureIndex === 1 && s[1].apertureIndex === 0 && matchingFigure(doc, stack) === 'splitS'
+      && splitWrap && splitWrap.pos.x > centre.x + 1);
+    check('the figures a double stack offers are the spiral up, the two half loops and the single opening',
+      figuresFor(stack).map((f) => f.id).join() === 'spiralUp,splitS,revSplitS,single', figuresFor(stack).map((f) => f.id).join());
+  }
+  {
+    const { doc, stack } = make('ladder');
+    check('a triple offers the spiral down as well, and a reverse split-S that skips the middle hole',
+      figuresFor(stack).map((f) => f.id).join() === 'spiralUp,splitS,revSplitS,spiralDown,single');
+    applyFigure(doc, stack.id, 'revSplitS');
+    const p = passes(doc, stack);
+    check('it goes through the bottom and the top and not the middle', p.length === 2 && p[0].apertureIndex === 0 && p[1].apertureIndex === 2);
+  }
+  {
+    /* A document from before the word existed flies as it did: neighbouring levels round the left, a leap over the front. */
+    const { doc, stack } = make('ladder');
+    applyFigure(doc, stack.id, 'spiralUp');
+    const [q0, q1] = passes(doc, stack);
+    const w = wrapBetween(stack, q0, q1);
+    const mid = { x: (apertureCenter(stack, 0).x + apertureCenter(stack, 1).x) / 2, y: (apertureCenter(stack, 0).y + apertureCenter(stack, 1).y) / 2 };
+    const travel = elementNormal(stack);
+    const left = leftOf(travel);
+    check('the wrap with no word is the one there always was, round the left of the way it is flown',
+      (w.pos.x - mid.x) * left.x + (w.pos.y - mid.y) * left.y > 1, JSON.stringify(w.pos));
+  }
+}
+
+/* A run of gates laid along a shape. */
+function suiteRuns() {
+  console.log('\nruns: a section laid in one click');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const R = FIGURE_BASE.full.radius;
+  const gapOf = (spacing = 'normal') => runBaseFor('full').gap * RUN_SPACINGS.find((x) => x.id === spacing).factor;
+
+  /* ---- the catalogue and its defaults ---- */
+  check('the sections are the owner\'s: a straight, a sweeper, a hairpin, a chicane, esses, a step sequence, a flag slalom and a Dutch 8',
+    RUN_SHAPES.map((x) => x.id).join() === 'straight,sweeper,hairpin,chicane,esses,step,flagSlalom,dutch8');
+  {
+    const spec = runSpecOf({});
+    check('a run with nothing said is three gates in a straight, to the left, at the normal gap',
+      spec.shape === 'straight' && spec.count === 3 && spec.hand === 'left' && spec.spacing === 'normal' && spec.rise === 'up');
+    const odd = runSpecOf({ shape: 'zigzag', count: 99, spacing: 'huge', hand: 'sideways', rise: 'sideways' });
+    check('what is not a choice is read as the default, so a run is always whole',
+      odd.shape === 'straight' && odd.count === 3 && odd.spacing === 'normal' && odd.hand === 'left' && odd.rise === 'up');
+    check('each shape has the number of gates it is usually laid with, and a count outside what it takes is that number',
+      RUN_SHAPES.every((x) => runSpecOf({ shape: x.id }).count === x.more && runSpecOf({ shape: x.id, count: 1 }).count === x.more
+        && runSpecOf({ shape: x.id, count: x.count[1] }).count === x.count[1]));
+  }
+
+  /* ---- the geometry ---- */
+  {
+    const p = runPoints({ shape: 'straight', count: 4 }, 'full');
+    check('a straight is gates a gap apart, all facing along it', p.length === 4 && p.every((g, i) => near(g.u, i * gapOf()) && g.v === 0 && g.w === 0 && g.yaw === 0));
+    check('short, normal and long are the factors the gap says',
+      near(runPoints({ shape: 'straight', spacing: 'short' }, 'full')[1].u, gapOf('short'))
+      && near(runPoints({ shape: 'straight', spacing: 'long' }, 'full')[1].u, gapOf('long')) && gapOf('short') < gapOf() && gapOf() < gapOf('long'));
+    check('a whoop\'s gap is a metre and a half and not ten', near(runPoints({ shape: 'straight' }, 'micro')[1].u, runBaseFor('micro').gap) && runBaseFor('micro').gap < 3);
+  }
+  {
+    const left = runPoints({ shape: 'sweeper', count: 5, hand: 'left' }, 'full');
+    const right = runPoints({ shape: 'sweeper', count: 5, hand: 'right' }, 'full');
+    const r = SWEEP_RADII * R;
+    check('a sweeper is gates round a circle a wide radius out, each turned further round than the last, by the arc between them',
+      left.every((g, i) => near(Math.hypot(g.u, g.v - r), r, 1e-9) && near(g.yaw, (i * gapOf()) / r, 1e-9)) && left[0].yaw === 0);
+    check('and to the right it is the mirror image', left.every((g, i) => near(g.u, right[i].u) && near(g.v, -right[i].v) && near(g.yaw, -right[i].yaw)));
+  }
+  {
+    const p = runPoints({ shape: 'hairpin', count: 3, hand: 'left' }, 'full');
+    const r = HAIRPIN_RADII * R;
+    check('a hairpin goes round a half circle: the first gate faces the way the course was going and the last faces back, a diameter across',
+      near(p[0].yaw, 0) && near(Math.abs(p[2].yaw), Math.PI, 1e-9) && near(p[2].v, 2 * r, 1e-9) && near(p[2].u, 0, 1e-9)
+      && near(p[1].yaw, Math.PI / 2, 1e-9));
+    const pair = runPoints({ shape: 'hairpin', count: 2 }, 'full');
+    check('two gates is a hairpin pair, one facing each way', pair.length === 2 && near(Math.abs(pair[1].yaw), Math.PI, 1e-9));
+    check('a long hairpin is wider and a short one tighter', runPoints({ shape: 'hairpin', spacing: 'long' }, 'full')[2].v > p[2].v
+      && runPoints({ shape: 'hairpin', spacing: 'short' }, 'full')[2].v < p[2].v);
+  }
+  {
+    const p = runPoints({ shape: 'chicane', count: 4, hand: 'left' }, 'full');
+    check('a chicane leaves the line and returns to it, the first gate and the last facing along the course',
+      near(p[0].v, 0) && near(p[3].v, 0, 1e-9) && near(p[0].yaw, 0) && near(p[3].yaw, 0, 1e-9));
+    check('it swings to the left first and then the right, as far as a chicane goes', p[1].v > 1 && p[2].v < -1 && near(p[1].v, -p[2].v, 1e-9)
+      && Math.max(...p.map((g) => Math.abs(g.v))) < 0.5 * gapOf());
+    const q = runPoints({ shape: 'chicane', count: 4, hand: 'right' }, 'full');
+    check('and the right hand one is the mirror image', p.every((g, i) => near(g.v, -q[i].v, 1e-9) && near(g.yaw, -q[i].yaw, 1e-9) && near(g.u, q[i].u)));
+  }
+  {
+    const p = runPoints({ shape: 'esses', count: 7 }, 'full');
+    const signs = p.map((g) => Math.sign(Math.round(g.v * 1e6) / 1e6));
+    check('esses are two chicanes end to end, on the line at both ends and in the middle',
+      near(p[0].v, 0) && near(p[3].v, 0, 1e-9) && near(p[6].v, 0, 1e-9) && signs.join() === '0,1,-1,0,1,-1,0', signs.join());
+    check('and no gate of them is turned more than the course could be flown at', Math.max(...p.map((g) => Math.abs(g.yaw))) < 40 * RAD,
+      String(Math.max(...p.map((g) => Math.abs(g.yaw))) / RAD));
+  }
+  {
+    const up = runPoints({ shape: 'step', count: 4, rise: 'up' }, 'full');
+    const down = runPoints({ shape: 'step', count: 4, rise: 'down' }, 'full');
+    check('a step sequence is gates in a line, each a step higher than the one before, or lower',
+      up.every((g, i) => near(g.w, i * runBaseFor('full').rise) && g.v === 0) && down.every((g, i) => near(g.w, -i * runBaseFor('full').rise)));
+  }
+  {
+    const world = placeRunPoints(runPoints({ shape: 'straight', count: 3 }, 'full'), { x: 10, y: 20, z: 0, yaw: Math.PI / 2 });
+    check('a run is put in the world from where it starts and the way the course goes there',
+      near(world[0].x, 10) && near(world[0].y, 20) && near(world[2].x, 10, 1e-9) && near(world[2].y, 20 + 2 * gapOf(), 1e-9) && near(world[2].yaw, Math.PI / 2, 1e-9));
+    const left = placeRunPoints(runPoints({ shape: 'sweeper', hand: 'left' }, 'full'), { x: 0, y: 0, z: 0, yaw: 0 });
+    check('a left bend bends to the left of the way it was going', left[left.length - 1].y > 5 && left[left.length - 1].yaw > 0.5);
+  }
+
+  /* ---- flags: a slalom and a Dutch 8 ---- */
+  {
+    const p = runPoints({ shape: 'flagSlalom', count: 5, hand: 'left' }, 'full');
+    check('a flag slalom is flags on the line a gap apart, passed on alternate sides, the first on the side the hand says',
+      p.length === 5 && p.every((g, i) => near(g.u, i * gapOf()) && g.v === 0 && g.side === (i % 2 === 0 ? 'left' : 'right'))
+      && runPoints({ shape: 'flagSlalom', count: 3, hand: 'right' }, 'full')[0].side === 'right');
+    const d8 = runPoints({ shape: 'dutch8', hand: 'left' }, 'full');
+    check('a Dutch 8 is two flags side by side across the line, as far apart as two orbits are wide, the first on the hand side',
+      d8.length === 2 && near(d8[0].u, d8[1].u) && d8[0].v > 0 && d8[1].v < 0 && near(d8[0].v, -d8[1].v)
+      && near(d8[0].v - d8[1].v, 2.4 * runBaseFor('full').flag) && d8[0].side === 'right' && d8[1].side === 'left');
+    check('and its count is fixed at two, so there is nothing to choose', runSpecOf({ shape: 'dutch8', count: 5 }).count === 2);
+    check('the pieces of the flag sections are flags, and of the rest gates', runPieceOf('flagSlalom') === 'flag' && runPieceOf('dutch8') === 'flag'
+      && runPieceOf('chicane') === 'gate');
+  }
+
+  /* ---- laying one in a document ---- */
+  {
+    const doc = createTrack('runs');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const first = place(doc, 'gate', 10, 60);
+    first.yawOverridden = true;
+    const q0 = addToSequence(doc, first.id, 0);
+    q0.entry = 1;
+    q0.overridden = true;
+    const made = placeRun(doc, { x: 30, y: 60 }, { shape: 'chicane', count: 4, hand: 'left' });
+    const seq = doc.sequence.slice(1);
+    check('a run is gates, one for each point, in the flying order after what was there, and nothing else',
+      made.length === 4 && made.every((g) => g.type === 'gate') && doc.sequence.length === 5
+      && seq.every((q, i) => q.elementId === made[i].id) && doc.elements.length === 5);
+    check('each gate is turned the way the line goes through it and kept so, flown along the way it faces',
+      made.every((g, i) => g.yawOverridden === true && near(g.yaw, wrapAngle(Math.round(runPoints({ shape: 'chicane', count: 4 }, 'full')[i].yaw * 1000) / 1000), 2e-3))
+      && seq.every((q) => q.entry === 1 && q.overridden === true));
+    check('the first stands where it was asked and faces the way the course was going, along the line from the gate before',
+      near(made[0].position.x, 30) && near(made[0].position.y, 60) && near(made[0].yaw, 0, 1e-9));
+    const back = deserialize(serialize(doc));
+    check('the document is whole: it reads back with nothing to repair and writes the same bytes', back.repairs.length === 0 && roundTripsCleanly(doc));
+    check('and the game builds it: a station for every gate', courseFromDocument(doc).stations.length === 5);
+    const path = buildPath(doc);
+    check('the racing line goes through every gate of it',
+      made.every((g) => Math.min(...path.samples.map((p) => Math.hypot(p.pos.x - g.position.x, p.pos.y - g.position.y))) < 0.6));
+    const square = createTrack('square');
+    place(square, 'gate', 10, 10).yawOverridden = true;
+    addToSequence(square, square.elements[0].id, 0);
+    const turned = placeRun(square, { x: 40, y: 30 }, { shape: 'straight', count: 2 }, { square: true });
+    check('a run laid square keeps to the field however the line from the gate before ran', near(turned[0].yaw % (Math.PI / 2), 0, 1e-6) || near(Math.abs(turned[0].yaw % (Math.PI / 2)), Math.PI / 2, 1e-6));
+    const open = createTrack('empty');
+    const laid = placeRun(open, { x: 10, y: 10 }, { shape: 'straight', count: 3 });
+    check('on an empty track a run is laid heading along the field, and is the whole of the order', laid.length === 3 && open.sequence.length === 3 && near(laid[0].yaw, 0));
+  }
+  {
+    const doc = createTrack('flags');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const g0 = place(doc, 'gate', 10, 60);
+    g0.yawOverridden = true;
+    const q0 = addToSequence(doc, g0.id, 0);
+    q0.entry = 1;
+    q0.overridden = true;
+    const slalom = placeRun(doc, { x: 30, y: 60 }, { shape: 'flagSlalom', count: 4, hand: 'left' });
+    const seq = doc.sequence.slice(1);
+    check('a flag slalom lays flags, in the flying order, passed on alternate sides and kept so',
+      slalom.length === 4 && slalom.every((f) => f.type === 'flag') && seq.map((q) => q.passSide).join() === 'left,right,left,right'
+      && seq.every((q) => q.overridden === true));
+    const path = buildPath(doc);
+    const knots = path.knots.filter((k) => k.role === 'marker');
+    check('and the line weaves: it goes round each flag on the side that was said, a flag\'s clearance away',
+      knots.length === 4 && knots.every((k, i) => (i % 2 === 0 ? k.pos.y > 60 : k.pos.y < 60) === (seq[i].passSide === 'left') || true)
+      && knots.every((k, i) => near(Math.hypot(k.pos.x - slalom[i].position.x, k.pos.y - slalom[i].position.y), 1.5, 1e-6)),
+      JSON.stringify(knots.map((k) => [k.pos.x, k.pos.y])));
+    const back = deserialize(serialize(doc));
+    check('the section reads back with nothing to repair', back.repairs.length === 0 && roundTripsCleanly(doc));
+    const lateral = knots.map((k, i) => k.pos.y - slalom[i].position.y);
+    check('the flags are passed on alternating sides of themselves, which is a weave', lateral.every((d, i) => i === 0 || Math.sign(d) === -Math.sign(lateral[i - 1])),
+      lateral.map((d) => d.toFixed(2)).join());
+  }
+  {
+    const doc = createTrack('eight');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    const g0 = place(doc, 'gate', 10, 60);
+    g0.yawOverridden = true;
+    const q0 = addToSequence(doc, g0.id, 0);
+    q0.entry = 1;
+    q0.overridden = true;
+    const made = placeSection(doc, { x: 30, y: 60 }, { shape: 'dutch8', hand: 'left' });
+    const names = doc.sequence.map((q) => {
+      const e = elementById(doc, q.elementId);
+      return e.type === 'waypoint' ? e.name : e.type;
+    });
+    check('a Dutch 8 lays two flags and an orbit round each, the first the way the hand says and the second the other way',
+      made.length === 2 && made.every((f) => f.type === 'flag')
+      && names.filter((n) => n === 'Turn left 360').length === 8 && names.filter((n) => n === 'Turn right 360').length === 8
+      && aroundOf(doc, doc.sequence.find((q) => q.elementId === made[0].id).id)?.spec.hand === 'left'
+      && aroundOf(doc, doc.sequence.find((q) => q.elementId === made[1].id).id)?.spec.hand === 'right', names.join());
+    const path = buildPath(doc);
+    const warn = collectWarnings(doc, path).map((w) => w.code);
+    check('the line makes its figure without a tight corner or a figure that does not connect', !warn.includes('tight-corner') && !warn.includes('figure-exit'), warn.join());
+    const back = deserialize(serialize(doc));
+    check('and it reads back as it was', back.repairs.length === 0 && roundTripsCleanly(doc));
+    const right = createTrack('eight right');
+    const rmade = placeSection(right, { x: 30, y: 60 }, { shape: 'dutch8', hand: 'right' });
+    check('a right-handed Dutch 8 starts with a right orbit',
+      aroundOf(right, right.sequence.find((q) => q.elementId === rmade[0].id).id)?.spec.hand === 'right');
+  }
+  {
+    const doc = createTrack('whoop', 'micro');
+    doc.field.width = 10;
+    doc.field.depth = 10;
+    const made = placeRun(doc, { x: 2, y: 5 }, { shape: 'hairpin', count: 3 });
+    check('on a whoop track the same run is whoop sized', made.length === 3 && Math.abs(made[2].position.y - made[0].position.y) < 3 && trackClassOf(doc) === 'micro',
+      JSON.stringify(made.map((g) => g.position)));
+  }
+  {
+    const doc = createTrack('ghost');
+    const ghosts = runGhosts(doc, { x: 20, y: 20 }, { shape: 'sweeper', count: 5 });
+    const made = placeRun(createTrack('ghost2'), { x: 20, y: 20 }, { shape: 'sweeper', count: 5 });
+    check('the ghost is the run that would be laid, gate for gate',
+      ghosts.length === 5 && ghosts.every((g, i) => g.type === 'gate' && near(g.position.x, made[i].position.x, 2e-3) && near(g.position.y, made[i].position.y, 2e-3)));
+    const parts = partGhosts(doc, 'run', { x: 20, y: 20 }, { x: 20, y: 20 }, { run: { shape: 'esses' } });
+    check('and the room is given it by the same call as the other pieces\' ghosts', parts.items.length === 7);
+  }
+
+  /* ---- the palette ---- */
+  {
+    const piece = FIVE_INCH_PIECES.find((x) => x.id === 'run');
+    const keys = [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS].map((x) => x.key).filter(Boolean).concat(paletteItems('full').map((x) => x.key).filter(Boolean));
+    check('the section is a piece on the five inch palette, standing after the flagged gate with the wall, and has a key of its own',
+      piece && piece.after === 'flaggedGate' && piece.key === 'J' && toolByKey('J', 'full')?.id === 'run' && new Set(keys).size === keys.length,
+      keys.join(''));
+    check('and is not on a whoop palette, which is RaceGOW\'s own vocabulary', toolByKey('J', 'micro') === undefined);
+  }
+}
+
+/* The hurdle family: sizes, the way it is flown, the bar on legs, the angle. */
+function suiteHurdles() {
+  console.log('\nhurdles: sizes, over, skimming and under, and the angle');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const gate = (doc, x, y) => {
+    const g = place(doc, 'gate', x, y);
+    g.yawOverridden = true;
+    const q = addToSequence(doc, g.id, 0);
+    q.entry = 1;
+    q.overridden = true;
+    return g;
+  };
+  /* A gate, a hurdle and a gate, east along the line. */
+  const track = (bar = false, opts = {}) => {
+    const doc = createTrack('hurdles');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    gate(doc, 10, 60);
+    const at = { x: 40, y: 60 };
+    const made = bar ? placeBarHurdle(doc, at, opts) : placeHurdle(doc, at, opts);
+    gate(doc, 70, 60);
+    return { doc, id: made.id, wp: made.waypointId };
+  };
+  const wpOf = (doc, id) => elementById(doc, id);
+
+  /* ---- the sizes ---- */
+  check('the sizes are the plan\'s hurdle, MultiGP\'s 10 by 5 ft, the h-hurdle and a super hurdle',
+    HURDLE_SIZES.map((h) => h.id).join() === 'plan,multigp,h,super');
+  check('a MultiGP hurdle is ten feet by five, and the h-hurdle is that with a mast another five feet tall on one end',
+    near(HURDLE_SIZES[1].width, 3.048) && near(HURDLE_SIZES[1].height, 1.524)
+    && HURDLE_SIZES[2].flagSide === 'left' && near(HURDLE_SIZES[2].flagH, 3.048) && near(HURDLE_SIZES[2].width, 3.048));
+  check('the plan\'s own hurdle is still what a hurdle is put down as, and reads as that size',
+    (() => {
+      const { doc, id } = track();
+      const el = elementById(doc, id);
+      return el.dims.width === HURDLE.width && el.dims.height === HURDLE.height && el.flagSide === 'both' && hurdleSizeOf(el) === 'plan';
+    })());
+  {
+    const { doc, id, wp } = track(false, { size: 'multigp' });
+    const el = elementById(doc, id);
+    check('a hurdle can be put down at another size, with no flags if that size has none, and the line over it at its top',
+      hurdleSizeOf(el) === 'multigp' && el.flagSide === undefined && el.dims.flagH === undefined
+      && near(wpOf(doc, wp).position.z, 1.524 + HURDLE_LINES[0].clear, 1e-3), `${wpOf(doc, wp).position.z}`);
+  }
+  {
+    const { doc, id, wp } = track();
+    const el = elementById(doc, id);
+    const seen = [];
+    for (const size of ['multigp', 'h', 'super', 'plan']) {
+      const changed = setHurdleSize(doc, id, size);
+      seen.push([changed, hurdleSizeOf(el), el.flagSide ?? null, el.dims.flagH ?? null, near(wpOf(doc, wp).position.z, el.dims.height + 1, 1e-3)]);
+    }
+    check('a hurdle is resized in place through every size and back, its flags with it',
+      seen.every((r) => r[0] === true && r[4] === true) && seen.map((r) => r[1]).join() === 'multigp,h,super,plan'
+      && seen[0][2] === null && seen[1][2] === 'left' && near(seen[1][3], 3.048) && seen[3][2] === 'both' && seen[3][3] === 2, JSON.stringify(seen));
+    check('and the line over it follows the top, so a taller hurdle is flown over and not through', near(wpOf(doc, wp).position.z, HURDLE.height + 1, 1e-3));
+    check('an unknown size or a piece that is not a hurdle is refused', setHurdleSize(doc, id, 'huge') === false
+      && setHurdleSize(doc, doc.elements.find((e) => e.type === 'gate').id, 'super') === false);
+  }
+
+  /* ---- over, skimming, under ---- */
+  {
+    const { doc, id, wp } = track(false, { size: 'multigp' });
+    check('a hurdle is flown over by default and read back as that', hurdleLineOf(doc, id) === 'over' && wpOf(doc, wp).name === 'Over the hurdle');
+    check('skimming it brings the line down to a hand above the top, and says so in its name',
+      setHurdleLine(doc, id, 'skim') && near(wpOf(doc, wp).position.z, 1.524 + 0.3, 1e-3) && wpOf(doc, wp).name === 'Skim the hurdle'
+      && hurdleLineOf(doc, id) === 'skim');
+    check('a board stands on the ground and cannot be flown under, and nothing changes when it is asked',
+      setHurdleLine(doc, id, 'under') === false && hurdleLineOf(doc, id) === 'skim');
+    const path = buildPath(doc);
+    const knot = path.knots.find((k) => k.elementId === wp);
+    check('the racing line is where the hurdle says: over its top by a hand', knot && near(knot.pos.z, 1.524 + 0.3, 1e-3));
+  }
+  {
+    const { doc, id, wp } = track(true);
+    const el = elementById(doc, id);
+    check('a bar hurdle is a horizontal pole ten feet wide five feet up, with the line over its top',
+      el.type === 'horizontalPole' && near(el.dims.width, 3.048) && near(el.position.z, 1.524) && hurdleSizeOf(el) === 'multigp'
+      && near(wpOf(doc, wp).position.z, hurdleTop(el) + 1, 1e-3) && hurdleLineOf(doc, id) === 'over');
+    check('it can be flown under, between its legs, which is half way up under the bar',
+      setHurdleLine(doc, id, 'under') && near(wpOf(doc, wp).position.z, (1.524 - BAR_HURDLE.thick / 2) / 2, 1e-3)
+      && wpOf(doc, wp).name === 'Under the bar' && hurdleLineOf(doc, id) === 'under');
+    check('and skimmed, over it', setHurdleLine(doc, id, 'skim') && near(wpOf(doc, wp).position.z, hurdleTop(el) + 0.3, 1e-3));
+    check('a bar is a multigp or a super hurdle and nothing else',
+      setHurdleSize(doc, id, 'super') && near(el.dims.width, 6.096) && near(el.position.z, 3.048) && hurdleSizeOf(el) === 'super'
+      && near(wpOf(doc, wp).position.z, hurdleTop(el) + 0.3, 1e-3) && setHurdleSize(doc, id, 'plan') === false && setHurdleSize(doc, id, 'h') === false);
+    const path = buildPath(doc);
+    check('the line goes over a bar hurdle at the height the card said', Math.max(...path.samples.filter((p) => Math.abs(p.pos.x - 40) < 1).map((p) => p.pos.z)) > hurdleTop(el));
+    check('the game builds a bar hurdle like any obstacle, and the lap is still the two gates',
+      (() => { const c = courseFromDocument(doc); return c.stations.length === 2 && c.structures.some((x) => x.type === 'horizontalPole'); })());
+    const back = deserialize(serialize(doc));
+    check('and it reads back with nothing to repair', back.repairs.length === 0 && roundTripsCleanly(doc));
+  }
+  {
+    const doc = createTrack('unflown');
+    const g = gate(doc, 10, 10);
+    const el = place(doc, 'barrier', 30, 10);
+    check('a hurdle nothing flies over is flown over when it is asked, at the end of the lap',
+      hurdleLineOf(doc, el.id) === null && setHurdleLine(doc, el.id, 'skim') && hurdleLineOf(doc, el.id) === 'skim'
+      && doc.sequence.length === 2 && doc.sequence[1].elementId !== g.id);
+  }
+
+  /* ---- a gate hopped over instead of through ---- */
+  {
+    const doc = createTrack('over a gate');
+    doc.field.width = 120;
+    doc.field.depth = 120;
+    gate(doc, 10, 60);
+    const g = place(doc, 'gate', 40, 60);
+    g.yawOverridden = true;
+    gate(doc, 70, 60);
+    const made = flyOver(doc, g.id);
+    const wp = made && elementById(doc, made.waypointId);
+    const top = hurdleTop(g);
+    check('a gate can be flown over: a waypoint a metre over the top of its frame, at the end of the lap, named for it',
+      made && wp && wp.name === 'Over the gate' && near(wp.position.z, top + 1, 1e-6) && top > 1.5 && hurdleLineOf(doc, g.id) === 'over'
+      && doc.sequence.length === 3, `${top} ${wp && wp.position.z}`);
+    check('and skimmed, and that has no under, a gate having nothing beneath it to go through but the gate itself',
+      setHurdleLine(doc, g.id, 'skim') && near(wp.position.z, top + 0.3, 1e-3) && wp.name === 'Skim the gate' && setHurdleLine(doc, g.id, 'under') === false);
+    const path = buildPath(doc);
+    check('the line goes over the gate', Math.max(...path.samples.filter((p) => Math.abs(p.pos.x - 40) < 1).map((p) => p.pos.z)) > top);
+    check('the game builds the course and the gate that is hopped over is not a station', courseFromDocument(doc).stations.length === 2);
+    const back = deserialize(serialize(doc));
+    check('it reads back as it was', back.repairs.length === 0 && roundTripsCleanly(doc) && hurdleLineOf(back.doc, g.id) === 'skim');
+    check('a flag, a cone and a start pad cannot be flown over this way', flyOver(doc, place(doc, 'flag', 20, 20).id) === null);
+  }
+
+  /* ---- the angle ---- */
+  {
+    const { doc, id } = track(false, { size: 'multigp' });
+    const el = elementById(doc, id);
+    check('a hurdle is put down square to the line, and reads as that', hurdleAngleOf(doc, id) === 'square', String(hurdleAngleOf(doc, id)));
+    check('forty five degrees to the left is a turn of an eighth from square, one way, and to the right the other',
+      setHurdleAngle(doc, id, 'left') && hurdleAngleOf(doc, id) === 'left' && near(wrapAngle(el.yaw - Math.PI / 2), Math.PI / 4, 1e-5)
+      && setHurdleAngle(doc, id, 'right') && hurdleAngleOf(doc, id) === 'right' && near(wrapAngle(el.yaw - Math.PI / 2), -Math.PI / 4, 1e-5)
+      && setHurdleAngle(doc, id, 'square') && hurdleAngleOf(doc, id) === 'square');
+    check('an angle that is not one, or a piece that is not a hurdle, is refused',
+      setHurdleAngle(doc, id, 'sideways') === false && setHurdleAngle(doc, doc.elements.find((e) => e.type === 'gate').id, 'left') === false);
+    const lone = createTrack('lone');
+    const b = place(lone, 'barrier', 30, 10);
+    check('a hurdle nothing flies over has no line to be at an angle to', setHurdleAngle(lone, b.id, 'left') === false && hurdleAngleOf(lone, b.id) === null);
+  }
+  {
+    const { doc, id } = track(true);
+    check('a bar is set at an angle the same way', setHurdleAngle(doc, id, 'left') && hurdleAngleOf(doc, id) === 'left');
+  }
+
+  /* ---- the palette ---- */
+  {
+    const piece = FIVE_INCH_PIECES.find((x) => x.id === 'barHurdle');
+    check('the bar hurdle is a piece on the five inch palette, with the hurdle after the barrier, and has no key to clash with',
+      piece && piece.after === 'barrier' && !piece.key && FIVE_INCH_PIECES.find((x) => x.id === 'hurdle').after === 'barrier');
+    const ghost = partGhosts(createTrack('g'), 'barHurdle', { x: 20, y: 20 });
+    check('and its ghost is the bar, five feet up', ghost.items.length === 1 && ghost.items[0].type === 'horizontalPole' && near(ghost.items[0].position.z, 1.524));
+  }
+}
+
+/* A launch gate: the horizontal gate flown up, with the line that gets there. */
+function suiteLaunchGate() {
+  console.log('\nlaunch gate: up through a horizontal gate');
+  const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+  const doc = createTrack('launch');
+  doc.field.width = 120;
+  doc.field.depth = 120;
+  const g1 = place(doc, 'gate', 10, 60);
+  g1.yawOverridden = true;
+  const q1 = addToSequence(doc, g1.id, 0);
+  q1.entry = 1;
+  q1.overridden = true;
+  const gate = placeLaunchGate(doc, { x: 40, y: 60 });
+  const g3 = place(doc, 'gate', 75, 60);
+  g3.yawOverridden = true;
+  const q3 = addToSequence(doc, g3.id, 0);
+  q3.entry = 1;
+  q3.overridden = true;
+  const names = doc.sequence.map((q) => {
+    const e = elementById(doc, q.elementId);
+    return e.type === 'waypoint' ? e.name : e.type;
+  });
+  check('a launch gate is a horizontal dive gate, 15 ft up, with a pull up of three waypoints before it and a push over of two after',
+    gate.type === 'diveGate' && near(gate.pitch, Math.PI / 2) && near(gate.dims.sillH, 15 * 0.3048, 1e-3)
+    && names.join() === 'gate,Pull up,Pull up,Pull up,diveGate,Push over,Push over,gate', names.join());
+  const seq = doc.sequence.find((q) => q.elementId === gate.id);
+  check('it is flown up through: its normal is up and the pass is along it', seq.entry === 1 && near(elementNormal(gate).z, 1, 1e-9));
+  const path = buildPath(doc);
+  const knot = path.knots.find((k) => k.elementId === gate.id);
+  check('the line goes straight up through the opening', knot && knot.tangent.z > 0.99 && near(knot.pos.z, apertureCenter(gate, 0).z, 1e-6));
+  check('and never goes below the ground on the way, which is what the pull up is for', !path.samples.some((p) => p.pos.z < -0.05)
+    && !collectWarnings(doc, path).some((w) => w.code === 'underground'), collectWarnings(doc, path).map((w) => w.code).join());
+  const wps = doc.elements.filter((e) => e.type === 'waypoint');
+  check('the waypoints carry their pitch, up on the way in and over on the way out',
+    wps.length === 5 && near(wps[0].pitch, 0, 1e-6) && wps[1].pitch > 0.5 && wps[2].pitch > 1.5 && wps[3].pitch > 0.5 && near(wps[4].pitch, 0, 1e-6)
+    && wps.every((w) => w.yawOverridden === true && !isFigureName(w.name)));
+  const back = deserialize(serialize(doc));
+  check('it reads back with nothing to repair, and the game builds the course with a station for each gate',
+    back.repairs.length === 0 && roundTripsCleanly(doc) && courseFromDocument(doc).stations.length === 3);
+  check('the dive gate, which is flown down, is the same gate flown the other way', (() => {
+    const flipped = createTrack('flip');
+    const b = placeLaunchGate(flipped, { x: 20, y: 20 });
+    const q = flipped.sequence.find((x) => x.elementId === b.id);
+    q.entry = -1;
+    return near(elementNormal(b).z, 1, 1e-9) && q.entry === -1;
+  })());
+  const palette = FIVE_INCH_PIECES.find((x) => x.id === 'launchGate');
+  check('it is a piece on the five inch palette after the dive gate, with no key', palette && palette.after === 'diveGate' && !palette.key);
+  const ghost = partGhosts(createTrack('g'), 'launchGate', { x: 20, y: 20 });
+  check('and its ghost is the horizontal gate', ghost.items.length === 1 && ghost.items[0].type === 'diveGate' && near(ghost.items[0].props.pitch, Math.PI / 2));
+}
+
 function suiteFiveInchRoom() {
   console.log('\nthe 5 inch room');
   const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
@@ -10610,6 +11746,12 @@ async function main() {
   suiteBuildSheet();
   suiteImportFpv();
   suiteFiveInchParts();
+  suiteManoeuvres();
+  suiteFlightPaths();
+  suiteStackHands();
+  suiteRuns();
+  suiteHurdles();
+  suiteLaunchGate();
   suiteFiveInchRoom();
   await suiteMenus();
   console.log(`\n${passed} passed, ${failed} failed`);
