@@ -63508,3 +63508,115 @@ preview that was taken this morning is asked for afresh.
 
 One more thing went wrong: a `pkill -f` meant for the rehearsal board matched the shell running it and took the
 rest of that command with it. Nothing had been sent; the board was stopped by its process id instead.
+
+## 2026-10-02 | builder | The owner's catalogue in the builder: figures, sections, the hurdle family, handed stacks and a launch gate (the owner's ask)
+
+The owner, after the Nationals qualifier was flown: "ok getting there with the builder, lets focus on that, i'll
+manually build the tracks, here are all the variants we need in the track bulder - figure it out", and then the
+catalogue: fourteen manoeuvres (straight with a leaning exit, hop, turn, climbing turn, descending turn, split-S,
+reverse split-S, power loop, corkscrew, dive, launch, slalom, figure 8, Matty flip, each with a hand and where it
+matters a vertical sense) and six groups of elements (flags, ground gates, hurdles, elevated and stacked gates,
+indoor and whoop elements, course structure). Nothing here changes the physics, the plant, the module ABI or the
+build, and `git diff --stat vendor/betaflight` is empty. The plan and the row by row ledger are
+TRACK-BUILDER-VARIANTS-PLAN.md.
+
+### How it was read
+
+A track is pieces, the order they are flown in and a derived line. So the manoeuvres are shapes of the line, and are
+written as what the line already understands: runs of ordinary waypoints, each pointing the way the line goes through
+it, named by a closed grammar so they can be read back. The elements are pieces, or choices on a piece's card, or a
+pattern of pieces laid by one tool in one undo step. The one thing the document learns is an optional word on a
+stacked gate's sequence entry (`wrap`), which is in the plan's section 6 for the owner.
+
+### What changed
+
+- **`manoeuvres.js` (new).** The fourteen as pure curves in a local frame (ahead, left, up), every point with its
+  tangent in three axes, at most 45 degrees apart; sizes tight, standard and wide; a full circle gets a lead of its
+  radius and a bit so that it does not pass back through the piece it came from; the names' grammar and its exact
+  reading back. Half loops are 0.013 m from the true circle.
+- **`flightpaths.js` (new).** Then, Into it and Round it laid in the flying order and read back; a second pass where a
+  figure comes back (an orbit round a flagged leg, a turnaround over the top or round, a power loop gate); a figure
+  8 round both flags of a gate; the launch gate; the section the Section tool lays, including the Dutch 8's two turns
+  round two flags. A turn round a flag stands on both sides of the pass and keeps to its own arcs, so two flags in a
+  row each keep one and a gate beside a flag is not read as having a figure of its own.
+- **`glyphs.js` (new).** The picture of each figure, drawn from its own curve, so a left and a right turn are mirror
+  images because the curves are.
+- **`runs.js` (new).** The Section tool: straight, sweeper, hairpin, chicane, esses, step sequence, flag slalom and
+  Dutch 8; short, normal or long gaps; left or right; the ghost in the room.
+- **`parts.js`.** Hurdle sizes (the plan's, MultiGP's 10 by 5 ft, an h-hurdle, a super hurdle), a bar hurdle, how a
+  hurdle is flown (over, skimming, under a bar) and its angle; a gate hopped over.
+- **`figures.js`, `model.js`.** Which way a stack's spiral turns, and the reverse split-S: `wrap` on a sequence entry,
+  written only when said.
+- **`path.js`.** A waypoint's pitch is part of its tangent when it has set its heading, so a loop is followed up and over;
+  with no pitch it is the level tangent it always was.
+- **`warnings.js`.** `figure-exit` and `figure-entry`; `over-flag`; the figures' own curvature is exempt from
+  `tight-corner`.
+- **`ui.js`, `app.js`, `edit3d.js`, `index.html`, `elements.js`.** The Flight path section in the details, with a tab for
+  Then, Into it and Round it and a picture for every figure; the card's rows that open it; the figure note on a waypoint
+  with Take the figure out; the Section tool's choices under its button; three pieces on the palette (Section, Bar
+  hurdle, Launch gate); the hurdle card's Size, Flown and Set at; Fly over on a gate.
+- **`schema.md`, TRACK-BUILDER-VARIANTS-PLAN.md (new), TRACK-BUILDER-5IN-PLAN.md.** The word, the figures' names, the
+  waypoint's pitch, the new warnings, and the ledger.
+
+### Checked, this turn
+
+    self test            node src/trackbuilder/selftest.js: 2139 passed, 0 failed (1949 before). New suites:
+                         manoeuvres (geometry, mirror images, names), flight paths in a document, stacks' hands,
+                         sections, hurdles, the launch gate, over-flag, and every figure's round trip
+    flow check           node scripts/builder-flow-check.js: PASS, 639 checks, 0 failed (620 before). The new case "five inch:
+                         variants" drives a flight path in the details, a section, a bar hurdle and a launch gate
+                         with the pointer, 20 checks. An earlier full run failed one check, in the first case
+                         ("select", which waits for a click to select a gate), under load; it passed alone and in
+                         the run above
+    device check         npm run lint:devices: PASS. The first run failed five rows, all the whoop card on a tablet
+                         held in the hand, 368 px of a 581 px drawing against the 45 percent the check allows: the new
+                         rows made it taller. See what went wrong
+    served documents     a track made of every new construct through the deployed board's own inspectDocument:
+                         accepted, 19 gates, 69 elements; read back by the simulator with nothing to repair; its
+                         layout hash the same after a save and a load
+    the rest             lint:preload up to date (245 served), check:fresh 18 passed, check:path 12 passed, lint:nouns PASS
+                         (after one retired word in a coach line), mission-preset --check clean, no dashes added
+    pictures             the Flight path section, the Section options and every shape's ghost, the hurdle card,
+                         a Dutch 8, the whoop card, the phone and the tablet, and the elevation chart of seven
+                         figures laid in a row: looked at in headless Chromium; not committed
+    not run              npm run verify (no physics, plant, ABI or build change); shots.js; lint:board; lint:shell,
+                         lint:input, lint:responsive; nobody flew a figure, so none of this is a statement about how a
+                         figure flies
+
+### What went wrong, this turn
+
+- **A pitch of a quarter turn was written as 1.571, which is past it.** The loops end on a vertical tangent, a load clamps
+  pitch back to 1.5707963, and the next save wrote 1.570796: a track that was not the bytes it was after one round
+  trip, and for the board a layout hash that changes on a republish, which wipes the times. Found by putting the
+  document through the board's inspector, not by a check; the check that would have found it now exists (every
+  figure, both slots, both hands, round trips) and fails without the fix on eight of its sixty four.
+- **The same thing with a heading of exactly half a turn,** found earlier: 3.142 reads back as minus 3.141. Both are now
+  rounded and then wrapped or clamped.
+- **A figure's waypoints named by the grammar were read as a gate's figure when they were a flag's.** The slot between
+  two passes is one slot, and a turn round a flag stands in the slots on both sides of it, so a gate before a flag with
+  a turn showed the turn as its own Then. The readers now keep to a turn's own arcs.
+- **The launch gate sagged under the ground** from a vertical pass thirty metres from the last gate, because a
+  Hermite line that is to arrive vertical sags on the way; a level point at the bottom of the pull up fixes it.
+- **A crossover check fired twice on the Nationals qualifier,** which is a time trial and is right. Taken out and put to
+  the owner.
+- **The first Section tool's chicane faced the first gate 43 degrees off the line.** A sine starts at its steepest; it
+  now eases in and out of the line.
+- **The device check failed on the first run.** The new Then and Into rows, at finger size, made the whoop card on a
+  tablet 368 px tall in a 581 px drawing. On a touched screen the card is the small bar and its choices are left to
+  the details (More), which has the Flight path; Then and Into share one row on the rest; the hurdle card keeps only
+  how it is flown on a touched screen. The second run is clear.
+- **A Dive or a Split-S laid after a gate on the ground goes under the ground,** which is what the figure does from that
+  height, and `underground` says so. They are for after a tower or a launch; I did not make the card refuse them.
+- **Several of my own checks were wrong, not the code:** a count of five where the half turn lays one more than I
+  counted, a standard gate's height, a threshold on the number of cases.
+
+### The owner's word
+
+No approval was asked for or taken: no change here alters the physics model's shape, the module ABI or the build.
+The one change to the document, `wrap`, is optional and additive, and is put to the owner in the plan's section 6.
+
+### Left open
+
+The questions in the plan's section 6: roll on a gate (a banked angled gate), what a tunnel and a sky bridge are, the
+arch and the keyhole, the board's vocabulary, a crossover rule, a check for something over a climbing turn, and the
+new word. And two readings to confirm: what a slurdle is, and how big a super hurdle is.

@@ -10397,6 +10397,38 @@ function suiteFlightPaths() {
   });
   const minGap = (path, p) => Math.min(...path.samples.map((s) => Math.hypot(s.pos.x - p.x, s.pos.y - p.y, s.pos.z - p.z)));
 
+  /* ---- every figure is the bytes it was after a save and a load ---- */
+  {
+    /* A track is republished from what was loaded, and the board decides whether a republish keeps its times from a hash of the
+     * layout: a figure that is not the same after a round trip is a layout that changed, and the times with it. */
+    let unstable = 0;
+    let total = 0;
+    const odd = [];
+    for (const m of MANOEUVRES) {
+      for (const hand of m.hand ? ['left', 'right'] : [undefined]) {
+        for (const deg of m.degs ?? [undefined]) {
+          for (const slot of ['then', 'into']) {
+            const { doc, b } = line();
+            const spec = { id: m.id, hand, deg, sense: m.sense ? 'down' : undefined, size: 'wide' };
+            const made = slot === 'then' ? applyThen(doc, b.q.id, spec) : applyInto(doc, b.q.id, spec);
+            total += 1;
+            const back = deserialize(serialize(doc));
+            if (!made || back.repairs.length || !roundTripsCleanly(doc)) {
+              unstable += 1;
+              odd.push(`${slot} ${m.id} ${hand ?? ''} ${deg ?? ''}`);
+            }
+          }
+        }
+      }
+    }
+    check('every figure laid after a gate or before it reads back with nothing to repair and writes the bytes it was, which is what keeps a republished track\'s times',
+      unstable === 0 && total >= 40, `${unstable} of ${total}: ${odd.slice(0, 4).join(' | ')}`);
+    const { doc, b } = line();
+    applyTurnaround(doc, b.q.id, 'over');
+    applyLeg(doc, applyThen(doc, b.q.id, { id: 'hop' }) && b.q.id, 'left', 'orbit');
+    check('and so are a turnaround over the top, whose figure ends facing back', deserialize(serialize(doc)).repairs.length === 0 && roundTripsCleanly(doc));
+  }
+
   /* ---- after a pass ---- */
   {
     const { doc, b } = line();
@@ -10669,6 +10701,40 @@ function suiteFlightPaths() {
     const loopDoc = line();
     applyThen(loopDoc.doc, loopDoc.b.q.id, { id: 'loop' });
     check('a loop is not called a tight corner either, however small its circle', !code(loopDoc.doc).includes('tight-corner'), code(loopDoc.doc).join());
+  }
+
+  /* ---- a line over a flag ---- */
+  {
+    const code = (doc) => collectWarnings(doc, buildPath(doc)).filter((w) => w.code === 'over-flag');
+    const make = (type, over) => {
+      const doc = createTrack('over a flag');
+      doc.field.width = 120;
+      doc.field.depth = 120;
+      lay(doc, 'gate', 10, 60);
+      const f = lay(doc, type, 40, 60);
+      if (over) {
+        /* A waypoint right above it, in the order after it, which is where a hop laid by hand might put the line. */
+        const wp = createElement(doc, 'waypoint', { x: 40, y: 60, z: 5 }, 0);
+        doc.elements.push(wp);
+        addToSequence(doc, wp.id, 0, doc.sequence.length);
+      }
+      lay(doc, 'gate', 70, 60);
+      return { doc, f };
+    };
+    const flown = make('flag', false);
+    check('a flag flown round, as a flag is, is not warned about', code(flown.doc).length === 0);
+    const over = make('flag', true);
+    const hit = code(over.doc);
+    check('a line that goes over a flag is warned about, once, with where it is and which flag',
+      hit.length === 1 && hit[0].elementId === over.f.e.id && Number.isFinite(hit[0].s) && /goes up for ever/.test(hit[0].message), JSON.stringify(hit.map((w) => w.message)));
+    check('a cone, which is a marker on the ground, is not held to it', code(make('cone', true).doc).length === 0);
+    const lone = createTrack('lone flag');
+    place(lone, 'flag', 40, 60);
+    check('and a track with no line has nothing to check', collectWarnings(lone, null).filter((w) => w.code === 'over-flag').length === 0);
+    check('the Nationals qualifier, whose flags are all flown round, has none', (() => {
+      const doc = deserialize(JSON.stringify(FIVE_INCH_PRESETS[0])).doc;
+      return collectWarnings(doc, buildPath(doc)).every((w) => w.code !== 'over-flag');
+    })());
   }
 
   /* ---- size and class ---- */

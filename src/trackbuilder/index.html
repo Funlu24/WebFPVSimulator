@@ -1259,6 +1259,8 @@
         vertical-align: 1px;
       }
       .tb-fp-laid { margin: var(--s2) 0 0; color: var(--slate); font-size: var(--t-small); }
+      /* A card button that says what is laid, cut with an ellipsis when the name is longer than half a row. */
+      .tb-seg-btn.tb-card-wide { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
       /* The run tool's choices, under its button while it is in hand: small, because the palette is narrow, and quiet,
          because they are the tool's and not the track's. */

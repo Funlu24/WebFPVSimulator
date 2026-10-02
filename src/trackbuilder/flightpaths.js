@@ -299,7 +299,9 @@ function laidWaypoint(doc, p, spec, index) {
    * written as the value a load gives it back: 3.142 is past pi and reads back as -3.141, and a track that is not
    * the same after a round trip says so. */
   const wp = createElement(doc, 'waypoint', { x: mm(p.x), y: mm(p.y), z: mm(p.z) }, wrapAngle(mm(p.yaw)));
-  wp.pitch = mm(Math.max(-Math.PI / 2, Math.min(Math.PI / 2, p.pitch)));
+  /* Clamped to a quarter turn, and then rounded to what a saved track keeps: rounded first, a pitch of exactly a quarter turn is
+   * written as 1.571, which is past it, and a load clamps it back and the track is no longer the bytes it was. */
+  wp.pitch = Math.round(Math.max(-Math.PI / 2, Math.min(Math.PI / 2, p.pitch)) * 1e6) / 1e6;
   wp.yawOverridden = true;
   wp.name = figureName(spec);
   doc.elements.push(wp);

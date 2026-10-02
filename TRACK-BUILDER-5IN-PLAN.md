@@ -3,6 +3,9 @@
 A plan for the owner, 1 October 2026. It is written to be argued with. Section 8
 lists the decisions it takes on the owner's behalf, and how to reverse each one.
 
+The owner's catalogue of manoeuvres and elements of 2 October 2026, which this builder was
+then taken further to build, is in TRACK-BUILDER-VARIANTS-PLAN.md.
+
 Status is kept at the top and updated as stages land. As of 1 October 2026 every
 stage in section 5 has landed and the acceptance run in section 7 passes: the
 Nationals qualifying track is built from an empty canvas with the pointer and the

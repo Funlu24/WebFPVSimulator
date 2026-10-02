@@ -453,6 +453,41 @@ drop an invisible trigger volume in open air to pin the racing line where there
 is no gate, and a course that reads one of those as a gate puts obstacles on
 the field that are not on the real track.
 
+**A waypoint can point.** When its `yawOverridden` is true the racing line takes its tangent from
+its `yaw` and its `pitch` together, `(cos pitch * cos yaw, cos pitch * sin yaw, sin pitch)`, where it
+used to take it level, so a run of waypoints follows a vertical loop up, over and down. A waypoint
+that never set its pitch has pitch 0 and is the level tangent it always was. `pitch` has always been a
+field of every element and is clamped to a quarter turn either way.
+
+**A figure between two pieces.** The manoeuvres of the owner's catalogue of 2026-10-02 (straight with
+a leaning exit, hop and dip, turn, climbing turn, descending turn, split-S, reverse split-S, power
+loop, corkscrew, dive, launch, slalom, figure 8, Matty flip) are not elements and are not in the
+document under their own name. A figure is a run of ordinary `waypoint` elements in the flying order,
+each pointing the way the line goes through it, named by a closed grammar the builder reads back to
+find the figure again: `Turn left 180`, `Climbing turn right 360, wide`, `Corkscrew left up`,
+`Slalom right x4`, `Exit left`, `Hop`, `Dip`, `Power loop`, with `, tight` or `, wide` for a size and
+`, back through` or `, back through reversed` where the piece it belongs to is flown a second time
+as its own entry in the sequence (an orbit round a flagged leg, a turnaround, a power loop gate). A
+figure after a pass, before it, or round a flag stands in the slot of waypoints between two passes;
+`src/trackbuilder/manoeuvres.js` is the geometry and `src/trackbuilder/flightpaths.js` lays and reads
+them. A waypoint renamed is an ordinary waypoint again, and the board, which keeps names, keeps the
+figures. Their curvature is exempt from `tight-corner`, and `figure-exit` and `figure-entry` warn
+when a figure ends facing away from the next piece or starts facing back at the last.
+
+**A section.** The Section tool (`src/trackbuilder/runs.js`) lays a straight, a sweeper, a hairpin, a
+chicane, esses, a step sequence, a flag slalom or a Dutch 8 as ordinary gates or flags in the flying
+order in one step, and leaves nothing in the document that says it did.
+
+**The hurdle family.** A `barrier` is the board of a hurdle (the plan's 4 m by 1 m, MultiGP's 10 by 5
+ft, an h-hurdle, which is a flag mast 10 ft tall on one end, or a super hurdle twice the standard
+one), and a `horizontalPole` at 5 ft, 10 ft wide, is a bar hurdle. The lap goes over (or, for a bar,
+under) by a `waypoint` named `Over the hurdle`, `Skim the hurdle`, `Under the bar` and so on, put at the
+height the name says; a gate the lap hops over is the same, named `Over the gate`.
+
+**A launch gate** is a `diveGate` at its default horizontal pitch with its pass set upward, and two
+waypoints named `Pull up` before it and `Push over` after it, which are quarter circles and are exempt
+from `tight-corner` like a figure.
+
 Exactly one `startPads` element may exist. A second one is dropped on read.
 
 The defaults for every one of these live in exactly one place,
@@ -835,6 +870,7 @@ The flying order, in order. **One entry is one opening, not one element.**
 | `passSide` | `"left"`, `"right"` or null | **Markers only.** Which side of the marker the QUAD passes on, in the frame of the direction of travel. `null` for an aperture. |
 | `clearance` | number, metres, or null | **Markers only.** How far off the marker the racing line is drawn. |
 | `overridden` | boolean | `true` when the AUTHOR set the face or the side by hand, which stops the tool re-deriving it. |
+| `wrap` | `"left"`, `"right"`, `"over"`, or absent | **Aperture entries only, and optional.** How the line gets here from the pass before it when that was another opening of the same stack: round the pilot's left of the structure, round the right, or looping out over the front. Written only when it was said, so an entry that never said keeps its bytes and the line's default: neighbouring levels round the left, a leap between levels over the front. See **Stacked figures**. |
 
 A structure may appear more than once. That is the point:
 
@@ -852,16 +888,19 @@ A double stack or a triple stack is one structure and several openings. Each
 opening is a pass of its own. The inspector offers named figures that write
 those passes in one click:
 
-| figure | openings, in order | faces |
-| --- | --- | --- |
-| One opening | the chosen hole | derived, or as set |
-| Spiral up | bottom to top | the same face on every hole, wrapping around the stack |
-| Spiral down | top to bottom, triples only | alternating, wrapping around the stack |
-| Split-S | top, then bottom | opposite. On a triple the middle opening is skipped. |
+| figure | openings, in order | faces | wrap |
+| --- | --- | --- | --- |
+| One opening | the chosen hole | derived, or as set | |
+| Spiral up | bottom to top | the same face on every hole | round the left, or the right when it says so |
+| Spiral down | top to bottom, triples only | alternating | round the left, or the right when it says so |
+| Split-S | top, then bottom | opposite. On a triple the middle opening is skipped. | out over the front |
+| Reverse Split-S | bottom, then top | opposite. On a triple the middle opening is skipped. | `over`, said, because two neighbouring levels would otherwise be a spiral |
 
 The figure is not a stored field. It is detected from the consecutive sequence
 entries on that element, so a track from before figures existed still loads,
-and a hand edit that leaves the plan still lights the matching button.
+and a hand edit that leaves the plan still lights the matching button. The way a
+spiral turns is read the same way, off the `wrap` of the second pass: `right` or, when
+there is none, left.
 
 Placing a double stack or a triple stack writes a spiral up, so each hole is
 already a gate. The inspector's How it is flown cards change that.
@@ -991,6 +1030,9 @@ does. Codes, so a consumer can filter:
 | `unsequenced` | warn | an element that could be in the course is not |
 | `element-out-of-field` | warn | an element stands outside the field |
 | `coincident` | warn | two consecutive knots are in the same place |
+| `figure-exit` | warn | a figure ends facing away from the next piece, so the line has to turn back on itself to reach it |
+| `figure-entry` | warn | a figure is entered from a piece facing the other way, or starts heading back at the one before it |
+| `over-flag` | warn | the line goes over a flag: a flag's line goes up for ever, so it is flown round and never over |
 | `empty` | info | nothing in the flying order yet |
 | `no-start` | info | no start pads, so the lap does not close |
 
@@ -1061,6 +1103,16 @@ is missing, with a default, all four built, that is what every gate before it
 was. A reader that does not know it builds the whole frame, which is a
 picture with pipe the author took away rather than a document whose meaning
 changed: the openings, the flying order and the scoring are untouched.
+
+### A stack's wrap is not a bump
+
+`wrap` is an optional field on a sequence entry for an aperture, written only when it was said. A
+reader that does not know it flies the default wrap, left for neighbouring levels and over the front
+for a leap, which is a line that goes round the other side of a stack rather than a track whose
+meaning changed: the openings, the faces, the order and the scoring are untouched. The layout
+fingerprint hashes the sequence as it stands, so a track with a spiral turned to the right is a
+different layout from the same track turned to the left, as it should be, and every track that never
+said keeps the hash it had.
 
 ### Freestyle maps are not a bump
 

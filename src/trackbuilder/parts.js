@@ -835,13 +835,15 @@ export function hurdleAngleOf(doc, id) {
   const course = Math.atan2(to.y - from.y, to.x - from.x);
   /* A board and a bar are the same turned half a turn, so the angle is read modulo that. */
   const rel = ((wrapAngle(el.yaw - course - Math.PI / 2) % Math.PI) + Math.PI) % Math.PI;
-  if (Math.min(rel, Math.PI - rel) < 0.03) {
+  /* A hurdle is put down on the nearest fifteen degrees to square, so square is anything within half of that. */
+  const slack = (7.5 * Math.PI) / 180 + 0.01;
+  if (Math.min(rel, Math.PI - rel) < slack) {
     return 'square';
   }
-  if (Math.abs(rel - Math.PI / 4) < 0.03) {
+  if (Math.abs(rel - Math.PI / 4) < slack) {
     return 'left';
   }
-  return Math.abs(rel - (3 * Math.PI) / 4) < 0.03 ? 'right' : null;
+  return Math.abs(rel - (3 * Math.PI) / 4) < slack ? 'right' : null;
 }
 
 /* ------------------------------------------------------------------ */

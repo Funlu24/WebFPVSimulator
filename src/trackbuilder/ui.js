@@ -1769,22 +1769,35 @@ export class Panels {
    * the details at the flight path, where the choices are. The card is the room's and this is a row of it; the
    * figures themselves are a screen of pictures, which a floating card is not the place for.
    */
-  cardFlight(card, element, at) {
+  cardFlight(card, element, at, touched = false) {
     const kind = kindOf(element);
-    if (!at || element.type === 'waypoint' || (kind !== KIND.APERTURE && kind !== KIND.MARKER)) {
+    /* On a screen that is touched the card is the small bar and the choices are left to the details (More), which has the
+     * Flight path in it: three rows at finger size were a card a third taller, over the room it is for. */
+    if (touched || !at || element.type === 'waypoint' || (kind !== KIND.APERTURE && kind !== KIND.MARKER)) {
       return;
     }
     const doc = this.host.doc;
     const say = (found) => (found && found.spec ? figureName(found.spec) : 'None');
     const around = kind === KIND.MARKER ? aroundOf(doc, at.id) : null;
-    const row = (label, slot, found, title) => card.append(this.cardChoice(label, [{
-      label: `${say(found)} \u25be`, on: Boolean(found), toggle: true, run: () => this.host.openFlightPath(at.id, slot), title,
-    }]));
+    /* A button says what is laid in its place and opens the details at it. Two share a row, because the card is over the room
+     * and a row each was a third taller; a long name is cut with an ellipsis and is in its title whole. */
+    const button1 = (slot, label, found, what) => ({
+      label: `${label ? `${label}: ` : ''}${say(found)} \u25be`,
+      on: Boolean(found),
+      toggle: true,
+      className: 'tb-card-wide',
+      run: () => this.host.openFlightPath(at.id, slot),
+      title: `${what}${found ? ` Laid: ${figureName(found.spec)}.` : ''} Opens the flight path in the details`,
+    });
+    const thenFound = around ? null : thenOf(doc, at.id);
+    const intoFound = around ? null : intoOf(doc, at.id);
     if (kind === KIND.MARKER) {
-      row('Round it', 'around', around, 'A turn round the flag. Opens the flight path in the details');
+      card.append(this.cardChoice('Round it', [button1('around', '', around, 'A turn round the flag, flown round and never over.')], 'A turn round the flag'));
     }
-    row('Then', 'then', around ? null : thenOf(doc, at.id), 'What the line does after this pass: a turn, a loop, a hop and the rest. Opens the flight path in the details');
-    row('Into it', 'into', around ? null : intoOf(doc, at.id), 'What the line does before this pass. Opens the flight path in the details');
+    card.append(this.cardChoice('Flight path', [
+      button1('then', 'Then', thenFound, 'What the line does after this pass: a turn, a loop, a hop and the rest.'),
+      button1('into', 'Into', intoFound, 'What the line does before this pass.'),
+    ], 'What the line does after this pass and before it'));
   }
 
   /*
@@ -2485,9 +2498,9 @@ export class Panels {
     this.cardFacing(card, element);
     this.cardPassOn(card, element, at);
     this.cardFlags(card, element);
-    this.cardHurdle(card, element);
+    this.cardHurdle(card, element, touched);
     this.cardRound(card, element, at);
-    this.cardFlight(card, element, at);
+    this.cardFlight(card, element, at, touched);
 
     if (touched) {
       /* The small bar: what a keyboard's Q, E and X did, as buttons. */
@@ -2624,7 +2637,7 @@ export class Panels {
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', label);
     for (const it of items) {
-      const b = button(it.label, it.on ? 'tb-seg-btn on' : 'tb-seg-btn', () => {
+      const b = button(it.label, `${it.on ? 'tb-seg-btn on' : 'tb-seg-btn'}${it.className ? ` ${it.className}` : ''}`, () => {
         /* The lit one of a choice is already chosen; a toggle is pressed to turn it off as well as on. */
         if (it.toggle || !it.on) {
           it.run();
@@ -2645,7 +2658,7 @@ export class Panels {
    * five degrees. The line and the angle are about the waypoint that puts the lap over it, so they are offered once
    * there is one: Fly over puts it there.
    */
-  cardHurdle(card, element) {
+  cardHurdle(card, element, touched = false) {
     if (!canFlyOver(element) || this.host.isWhoopRace()) {
       return;
     }
@@ -2665,16 +2678,19 @@ export class Panels {
     const bar = element.type === 'horizontalPole';
     const size = hurdleSizeOf(element);
     const sizes = bar ? HURDLE_SIZES.filter((s) => s.id === 'multigp' || s.id === 'super') : HURDLE_SIZES;
-    card.append(this.cardChoice('Size', sizes.map((s) => ({
-      label: s.label, on: size === s.id, run: () => this.host.setHurdleSize(element.id, s.id), title: s.hint,
-    })), 'How big the hurdle is'));
+    /* On a screen that is touched only how it is flown is on the card: its size is a field of the details and its angle the Turn. */
+    if (!touched) {
+      card.append(this.cardChoice('Size', sizes.map((s) => ({
+        label: s.label, on: size === s.id, run: () => this.host.setHurdleSize(element.id, s.id), title: s.hint,
+      })), 'How big the hurdle is'));
+    }
     const line = hurdleLineOf(doc, element.id);
     card.append(this.cardChoice('Flown', HURDLE_LINES.map((l) => ({
       label: l.label, on: line === l.id, disabled: l.id === 'under' && !bar,
       run: () => this.host.setHurdleLine(element.id, l.id),
       title: l.id === 'under' && !bar ? 'A board stands on the ground and has nothing to go under. A bar hurdle has.' : l.hint,
     })), 'How the lap goes past it'));
-    if (line) {
+    if (line && !touched) {
       const angle = hurdleAngleOf(doc, element.id);
       card.append(this.cardChoice('Set at', [['Square', 'square'], ['45° left', 'left'], ['45° right', 'right']].map(([label, value]) => ({
         label, on: angle === value, run: () => this.host.setHurdleAngle(element.id, value),
@@ -3247,7 +3263,7 @@ export class Panels {
         ? 'Drag along the ground, from the bay that is flown first, to lay a wall. A tap lays three. One wall, then the tool is put away.'
         : 'Drag along the ground, from the bay that is flown first, to lay a wall of gates that share their uprights, two to six. A click lays three. One wall, then the tool is put away. Alt turns it freely.';
     } else if (room && !whoop && armed === 'run') {
-      text = `${touched ? 'Tap' : 'Click'} where the section starts: the first piece stands there, facing the way the track is going, and the rest follow the shape picked under the tool. One section, then the tool is put away.`;
+      text = `${touched ? 'Tap' : 'Click'} where the section starts: the first piece stands there, facing the way the track is going, and the rest follow the shape picked under the tool. One section, then the tool is put away.${touched && this.host.onPhone() ? ' The shapes are under Tools.' : ''}`;
     } else if (room && !whoop && armed === 'launchGate') {
       text = `${touched ? 'Tap' : 'Click'} where the launch gate goes: a horizontal gate 15 ft up, flown up through from below, with the pull up and push over that fly it laid as waypoints. One gate, then the tool is put away.`;
     } else if (room && !whoop && armed === 'barHurdle') {

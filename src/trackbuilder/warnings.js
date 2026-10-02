@@ -251,6 +251,7 @@ export function collectWarnings(doc, path) {
 
   closeStationWarnings(doc, path, out);
   figureWarnings(doc, path, out);
+  overFlagWarnings(doc, path, out);
 
   /* -------- curvature -------- */
 
@@ -523,6 +524,37 @@ function figureWarnings(doc, path, out) {
           elementId: knots[i].elementId,
         }));
       }
+    }
+  }
+}
+
+/*
+ * A LINE OVER A FLAG. The line of a flag goes up for ever: the flag is flown round and never over, and a line that goes
+ * over the top of one is going somewhere the rules do not let a pilot fly. The derived line does it when a hop or a loop
+ * is laid where a flag stands, or a waypoint is dragged over one, and the pass round the flag, which is scored, was never
+ * the problem. One warning for a flag, at the first sample that is over it: above the mast and within a pole and a
+ * half a metre of it, which is a quad's own width on each side. Poles and cones are not in it: a cone is a ground marker, and a pole is the
+ * RaceGOW one, whose rules are its own.
+ */
+const OVER_FLAG_REACH = 0.5;
+
+function overFlagWarnings(doc, path, out) {
+  if (!path || path.samples.length < 2) {
+    return;
+  }
+  for (const flag of doc.elements) {
+    if (flag.type !== 'flag') {
+      continue;
+    }
+    const top = (flag.position.z ?? 0) + (flag.dims.height ?? ELEMENTS.flag.dims.height);
+    const reach = OVER_FLAG_REACH + (flag.dims.poleRadius ?? 0);
+    const over = path.samples.find((p) => p.pos.z > top && Math.hypot(p.pos.x - flag.position.x, p.pos.y - flag.position.y) < reach);
+    if (over) {
+      out.push(warn('over-flag', `The line goes over ${flag.name || 'a flag'} at ${over.s.toFixed(1)} m along the lap. A flag\u2019s line goes up for ever, so it is flown round and never over: move the line to one side of it.`, {
+        s: over.s,
+        pos: over.pos,
+        elementId: flag.id,
+      }));
     }
   }
 }

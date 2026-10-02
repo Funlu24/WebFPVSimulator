@@ -3702,6 +3702,125 @@ kase('five inch: a hurdle, an up gate and Fly order', async () => {
   }
 });
 
+/* A button in the details or the palette, by the words on it (or on its picture), scrolled to and pressed with the mouse. */
+async function pressIn(page, scope, label) {
+  const at = await json(page, `(() => {
+    const root = document.querySelector(${JSON.stringify(scope)});
+    const b = root && [...root.querySelectorAll('button')].find((x) => (x.querySelector('strong')?.textContent ?? x.textContent).trim() === ${JSON.stringify(label)});
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  if (!at) {
+    throw new Error(`no button called ${label} in ${scope}`);
+  }
+  await page.sleep(120);
+  const now = await json(page, `(() => { const root = document.querySelector(${JSON.stringify(scope)}); const b = [...root.querySelectorAll('button')].find((x) => (x.querySelector('strong')?.textContent ?? x.textContent).trim() === ${JSON.stringify(label)}); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await click(page, now.x, now.y);
+}
+
+kase('five inch: variants', async () => {
+  const page = await openField();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    const names = () => json(page, `window.trackBuilder.doc.sequence.map((q) => { const e = window.trackBuilder.doc.elements.find((x) => x.id === q.elementId); return e.type === 'waypoint' ? e.name : e.type; })`);
+    /* A line of three gates, east, to put the variants on. */
+    await tool(page, 'Gate');
+    for (const x of [15, 35, 55]) {
+      const at = await screenOf(page, 'view3d', x, 30, 0);
+      await click(page, at.x, at.y);
+    }
+    await key(page, 'Escape');
+
+    /* ---- a flight path: Then, in the details, with a picture ---- */
+    const mid = await screenOf(page, 'view3d', 35, 30, 0.8);
+    await click(page, mid.x, mid.y);
+    const rows = await cardRows(page);
+    check('a gate\'s card has a Flight path row with Then and Into, each saying what is laid there',
+      rows.some((r) => /^Flight path: Then: None ▾ Into: None ▾$/.test(r)), rows.join(' / '));
+    const steps = await undoCount(page);
+    await cardClick(page, 'Then: None ▾', 'Flight path');
+    await page.sleep(500);
+    const open = await json(page, `({ drawer: document.body.classList.contains('tb-drawer'), flight: Boolean(document.getElementById('tb-flight')), lit: [...document.querySelectorAll('#tb-flight .tb-seg-btn.on')].map((b) => b.textContent.trim()), cards: document.querySelectorAll('#tb-flight .tb-fig-card svg').length })`);
+    check('pressing it opens the details at the Flight path, on the tab for Then, with a picture on every card',
+      open.drawer && open.flight && open.lit.includes('Then') && open.cards >= 15, JSON.stringify(open));
+    await pressIn(page, '#tb-flight', 'Turn');
+    const turned = await names();
+    check('the Turn card lays a half turn after the gate, left, in one undo step, as waypoints in the flying order',
+      turned.filter((n) => n === 'Turn left 180').length === 5 && turned[1] === 'gate' && turned[2] === 'Turn left 180' && (await undoCount(page)) === steps + 1, turned.join());
+    const wps = await json(page, `window.trackBuilder.doc.elements.filter((e) => e.type === 'waypoint').map((e) => ({ y: e.position.y, pitch: e.pitch, pinned: e.yawOverridden }))`);
+    check('they bend to the left of the way the gate is flown, and each is kept pointing the way the line goes', wps.every((w) => w.pinned === true) && wps[wps.length - 1].y > 30 + 4, JSON.stringify(wps));
+    await pressIn(page, '#tb-flight', 'Right');
+    await pressIn(page, '#tb-flight', '360°');
+    const orbit = await names();
+    check('Right and 360 degrees change the figure that is laid, where it is: an orbit to the right, and nothing added beside it',
+      orbit.every((n) => n === 'gate' || n === 'Turn right 360') && orbit.filter((n) => n !== 'gate').length === 9, orbit.join());
+    await pressIn(page, '#tb-flight', 'None');
+    check('None takes it out, and the order is the three gates again', (await names()).join() === 'gate,gate,gate');
+    await pressIn(page, '#tb-flight', 'Into it');
+    await pressIn(page, '#tb-flight', 'Power loop');
+    const loop = await json(page, `(() => { const a = window.trackBuilder; return { names: a.doc.sequence.length, top: Math.max(...a.doc.elements.filter((e) => e.type === 'waypoint').map((e) => e.position.z)) }; })()`);
+    check('Into it lays a power loop before the gate, which climbs a diameter', loop.names === 12 && loop.top > 5.5, JSON.stringify(loop));
+    const wp = await json(page, `window.trackBuilder.doc.elements.find((e) => e.type === 'waypoint').id`);
+    await page.evaluate(`window.trackBuilder.setSelection(['${wp}']), 1`);
+    await page.sleep(400);
+    check('selecting one point of it says it is one point of a figure, and offers to take the whole figure out',
+      /One point of Power loop/.test(await page.evaluate("document.getElementById('tb-inspector').textContent")));
+    await pressIn(page, '#tb-inspector', 'Take the figure out');
+    check('which takes every point of it', (await names()).join() === 'gate,gate,gate');
+    await page.evaluate('window.trackBuilder.toggleDrawer(false), 1');
+
+    /* ---- a section ---- */
+    await key(page, 'Escape');
+    await page.evaluate('window.trackBuilder.setSelection([]), 1');
+    await key(page, 'KeyJ');
+    check('J arms the Section tool, and its choices stand under it', (await app('a.armed')) === 'run'
+      && (await json(page, "!document.querySelector('.tb-run-opts').hidden")));
+    await pressIn(page, '.tb-run-opts', 'Chicane');
+    const before = (await placed(page)).length;
+    const step2 = await undoCount(page);
+    const spot = await screenOf(page, 'view3d', 62, 38, 0);
+    await click(page, spot.x, spot.y);
+    const after = await placed(page);
+    check('a click lays a chicane of four gates in one undo step, flown in order, and puts the tool away',
+      after.length === before + 4 && (await undoCount(page)) === step2 + 1 && (await app('a.armed')) === null && (await app('a.selection.size')) === 4, `${before} then ${after.length}`);
+    const laid = after.slice(-4);
+    /* Across the heading the first gate faces, which is the way the section was begun. */
+    const across = (g) => -(g.x - laid[0].x) * Math.sin(laid[0].yaw) + (g.y - laid[0].y) * Math.cos(laid[0].yaw);
+    check('they swing off the line and come back to it, the last gate on the line the first stands on and the two between it a few metres out',
+      Math.abs(across(laid[3])) < 0.5 && Math.min(Math.abs(across(laid[1])), Math.abs(across(laid[2]))) > 2 && across(laid[1]) * across(laid[2]) < 0,
+      laid.map((g) => across(g).toFixed(2)).join(' '));
+    await page.evaluate('window.trackBuilder.undo(), 1');
+    check('and one Undo takes the whole section away', (await placed(page)).length === before);
+
+    /* ---- a bar hurdle: under, over, and at an angle ---- */
+    await layAt(page, 'Bar hurdle', 45, 22);
+    const bar = (await placed(page)).find((e) => e.type === 'horizontalPole');
+    check('the Bar hurdle tool lays a bar ten feet wide, five feet up, with the lap pinned over it',
+      bar && Math.abs(bar.z - 1.524) < 1e-6 && (await names()).includes('Over the bar'), JSON.stringify(bar));
+    const hrows = await cardRows(page);
+    check('its card has Size, Flown and Set at', hrows.some((r) => /^Size: 10 x 5 ft\* Super$/.test(r)) && hrows.some((r) => /^Flown: Over\* Skim Under$/.test(r))
+      && hrows.some((r) => /^Set at: Square/.test(r)), hrows.join(' / '));
+    await cardClick(page, 'Under', 'Flown');
+    check('Under puts the lap beneath the bar, between its legs', (await names()).includes('Under the bar')
+      && (await json(page, "window.trackBuilder.doc.elements.find((e) => e.name === 'Under the bar').position.z")) < 1);
+    await cardClick(page, '45° left', 'Set at');
+    check('45 degrees left turns it an eighth off square', (await cardRows(page)).some((r) => /^Set at: Square 45° left\* 45° right$/.test(r)), (await cardRows(page)).join(' / '));
+
+    /* ---- a launch gate ---- */
+    await key(page, 'Escape');
+    await layAt(page, 'Launch gate', 70, 30);
+    const gate = (await placed(page)).find((e) => e.type === 'diveGate');
+    const order = await names();
+    check('the Launch gate tool lays a horizontal gate 15 ft up, flown up, with a pull up before it and a push over after',
+      gate && Math.abs(gate.pitch - Math.PI / 2) < 1e-6 && order.filter((n) => n === 'Pull up').length === 3 && order.filter((n) => n === 'Push over').length === 2, order.join());
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
 kase('five inch: by touch', async () => {
   const page = await openField(1024, 768, { touch: true });
   try {
