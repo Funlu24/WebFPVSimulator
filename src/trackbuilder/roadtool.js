@@ -288,6 +288,31 @@ export function snapToRoad(doc, x, y, slack, only = null) {
   return best;
 }
 
+/*
+ * WHERE A COPY OF A CAR GOES: further along the road the car is on, by about three car lengths and a gap, so it is
+ * not drawn on the car it copies. Round a loop it wraps; on an open road it stops at the end, and a copy of a car
+ * that is already there is put back the same distance instead, so there is always room to see which is which.
+ * `car.dims.offset` is where it is now; a car with no road is not moved.
+ */
+export function copyOffsetAlong(doc, car) {
+  const road = (doc?.elements ?? []).find((e) => e.id === car.road);
+  if (!isRoad(road)) {
+    return car.dims.offset;
+  }
+  const line = roadOf(road).centre;
+  const step = 12;
+  if (!(line.length > 0)) {
+    return car.dims.offset;
+  }
+  let at = car.dims.offset + step;
+  if (line.closed) {
+    at %= line.length;
+  } else if (at > line.length) {
+    at = Math.max(0, car.dims.offset - step);
+  }
+  return Math.round(at * 100) / 100;
+}
+
 /* The style a vehicle is drawn and driven as. */
 export function vehicleStyleOf(el) {
   return CAR_STYLES.includes(el?.style) ? el.style : CAR_STYLES[0];

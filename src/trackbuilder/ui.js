@@ -41,7 +41,7 @@ import {
   SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from './model.js';
 import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElements } from './sequence.js';
-import { labelOf, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
+import { labelOf, MAP_TOOLS, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
 import { replacementsFor } from './snap.js';
 import {
   canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
@@ -49,7 +49,7 @@ import {
 } from './parts.js';
 import { scaleOf, say as sayLength } from './scale.js';
 import { passList, reuseOf } from './passes.js';
-import { standsOnGround } from './seat.js';
+import { needsSeat, standsOnGround } from './seat.js';
 import {
   HANDED_FIGURES, consecutiveEntries, figureBlurb, figureHandOf, figuresFor, levelName, matchingFigure,
 } from './figures.js';
@@ -62,7 +62,7 @@ import {
 import { elevationProfile } from './path.js';
 import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
-import { localBoundsOf, turnsOf } from './view2d.js';
+import { localBoundsOf, planShapeOf, turnsOf } from './view2d.js';
 import {
   PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf,
 } from '../props/types.js';
@@ -442,8 +442,6 @@ export class Panels {
     const close = button('×', 'tb-tools-x', () => this.host.closeTools(), 'Close the palette. Esc');
     close.setAttribute('aria-label', 'Close the palette');
     host.append(close);
-    /* Shown only while the five inch or map preview is up: see previewNote. */
-    host.append(this.previewNote());
     if (mode === 'freestyle') {
       this.buildFreestylePalette(host, cls);
       return;
@@ -495,24 +493,6 @@ export class Panels {
     host.append(el('p', 'tb-help', cls === 'micro'
       ? `Press a key or click a tool, then click the ${place}. The tool stays armed, so ten gates are ten clicks. Escape or right click puts it away.`
       : `Press a key or click a tool, then click the ${place}. A gate stays armed, so ten gates are ten clicks; a wall, a hurdle and an up gate are one at a time. Escape or right click puts it away.`));
-  }
-
-  /*
-   * BUILD IN 2D. On the five inch and map canvases the 3D view is a preview: a
-   * click there places nothing, and the palette used to look exactly as armed
-   * and ready as it does in 2D (MENUS-PLAN.md 4.2). While the preview is up the
-   * tools are quieted and this says where building happens; a tool picked
-   * anyway opens 2D with it in hand (pickTool in app.js). The stylesheet shows
-   * it, by body.tb-in-3d, and never on the whoop canvas, whose 3D is the tool.
-   */
-  previewNote() {
-    const box = el('div', 'tb-preview-note');
-    box.append(
-      el('strong', null, 'Build in 2D'),
-      el('span', null, 'The 3D view is a preview. Pick a tool and 2D opens with it in hand.'),
-      button('Back to 2D', 'tb-btn', () => this.host.show2d(), 'The plan, where pieces are placed. V'),
-    );
-    return box;
   }
 
   /*
@@ -592,7 +572,14 @@ export class Panels {
         host.append(div);
       }
     }
-    host.append(el('p', 'tb-help', 'Press a key or click a tool, then click the plot. The tool stays armed. Buildings, containers and the skate set keep to the compass; everything else turns freely. Escape or right click puts it away.'));
+    /* The ruler, after the pieces: it measures, and places nothing. */
+    const tools = el('div', 'tb-group');
+    tools.append(el('h3', null, 'Tools'));
+    for (const t of MAP_TOOLS) {
+      tools.append(this.toolButton(t.id, t.key, t.label, t.note));
+    }
+    host.append(tools);
+    host.append(el('p', 'tb-help', 'Press a key or click a tool, then click the plot. A piece stands on what the pointer is over: the ground, a roof, a container. The tool stays armed. Buildings, containers and the skate set keep to the compass; everything else turns freely. Escape or right click puts it away.'));
   }
 
   /*
@@ -1143,10 +1130,13 @@ export class Panels {
    * same function the document reader uses, so the field can never hold a
    * number the file would not.
    */
-  propDimField(element, def, key) {
+  propDimField(element, def, key, prefix = 'dim') {
     const lim = def.limits?.[key] ?? null;
     const kind = lim ? lim[2] : 'm';
-    return this.field(`dim-${element.id}-${key}`, def.labels?.[key] ?? DIM_LABELS[key] ?? key, element.dims[key], (val) => {
+    /* On the card the unit is in the label, as X and Y are, and not under the field. */
+    const onCard = prefix !== 'dim';
+    const named = def.labels?.[key] ?? DIM_LABELS[key] ?? key;
+    return this.field(`${prefix}-${element.id}-${key}`, onCard && kind === 'm' ? `${named} (m)` : named, element.dims[key], (val) => {
       this.host.edit('resize', (d) => {
         const e2 = elementById(d, element.id);
         if (e2) {
@@ -1154,7 +1144,7 @@ export class Panels {
         }
       });
     }, {
-      suffix: kind === 'm' ? 'm' : '',
+      suffix: kind === 'm' && !onCard ? 'm' : '',
       step: LIMIT_STEP[kind] ?? 0.1,
       places: LIMIT_PLACES[kind] ?? 2,
       min: lim ? lim[0] : undefined,
@@ -1169,6 +1159,23 @@ export class Panels {
    * texture: it is lower and wider, and choosing Warehouse on a six storey
    * office block and keeping six storeys builds nobody's warehouse.
    */
+  /* An asset's look, and the size that look starts at (styleDims), as one edit. */
+  setAssetStyle(element, style) {
+    this.host.edit('style', (d) => {
+      const e2 = elementById(d, element.id);
+      if (!e2) {
+        return;
+      }
+      e2.style = style;
+      const sized = styleDims(element.type, style);
+      if (sized) {
+        for (const [k, v] of Object.entries(sized)) {
+          e2.dims[k] = clampDim(element.type, k, v);
+        }
+      }
+    });
+  }
+
   renderStructureInspector(host, element, def) {
     if (def.styles) {
       const current = propStyleOf(element);
@@ -1177,21 +1184,7 @@ export class Panels {
       seg.setAttribute('role', 'group');
       seg.setAttribute('aria-label', 'Style');
       for (const style of def.styles) {
-        const b = button(styleLabel(style), current === style ? 'tb-seg-btn on' : 'tb-seg-btn', () => {
-          this.host.edit('style', (d) => {
-            const e2 = elementById(d, element.id);
-            if (!e2) {
-              return;
-            }
-            e2.style = style;
-            const sized = styleDims(element.type, style);
-            if (sized) {
-              for (const [k, v] of Object.entries(sized)) {
-                e2.dims[k] = clampDim(element.type, k, v);
-              }
-            }
-          });
-        });
+        const b = button(styleLabel(style), current === style ? 'tb-seg-btn on' : 'tb-seg-btn', () => this.setAssetStyle(element, style));
         b.setAttribute('aria-pressed', current === style ? 'true' : 'false');
         seg.append(b);
       }
@@ -1267,27 +1260,40 @@ export class Panels {
    * road's line (closing it, a radius) keeps every car on it where it was
    * on the plan (reseatVehicles in app.js).
    */
-  renderRoadInspector(host, element, def) {
-    const doc = this.host.doc;
-    const r = roadOf(element);
-    const n = element.nodes.length;
-    const closed = element.closed === true;
+  /* Whether a road closes and how many lanes it has, as the choices the inspector and the card both offer. */
+  roadShapeItems(element) {
     const id = element.id;
-    this.segRow(host, 'Shape', [
+    const closed = element.closed === true;
+    const n = element.nodes.length;
+    return [
       { label: 'Open road', on: !closed, run: () => this.host.setRoadClosed(id, false) },
       {
         label: 'Loop',
         on: closed,
         run: () => this.host.setRoadClosed(id, true),
         disabled: !closed && n < 3,
-        title: !closed && n < 3 ? 'A loop needs three nodes. Add one on the plan first.' : 'Join the last node back to the first',
+        title: !closed && n < 3 ? 'A loop needs three nodes. Add one first.' : 'Join the last node back to the first',
       },
-    ]);
+    ];
+  }
+
+  roadLaneItems(element) {
+    const id = element.id;
     const lanes = element.dims.lanes === 1 ? 1 : 2;
-    this.segRow(host, 'Lanes', [
+    return [
       { label: 'One lane', on: lanes === 1, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 1; }) },
       { label: 'Two lanes', on: lanes === 2, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 2; }) },
-    ]);
+    ];
+  }
+
+  renderRoadInspector(host, element, def) {
+    const doc = this.host.doc;
+    const r = roadOf(element);
+    const n = element.nodes.length;
+    const closed = element.closed === true;
+    const id = element.id;
+    this.segRow(host, 'Shape', this.roadShapeItems(element));
+    this.segRow(host, 'Lanes', this.roadLaneItems(element));
 
     host.append(el('h3', null, 'Size'));
     const dims = el('div', 'tb-grid2');
@@ -1361,6 +1367,43 @@ export class Panels {
    * comes from its road and its start along it, so there is no X and Y:
    * drag it along the road on the plan, or type how far along it starts.
    */
+  /* How a car drives and which way, as the choices the inspector and the card both offer. */
+  vehicleDrivingItems(element, def) {
+    const id = element.id;
+    const drift = element.drift === true;
+    const styleSpeed = (style) => styleDims('vehicle', style)?.speed ?? def.dims.speed;
+    return [
+      {
+        label: 'Traffic',
+        on: !drift,
+        run: () => this.host.edit('drift', (d) => {
+          const e2 = elementById(d, id);
+          e2.drift = false;
+          e2.dims.speed = clampByLimits(def, 'speed', styleSpeed(e2.style));
+        }),
+      },
+      {
+        label: 'Drift car',
+        on: drift,
+        title: `Corners twice as hard and slides, its nose into every bend, at ${Math.round(DRIFT.speed * KMH)} km/h on the straights`,
+        run: () => this.host.edit('drift', (d) => {
+          const e2 = elementById(d, id);
+          e2.drift = true;
+          e2.dims.speed = clampByLimits(def, 'speed', DRIFT.speed);
+        }),
+      },
+    ];
+  }
+
+  vehicleDirectionItems(element) {
+    const id = element.id;
+    const reverse = element.reverse === true;
+    return [
+      { label: 'Forward', on: !reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = false; }) },
+      { label: 'Reverse', on: reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = true; }) },
+    ];
+  }
+
   renderVehicleInspector(host, element, def) {
     const doc = this.host.doc;
     const id = element.id;
@@ -1393,33 +1436,8 @@ export class Panels {
     }
     host.append(seg);
 
-    const drift = element.drift === true;
-    this.segRow(host, 'Driving', [
-      {
-        label: 'Traffic',
-        on: !drift,
-        run: () => this.host.edit('drift', (d) => {
-          const e2 = elementById(d, id);
-          e2.drift = false;
-          e2.dims.speed = clampByLimits(def, 'speed', styleSpeed(e2.style));
-        }),
-      },
-      {
-        label: 'Drift car',
-        on: drift,
-        title: `Corners twice as hard and slides, its nose into every bend, at ${Math.round(DRIFT.speed * KMH)} km/h on the straights`,
-        run: () => this.host.edit('drift', (d) => {
-          const e2 = elementById(d, id);
-          e2.drift = true;
-          e2.dims.speed = clampByLimits(def, 'speed', DRIFT.speed);
-        }),
-      },
-    ]);
-    const reverse = element.reverse === true;
-    this.segRow(host, 'Direction', [
-      { label: 'Forward', on: !reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = false; }) },
-      { label: 'Reverse', on: reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = true; }) },
-    ]);
+    this.segRow(host, 'Driving', this.vehicleDrivingItems(element, def));
+    this.segRow(host, 'Direction', this.vehicleDirectionItems(element));
 
     host.append(el('h3', null, 'Speed and start'));
     const grid = el('div', 'tb-grid2');
@@ -2377,6 +2395,10 @@ export class Panels {
       card.textContent = '';
       return;
     }
+    if (docModeOf(doc) === 'freestyle') {
+      this.renderMapCard(card, doc, ids);
+      return;
+    }
     const cls = trackClassOf(doc);
     const metric = scaleOf(doc).metric;
     card.textContent = '';
@@ -2551,6 +2573,107 @@ export class Panels {
     /* After the buttons, so a sentence appearing or going after a press moves
      * nothing that is under the finger. */
     this.cardWarnings(card, element, entries);
+  }
+
+  /*
+   * THE CARD ON A MAP: what a piece is asked about while it is being built, beside the piece. Its look, where it
+   * stands (X, Y and Base, which is the height it stands at: a roof, a deck, the paving), which way it faces and
+   * how big it is, in metres from the plot's corner as the plan has them; for a road its shape and its lanes, for
+   * a car how it drives, for a gap its name and what it is worth. Everything else is under More, which is the
+   * inspector. A map's pieces are furniture and have no flying order, so none of a track's rows about passes is
+   * here. On a screen that is touched it is the small bar and nothing else, for the reason the track's is.
+   */
+  renderMapCard(card, doc, ids) {
+    card.textContent = '';
+    card.hidden = false;
+    card.classList.toggle('docked', this.host.mode !== '3d');
+    const head = el('div', 'tb-card-head');
+    const actions = el('div', 'tb-card-actions');
+    const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const picked = ids.map((id) => elementById(doc, id));
+    const turns = picked.some((e2) => ![KIND.ROAD, KIND.VEHICLE, KIND.ANNOTATION].includes(kindOf(e2)));
+    if (turns) {
+      actions.append(button('Turn', 'tb-btn', () => this.host.nudgeYaw(-90),
+        'Turn it a quarter. E turns it fifteen degrees one way and Q the other; Shift with either is a quarter'));
+    }
+    const copyBtn = button('Copy', 'tb-btn', () => this.host.copySelection(), 'A copy beside it. Control D');
+    actions.append(
+      copyBtn,
+      button('Remove', 'tb-btn tb-danger', () => this.host.deleteSelection(), 'Delete'),
+      button('More', 'tb-btn', (e) => this.host.toggleDrawer(true, { from: e.currentTarget, keys: e.detail === 0 }),
+        'Everything else about it: its name, its size, where it is to the centimetre'),
+    );
+    const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
+    close.setAttribute('aria-label', 'Let go of it');
+
+    if (ids.length > 1) {
+      head.append(el('strong', null, `${ids.length} selected`), close);
+      card.append(head, el('p', 'tb-help', 'Drag one to move them together. Q and E turn them. Arrow keys nudge them. Delete removes them.'), actions);
+      return;
+    }
+    const element = picked[0];
+    const def = ELEMENTS[element.type];
+    const id = element.id;
+    const called = element.name ? `${def.label} \u201c${element.name}\u201d` : def.label;
+    head.append(el('strong', null, called), close);
+    card.append(head);
+
+    if (!touched) {
+      if (def.kind === KIND.ZONE) {
+        const name = this.field(`card-name-${id}`, 'Gap name', element.name, (val) => {
+          this.host.edit('rename', (d) => { elementById(d, id).name = String(val).slice(0, 40); });
+        }, { text: true });
+        name.classList.add('tb-gap-name');
+        card.append(name);
+        card.append(this.cardChoice('Points', GAP_POINTS.map((pts) => ({
+          label: String(pts), on: element.points === pts,
+          run: () => this.host.edit('points', (d) => { const e2 = elementById(d, id); if (e2) { e2.points = pts; } }),
+        })), 'What flying through it is worth'));
+      } else if (def.kind === KIND.ROAD) {
+        card.append(this.cardChoice('Shape', this.roadShapeItems(element), 'Whether the road closes into a loop'));
+        card.append(this.cardChoice('Lanes', this.roadLaneItems(element), 'How many lanes it has'));
+      } else if (def.kind === KIND.VEHICLE) {
+        card.append(this.cardChoice('Driving', this.vehicleDrivingItems(element, def), 'Traffic, or the drift car'));
+        card.append(this.cardChoice('Direction', this.vehicleDirectionItems(element), 'Which way it drives its road'));
+      } else if (def.kind === KIND.STRUCTURE && def.styles) {
+        const current = propStyleOf(element);
+        card.append(this.cardChoice('Style', def.styles.map((style) => ({
+          label: styleLabel(style), on: current === style, run: () => this.setAssetStyle(element, style),
+        })), 'How it looks, and the size that look starts at'));
+      }
+      if (def.kind !== KIND.ROAD && def.kind !== KIND.VEHICLE) {
+        const grid = el('div', 'tb-card-grid');
+        grid.append(
+          this.field(`card-x-${id}`, 'X (m)', element.position.x, (val) => {
+            this.host.edit('move', (d) => { elementById(d, id).position.x = round6(val); });
+          }, { step: 1, places: 2 }),
+          this.field(`card-y-${id}`, 'Y (m)', element.position.y, (val) => {
+            this.host.edit('move', (d) => { elementById(d, id).position.y = round6(val); });
+          }, { step: 1, places: 2 }),
+        );
+        /* The height a built piece stands at, which is what it was put down on: the paving, a roof, a deck. */
+        if (needsSeat(element) || def.kind === KIND.ZONE) {
+          grid.append(this.field(`card-h-${id}`, 'Base (m)', element.position.z, (val) => {
+            this.host.edit('height', (d) => { elementById(d, id).position.z = round6(Math.max(0, val)); });
+          }, { step: 0.25, places: 2, min: 0 }));
+        }
+        if (turns && def.kind !== KIND.ANNOTATION) {
+          grid.append(this.field(`card-turn-${id}`, 'Turn (degrees)', element.yaw * DEG, (val) => {
+            this.host.setElementYaw(id, val * RAD);
+          }, { step: turnsOf(element.type) === 'quarter' ? 90 : 15, places: 0 }));
+        }
+        /* An asset's own size: the first few of its dimensions, which are the ones that say how much ground it takes. */
+        if (def.kind === KIND.STRUCTURE || def.kind === KIND.ZONE) {
+          for (const key of Object.keys(def.dims).filter((k) => k !== 'variant').slice(0, 3)) {
+            grid.append(this.propDimField(element, def, key, 'card-dim'));
+          }
+        }
+        card.append(grid);
+      }
+    }
+    card.append(actions);
+    /* After the buttons, so a sentence appearing or going after a press moves nothing that is under the finger. */
+    this.cardWarnings(card, element, []);
   }
 
   /*
@@ -2928,6 +3051,9 @@ export class Panels {
     }
     const c = this.host.selectionCentroid();
     const at = c ? project({ x: c.x, y: c.y, z: c.z + 0.9 }) : null;
+    /* A map's pieces are anything from a lamp to a warehouse: the card keeps off the whole of what is selected,
+     * as it appears on the screen, and not only off a point in it. */
+    const area = docModeOf(this.host.doc) === 'freestyle' ? this.selectionArea(project) : null;
     const w = card.offsetWidth;
     const h = card.offsetHeight;
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -2943,17 +3069,25 @@ export class Panels {
     /* Its top is fixed to the piece, not its middle: a card that grows (a
      * sentence appears) grows downward, and nothing under the finger jumps. */
     const top = at ? at.y - 48 : 0;
-    const tries = at ? [
+    const side = 24;
+    const tries = area ? [
+      { x: area.x1 + side, y: Math.max(10, area.y0) },
+      { x: area.x0 - side - w, y: Math.max(10, area.y0) },
+      { x: area.cx - w / 2, y: area.y0 - side - h },
+      { x: area.cx - w / 2, y: area.y1 + side },
+    ] : (at ? [
       { x: at.x + gap, y: top },
       { x: at.x - gap - w, y: top },
       { x: at.x - w / 2, y: at.y - gap - h },
       { x: at.x - w / 2, y: at.y + gap },
-    ] : [];
+    ] : []);
     for (const t of tries) {
       const x = clamp(t.x, 10, Math.max(10, rect.width - w - 10));
       /* The bar stands 44 px off the foot, and a card keeps 8 px clear of it. */
       const y = clamp(t.y, 10, Math.max(10, rect.height - h - (this.barH || 90) - 52));
-      const covers = at.x > x - 60 && at.x < x + w + 60 && at.y > y - 60 && at.y < y + h + 60;
+      const covers = area
+        ? x < area.x1 + 8 && x + w > area.x0 - 8 && y < area.y1 + 8 && y + h > area.y0 - 8
+        : at.x > x - 60 && at.x < x + w + 60 && at.y > y - 60 && at.y < y + h + 60;
       if (!covers && this.host.mode === '3d') {
         card.classList.remove('docked');
         card.style.left = `${x.toFixed(0)}px`;
@@ -2964,6 +3098,41 @@ export class Panels {
     card.classList.add('docked');
     card.style.left = '';
     card.style.top = '';
+  }
+
+  /*
+   * WHERE WHAT IS SELECTED IS ON THE SCREEN, as a box { x0, y0, x1, y1, cx }: the corners of each piece's ground
+   * (planShapeOf) at its base and a point over the middle at its top. Null when none of it is in front of the
+   * camera, which docks the card.
+   */
+  selectionArea(project) {
+    const doc = this.host.doc;
+    const out = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const id of this.host.selection) {
+      const e2 = elementById(doc, id);
+      if (!e2) {
+        continue;
+      }
+      const def = ELEMENTS[e2.type];
+      const base = e2.position.z;
+      const top = base + (def?.kind === KIND.STRUCTURE ? elementHeight(def, e2.dims, propStyleOf(e2)) : 1);
+      const pts = [...planShapeOf(e2, doc).map((q) => ({ x: q.x, y: q.y, z: base })), { x: e2.position.x, y: e2.position.y, z: top }];
+      for (const q of pts) {
+        const at = project(q);
+        if (!at) {
+          continue;
+        }
+        out.x0 = Math.min(out.x0, at.x);
+        out.y0 = Math.min(out.y0, at.y);
+        out.x1 = Math.max(out.x1, at.x);
+        out.y1 = Math.max(out.y1, at.y);
+      }
+    }
+    if (!Number.isFinite(out.x0)) {
+      return null;
+    }
+    out.cx = (out.x0 + out.x1) / 2;
+    return out;
   }
 
   /*
@@ -3147,9 +3316,6 @@ export class Panels {
       return;
     }
     const doc = this.host.doc;
-    const path = this.host.path;
-    const gates = [...gateNumbers(doc).values()].filter((n) => n != null).length;
-    const reuse = reuseOf(doc);
     const bad = (this.host.warnings ?? []).filter((w) => w.level === 'warn').length;
     const fig = (label, value, tone, small = '') => {
       const f = el('span', tone ? `tb-lap-fig ${tone}` : 'tb-lap-fig');
@@ -3159,6 +3325,28 @@ export class Panels {
       }
       return f;
     };
+    /*
+     * A MAP'S BAR: what is on it, what the physics will hold, what is wrong, and how big the plot is. No strip
+     * and no length, because a map has no lap; the drawer is the inspector and the report, so it says Details.
+     */
+    if (docModeOf(doc) === 'freestyle') {
+      this.stripNode = null;
+      this.stripSig = '';
+      const report = this.host.report ?? null;
+      bar.append(
+        fig('Things', String(doc.elements.length)),
+        fig('Solids', report ? String(report.solids) : '0'),
+        fig('Warnings', String(bad), bad ? 'bad' : 'good'),
+        el('span', 'tb-lap-gap'),
+        button(`Plot ${sayLength(doc, doc.field.width).replace(' m', '')} \u00d7 ${sayLength(doc, doc.field.depth)}`, 'tb-btn', () => this.host.openFieldSettings(),
+          'How big the plot is, the grid, the time of day and the ground'),
+        this.drawerToggle('Details', 'Everything about what is selected, the plot, and every warning', 'Close the panel. Esc'),
+      );
+      return;
+    }
+    const path = this.host.path;
+    const gates = [...gateNumbers(doc).values()].filter((n) => n != null).length;
+    const reuse = reuseOf(doc);
     /* Nothing to fly, nothing to show: a lone plus on an empty room is a tool for a lap
      * that has no pieces. */
     const anything = doc.sequence.length > 0 || doc.elements.some((e) => isSequenceable(e));
@@ -3201,10 +3389,10 @@ export class Panels {
    * stylesheet's --tb-cover), so this button is never under the thing it
    * closes, and it is lit, as an open panel's switch is.
    */
-  drawerToggle() {
+  drawerToggle(word = 'Flying order', hint = 'The order the gates are flown in, every warning, and the elevation profile', openHint = 'Close the panel with the flying order, the warnings and the profile. Esc') {
     const open = Boolean(this.host.drawerOpen);
-    const b = button('Flying order', open ? 'tb-btn on' : 'tb-btn', (e) => this.host.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
-      open ? 'Close the panel with the flying order, the warnings and the profile. Esc' : 'The order the gates are flown in, every warning, and the elevation profile');
+    const b = button(word, open ? 'tb-btn on' : 'tb-btn', (e) => this.host.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
+      open ? openHint : hint);
     b.dataset.drawer = '';
     b.setAttribute('aria-expanded', open ? 'true' : 'false');
     b.setAttribute('aria-controls', 'tb-side');
@@ -3220,6 +3408,12 @@ export class Panels {
       return;
     }
     const doc = this.host.doc;
+    if (docModeOf(doc) === 'freestyle') {
+      const said = this.mapCoach(doc);
+      coach.hidden = !said;
+      coach.textContent = said;
+      return;
+    }
     const gates = doc.elements.filter((e) => kindOf(e) === KIND.APERTURE).length;
     let text = '';
     const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -3295,6 +3489,48 @@ export class Panels {
     coach.textContent = text;
   }
 
+  /*
+   * THE LINE AT THE FOOT OF A MAP'S ROOM: what the pointer does with the tool in hand, and while the map is only a
+   * few things, what it does with none. A road and a car say what the next click does, because they are not
+   * placed the way the rest are. It goes when there are six things: by then the pilot knows.
+   */
+  mapCoach(doc) {
+    const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const phone = this.host.onPhone();
+    const armed = this.host.armed;
+    const tap = touched ? 'Tap' : 'Click';
+    const away = phone ? ' Put it away from Tools.' : ' Tap it again on the left to put it away.';
+    const esc = touched ? away : ' Right click or Esc puts it away.';
+    if (armed === 'ruler') {
+      return `${tap} two points to measure between them, in metres. A ${tap.toLowerCase()} near a piece takes its middle.${touched ? away : ' Right click or Esc puts the ruler away.'}`;
+    }
+    if (armed === 'road') {
+      const n = this.host.roadDraft?.length ?? 0;
+      if (!n) {
+        return `${tap} the ground to lay the road's first node. It bends through its nodes the way a car can drive.${esc}`;
+      }
+      return touched
+        ? `${n} node${n === 1 ? '' : 's'} laid. Tap the next, tap the first to close a loop, tap the last again to finish. Backspace takes one back.${esc}`
+        : `${n} node${n === 1 ? '' : 's'} laid. Click the next, click the first to close a loop, double click or Enter to finish. Backspace takes one back. Esc cancels.`;
+    }
+    if (armed === 'vehicle') {
+      return doc.elements.some((e) => kindOf(e) === KIND.ROAD)
+        ? `${tap} a road to put a car on it. On a two lane loop the side you ${tap.toLowerCase()} is the lane it drives.${esc}`
+        : 'A car drives a road, and this map has none yet. Lay one with the Road tool first.';
+    }
+    if (armed) {
+      return `${tap} the plot to place it. It stands on what is under the ${touched ? 'finger' : 'pointer'}: the ground, a roof, a container. The tool stays in hand, so a second ${tap.toLowerCase()} places another.${esc}`;
+    }
+    if (doc.elements.length >= 6 || this.host.selection.size) {
+      return '';
+    }
+    return doc.elements.length
+      ? (touched
+        ? `Tap a piece to select it. Drag it to move it, and the ring at its foot turns it. Drag empty ground to look round. ${phone ? 'Tools has the pieces to place more.' : 'Pick a tool on the left to place more.'}`
+        : 'Click a piece to select it. Drag it to move it, and the ring at its foot turns it. Drag empty ground to look round. Pick a tool on the left to place more.')
+      : '';
+  }
+
   /* An empty canvas is the hardest thing to start from and a finished track with
    * one gate to move is the easiest, so it says what to do and offers the
    * second. */
@@ -3321,14 +3557,23 @@ export class Panels {
     /* Where the tools are and what a finger does: a phone's palette is a
      * drawer behind Tools on the bar, and a touch screen is tapped. */
     const touched = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const thing = docModeOf(doc) === 'freestyle' ? 'a piece' : 'a gate';
     const first = (place) => (this.host.onPhone()
-      ? `Open Tools and pick a gate, then tap the ${place}.`
-      : `Pick a gate on the left, then ${touched ? 'tap' : 'click'} the ${place}.`);
+      ? `Open Tools and pick ${thing}, then tap the ${place}.`
+      : `Pick ${thing} on the left, then ${touched ? 'tap' : 'click'} the ${place}.`);
     if (whoop) {
       box.append(
         el('p', null, first('floor')),
         el('p', 'tb-help', 'Or start from a finished RaceGOW track and move a gate.'),
         button('Start from a RaceGOW track', 'tb-btn tb-primary', () => this.host.openLoad(), 'The eight tracks of RaceGOW5, to open and change'),
+      );
+      return;
+    }
+    if (docModeOf(doc) === 'freestyle') {
+      box.append(
+        el('p', null, `${first('plot')} It stands on what is under the ${touched ? 'finger' : 'pointer'}: the ground, or a roof.`),
+        el('p', 'tb-help', 'Or open the starter yard, and make it yours.'),
+        button('Start from the yard', 'tb-btn tb-primary', () => this.host.openLoad(), 'The maps that ship with the builder, and the ones you saved'),
       );
       return;
     }

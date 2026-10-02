@@ -1181,8 +1181,9 @@ export class View2D {
       step *= 10;
     }
     /* A five inch track's major lines are every five of its metres, the way the plans a track is designed from are
-     * ruled (5 m major, 1 m minor); a hall's plan and a map's stay every ten of their steps, as they were. */
-    const field = Boolean(this.host.buildsIn3D?.()) && !this.host.isWhoopRace?.();
+     * ruled (5 m major, 1 m minor); a hall's plan and a map's stay every ten of their steps, as they were. The
+     * room is every canvas's now, so a map is named: its plan is not changed by being built in 3D. */
+    const field = Boolean(this.host.buildsIn3D?.()) && !this.host.isWhoopRace?.() && docModeOf(doc) !== 'freestyle';
     const major = step * (field && step === g ? 5 : 10);
     ctx.lineWidth = 1;
     for (let pass = 0; pass < 2; pass += 1) {

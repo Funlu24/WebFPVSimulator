@@ -159,6 +159,39 @@ export function seatFloating(doc, world = null) {
 }
 
 /*
+ * WHAT STANDS ON A THING GOES WITH IT. The ids of every element that stands on one of `ids`, directly or on
+ * something that does, not counting `ids` themselves: the billboard on the roof of a container that is being
+ * moved, and the container on that one. A thing stands on what `world.seatFor` finds under its origin at its
+ * base, which is what set it down in the first place, so this is the seat's own answer read the other way
+ * round. Only what needs a seat and is raised has one; the rest stand on the ground and are never carried.
+ */
+export function standingOn(doc, ids, world) {
+  const on = new Map();
+  for (const el of doc.elements) {
+    if (!(el.position.z > SEAT_SLACK) || !needsSeat(el)) {
+      continue;
+    }
+    const held = world.seatFor(el, el.position.z);
+    if (held && held.on) {
+      on.set(el.id, held.on);
+    }
+  }
+  const taken = new Set(ids);
+  const carried = [];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [id, base] of on) {
+      if (!taken.has(id) && taken.has(base)) {
+        taken.add(id);
+        carried.push(id);
+        grew = true;
+      }
+    }
+  }
+  return carried;
+}
+
+/*
  * What the builder says when it has set something down, or the empty string.
  * `nameOf` turns an element into the name the warnings use ("Gate 6"), and
  * `elementOf` finds the element a move stood on, for its name.

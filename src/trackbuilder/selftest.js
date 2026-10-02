@@ -89,7 +89,7 @@ import {
 } from './geometry.js';
 import {
   FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf,
-  FIVE_INCH_PIECES, FIVE_INCH_TOOLS, toolByKey,
+  FIVE_INCH_PIECES, FIVE_INCH_TOOLS, MAP_TOOLS, toolByKey,
 } from './elements.js';
 import { PRESETS } from './presets.js';
 import { ELEMENTS, PALETTE_ORDER, GATE_FLAG_H, flagSideOf, flagSideSigns, elementByKey, elementHeight,
@@ -107,8 +107,8 @@ import { partsOf } from '../props/catalog.js';
 import { GAP_MIN } from '../props/parts.js';
 import { startBlockDims, startBlockHeight, startBlockLaneOffset } from '../art/startblock.js';
 import { padsLayout } from '../props/course.js';
-import { placeDocument, seatDocument, topUnder, groundUnder, SUPPORT_TIE, OPEN_CLEAR } from '../maps/built/place.js';
-import { SEAT_SLACK, hasRaised, needsSeat, seatFloating, seatedNote, standsOnGround } from './seat.js';
+import { placeDocument, seatDocument, supportsFor, topUnder, groundUnder, SUPPORT_TIE, OPEN_CLEAR } from '../maps/built/place.js';
+import { SEAT_SLACK, hasRaised, needsSeat, seatFloating, seatedNote, standingOn, standsOnGround } from './seat.js';
 import { addSolids, placeSolids } from '../props/solids.js';
 import {
   ROOM_TYPES, ROOM_COLOURS, ROOM_SIZE_MIN, ROOM_SIZE_MAX, isRoomType, clampRoomSize, roomBoxes, roomFootprint,
@@ -5420,6 +5420,64 @@ function suiteDiveSupports() {
  * the builder's own doors (settle, restore, loadDocument) call the same
  * functions and are left to the screenshots with the rest of the tool's DOM.
  */
+/*
+ * A MAP IS BUILT IN THE ROOM (FREESTYLE-3D-BUILD-PLAN.md): what the pointer can stand a piece on, and what goes with
+ * a piece that is moved. Both are the seat's own arithmetic asked in another way, so what the ghost shows is
+ * what seat() keeps, and these checks say so against the same placed map.
+ */
+function suiteMapRoom() {
+  console.log('\nA map is built in the room');
+  const d = createTrack(undefined, 'full', 'freestyle');
+  const bld = freestylePlace(d, 'building', 40, 40);
+  const sup = supportsFor(d);
+  const roof = sup.under(40, 40, 1000);
+  const world = topUnder(placeDocument(d).solids, 40 - d.field.width / 2, -(40 - d.field.depth / 2));
+  check('what the pointer can stand a piece on is the roof the seat would, to the last bit',
+    roof && roof.top === world && roof.on === bld.id, JSON.stringify(roof));
+  check('nothing is under a point at the paving, which is where the ground is', sup.under(40, 40, 0) === null && sup.under(40, 40, 0.05) === null);
+  check('and nothing is under a point that is looking below the roof, such as the side of the building', sup.under(40, 40, roof.top - 1) === null);
+  check('a point over open ground has nothing under it, and one on the very edge of the footprint is not over it',
+    sup.under(120, 120, 1000) === null && sup.under(40 - 8, 40, 1000) === null);
+  check('an element does not hold itself up: with the building left out its own roof is nothing',
+    sup.under(40, 40, 1000, bld.id) === null && sup.under(40, 40, 1000, new Set([bld.id])) === null && sup.under(40, 40, 1000, 'nobody').top === roof.top);
+  check('seatFor is the same question asked of an element at its height',
+    sup.seatFor({ id: 'x', position: { x: 40, y: 40, z: 0 } }, roof.top).top === roof.top && sup.seatFor(bld, roof.top) === null);
+
+  const s = createTrack(undefined, 'full', 'freestyle');
+  const ledge = (z) => freestylePlace(s, 'ledge', 80, 80, { z, dims: { length: 6, height: 1, depth: 2 } });
+  const a = ledge(0);
+  const b = ledge(1);
+  const c = ledge(2);
+  const far = freestylePlace(s, 'ledge', 20, 20, { z: 0, dims: { length: 6, height: 1, depth: 2 } });
+  const stack = supportsFor(s);
+  check('over a stack the highest top at or below where the pointer is looking is the one stood on',
+    stack.under(80, 80, 1000).top === 3 && stack.under(80, 80, 2.04).top === 2 && stack.under(80, 80, 1.5).top === 1 && stack.under(80, 80, 0.5) === null,
+    [1000, 2.04, 1.5, 0.5].map((z) => stack.under(80, 80, z)?.top).join(', '));
+  check('and a thing carried over it leaves its own boxes out, so it does not stand on itself',
+    stack.under(80, 80, 1000, new Set([c.id])).top === 2 && stack.under(80, 80, 1000, new Set([b.id, c.id])).top === 1);
+
+  check('what stands on a piece goes with it: a moved bottom ledge takes the two above it',
+    JSON.stringify(standingOn(s, [a.id], stack)) === JSON.stringify([b.id, c.id]), JSON.stringify(standingOn(s, [a.id], stack)));
+  check('the middle takes only the top one, and the top takes nothing', JSON.stringify(standingOn(s, [b.id], stack)) === JSON.stringify([c.id]) && standingOn(s, [c.id], stack).length === 0);
+  check('a piece on the ground that is not under it is left where it is', !standingOn(s, [a.id], stack).includes(far.id) && standingOn(s, [far.id], stack).length === 0);
+  check('and one that is already being moved is not carried twice', JSON.stringify(standingOn(s, [a.id, c.id], stack)) === JSON.stringify([b.id]));
+
+  /* A gap is a window in the air and nothing stands on anything for it: it is not carried. */
+  const w = createTrack(undefined, 'full', 'freestyle');
+  const house = freestylePlace(w, 'building', 40, 40);
+  const top = supportsFor(w).under(40, 40, 1000).top;
+  const sign = freestylePlace(w, 'billboard', 40, 40, { z: top });
+  const gap = freestylePlace(w, 'gap', 40, 40, { z: top });
+  const carried = standingOn(w, [house.id], supportsFor(w));
+  check('a billboard on the roof is carried with the building, and a gap on it, which needs no seat, is not',
+    carried.length === 1 && carried[0] === sign.id && !carried.includes(gap.id), JSON.stringify(carried));
+  check('a track has no map to stand on: nothing is carried and a ground piece stays', standingOn(createTrack(undefined, 'full'), [], supportsFor(createTrack(undefined, 'full', 'freestyle'))).length === 0);
+
+  check('a map has one tool that is not a piece, the ruler, with no key, because M is the ledge there',
+    MAP_TOOLS.length === 1 && MAP_TOOLS[0].id === 'ruler' && MAP_TOOLS[0].key === '' && toolByKey('M', 'full', 'freestyle') === undefined
+    && toolByKey('M', 'full')?.id === 'ruler' && toolByKey('N', 'full', 'freestyle') === undefined);
+}
+
 function suiteSeat() {
   console.log('\nnothing built stands in the air');
   const mk = (doc, type, opts) => place(doc, type, 5, 5, opts);
@@ -11796,6 +11854,7 @@ async function main() {
   suiteStartBlock();
   suiteDiveSupports();
   suiteSeat();
+  suiteMapRoom();
   suiteClubhouseShell();
   suiteWhoopRepairs();
   suiteWhoopPlacement();

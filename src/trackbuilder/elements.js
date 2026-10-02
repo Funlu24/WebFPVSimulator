@@ -1657,11 +1657,26 @@ export const FIVE_INCH_TOOLS = [
   },
 ];
 
+/*
+ * THE MAP'S TOOLS THAT ARE NOT PIECES: the ruler, and nothing else, because a map has no flying order to put
+ * in order and its pieces are the palette's own. It has no key: M is the ledge on a map and the digits and
+ * the free letters ran out before the assets did.
+ */
+export const MAP_TOOLS = [
+  {
+    id: 'ruler',
+    label: 'Ruler',
+    key: '',
+    note: 'Click two points to measure between them, in metres. A click near a piece takes its middle. Nothing is saved with the map.',
+  },
+];
+
 /* The tool or the piece-of-pieces a key arms on a class's palette, or undefined. A whoop
- * canvas has the tools above in WHOOP_TOOLS; a 5 inch race canvas has these two lists. */
-export function toolByKey(letter, cls = 'micro') {
+ * canvas has the tools above in WHOOP_TOOLS; a 5 inch race canvas has these two lists. A map's
+ * keys are its assets' (elementByKey), and its one tool has none. */
+export function toolByKey(letter, cls = 'micro', mode = 'race') {
   const up = String(letter || '').toUpperCase();
-  if (!up) {
+  if (!up || mode === 'freestyle') {
     return undefined;
   }
   const list = cls === 'micro' ? WHOOP_TOOLS : [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS];

@@ -88,6 +88,9 @@ import {
 import { sequenceNumbers } from './sequence.js';
 import { aroundPass, arrowLanes, spreadTags, stretchOf, tagsOf } from './passes.js';
 import { RoomEditor } from './edit3d.js';
+import { planShapeOf } from './view2d.js';
+import { absNodes, footprint, legMidpoints, vehiclePlace } from './roadtool.js';
+import { roadOf } from '../maps/built/road.js';
 import { frameRectFor } from './snap.js';
 import { levelName } from './figures.js';
 import { travelDirection, markerPassDir } from './faces.js';
@@ -103,7 +106,7 @@ import { placedYaw } from '../props/solids.js';
  * module that drives them, and the code that draws them, are fetched later
  * (loadFreestyle, loadPlay). */
 import { trafficOf, uploadTraffic, vehicleStart } from '../maps/built/traffic.js';
-import { docToWorld } from '../maps/built/place.js';
+import { docToWorld, supportsFor } from '../maps/built/place.js';
 import { makeVehiclePoses, readVehicles, setVehicleClock } from '../game/plantworld.js';
 
 /*
@@ -660,6 +663,14 @@ export class View3D {
     /* The freestyle half: its scene, once CEL has arrived, and each asset's
      * drawing, kept across rebuilds by assetKey(). */
     this.fs = null;
+    this.supports = null;
+    this.handles = null;
+    this.draftGroup = null;
+    this.draftKey = '';
+    this.draftPointer = null;
+    this.draftPointerKey = '';
+    this.carGhostGroup = null;
+    this.carGhostKey = '';
     this.assets = new Map();
     this.builtFreestyle = false;
     this.fsPending = null;
@@ -710,6 +721,16 @@ export class View3D {
 
   isFreestyle() {
     return docModeOf(this.host.doc) === 'freestyle';
+  }
+
+  /*
+   * THE ROOT THE ROOM'S EXTRAS GO IN: the ghost, the guides, the distances, the ruler and the ring. A map
+   * is drawn in a scene of its own (ensureFreestyle), and anything put in the race scene's root is never
+   * rendered, so these follow the content. Both roots take the one conversion, so a document point is the
+   * same point in either.
+   */
+  stage() {
+    return this.isFreestyle() && this.fs ? this.fs.root : this.root;
   }
 
   /*
@@ -1225,20 +1246,25 @@ export class View3D {
     this.cameraMoved();
   }
 
-  /* Fetch Three.js without turning the room on: what a whoop canvas does the
-   * moment it opens, so the room is ready when its turn comes. Resolves true
-   * when the library is there and never rejects. */
+  /* Fetch Three.js without turning the room on: what a canvas does the
+   * moment it opens, so the room is ready when its turn comes. A map's room
+   * is not ready until its kit is, so that is fetched too, and a kit that
+   * cannot come is told by fetchFreestyle and does not stop the room opening
+   * (it draws each asset as its plain solids). Resolves true when the library
+   * is there and never rejects. */
   async preload() {
-    if (THREE) {
-      return true;
+    if (!THREE) {
+      try {
+        await loadThree();
+      } catch (e) {
+        this.loadError = e.message ?? String(e);
+        return false;
+      }
     }
-    try {
-      await loadThree();
-      return true;
-    } catch (e) {
-      this.loadError = e.message ?? String(e);
-      return false;
+    if (this.isFreestyle()) {
+      await this.fetchFreestyle();
     }
+    return true;
   }
 
   /* Straight down with north up, for measuring, and back to the angle the room
@@ -1336,6 +1362,9 @@ export class View3D {
       side: o.userData.side ?? null,
       weak: o.userData.weak === true,
       ring: o.userData.ring === true,
+      /* A selected road's handles: the node a press is on, or the knob between two nodes, by index. */
+      node: o.userData.node ?? null,
+      leg: o.userData.leg ?? null,
       distance: hits[0].distance,
       point: { x: local.x, y: local.y, z: local.z },
     };
@@ -1434,6 +1463,77 @@ export class View3D {
       return null;
     }
     return { x: o.x + d.x * t, y: -(o.z + d.z * t), z };
+  }
+
+  /*
+   * WHERE THE POINTER IS ON WHAT STANDS HERE: { x, y, z, on } for the ground under it, which is all a track has
+   * to stand on. A map's answer is the highest surface the pointer is looking at (see the landing rule in
+   * FREESTYLE-3D-BUILD-PLAN.md, 2.2). `type` is what is about to be put down, since paint has no height to take.
+   */
+  surfaceAt(e, { type = null, ignore = null } = {}) {
+    const ground = this.levelPoint(e.clientX, e.clientY, 0);
+    if (!ground) {
+      return null;
+    }
+    const flat = { x: ground.x, y: ground.y, z: 0, look: 0, on: null };
+    /* A track has the floor, and paint and notes have no height to take. */
+    const kind = type ? ELEMENTS[type]?.kind : null;
+    if (!this.isFreestyle() || !this.camera || kind === KIND.DECAL || kind === KIND.ANNOTATION) {
+      return flat;
+    }
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(this.ndc(e), this.camera);
+    const o = ray.ray.origin;
+    const d = ray.ray.direction;
+    /* How far along the ray the ground is, and the first solid thing nearer than that. */
+    let t = Math.abs(d.y) < 1e-6 ? Infinity : -o.y / d.y;
+    if (!(t > 0)) {
+      return flat;
+    }
+    const doc = this.host.doc;
+    for (const h of ray.intersectObjects(this.pickables, false)) {
+      if (h.distance >= t) {
+        break;
+      }
+      const id = h.object.userData.elementId;
+      const el = id && !h.object.userData.ring && !(ignore && ignore.has(id)) ? elementById(doc, id) : null;
+      const k = el ? ELEMENTS[el.type]?.kind : null;
+      /* A window, a car, a label and a ring are not things to stand on. */
+      if (el && ![KIND.ZONE, KIND.VEHICLE, KIND.ANNOTATION, KIND.DECAL, KIND.ROAD].includes(k)) {
+        t = h.distance;
+        break;
+      }
+    }
+    /* The scene's Y is the document's Z, and its Z is the document's minus Y: the one conversion, read back. */
+    const x = o.x + d.x * t;
+    const y = -(o.z + d.z * t);
+    const look = Math.max(0, o.y + d.y * t);
+    const top = this.landings().under(x, y, look, ignore);
+    return { x, y, z: top ? top.top : 0, look, on: top ? top.on : null };
+  }
+
+  /*
+   * WHAT STANDS BY THE PLACED MAP: the box tops a raised piece can stand on, as place.js answers for a document
+   * (`under(x, y, z, ignore)` and `seatFor(el, z)`). Made when first asked after an edit and dropped by the next
+   * one (markDirty), so a pointer moving over the plot places the map once and not once for each pixel. A map the
+   * kit cannot place is a map with nothing to stand on but the ground.
+   */
+  landings() {
+    if (!this.supports) {
+      try {
+        this.supports = supportsFor(this.host.doc);
+      } catch (e) {
+        console.error('3D room: the map could not be placed to find what stands on what', e);
+        this.supports = { under: () => null, seatFor: () => null };
+      }
+    }
+    return this.supports;
+  }
+
+  /* The height of what a piece would stand on at (x, y), no higher than `look`, with `ignore` left out. */
+  standAt(x, y, look, ignore = null) {
+    const top = this.isFreestyle() ? this.landings().under(x, y, look, ignore) : null;
+    return top ? top.top : 0;
   }
 
   /* Held within half a field of the field's edge, so a ray skimming the
@@ -1727,6 +1827,8 @@ export class View3D {
 
   markDirty() {
     this.dirty = true;
+    /* What a piece can stand on is read off the placed map, which an edit has changed. */
+    this.supports = null;
   }
 
   disposeContent() {
@@ -3096,6 +3198,45 @@ export class View3D {
         p.mat.opacity = p.base + (id === this.hoverId ? 0.12 : 0);
       }
     }
+    if (this.isFreestyle()) {
+      this.hoverOutline();
+    }
+  }
+
+  /*
+   * WHAT THE POINTER IS OVER, on a map: the box round the asset, in faint cream, where a track lights the
+   * panes in its openings. One line box moved from piece to piece, never a rebuild, and not for what is
+   * selected, which has its own.
+   */
+  hoverOutline() {
+    if (this.hoverBox) {
+      this.hoverBox.removeFromParent();
+      this.hoverBox.traverse((o) => {
+        o.geometry?.dispose();
+        o.material?.dispose();
+      });
+      this.hoverBox = null;
+    }
+    const id = this.hoverId;
+    const el = id && !this.host.selection.has(id) ? elementById(this.host.doc, id) : null;
+    const holder = el ? this.groups.get(el.id) : null;
+    const art = el ? this.assets.get(assetKey(el)) : null;
+    if (!holder || !art || !art.group || art.box.isEmpty()) {
+      return;
+    }
+    /* The asset's own frame is the holder's first child (buildAsset). */
+    const local = holder.children[0];
+    if (!local || local.rotation.x !== Math.PI / 2) {
+      return;
+    }
+    const size = art.box.getSize(new THREE.Vector3()).addScalar(0.3);
+    const lines = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z)),
+      new THREE.LineBasicMaterial({ color: 0xf7e8cd, transparent: true, opacity: 0.7, depthWrite: false, fog: false }),
+    );
+    art.box.getCenter(lines.position);
+    this.hoverBox = lines;
+    local.add(lines);
   }
 
   /* Free what a group holds, and take it out of the scene. */
@@ -3127,7 +3268,7 @@ export class View3D {
 
   /* The ghost is a list of pieces, because a row of gates is several. */
   setGhosts(list) {
-    const key = list.map((g) => `${g.type}|${g.position.x.toFixed(4)}|${g.position.y.toFixed(4)}|${g.yaw.toFixed(4)}|${g.props ? `${g.props.pitch}|${g.props.dims.sillH}` : ''}`).join(';');
+    const key = list.map((g) => `${g.type}|${g.position.x.toFixed(4)}|${g.position.y.toFixed(4)}|${(g.position.z ?? 0).toFixed(4)}|${g.yaw.toFixed(4)}|${g.props ? `${g.props.pitch}|${g.props.dims.sillH}` : ''}`).join(';');
     if (this.ghost && this.ghost.key === key) {
       return;
     }
@@ -3137,6 +3278,8 @@ export class View3D {
   }
 
   clearGhost() {
+    this.setDraftPointer(null);
+    this.setCarGhost(null);
     if (!this.ghost && !this.ghostGroup) {
       return;
     }
@@ -3160,6 +3303,14 @@ export class View3D {
     try {
       for (const g of ghost.items) {
         const def = ELEMENTS[g.type];
+        /* A map's pieces are drawn by the kit and have their own: see mapGhost. */
+        if (this.isFreestyle()) {
+          const node = def ? this.mapGhost(g, def) : null;
+          if (node) {
+            all.add(node);
+          }
+          continue;
+        }
         if (!def || ![KIND.APERTURE, KIND.MARKER, KIND.OBSTACLE].includes(def.kind)) {
           continue;
         }
@@ -3192,12 +3343,51 @@ export class View3D {
         all.add(node);
       }
       this.ghostGroup = all;
-      this.root.add(all);
+      this.stage().add(all);
     } catch (e) {
       this.ghost = null;
     } finally {
       this.pickables = saved;
     }
+  }
+
+  /*
+   * THE GHOST OF A MAP'S PIECE, where a click would put it: the piece as it
+   * would be made (createElement, so the style and size it would start at),
+   * standing at the height of what is under the pointer.
+   *
+   * An asset is drawn as its solids in translucent mint, with the edges of
+   * the boxes: it is what the physics will hold, it needs no kit pass so it is
+   * there on the first frame of a hover, and it writes no depth, so the town's
+   * ink draws no line round it. A gap is its amber window, paint and a label
+   * are as the plan draws them, and the pads and the furniture gates are
+   * solids like the rest. `g.position.z` is the base.
+   */
+  mapGhost(g, def) {
+    const el = createElement(this.host.doc, g.type, g.position, g.yaw);
+    el.id = '__ghost';
+    if (def.kind === KIND.ZONE) {
+      return this.buildGap(el, false, true);
+    }
+    const asset = FS && def.kind !== KIND.DECAL && def.kind !== KIND.ANNOTATION ? FS.assetOf(el) : null;
+    if (!asset) {
+      const node = this.buildElement(el, []);
+      node.traverse((o) => {
+        if (o.material && !(o.material.userData && o.material.userData.sharedKit)) {
+          o.material.transparent = true;
+          o.material.opacity = Math.min(o.material.opacity ?? 1, 0.55);
+        }
+      });
+      return node;
+    }
+    const holder = new THREE.Group();
+    holder.position.set(el.position.x, el.position.y, el.position.z);
+    holder.rotation.z = FS.placedYaw(def.turns ?? asset.turns ?? 'any', el.yaw);
+    const local = new THREE.Group();
+    local.rotation.x = Math.PI / 2;
+    local.add(this.plainAsset(el, false, true));
+    holder.add(local);
+    return holder;
   }
 
   /*
@@ -3229,7 +3419,7 @@ export class View3D {
         g.add(line);
       }
       this.measureGroup = g;
-      this.root.add(g);
+      this.stage().add(g);
     }
     for (const n of this.measureNodes) {
       n.remove();
@@ -3283,7 +3473,7 @@ export class View3D {
         group.add(dot);
       }
       this.rulerGroup = group;
-      this.root.add(group);
+      this.stage().add(group);
       if (r.text && (r.a.x !== r.b.x || r.a.y !== r.b.y)) {
         const n = document.createElement('div');
         n.className = 'tb-measure tone-ruler';
@@ -3325,7 +3515,7 @@ export class View3D {
         group.add(dot);
       }
       this.guideGroup = group;
-      this.root.add(group);
+      this.stage().add(group);
     }
     this.host.requestDraw();
   }
@@ -3954,6 +4144,14 @@ export class View3D {
     const g = new THREE.Group();
     this.pickables = [];
     this.gapLabels = [];
+    /* What the room's gestures find again: each piece's drawing by id, so a drag slides it without a rebuild
+     * (movePieces), and none of a track's panes or numbers, which a map has not. */
+    this.groups = new Map();
+    this.panes = new Map();
+    this.bubbleSpecs = [];
+    this.drawnSquares = new Set();
+    this.ring = null;
+    this.hoverBox = null;
     if (fs) {
       this.seatScene(doc);
       this.seatFreestyleGround(doc);
@@ -3962,10 +4160,17 @@ export class View3D {
       g.add(this.gridLines(doc));
     }
     const used = new Set();
+    /* The ring at the foot of the one piece that is selected. */
+    const picked = [...this.host.selection];
+    const ringFor = picked.length === 1 ? elementById(doc, picked[0]) : null;
     for (const el of doc.elements) {
-      const node = this.buildFreestyleElement(el, used);
+      let node = this.buildFreestyleElement(el, used);
+      if (node && ringFor && ringFor.id === el.id && this.ringed(el)) {
+        node = this.withRing(node, el);
+      }
       if (node) {
         g.add(node);
+        this.groups.set(el.id, node);
       }
     }
     if (fs) {
@@ -3979,10 +4184,302 @@ export class View3D {
         }
       });
     }
+    /* A road has no drawing of its own to mark (the traffic is drawn all together), so a selected road has its
+     * line and its handles, and a selected car its box. */
+    this.handles = null;
+    const roadKind = ringFor ? ELEMENTS[ringFor.type]?.kind : null;
+    if (roadKind === KIND.ROAD) {
+      g.add(this.buildRoadHandles(ringFor));
+    } else if (roadKind === KIND.VEHICLE) {
+      g.add(this.buildCarOutline(ringFor));
+    }
     this.sweepAssets(used);
     this.content = g;
     (fs ? fs.root : this.root).add(g);
     this.buildTraffic(doc);
+    this.faceSig = this.signature();
+    this.applyHover();
+    /* A track's numbers are HTML over the canvas and a map has none, so any a track left are taken away. */
+    this.syncBubbles();
+  }
+
+  /* ---------------- roads and cars, in the room ---------------- */
+
+  /*
+   * A SELECTED ROAD: the line it is laid along in amber, a handle on each node and a knob between each pair, on
+   * the ground (z a hand above it, drawn without a depth test so a handle is never lost in the kerb). A node is
+   * pulled, a knob is pulled to put a new node in, as on the plan. The handles are unit spheres whose size is
+   * set a frame at a time to a few pixels (fitHandles), so they are as big on the screen at six hundred metres
+   * as at ten. The picked node is lit.
+   */
+  buildRoadHandles(road) {
+    const group = new THREE.Group();
+    const nodes = absNodes(road);
+    const active = this.host.activeNode;
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(
+        [...nodes, ...(road.closed === true ? [nodes[0]] : [])].flatMap((p) => (p ? [p.x, p.y, 0.15] : [])), 3)),
+      new THREE.LineBasicMaterial({ color: COL.frameSel, transparent: true, opacity: 0.7, depthTest: false, fog: false }),
+    );
+    line.renderOrder = 11;
+    group.add(line);
+    const sphere = new THREE.SphereGeometry(1, 14, 10);
+    const handles = [];
+    const make = (x, y, px, colour, userData) => {
+      const m = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: colour, depthTest: false, fog: false }));
+      m.position.set(x, y, 0.2);
+      m.renderOrder = 12;
+      m.userData = { ...userData, elementId: road.id, px };
+      this.pickables.push(m);
+      group.add(m);
+      handles.push(m);
+    };
+    for (const k of legMidpoints(road)) {
+      make(k.x, k.y, 5, 0xffe9a8, { leg: k.leg });
+    }
+    nodes.forEach((p, i) => {
+      const on = active && active.id === road.id && active.index === i;
+      make(p.x, p.y, i === 0 ? 8.5 : 7, on ? COL.frameSel : 0xffffff, { node: i });
+    });
+    this.handles = { group, handles, centre: nodes[0] ?? { x: 0, y: 0 } };
+    return group;
+  }
+
+  /* The handles' size: so many pixels, at wherever they are. Called on every frame the room draws. */
+  fitHandles() {
+    const hs = this.handles;
+    if (!hs || !hs.group.parent) {
+      return;
+    }
+    for (const m of hs.handles) {
+      m.scale.setScalar(m.userData.px * this.metresPerPixel({ x: m.position.x, y: m.position.y, z: 0 }));
+    }
+  }
+
+  /* A SELECTED CAR: a box of amber lines round where it starts, the length and width it is drawn. */
+  buildCarOutline(car) {
+    const group = new THREE.Group();
+    const at = vehiclePlace(this.host.doc, car);
+    const c = footprint(at);
+    const pts = [];
+    const top = 1.7;
+    for (let i = 0; i < 4; i += 1) {
+      const a = c[i];
+      const b = c[(i + 1) % 4];
+      pts.push(a.x, a.y, 0.05, b.x, b.y, 0.05, a.x, a.y, top, b.x, b.y, top, a.x, a.y, 0.05, a.x, a.y, top);
+    }
+    const lines = new THREE.LineSegments(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
+      new THREE.LineBasicMaterial({ color: COL.frameSel, depthTest: false, fog: false }),
+    );
+    lines.renderOrder = 11;
+    group.add(lines);
+    return group;
+  }
+
+  /*
+   * THE ROAD BEING LAID: the nodes so far as dots, the line through them, and a rubber band to where the next
+   * would go, which is the snapped point under the pointer (setDraftPointer). The nodes are the host's
+   * (roadDraft), so it follows the draft however the draft changes; only the pointer is the view's.
+   */
+  setDraftPointer(p) {
+    const key = p ? `${p.x.toFixed(3)},${p.y.toFixed(3)}` : '';
+    if (key !== this.draftPointerKey) {
+      this.draftPointerKey = key;
+      this.draftPointer = p ? { x: p.x, y: p.y } : null;
+      this.host.requestDraw();
+    }
+  }
+
+  syncDraft() {
+    const nodes = this.host.roadDraft ?? [];
+    const at = this.host.armed === 'road' ? this.draftPointer : null;
+    const mpp = nodes.length || at ? this.metresPerPixel(nodes[0] ?? at) : 0;
+    const key = `${nodes.map((n) => `${n.x},${n.y}`).join(';')}|${at ? `${at.x},${at.y}` : ''}|${mpp.toFixed(2)}`;
+    if (key === this.draftKey) {
+      return;
+    }
+    this.draftKey = key;
+    if (this.draftGroup) {
+      this.freeGroup(this.draftGroup);
+      this.draftGroup = null;
+    }
+    if (!nodes.length && !at) {
+      return;
+    }
+    const group = new THREE.Group();
+    nodes.forEach((p, i) => {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(mpp * (i === 0 ? 8.5 : 6.5), 12, 8),
+        new THREE.MeshBasicMaterial({ color: i === 0 ? 0xffffff : COL.frameSel, depthTest: false, fog: false }),
+      );
+      m.position.set(p.x, p.y, 0.2);
+      m.renderOrder = 12;
+      group.add(m);
+    });
+    const path = [...nodes, ...(at ? [at] : [])];
+    if (path.length > 1) {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(path.flatMap((p) => [p.x, p.y, 0.15]), 3)),
+        new THREE.LineBasicMaterial({ color: COL.frameSel, transparent: true, opacity: 0.85, depthTest: false, fog: false }),
+      );
+      line.renderOrder = 11;
+      group.add(line);
+    }
+    if (at) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(mpp * 5, mpp * 7, 24),
+        new THREE.MeshBasicMaterial({ color: COL.entry, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false, fog: false }),
+      );
+      ring.position.set(at.x, at.y, 0.2);
+      ring.renderOrder = 12;
+      group.add(ring);
+    }
+    this.draftGroup = group;
+    this.stage().add(group);
+  }
+
+  /*
+   * THE CAR ABOUT TO BE DROPPED: its footprint on the road nearest the pointer, in mint, with its nose marked,
+   * `ghost` being { place } from the host (carGhostAt), or null for no road near enough.
+   */
+  setCarGhost(ghost) {
+    const key = ghost ? `${ghost.x.toFixed(3)},${ghost.y.toFixed(3)},${ghost.tx.toFixed(3)},${ghost.ty.toFixed(3)}` : '';
+    if (key === this.carGhostKey) {
+      return;
+    }
+    this.carGhostKey = key;
+    if (this.carGhostGroup) {
+      this.freeGroup(this.carGhostGroup);
+      this.carGhostGroup = null;
+    }
+    if (ghost) {
+      const c = footprint(ghost);
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.ShapeGeometry(new THREE.Shape(c.map((p) => new THREE.Vector2(p.x, p.y)))),
+        new THREE.MeshBasicMaterial({ color: COL.entry, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthTest: false, fog: false }),
+      );
+      body.position.z = 0.25;
+      body.renderOrder = 12;
+      group.add(body);
+      const nose = [ghost.x, ghost.y, ghost.x + ghost.tx * ghost.length, ghost.y + ghost.ty * ghost.length];
+      const arrow = new THREE.Line(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([nose[0], nose[1], 0.3, nose[2], nose[3], 0.3], 3)),
+        new THREE.LineBasicMaterial({ color: COL.entry, depthTest: false, fog: false }),
+      );
+      arrow.renderOrder = 12;
+      group.add(arrow);
+      this.carGhostGroup = group;
+      this.stage().add(group);
+    }
+    this.host.requestDraw();
+  }
+
+  /* ---------------- the ring, on a map ---------------- */
+
+  /* Whether a piece has a heading to turn by the ring: all but a road (turned by its nodes), a car (by its
+   * road) and a label. */
+  ringed(el) {
+    const kind = ELEMENTS[el.type]?.kind;
+    return kind != null && ![KIND.ROAD, KIND.VEHICLE, KIND.ANNOTATION].includes(kind);
+  }
+
+  /*
+   * A PIECE WITH ITS RING: the drawing and the ring at its foot in one node, at the piece's place, so a drag
+   * that slides the node (movePieces) takes the ring along. The drawing is turned by the heading it is
+   * placed at, and the ring is not, because its knob is where the heading points.
+   */
+  withRing(node, el) {
+    const wrap = new THREE.Group();
+    wrap.position.copy(node.position);
+    node.position.set(0, 0, 0);
+    wrap.add(node);
+    /* Its parts are made when the camera is known, on the frame that draws it: see fitRing. */
+    this.ring = { id: el.id, wrap, parts: null, mpp: 0 };
+    return wrap;
+  }
+
+  /* Metres of the ground one pixel of the screen covers at a document point: how big a thing has to be to
+   * be seen, and how wide to be taken, at the distance the camera is. */
+  metresPerPixel(p) {
+    const v = new THREE.Vector3(p.x, p.y, p.z ?? 0);
+    this.root.updateMatrixWorld(true);
+    this.root.localToWorld(v);
+    const d = v.distanceTo(this.camera.position);
+    return (2 * d * Math.tan((FOV_DEG * Math.PI) / 360)) / Math.max(1, this.viewH);
+  }
+
+  /*
+   * THE RING AT A SELECTED PIECE'S FOOT, the size of the ground it stands on and never smaller than a
+   * fingertip. A gate is a metre across and a building twenty six, and both are looked at from anywhere
+   * between two metres and six hundred, so a ring drawn at world sizes is a hairline on one and a hoop
+   * on another. Its line, its knob and the band that is taken are a few pixels wide, and its radius is the
+   * piece's reach (planShapeOf, the plan's own footprint) or a hand's span, whichever is more; they are
+   * made again when the camera has come in or out by a fifth, never every frame.
+   */
+  fitRing(force = false) {
+    const ring = this.ring;
+    if (!ring || !ring.wrap.parent) {
+      return;
+    }
+    const doc = this.host.doc;
+    const el = elementById(doc, ring.id);
+    if (!el) {
+      return;
+    }
+    const mpp = this.metresPerPixel({ x: el.position.x, y: el.position.y, z: el.position.z });
+    if (!force && ring.mpp && Math.abs(mpp / ring.mpp - 1) < 0.2) {
+      return;
+    }
+    ring.mpp = mpp;
+    if (ring.parts) {
+      for (const m of ring.parts.userData.meshes) {
+        const at = this.pickables.indexOf(m);
+        if (at >= 0) {
+          this.pickables.splice(at, 1);
+        }
+      }
+      this.freeGroup(ring.parts);
+    }
+    let reach = 0;
+    for (const q of planShapeOf(el, doc)) {
+      reach = Math.max(reach, Math.hypot(q.x - el.position.x, q.y - el.position.y));
+    }
+    const r = Math.max(reach + scaleOf(doc).ring.pad, 26 * mpp);
+    const line = Math.max(1.5 * mpp, 0.01);
+    const parts = new THREE.Group();
+    parts.userData.meshes = [];
+    const band = new THREE.Mesh(
+      new THREE.RingGeometry(r - line, r + line, 96),
+      new THREE.MeshBasicMaterial({ color: COL.frameSel, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false, depthWrite: false, fog: false }),
+    );
+    band.position.z = 0.006;
+    band.renderOrder = 12;
+    parts.add(band);
+    const grab = new THREE.Mesh(
+      new THREE.RingGeometry(r - 9 * mpp, r + 9 * mpp, 96),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false }),
+    );
+    grab.position.z = 0.008;
+    grab.userData.ring = true;
+    this.register(grab, el);
+    parts.userData.meshes.push(grab);
+    parts.add(grab);
+    const def = ELEMENTS[el.type];
+    const yaw = FS ? FS.placedYaw(def?.turns ?? FS.assetOf(el)?.turns ?? 'any', el.yaw) : el.yaw;
+    const knob = new THREE.Mesh(
+      new THREE.SphereGeometry(6 * mpp, 14, 10),
+      new THREE.MeshBasicMaterial({ color: COL.frameSel, depthTest: false, fog: false }),
+    );
+    knob.position.set(Math.cos(yaw) * r, Math.sin(yaw) * r, 6 * mpp);
+    knob.userData.ring = true;
+    knob.renderOrder = 12;
+    this.register(knob, el);
+    parts.userData.meshes.push(knob);
+    parts.add(knob);
+    ring.wrap.add(parts);
+    ring.parts = parts;
   }
 
   buildFreestyleElement(el, used) {
@@ -4135,7 +4632,7 @@ export class View3D {
    * frame colour. What the preview shows when the cel kit could not load,
    * or when one asset's paint threw.
    */
-  plainAsset(el, selected) {
+  plainAsset(el, selected, ghost = false) {
     const g = new THREE.Group();
     let parts;
     try {
@@ -4144,7 +4641,16 @@ export class View3D {
       console.error(`3D preview: the ${el.type} asset has no layout`, e);
       return g;
     }
-    const mat = new THREE.MeshLambertMaterial({ color: selected ? COL.frameSel : COL.frame });
+    /* A ghost is what the physics will hold and nothing it only draws, in mint, see-through, writing no depth. */
+    if (ghost && parts.some((p) => p.solid)) {
+      parts = parts.filter((p) => p.solid);
+    }
+    const mat = ghost
+      ? new THREE.MeshBasicMaterial({ color: COL.entry, transparent: true, opacity: 0.2, depthWrite: false, fog: false })
+      : new THREE.MeshLambertMaterial({ color: selected ? COL.frameSel : COL.frame });
+    const edgeMat = ghost
+      ? new THREE.LineBasicMaterial({ color: COL.entry, transparent: true, opacity: 0.85, depthWrite: false, fog: false })
+      : null;
     const up = new THREE.Vector3(0, 1, 0);
     for (const p of parts) {
       if (!p.draw && !p.solid) {
@@ -4152,12 +4658,16 @@ export class View3D {
       }
       let mesh;
       if (p.t === 'box') {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(
+        const geo = new THREE.BoxGeometry(
           Math.max(0.01, p.hi[0] - p.lo[0]),
           Math.max(0.01, p.hi[1] - p.lo[1]),
           Math.max(0.01, p.hi[2] - p.lo[2]),
-        ), mat);
+        );
+        mesh = new THREE.Mesh(geo, mat);
         mesh.position.set((p.lo[0] + p.hi[0]) / 2, (p.lo[1] + p.hi[1]) / 2, (p.lo[2] + p.hi[2]) / 2);
+        if (edgeMat) {
+          mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+        }
       } else {
         const a = new THREE.Vector3(p.a[0], p.a[1], p.a[2]);
         const b = new THREE.Vector3(p.b[0], p.b[1], p.b[2]);
@@ -4182,7 +4692,7 @@ export class View3D {
    * src/maps/built/place.js hands it to the scorer. Nothing here is drawn in
    * the sim: this is the author's view of a scoring zone.
    */
-  buildGap(el, selected) {
+  buildGap(el, selected, ghost = false) {
     const w = Math.max(0.2, el.dims.width);
     const h = Math.max(0.2, el.dims.height);
     const holder = new THREE.Group();
@@ -4238,7 +4748,7 @@ export class View3D {
      * the view draws. Under the Labels switch, as the race canvas's numbers
      * are; the selected gap keeps its name.
      */
-    if (this.host.labelsVisible === false && !selected) {
+    if ((this.host.labelsVisible === false && !selected) || ghost) {
       return holder;
     }
     const label = textSprite(`${el.name || 'GAP'}  ${el.points ?? ''}`.trim(), 1, '#1d1406', selected ? '#ffd45c' : '#ffb347');
@@ -4647,10 +5157,16 @@ export class View3D {
     }
     this.applyCamera();
     this.fitGapLabels();
+    if (freestyle) {
+      this.fitRing();
+      this.fitHandles();
+      this.syncDraft();
+    }
     if (freestyle && this.fs) {
       this.poseTraffic();
       this.renderFreestyle();
       this.updatePlayUi();
+      this.placeOverlay();
       return;
     }
     this.seatCamera(0.1);

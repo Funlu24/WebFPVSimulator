@@ -49,7 +49,7 @@ import { runSpecOf } from './runs.js';
 import { apertureAt, flyAgain, focusFor, removeLastPass, MAX_PASSES } from './passes.js';
 import {
   QUARTER, copyElements, magnetFor, moveToPlace, nearestQuarter, placeCube, placementFor, placeOnTrack, placeRow as layRow,
-  replaceWith, rowPlan, turnGroups, turnStepFor,
+  replaceWith, rowPlan, snapTurn, turnGroups, turnStepFor,
 } from './snap.js';
 import {
   addSpiral, flyOver, placeBarHurdle, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
@@ -67,8 +67,9 @@ import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
 /* Nothing built stands in the air: see seat.js. A map is seated with what is
  * under it, which needs the map placed, so that half is place.js's. */
-import { hasRaised, seatFloating, seatedNote, standsOnGround } from './seat.js';
+import { hasRaised, needsSeat, seatFloating, seatedNote, standingOn, standsOnGround } from './seat.js';
 import { seatDocument } from '../maps/built/place.js';
+import { vehicleStart } from '../maps/built/traffic.js';
 import { History } from './history.js';
 import { docFromQuery, trackLink } from './sharelink.js';
 import { buildSheet, sheetHtml, CORNERS } from './buildsheet.js';
@@ -76,7 +77,7 @@ import { importFpvEvents, looksLikeFpvEvents, reportLines } from './importfpv.js
 /* The road tool: every rule about nodes and where a car goes is in here,
  * pure, and this file only applies them as edits. */
 import {
-  addDraftNode, closesDraft, deleteNode, endsDraft, insertNode, moveNode, roadFromDraft, snapToRoad,
+  addDraftNode, closesDraft, copyOffsetAlong, deleteNode, endsDraft, insertNode, moveNode, roadFromDraft, snapToRoad,
   vehiclePlace, absNodes, OPEN_MIN, LOOP_MIN,
 } from './roadtool.js';
 import {
@@ -567,9 +568,8 @@ export class App {
      * was a click on the line. A view choice, like the line, and not stored. */
     this.bendLine = false;
     /* Which view the author asked for, so the room's opening by itself on a
-     * whoop canvas never overrules them: see syncViewToCanvas. */
+     * canvas never overrules them: see syncViewToCanvas. */
     this.viewChosen = false;
-    this.autoRoom = false;
     /* The side column, which a whoop canvas keeps in a drawer. */
     this.drawerOpen = false;
     /* What the magnets found at the last snap, for the views to draw. */
@@ -989,6 +989,12 @@ export class App {
       ? seatDocument(this.doc).moved
       : seatFloating(this.doc);
     return seatedNote(moved, labeller(this.doc), (id) => elementById(this.doc, id));
+  }
+
+  /* What stands on the pieces `ids` on a map, and is carried when they are moved: seat.js reads the placed map the
+   * room has already made for the pointer. */
+  carriedBy(ids) {
+    return docModeOf(this.doc) === 'freestyle' ? standingOn(this.doc, ids, this.view3d.landings()) : [];
   }
 
   /* Whether this element's base is the ground and nothing else in this
@@ -1461,34 +1467,23 @@ export class App {
   /*
    * A TOOL PICKED, by its button on the palette or by its key.
    *
-   * On the five inch and map canvases the 3D view is a preview, and a tool
-   * armed there placed nothing however often the field was clicked
-   * (MENUS-PLAN.md 4.2). The palette says "Build in 2D" while the preview is
-   * up, and picking a tool there takes the author to 2D with the tool in hand,
-   * because the tool is what they asked for and 2D is where it works. On the
-   * whoop canvas the room is where things are built, and a tool is armed as
-   * it always was.
+   * It is armed where it is. Every canvas is built in the room now, so there is
+   * no view a tool armed in places nothing: the map's 3D was the last preview
+   * (FREESTYLE-3D-BUILD-PLAN.md), and the hop to the plan that picking a tool
+   * made from it went with it. Picked in 2D the tool places on the plan, as it
+   * always did.
    */
   pickTool(typeId) {
     /* A phone's palette is a drawer over the drawing, and the next thing to do
      * with a tool is tap the drawing, so picking one puts the drawer away. */
-    const phone = isPhone();
-    if (phone) {
+    if (isPhone()) {
       this.closeTools();
     }
-    if (this.previewing()) {
-      this.viewChosen = true;
-      this.setMode('2d');
-      if (this.armed !== typeId) {
-        this.arm(typeId);
-      }
-    } else {
-      this.arm(typeId);
-    }
+    this.arm(typeId);
     /* And says, once, what a tap does now and how the tool goes back, since
-     * the palette that would show it lit has just closed. The room's coach
-     * line says it on a room canvas, and the road and the car say their own. */
-    if (phone && this.armed === typeId && !this.buildsIn3D() && typeId !== 'road' && typeId !== 'vehicle') {
+     * the palette that would show it lit has just closed, on the plan: the
+     * room's coach line says it in the room, and the road and the car say their own. */
+    if (isPhone() && this.armed === typeId && this.mode === '2d' && typeId !== 'road' && typeId !== 'vehicle') {
       this.sayOnce('phone tool', `Tap the ${wordsFor(this.doc).place} to place it. It stays in hand for the next one, and Tools on the bar puts it away.`);
     }
   }
@@ -1497,12 +1492,6 @@ export class App {
    * say so in their words. */
   onPhone() {
     return isPhone();
-  }
-
-  /* Whether the view up is the 3D preview, where nothing is placed: a map's. A room, the whoop's or the five
-   * inch's, is where it is built. */
-  previewing() {
-    return this.mode === '3d' && !this.buildsIn3D();
   }
 
   arm(typeId) {
@@ -1553,12 +1542,6 @@ export class App {
   armGroundLogo(logoId) {
     this.armed = 'groundLogo';
     this.armedLogoId = typeof logoId === 'string' ? logoId : '';
-    /* Painted in 2D on a plot, where a click places: the 3D view there is a
-     * preview. A room is built in 3D. */
-    if (this.mode === '3d' && !this.buildsIn3D()) {
-      this.viewChosen = true;
-      this.setMode('2d');
-    }
     this.panels.renderPalette();
     this.requestDraw();
     this.toast(`Click the ${wordsFor(this.doc).place} where the paint goes. Its size is in the inspector.`);
@@ -1602,6 +1585,7 @@ export class App {
       return;
     }
     this.roadDraft = addDraftNode(nodes, snapped);
+    this.panels.renderCoach();
     this.requestDraw();
   }
 
@@ -1625,6 +1609,7 @@ export class App {
       newId = el.id;
     });
     this.roadDraft = null;
+    this.panels.renderCoach();
     if (newId) {
       this.setSelection([newId]);
     }
@@ -1633,6 +1618,7 @@ export class App {
 
   cancelDraft() {
     this.roadDraft = null;
+    this.panels.renderCoach();
     this.requestDraw();
   }
 
@@ -1642,13 +1628,36 @@ export class App {
       return;
     }
     this.roadDraft = this.roadDraft.length > 1 ? this.roadDraft.slice(0, -1) : null;
+    this.panels.renderCoach();
     this.requestDraw();
   }
 
   setActiveNode(id, index) {
     this.activeNode = { id, index };
     this.panels.renderInspector();
+    this.view3d.markDirty();
     this.requestDraw();
+  }
+
+  /*
+   * THE ROAD UNDER A POINT ON THE GROUND, or null: the road whose tarmac holds it (`slack` is metres past the
+   * edge). A road has no drawing to hit in the room, so a press on one is asked of the same rule a car is put on
+   * a road by (snapToRoad).
+   */
+  roadAt(world, slack = 0) {
+    return snapToRoad(this.doc, world.x, world.y, slack)?.road ?? null;
+  }
+
+  /* Where a car dropped at `world` would stand, for the room's ghost: { x, y, tx, ty, length, width } on the
+   * road nearest it, facing the way it would drive, or null with no road near enough. */
+  carGhostAt(world, slack) {
+    const snap = snapToRoad(this.doc, world.x, world.y, slack);
+    if (!snap) {
+      return null;
+    }
+    return vehicleStart(this.doc, {
+      type: 'vehicle', road: snap.road, dims: { offset: snap.offset }, style: 'kei', reverse: snap.twoLaneLoop && snap.right,
+    });
   }
 
   /* Where every vehicle on a road is drawn now, by id: taken before an edit
@@ -1715,6 +1724,7 @@ export class App {
     el.position = moved.position;
     el.nodes = moved.nodes;
     this.reseatVehicles(this.doc, id, starts);
+    this.view3d.markDirty();
     this.requestDraw();
     this.panels.renderInspector();
   }
@@ -1731,6 +1741,7 @@ export class App {
     el.nodes = out.nodes;
     this.reseatVehicles(this.doc, id, starts);
     this.activeNode = { id, index: out.index };
+    this.view3d.markDirty();
     this.requestDraw();
     this.panels.renderInspector();
     return out.index;
@@ -1807,14 +1818,15 @@ export class App {
       el.reverse = snap.twoLaneLoop && snap.right;
     }
     el.dims.offset = snap.offset;
+    this.view3d.markDirty();
     this.requestDraw();
     this.panels.renderInspector();
   }
 
   /*
-   * WHERE A POINT LANDS: on the grid, and on a canvas that is built in the room near
-   * what the rules say a piece should be beside, which `ctx` says what is being put
-   * down or pulled ({ type, ignore, dims }): see magnetFor in snap.js. Alt (`offGrid`) is off
+   * WHERE A POINT LANDS: on the grid, and on a track near what the rules say a piece
+   * should be beside, which `ctx` says what is being put down or pulled
+   * ({ type, ignore, dims }): see magnetFor in snap.js. Alt (`offGrid`) is off
    * grid and off magnets. What the magnets found, to be drawn as guides, is
    * `this.guides`, and it is what the last call with a `ctx` found.
    */
@@ -1827,7 +1839,8 @@ export class App {
       const g = this.doc.field.gridSize;
       base = { x: Math.round(world.x / g) * g, y: Math.round(world.y / g) * g, z: 0 };
     }
-    if (!ctx || !this.buildsIn3D()) {
+    /* The magnets are a track's: they know where a gate is meant to stand beside another. A map has the grid. */
+    if (!ctx || docModeOf(this.doc) === 'freestyle') {
       return base;
     }
     const m = magnetFor(this.doc, base, {
@@ -1873,6 +1886,9 @@ export class App {
           const e = elementById(d, existing.id);
           e.position.x = world.x;
           e.position.y = world.y;
+          if (freestyle && Number.isFinite(world.z)) {
+            e.position.z = world.z;
+          }
         });
         this.setSelection([existing.id]);
         this.toast(freestyle
@@ -1892,7 +1908,10 @@ export class App {
       let newId = null;
       this.edit(`place ${def.label}`, (d) => {
         const yaw = def.kind === KIND.ANNOTATION ? 0 : this.newYawFor(type);
-        const element = createElement(d, type, world, yaw);
+        /* It stands at the height the room found under the pointer (`world.z`): a roof, a container, the
+         * paving. Paint has no height to take and the plan gives none. */
+        const high = def.kind !== KIND.DECAL && def.kind !== KIND.ANNOTATION && Number.isFinite(world.z) && world.z > 0;
+        const element = createElement(d, type, high ? world : { x: world.x, y: world.y }, yaw);
         if (def.kind === KIND.DECAL && this.armedLogoId
           && logosOf(d).some((l) => l.id === this.armedLogoId)) {
           element.logoId = this.armedLogoId;
@@ -1987,6 +2006,11 @@ export class App {
       if (element && kindOf(element) !== KIND.VEHICLE) {
         element.position.x = from.x + delta.x;
         element.position.y = from.y + delta.y;
+        /* On a map a piece is carried up on to a roof and down off it, and takes its height with it: what
+         * is built, and a gap's window. Paint, a note and a road are on the ground and have none. */
+        if (delta.z && (needsSeat(element) || kindOf(element) === KIND.ZONE)) {
+          element.position.z = Math.max(0, Math.round((from.z + delta.z) * 1e6) / 1e6);
+        }
       }
     }
     applyAutoFaces(this.doc);
@@ -2087,14 +2111,20 @@ export class App {
   }
 
   /*
-   * A TRACK, OF EITHER CLASS: the canvases that are built in the room. The room's gestures, its card, its
-   * strip along the foot and the Fly order tool were written for the whoop and are the same for a five inch
-   * track, whose gates are bigger and whose lengths are metres (scale.js); a map is a plot of assets with no
-   * lap in it and keeps the plan and the orbiting preview it has. What is RaceGOW's own, the rule book, the
-   * inches, the build sheet, the link and the picture, stays on isWhoopRace.
+   * EVERY CANVAS IS BUILT IN THE ROOM: the whoop's, the five inch's and, since FREESTYLE-3D-BUILD-PLAN.md,
+   * the map's. The room's gestures, its card, its bar along the foot and its coach line were written for the
+   * whoop, are the same for a five inch track, whose gates are bigger and whose lengths are metres
+   * (scale.js), and have a map's words on a map, whose pieces stand on the ground and on each other and which
+   * has no lap. What is RaceGOW's own, the rule book, the inches, the build sheet, the link and the picture,
+   * stays on isWhoopRace.
+   *
+   * It is still a question, and not a constant folded away, because every call site reads as the question it
+   * asks (is the room the tool here), and a canvas that is a preview again only has to change this.
+   * The 2D plan is one key away on all of them, and it is where the room falls back to when Three.js does
+   * not come.
    */
-  buildsIn3D(doc = this.doc) {
-    return docModeOf(doc) !== 'freestyle';
+  buildsIn3D() {
+    return true;
   }
 
   /*
@@ -2360,7 +2390,16 @@ export class App {
       return;
     }
     let made = [];
-    this.edit('copy', (d) => { made = copyElements(d, [...this.selection]); });
+    this.edit('copy', (d) => {
+      made = copyElements(d, [...this.selection]);
+      /* A car has no place of its own, so a copy of one would sit exactly on it: it goes on along the same road. */
+      for (const id of made) {
+        const car = elementById(d, id);
+        if (car && kindOf(car) === KIND.VEHICLE) {
+          car.dims.offset = copyOffsetAlong(d, car);
+        }
+      }
+    });
     if (made.length) {
       this.setSelection(made);
     }
@@ -2408,6 +2447,27 @@ export class App {
         const e = elementById(d, id);
         e.position.x = round6(e.position.x + dir.x * step);
         e.position.y = round6(e.position.y + dir.y * step);
+      }
+    });
+  }
+
+  /*
+   * PAGE UP AND PAGE DOWN: a step up or down on a map, a quarter metre, or a metre with Shift, for what has a height
+   * of its own, which is a named gap: its window starts where it is put, with nothing under it needed. What is built
+   * stands on what is under it and sets itself down (seat.js), so a step is not a thing it can take, and the first
+   * press on one says where its height comes from.
+   */
+  liftSelection(sign, big = false) {
+    const gaps = [...this.selection].filter((id) => kindOf(elementById(this.doc, id)) === KIND.ZONE);
+    if (!gaps.length) {
+      this.sayOnce('lift built', 'A built thing stands on what is under it, so it has no height to step: put it on the roof or the container it is meant to stand on. A named gap has a height of its own, and this steps it.');
+      return;
+    }
+    const step = (big ? 1 : 0.25) * sign;
+    this.edit('height', (d) => {
+      for (const id of gaps) {
+        const e2 = elementById(d, id);
+        e2.position.z = Math.max(0, Math.round((e2.position.z + step) * 1e6) / 1e6);
       }
     });
   }
@@ -2601,7 +2661,8 @@ export class App {
       return;
     }
     if (!this.isWhoopRace()) {
-      out.textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)} m`;
+      /* On a map the room also says how high what is under the pointer is, when it is a roof and not the paving. */
+      out.textContent = `${world.x.toFixed(2)}, ${world.y.toFixed(2)} m${world.z > 0.05 ? `, ${world.z.toFixed(2)} m up` : ''}`;
       return;
     }
     const f = this.doc.field;
@@ -2662,6 +2723,22 @@ export class App {
       return;
     }
     this.toast('Buildings, containers, bridges and the skate set keep to the compass for now: they turn in quarter turns until the physics learns turned boxes. Cranes, trees, masts and gates turn freely.');
+  }
+
+  /*
+   * THE HEADING THE RING IS PULLED TO, for a pull that points `raw` radians. On a track the step is the
+   * canvas's (snapTurn); on a map it is the plan's own rule, snapYaw, so the room and the plan agree about what
+   * a heading is: buildings, containers, bridges and the skate set keep to the compass and say why the first
+   * time they are pulled off it, and everything else turns in fifteen degree steps, or freely with Alt.
+   */
+  turnWanted(el, raw, free) {
+    if (docModeOf(this.doc) !== 'freestyle') {
+      return snapTurn(this.doc, el, raw, free);
+    }
+    if (turnsOf(el.type) === 'quarter' && offCompass(raw) > QUARTER_TURN / 4) {
+      this.noteOffCompass(el);
+    }
+    return snapYaw(el.type, raw, free);
   }
 
   /* The inspector's yaw field. A quarter asset snaps, and says so the first
@@ -2808,14 +2885,8 @@ export class App {
       return;
     }
     this.mode = mode;
-    /* Roads are laid on the plan. */
+    /* A road half laid is in one view's coordinates: put it away rather than carry it across. */
     this.roadDraft = null;
-    /* A tool cannot place in the five inch or map preview, so it is put away
-     * on the way in rather than left lit over a view where it does nothing
-     * (pickTool). */
-    if (this.previewing() && this.armed) {
-      this.disarm();
-    }
     this.nodes.canvas2d.hidden = mode !== '2d';
     this.nodes.canvas3d.hidden = mode !== '3d';
     /* Three.js arrives on the first press of the 3D button, so this settles
@@ -2865,13 +2936,11 @@ export class App {
 
   show3d() {
     this.viewChosen = true;
-    this.autoRoom = false;
     this.setMode('3d');
   }
 
   show2d() {
     this.viewChosen = true;
-    this.autoRoom = false;
     this.setMode('2d');
   }
 
@@ -2896,28 +2965,20 @@ export class App {
   }
 
   /*
-   * A TRACK OPENS IN THE ROOM, of either class, once the room is ready. Three.js is
-   * fetched the moment the canvas opens and the plan is what shows until it
-   * arrives, so a slow or blocked CDN leaves the tool on the plan it always
-   * had (view3d.js says why the preview must never be load bearing). The
-   * author's own choice of view is never overruled, and leaving for another
-   * canvas puts back what that canvas has always opened on.
+   * A CANVAS OPENS IN THE ROOM once the room is ready. Three.js is fetched the moment the canvas opens, and
+   * for a map the props kit and the town's art with it, and the plan is what shows until they arrive, so a
+   * slow or blocked CDN leaves the tool on the plan it always had (view3d.js says why the room must never be
+   * load bearing). The author's own choice of view is never overruled.
    */
   syncViewToCanvas() {
-    if (this.buildsIn3D()) {
-      if (this.mode === '2d' && !this.viewChosen && !this.roomPending) {
-        this.roomPending = true;
-        this.view3d.preload().then((ok) => {
-          this.roomPending = false;
-          if (ok && this.buildsIn3D() && this.mode === '2d' && !this.viewChosen) {
-            this.autoRoom = true;
-            this.setMode('3d');
-          }
-        });
-      }
-    } else if (this.autoRoom) {
-      this.autoRoom = false;
-      this.setMode('2d');
+    if (this.mode === '2d' && !this.viewChosen && !this.roomPending) {
+      this.roomPending = true;
+      this.view3d.preload().then((ok) => {
+        this.roomPending = false;
+        if (ok && this.mode === '2d' && !this.viewChosen) {
+          this.setMode('3d');
+        }
+      });
     }
   }
 
@@ -5829,6 +5890,11 @@ export class App {
         this.nudgeSelection(e.key.slice(5).toLowerCase(), e.shiftKey);
         return;
       }
+      if ((e.key === 'PageUp' || e.key === 'PageDown') && docModeOf(this.doc) === 'freestyle' && this.selection.size) {
+        e.preventDefault();
+        this.liftSelection(e.key === 'PageUp' ? 1 : -1, e.shiftKey);
+        return;
+      }
       if ((e.key === 'f' || e.key === 'F') && this.buildsIn3D()) {
         this.frameSelection();
         return;
@@ -5850,7 +5916,7 @@ export class App {
 
       /* A track's tools, and on a field its pieces made of pieces: H lays a row of whoop gates, K a cube on the whoop
        * and a wall of five inch gates, M is the ruler and N the fly order. */
-      const tool = this.buildsIn3D() ? toolByKey(e.key, trackClassOf(this.doc)) : undefined;
+      const tool = toolByKey(e.key, trackClassOf(this.doc), docModeOf(this.doc));
       if (tool) {
         this.pickTool(tool.id);
         return;

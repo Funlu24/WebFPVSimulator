@@ -54,14 +54,20 @@
 import { ELEMENTS, KIND, defaultDims, isFiveInchPiece, trackClassOf } from './elements.js';
 import { elementById, kindOf, apertureCenter, aperturesOf } from './model.js';
 import {
-  cubeItems, measuresFor, placementFor, rowPlan, rulerPoint, rulerReading, snapTurn, spacingTone,
+  cubeItems, measuresFor, placementFor, rowPlan, rulerPoint, rulerReading, spacingTone,
 } from './snap.js';
 import { inches, GATE_SPACING_NOMINAL } from './racegow.js';
 import { partGhosts } from './parts.js';
 import { scaleOf, say } from './scale.js';
+import { absNodes, vehiclePlace } from './roadtool.js';
 
 /* How far a press travels, in pixels, before it is a drag and not a click. */
 const CLICK_PX = 4;
+
+/* How near, in pixels, a click on a map has to be to a node of the road being laid to close it or finish it, and how near a
+ * car has to be dropped to a road, past the road's own edge: the plan's own reach, at the size of the screen. */
+const NODE_PX = 12;
+const SNAP_PX = 18;
 
 /* Tools that are not placed with a click on the floor: a road is laid node by
  * node and a vehicle is dropped on a road. Neither is on a whoop palette. */
@@ -113,6 +119,10 @@ export class RoomEditor {
     if (e.button === 1 || e.button === 2) {
       /* Right click puts an armed tool away, as it does on the plan; when
        * nothing is armed, right and middle drag pan. */
+      if (e.button === 2 && h.roadDraft) {
+        h.cancelDraft();
+        return;
+      }
       if (e.button === 2 && h.armed) {
         h.disarm();
         return;
@@ -143,6 +153,14 @@ export class RoomEditor {
       return;
     }
 
+    /* The road tool lays a node a click and the car is dropped on a road: both, like every tool, leave a drag to
+     * look round with. */
+    if (h.armed === 'road' || h.armed === 'vehicle') {
+      this.drag = { kind: h.armed === 'road' ? 'lay' : 'drop', start: at, last: at, moved: false };
+      v.clearGhost();
+      return;
+    }
+
     /* A tool: a click places, a drag looks round. Whatever is under the
      * pointer, a gate included, because a tool armed is a tool armed. */
     if (h.armed && !NOT_PLACED.has(h.armed)) {
@@ -154,6 +172,11 @@ export class RoomEditor {
     const hit = v.pickHit(e);
     if (hit && hit.ring) {
       this.drag = { kind: 'turn', id: hit.id, start: at, last: at, began: false };
+      return;
+    }
+    /* A selected road's nodes, and the knob between two to pull a new one out of. */
+    if (hit && (hit.node != null || hit.leg != null)) {
+      this.pressHandle(hit, at);
       return;
     }
 
@@ -175,9 +198,42 @@ export class RoomEditor {
       return;
     }
 
+    /* Open ground, or a road laid on it: a road has no mesh to hit, so what is under the pointer on the ground is
+     * asked of the plan's own rule for where a road is. A press on one selects it and pulls it, as the plan does. */
+    if (!e.shiftKey && v.isFreestyle()) {
+      const g = v.levelPoint(e.clientX, e.clientY, 0);
+      const on = g ? h.roadAt(g, 0) : null;
+      if (on) {
+        h.setSelection([on]);
+        this.drag = {
+          kind: 'move', id: on, start: at, last: at, began: false, plane: 0, origin: null, offset: null, side: null,
+        };
+        return;
+      }
+    }
+
     this.drag = e.shiftKey
       ? { kind: 'box', start: at, last: at, additive: true }
       : { kind: 'floor', start: at, last: at, moved: false };
+  }
+
+  /*
+   * A PRESS ON A ROAD'S HANDLE: a node is picked, and pulled with the road's cars kept where they were; a knob
+   * between two nodes puts a new one in and pulls that. Nothing is an edit until it moves.
+   */
+  pressHandle(hit, at) {
+    const h = this.host;
+    const road = elementById(h.doc, hit.id);
+    if (!road) {
+      return;
+    }
+    const starts = h.vehicleStarts(road.id);
+    if (hit.node != null) {
+      h.setActiveNode(road.id, hit.node);
+      this.drag = { kind: 'node', id: road.id, index: hit.node, starts, start: at, last: at, began: false };
+      return;
+    }
+    this.drag = { kind: 'node', id: road.id, index: -1, leg: hit.leg, starts, start: at, last: at, began: false };
   }
 
   pressElement(e, hit, at) {
@@ -197,6 +253,12 @@ export class RoomEditor {
       }
     } else if (!was) {
       h.setSelection([hit.id]);
+    }
+    /* A car is wherever its road puts it: it is slid along it, not moved. */
+    if (kindOf(el) === KIND.VEHICLE) {
+      h.setSelection([el.id]);
+      this.drag = { kind: 'slide', id: el.id, start: at, last: at, began: false };
+      return;
     }
     /* A waypoint is a handle on the line, and pulling one moves it across its
      * own level and pins the gates either side of it (moveWaypoint), which is
@@ -258,7 +320,28 @@ export class RoomEditor {
       this.showRow(d);
       return;
     }
-    if (d.kind === 'floor' || d.kind === 'place' || d.kind === 'ruler' || d.kind === 'route') {
+    if (d.kind === 'node' || d.kind === 'slide') {
+      if (!d.began) {
+        if (dist(at, d.start) < CLICK_PX) {
+          return;
+        }
+        this.beginHandle(d, e);
+        if (!d.began) {
+          return;
+        }
+      }
+      const g = v.levelPoint(e.clientX, e.clientY, 0);
+      if (!g) {
+        return;
+      }
+      if (d.kind === 'slide') {
+        h.slideVehicle(d.id, g, SNAP_PX * v.metresPerPixel(g));
+      } else {
+        h.moveRoadNode(d.id, d.index, h.snap(g, e.altKey), d.starts);
+      }
+      return;
+    }
+    if (d.kind === 'floor' || d.kind === 'place' || d.kind === 'ruler' || d.kind === 'route' || d.kind === 'lay' || d.kind === 'drop') {
       if (!d.moved && dist(at, d.start) < CLICK_PX) {
         return;
       }
@@ -279,7 +362,9 @@ export class RoomEditor {
         }
         this.beginMove(d);
       }
-      const g = v.levelPoint(e.clientX, e.clientY, d.plane);
+      /* The grab point stays under the pointer, at the height it has now: on a map that is the height the
+       * piece has been carried to, so lifting it on to a roof does not leave the pointer behind. */
+      const g = v.levelPoint(e.clientX, e.clientY, d.plane + d.dz);
       if (!g) {
         return;
       }
@@ -287,7 +372,13 @@ export class RoomEditor {
       const pulled = elementById(h.doc, d.id);
       const snapped = h.snap({ x: g.x + d.offset.x, y: g.y + d.offset.y, z: 0 }, e.altKey,
         { type: pulled.type, ignore: [...d.origin.keys()] });
-      h.moveSelected(d.origin, { x: snapped.x - anchor.x, y: snapped.y - anchor.y, z: 0 });
+      if (v.isFreestyle()) {
+        /* It stands on what is under it now at or below where the pointer is looking, with what is moving
+         * left out, and rises or falls by the difference from what it stood on when it was picked up. */
+        const look = v.surfaceAt(e, { type: pulled.type, ignore: d.ignore });
+        d.dz = look ? v.standAt(snapped.x, snapped.y, look.look, d.ignore) - d.stoodOn : d.dz;
+      }
+      h.moveSelected(d.origin, { x: snapped.x - anchor.x, y: snapped.y - anchor.y, z: d.dz });
       v.movePieces([...d.origin.keys()]);
       v.setGuides(h.guides);
       this.measureDragged(d.id);
@@ -302,12 +393,13 @@ export class RoomEditor {
         d.began = true;
       }
       const el = elementById(h.doc, d.id);
-      const g = v.levelPoint(e.clientX, e.clientY, 0);
+      /* The ring lies at the piece's foot, which on a map may be a roof. */
+      const g = el ? v.levelPoint(e.clientX, e.clientY, v.isFreestyle() ? el.position.z : 0) : null;
       if (!el || !g) {
         return;
       }
       const raw = Math.atan2(g.y - el.position.y, g.x - el.position.x);
-      h.rotateSelected(snapTurn(h.doc, el, raw, e.altKey), d.id);
+      h.rotateSelected(h.turnWanted(el, raw, e.altKey), d.id);
       /* A turn changes what a piece IS, not only where, so the room is rebuilt
        * as it goes; it is rare, and a rebuild is a few milliseconds. */
       v.markDirty();
@@ -315,13 +407,50 @@ export class RoomEditor {
     }
   }
 
+  /* A node or a car taken hold of: the undo step begins at the first real movement, and a knob between two nodes puts
+   * its node in as it does. */
+  beginHandle(d, e) {
+    const h = this.host;
+    d.began = true;
+    if (d.kind === 'slide') {
+      h.beginEdit('slide vehicle');
+      return;
+    }
+    if (d.index >= 0) {
+      h.beginEdit('move node');
+      return;
+    }
+    const g = this.view.levelPoint(e.clientX, e.clientY, 0);
+    h.beginEdit('add node');
+    const index = g ? h.insertRoadNode(d.id, d.leg, h.snap(g, e.altKey), d.starts) : -1;
+    if (index < 0) {
+      h.cancelEdit();
+      d.began = false;
+      this.drag = null;
+      return;
+    }
+    d.index = index;
+  }
+
   /* The pieces about to be pulled, where they are, and where the pointer is
    * against the one that was pressed. The undo step begins here. */
   beginMove(d) {
     const h = this.host;
+    const v = this.view;
     const anchor = elementById(h.doc, d.id).position;
     d.origin = new Map([...h.selection].map((id) => [id, { ...elementById(h.doc, id).position }]));
-    const g = this.view.levelPoint(d.start.x, d.start.y, d.plane);
+    /* On a map what stands on a piece goes with it, and none of what is going is a thing to stand on. */
+    d.dz = 0;
+    d.ignore = null;
+    d.stoodOn = 0;
+    if (v.isFreestyle()) {
+      for (const id of h.carriedBy([...h.selection])) {
+        d.origin.set(id, { ...elementById(h.doc, id).position });
+      }
+      d.ignore = new Set(d.origin.keys());
+      d.stoodOn = v.standAt(anchor.x, anchor.y, anchor.z, d.ignore);
+    }
+    const g = v.levelPoint(d.start.x, d.start.y, d.plane);
     d.offset = g ? { x: anchor.x - g.x, y: anchor.y - g.y } : { x: 0, y: 0 };
     h.beginEdit('move');
     d.began = true;
@@ -344,10 +473,21 @@ export class RoomEditor {
       /* A click on empty floor lets go of what was selected. */
       h.setSelection([]);
     } else if (d.kind === 'place' && !d.moved) {
-      const p = v.levelPoint(e.clientX, e.clientY, 0);
+      const p = v.surfaceAt(e, { type: h.armed });
       if (p) {
-        h.placeAt(h.snap(p, e.altKey, { type: h.armed }));
+        const at = h.snap(p, e.altKey, { type: h.armed });
+        /* The height is the surface's, which a snap to the grid does not touch. */
+        h.placeAt({ x: at.x, y: at.y, z: p.z });
       }
+    } else if ((d.kind === 'lay' || d.kind === 'drop') && !d.moved) {
+      const g = v.levelPoint(e.clientX, e.clientY, 0);
+      if (g && d.kind === 'lay') {
+        h.draftClick(g, h.snap(g, e.altKey), NODE_PX * v.metresPerPixel(g));
+      } else if (g) {
+        h.dropVehicle(g, SNAP_PX * v.metresPerPixel(g));
+      }
+    } else if ((d.kind === 'node' || d.kind === 'slide') && d.began) {
+      h.endEdit();
     } else if (d.kind === 'row') {
       v.clearGhost();
       h.placeRow(d.a, d.b);
@@ -398,7 +538,7 @@ export class RoomEditor {
     const v = this.view;
     const h = this.host;
     this.drag = null;
-    if ((d.kind === 'move' || d.kind === 'turn') && d.began) {
+    if ((d.kind === 'move' || d.kind === 'turn' || d.kind === 'node' || d.kind === 'slide') && d.began) {
       h.revertEdit();
     }
     v.showBox(null);
@@ -504,7 +644,7 @@ export class RoomEditor {
     /* The readout at the foot says where on the floor the pointer is, in the
      * room as on the plan: it sat at nought while the room was up, the one
      * number on the canvas that was not about anything. */
-    const floor = v.levelPoint(e.clientX, e.clientY, 0);
+    const floor = v.isFreestyle() ? v.surfaceAt(e, { type: h.armed }) : v.levelPoint(e.clientX, e.clientY, 0);
     if (floor) {
       h.onHoverWorld(floor);
     }
@@ -522,6 +662,12 @@ export class RoomEditor {
       v.canvas.style.cursor = near && near.id ? 'pointer' : '';
       return;
     }
+    if (h.armed === 'road' || h.armed === 'vehicle') {
+      this.showTrafficGhost(e);
+      v.setHover(null);
+      v.canvas.style.cursor = 'crosshair';
+      return;
+    }
     if (h.armed && !NOT_PLACED.has(h.armed)) {
       this.showGhost(e);
       v.setHover(null);
@@ -529,7 +675,7 @@ export class RoomEditor {
       return;
     }
     const hit = v.pickHit(e);
-    v.setHover(hit && !hit.ring ? hit.id : null);
+    v.setHover(hit && !hit.ring && hit.node == null && hit.leg == null ? hit.id : null);
     v.canvas.style.cursor = hit ? (hit.ring ? 'grab' : 'pointer') : '';
     if (h.bendLine) {
       const line = v.pathHit(e);
@@ -546,6 +692,11 @@ export class RoomEditor {
   showGhost(e) {
     const v = this.view;
     const h = this.host;
+    /* A map's pieces are solids that stand on what is under them, with no gate before them to measure from. */
+    if (v.isFreestyle()) {
+      this.showMapGhost(e);
+      return;
+    }
     if (h.armed === 'cube') {
       this.showCubeGhost(e);
       return;
@@ -574,6 +725,50 @@ export class RoomEditor {
     } else {
       v.clearMeasures();
     }
+  }
+
+  /*
+   * THE GHOST ON A MAP: the piece's solids, mint and see-through, where a click would put it, facing the way it
+   * would be placed and standing at the height of what is under the pointer (view3d.js surfaceAt). There are
+   * no distances: a map has no gate before it to be measured from.
+   */
+  showMapGhost(e) {
+    const v = this.view;
+    const h = this.host;
+    const type = h.armed;
+    const p = ELEMENTS[type] ? v.surfaceAt(e, { type }) : null;
+    if (!p) {
+      v.clearGhost();
+      v.clearMeasures();
+      return;
+    }
+    const at = h.snap(p, e.altKey, { type });
+    v.setGuides([]);
+    v.setGhost({ type, position: { x: at.x, y: at.y, z: p.z }, yaw: h.newYawFor(type) });
+    v.clearMeasures();
+  }
+
+  /*
+   * THE ROAD TOOL AND THE CAR UNDER THE POINTER. The road tool says where the next node would be, with the line
+   * to it from the last one laid (view3d.js setDraftPointer); the car shows where it would be put, on the road
+   * nearest the pointer and facing the way it would drive, or nothing when no road is near enough.
+   */
+  showTrafficGhost(e) {
+    const v = this.view;
+    const h = this.host;
+    const g = v.levelPoint(e.clientX, e.clientY, 0);
+    if (!g) {
+      v.setDraftPointer(null);
+      v.setCarGhost(null);
+      return;
+    }
+    if (h.armed === 'road') {
+      v.setDraftPointer(h.snap(g, e.altKey));
+      v.setCarGhost(null);
+      return;
+    }
+    v.setDraftPointer(null);
+    v.setCarGhost(h.carGhostAt(g, SNAP_PX * v.metresPerPixel(g)));
   }
 
   /* The cube tool's ghost: the five faces a click would lay, faint, where they would stand, facing the way a gate
@@ -749,15 +944,35 @@ export class RoomEditor {
     const y1 = Math.max(d.start.y, e.clientY);
     const rect = v.canvas.getBoundingClientRect();
     const ids = [];
-    for (const el of this.host.doc.elements) {
-      const c = kindOf(el) === KIND.APERTURE ? apertureCenter(el, 0) : el.position;
-      const s = v.toScreen(c);
+    const doc = this.host.doc;
+    const inside = (p) => {
+      const s = v.toScreen(p);
       if (!s) {
-        continue;
+        return false;
       }
       const px = rect.left + s.x;
       const py = rect.top + s.y;
-      if (px >= x0 && px <= x1 && py >= y0 && py <= y1) {
+      return px >= x0 && px <= x1 && py >= y0 && py <= y1;
+    };
+    for (const el of doc.elements) {
+      const kind = kindOf(el);
+      /* The plan's rule for what a box takes: a road is taken when all its nodes are inside, a car where it is
+       * drawn, and a car's own position is nothing at all (it is where its road puts it). */
+      if (kind === KIND.ROAD) {
+        const nodes = absNodes(el);
+        if (nodes.length && nodes.every((n) => inside({ x: n.x, y: n.y, z: 0 }))) {
+          ids.push(el.id);
+        }
+        continue;
+      }
+      if (kind === KIND.VEHICLE) {
+        const at = vehiclePlace(doc, el);
+        if (inside({ x: at.x, y: at.y, z: 0 })) {
+          ids.push(el.id);
+        }
+        continue;
+      }
+      if (inside(kind === KIND.APERTURE ? apertureCenter(el, 0) : el.position)) {
         ids.push(el.id);
       }
     }
