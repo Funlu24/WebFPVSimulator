@@ -523,9 +523,13 @@ const CONTAINER_LEN = { '40ft': 12.192, '20ft': 6.058, '40ft open': 12.192 };
  * height leaves it (the layout keeps its lowest tip 2.5 m up), which is
  * counted here without the hub's own reach, so it can only be generous. A
  * tip is at most 1.1 m further from the hub than the blade is long (its root
- * starts inside the hub), and the nacelle's roof and lamp stand at most 3 m
- * over the hub's height. This is the builder's readout and never the
- * physics' path, so the cosine is the engine's.
+ * starts inside the hub), and it ends in a flat end at most 0.22 m round
+ * (tipR in ./industrial.js), whose rim on a blade leaning `off` from straight
+ * up stands r * sin(off) over the tip: counted as 0.25, because leaving it
+ * out put this 11 cm under the drawn tip of a 60 m blade at Rotor 0.5. The
+ * nacelle's roof and lamp stand at most 3 m over the hub's height. This is
+ * the builder's readout and never the physics' path, so the cosine and the
+ * sine are the engine's.
  */
 function turbineTop(d) {
   const H = d.height ?? 48;
@@ -533,7 +537,7 @@ function turbineTop(d) {
   const f = spin - Math.floor(spin);
   const off = Math.min(f, 1 - f) * ((2 * Math.PI) / 3);
   const L = Math.min(d.blade ?? 28, H - 2.5);
-  return H + Math.max(3, (L + 1.1) * Math.cos(off)) + 0.05;
+  return H + Math.max(3, (L + 1.1) * Math.cos(off) + 0.25 * Math.sin(off)) + 0.05;
 }
 
 export function approxHeight(type, dims, style, tilt = 0) {

@@ -63748,3 +63748,91 @@ Earlier entries in this file already assessed most of the device tickets; this t
 6. **`BUGS_TOKEN`** is in this session's transcript: rotate or unset it.
 7. **`lint:input` has one stale line**, described above, failing on main before this work. It wants either the
    one line fix or your word that the builder should open in 2D.
+
+## 2026-10-02 | builder | A sweep of the two commits before this one for bugs: a road copied with its cars, a button that did nothing, a readout 11 cm short (the owner's ask)
+
+The owner asked for a sweep for bugs in the fixes of cd059b2 and b7160a2, the input fix and the five map builder
+asks from bug-e605ff6a. One reader, by hand, no review workflow: every file in `3d6fe3a..b7160a2` read an area at a
+time, and anything that looked wrong put to a scratch script before it was called a bug. Three findings, all fixed,
+each with a check that fails on the code before the fix. Everything else looked at is listed below with why it was
+left alone, because a review's findings are written down whether or not they were acted on.
+
+### Findings, all fixed
+
+1. **A road copied with its cars lost them, and the road it was copied from got them twice.** Duplicate on a map,
+   with a road and the cars on it selected: the copied road came out empty, and every car's copy went a car's length
+   further along the ORIGINAL road, because `cloneElements` handled a car as if its road were not being copied. On
+   the starter yard's road, 4 cars became 8 and the copy had none. The tooltip promises a copy "keeping how they
+   stand to each other". A car copied with its road now rides the road's copy at its own offset, set in a second
+   pass after every copy is in, because a car names its road by id and may stand before it in the document. A car
+   copied without its road still goes further along its own, and a road copied alone still carries no cars, which
+   an existing check pins. The "whole starter yard" check had passed throughout, because it counted pieces and
+   solids and never asked which road a car was on.
+2. **The map inspector offered Duplicate on the start pads alone**, where pressing it could only say that a map has
+   one set. `anyCloneable` in `clone.js` was written "for a button that would do nothing" and the button never
+   called it. The button is now left out when nothing selected can be copied; Control D still says why, because a
+   key pressed with nothing on screen should not do nothing silently.
+3. **The turbine's height readout came out up to 11 cm under its drawn blade tip**: on a 70 m tower with a 60 m
+   blade at Rotor 0.5, drawn to 100.711 m against a readout of 100.600. A blade ends in a flat end up to 0.22 m
+   round, and on a blade leaning off straight up its rim stands `r * sin(off)` over the tip. `turbineTop`, whose
+   comment said it "can only be generous", left that out, and props-check's top line measures the solids, which
+   stop at the tip, so nothing saw it. It now counts 0.25 m times the sine. Builder readout only, never the physics.
+
+### Looked at and left alone
+
+- **The input fix (bug-52a66f69).** `isStandardGuess` tries every stick mode, so the ticket's stored map, Mode 2's
+  standard layout held by a Mode 3 pilot, is matched. With the old `input.js` swapped back in, input-selftest has 6
+  failures; with the new one, all 380 pass. Only a Firefox radio holding exactly a standard layout is affected.
+- **Stand on end.** `quarterXY` is a proper rotation, and the kit's matrix is the same turn and offsets for both
+  signs. The plan's bounds cache and the structure cache both key on pitch. Every reader of where an asset is goes
+  through `placedPartsOf` or `PropKit.element`: the placer, the plan, the 3D preview, the warnings, the ground's paint
+  and the egg. `normalize` snaps pitch to a quarter, and only roads and vehicles zero it. `toPlain` writes it, and
+  the board's map validator stores the document as sent, so a stood container survives publishing.
+- **Sink below ground.** `seatFloating` never lifts a sunk piece. `supportsOf` and `indexTops` keep only box tops over
+  0, so a buried container's roof is never a seat. Every editor path that writes a map piece's base allows a sink;
+  the two `Math.max(0, ...)` clamps left in `view3d.js` and `moveWaypoint` are track waypoints. `standsOnGround` is
+  false on a map, so the 3D height drag is open. The board accepts a negative base.
+- **The hollow chimney.** The shell's arc maps onto three's cylinder angle correctly (theta = pi/2 - a), the rim's
+  torus is turned onto the same convention, and so are the jambs and the lintel staves. Block 1d sweeps the rest.
+- **The turbine, apart from the readout.** Blade 0 points straight up at Rotor 0, so `turbineTop`'s "nearest to
+  up" is the right blade, and `coneChain`'s last dome meets the tip exactly.
+
+### Checks run
+
+    selftest         node src/trackbuilder/selftest.js: 2063 passed, 0 failed. New: a road copied with its cars,
+                     with the road before them in the document and after, and the doubled starter yard's roads each
+                     keeping their own traffic. All five failed on the old clone.js, e.g. riders [25,60,207.5,171]
+                     and none on the copy, and the yard's road carrying 8 with its copy carrying 0
+    props-check      node scripts/props-check.js: all passed. New line in 1d, the turbine's readout against what is
+                     DRAWN, end caps counted, at 9 rotor positions over 17 dim sets. On the old formula it failed at
+                     the biggest corner at Rotor 0.25, 0.375 and 0.5 (130.711 drawn, 130.600 said)
+    props-check      node scripts/props-check.js --selftest: all passed
+    sweep            a scratch sweep of 8 heights x 7 blade lengths x 41 rotor positions: the readout is at least
+                     10.6 cm over the drawn top everywhere now (it was 11 cm under at worst). Not committed
+    probe            headless Chromium on the real builder page with the starter yard loaded, through the flow
+                     check's own page helper: no Duplicate button on the start pads alone, one on a road, and a road
+                     copied with its 4 cars leaving 4 on each road, with no page errors. On the files before the fix
+                     the same probe found a button on the pads and 8 cars on the original road with none on the
+                     copy. Not committed
+    the rest         input-selftest 380; lint:preload up to date at 246 served (clone.js was already in the
+                     builder's graph, so ui.js importing it adds nothing); check:fresh 18; lint:nouns; no dashes in
+                     the lines added
+
+    not run          npm run verify (no physics, plant, ABI or build change); check:builder (none of its cases
+                     looks at the map inspector's Duplicate button, so the probe is the check that can see it);
+                     shots.js; lint:input (input untouched)
+
+### What went wrong
+
+- **The first draft of the fix declared `cars` twice.** The old `cloneElements` had an unused `const cars` at its
+  top, and I added a second. I found it by grep before anything ran, and removed the old one.
+- **The probe was written into the repository's root**, because the page helper serves from there. It was deleted
+  before the commit, and `git status` checked.
+- **The readout bug is a gap in what was measured, not in the arithmetic.** The previous entry says approxHeight is
+  "measured never to come out under what is drawn", and for the turbine it was measured against its solids only.
+  The new line measures the drawing.
+
+### For the owner
+
+Nothing new needs your word. The board was read, not written. The earlier entry's list still stands, the
+`BUGS_TOKEN` rotation and the stale `lint:input` line among it.

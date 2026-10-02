@@ -26,6 +26,8 @@
  * vehicle is not copied beside itself but ONTO ITS ROAD, a car's length and a
  * gap further along, because where a car is comes from its road and its
  * offset (schema.md) and a plan position would be a number nothing reads.
+ * A car copied WITH its road rides the road's copy instead, at its own
+ * offset, so a road and its traffic copy as one.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -129,7 +131,6 @@ export function cloneElements(doc, ids) {
   const wanted = new Set(ids);
   const sources = doc.elements.filter((el) => wanted.has(el.id));
   const left = sources.filter((el) => kindOf(el) === KIND.START).map((el) => el.id);
-  const cars = sources.filter((el) => kindOf(el) === KIND.VEHICLE);
   const pieces = sources.filter((el) => ![KIND.START, KIND.VEHICLE].includes(kindOf(el)));
   const made = [];
   /* Measured BEFORE the first copy goes in, so the copies do not move the
@@ -139,6 +140,9 @@ export function cloneElements(doc, ids) {
    * both. The name is taken as soon as the copy is in the document, so the
    * next group of a copy of several gets another. */
   const groups = new Map();
+  /* Each road copied, its copy's id by the original's, for the cars below. */
+  const roads = new Map();
+  const cars = [];
   for (const src of sources) {
     if (left.includes(src.id)) {
       continue;
@@ -146,13 +150,13 @@ export function cloneElements(doc, ids) {
     const copy = deepClone(src);
     copy.id = newElementId(doc);
     if (kindOf(src) === KIND.VEHICLE) {
-      /* Further along its own road. A car with no road is parked in a row,
-       * and its copy takes the next place in it. */
-      const car = vehiclePlace(doc, src);
-      copy.dims.offset = round6((Number(src.dims.offset) || 0) + car.length + CLONE_CAR_GAP);
+      cars.push([src, copy]);
     } else {
       copy.position.x = round6(src.position.x + shift.x);
       copy.position.y = round6(src.position.y + shift.y);
+    }
+    if (kindOf(src) === KIND.ROAD) {
+      roads.set(src.id, copy.id);
     }
     /* A named gap's name is what it scores as, and a copy of it is the same
      * window somewhere else. Everything else is told apart by its type. */
@@ -165,6 +169,23 @@ export function cloneElements(doc, ids) {
     }
     doc.elements.push(copy);
     made.push(copy.id);
+  }
+  /*
+   * THE CARS, once every road copied with them is in, because a car names
+   * its road by id and may stand before it in the document. A car whose road
+   * was copied with it rides the road's copy at its own offset (deepClone
+   * kept it), so a road and its traffic copy as one and the road they were
+   * copied from keeps the cars it had. Any other car goes further along its
+   * own road, and one with no road is parked in a row, its copy taking the
+   * next place in it.
+   */
+  for (const [src, copy] of cars) {
+    if (roads.has(src.road)) {
+      copy.road = roads.get(src.road);
+    } else {
+      const car = vehiclePlace(doc, src);
+      copy.dims.offset = round6((Number(src.dims.offset) || 0) + car.length + CLONE_CAR_GAP);
+    }
   }
   return { made, left };
 }

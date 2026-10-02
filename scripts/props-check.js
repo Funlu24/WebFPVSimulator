@@ -1308,8 +1308,36 @@ function hollowProblems(name, dims) {
   return { out, count: solids.length };
 }
 
+/*
+ * The highest point of what an asset draws: its drawn parts, and every cone
+ * and ball its draw() paints, a cone counted to the rim of its end caps,
+ * which on a cone that leans stand r * sin(lean) over the middle of the end.
+ * A blade's red tip is such a cap, and the turbine's readout once left it
+ * out: 11 cm under the drawn tip of a 60 m blade at Rotor 0.5.
+ */
+function drawnTop(parts, calls) {
+  let top = -Infinity;
+  for (const p of parts) {
+    if (p.draw) {
+      top = Math.max(top, topOf(p));
+    }
+  }
+  for (const c of calls) {
+    if (c[0] === 'cyl') {
+      const [a, b, ra] = [c[2], c[3], c[4]];
+      const rb = c[6] ?? ra;
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const lean = L > 0 ? Math.sqrt(Math.max(0, 1 - ((b[1] - a[1]) / L) ** 2)) : 1;
+      top = Math.max(top, a[1] + ra * lean, b[1] + rb * lean);
+    } else if (c[0] === 'ball') {
+      top = Math.max(top, c[2][1] + c[3]);
+    }
+  }
+  return top;
+}
+
 function turbineProblems(name, dims0, spins) {
-  const out = { foot: [], gap: [], slot: [], top: [] };
+  const out = { foot: [], gap: [], slot: [], top: [], drawn: [] };
   let count = 0;
   for (const spin of spins) {
     const dims = { ...dims0, spin };
@@ -1339,6 +1367,12 @@ function turbineProblems(name, dims0, spins) {
     const said = approxHeight('turbine', dims, null);
     if (highest > said + TOP_SLACK) {
       out.top.push(`${label}: a solid reaches ${r3(highest)} m, the readout says ${r3(said)} m`);
+    }
+    const el = assetEl('turbine', null, dims);
+    const parts = partsOf(el);
+    const drawn = drawnTop(parts, recordDraw(el, parts));
+    if (drawn > said + 1e-6) {
+      out.drawn.push(`${label}: drawn to ${r3(drawn)} m, the readout says ${r3(said)} m`);
     }
   }
   return { out, count };
@@ -1384,7 +1418,7 @@ function flyThroughBlock() {
   say('hollowChimney: every solid point is inside the drawn brick', hollow.fitIn, range);
   say('hollowChimney: the drawn brick is never far from a solid', hollow.fitFar, range);
 
-  const turb = { foot: [], gap: [], slot: [], top: [], sym: [], fitIn: [], fitFar: [] };
+  const turb = { foot: [], gap: [], slot: [], top: [], drawn: [], sym: [], fitIn: [], fitFar: [] };
   const tcounts = [];
   const tsets = cornerSets('turbine');
   const spins = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
@@ -1419,6 +1453,7 @@ function flyThroughBlock() {
   say('turbine: a blade hanging down clears the tower by the gap rule', turb.gap, trange);
   say('turbine: no slot between two of its solids', turb.slot, trange);
   say('turbine: the readout is over the highest solid at every rotor position', turb.top, trange);
+  say('turbine: the readout is never under what is drawn, blade tips and all, at every rotor position', turb.drawn, trange);
   say('turbine: a whole turn of Rotor is the rotor it started as', turb.sym, `${tsets.length} dim sets`);
   say('turbine: every solid point is inside what is drawn', turb.fitIn, `${tsets.length} dim sets`);
   say('turbine: what is drawn is never far from a solid', turb.fitFar, `${tsets.length} dim sets`);

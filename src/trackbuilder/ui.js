@@ -54,6 +54,7 @@ import { elevationProfile } from './path.js';
 import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
 import { localBoundsOf, turnsOf } from './view2d.js';
+import { anyCloneable } from './clone.js';
 import {
   PROP_GROUPS, GAP_POINTS, clampDim, fitDims, hollowDoorHeight, styleDims, styleOf as propStyleOf, tiltOf,
 } from '../props/types.js';
@@ -776,7 +777,7 @@ export class Panels {
     const freestyle = docModeOf(doc) === 'freestyle';
     host.append(el('p', 'tb-kind', `${def.label}. ${def.note}`));
     /* A map has no card in the room to hold Copy, so Duplicate is the first
-     * thing on its inspector, for every kind of piece. */
+     * thing on its inspector, for every kind of piece but the start pads. */
     this.appendDuplicate(host, [element.id]);
 
     if (def.kind === KIND.ZONE) {
@@ -980,7 +981,9 @@ export class Panels {
    * leaves out.
    */
   appendDuplicate(host, ids) {
-    if (docModeOf(this.host.doc) !== 'freestyle') {
+    /* Not on the start pads alone, where it could only say that a map has one
+     * set: Control D still says so, to a key pressed with nothing to see. */
+    if (docModeOf(this.host.doc) !== 'freestyle' || !anyCloneable(this.host.doc, ids)) {
       return;
     }
     const many = ids.length > 1;

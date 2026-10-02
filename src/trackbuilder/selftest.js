@@ -4020,6 +4020,33 @@ function suiteClone() {
       && (dx !== 0 || dy !== 0) && road3.closed === road2.closed);
     check('and no vehicle is carried across to it: cars name a road, they do not belong to one',
       yard2.elements.filter((e) => e.road === road3.id).length === 0);
+
+    /* Selected TOGETHER, a road and the cars on it are copied as one: each
+     * car's copy rides the road's copy at the car's own offset, and the road
+     * that was copied keeps exactly the cars it had. The copies used to go
+     * further along the ORIGINAL road, so a copied road was empty and the
+     * one beside it carried its traffic twice. Tried with the road before its
+     * cars in the document and after them, because a car names its road by
+     * id and the document's order is nobody's promise. */
+    for (const roadLast of [false, true]) {
+      const yard3 = normalize(starterMap()).doc;
+      const road4 = yard3.elements.find((e) => e.type === 'road' && yard3.elements.some((c) => c.road === e.id));
+      if (roadLast) {
+        yard3.elements.push(yard3.elements.splice(yard3.elements.indexOf(road4), 1)[0]);
+      }
+      const riders = yard3.elements.filter((e) => e.road === road4.id);
+      const r2 = cloneElements(yard3, [road4.id, ...riders.map((c) => c.id)]);
+      const road5 = r2.made.map((id) => elementById(yard3, id)).find((e) => e.type === 'road');
+      const onCopy = yard3.elements.filter((e) => road5 && e.road === road5.id);
+      const order = roadLast ? 'after its cars' : 'before its cars';
+      check(`a road copied with the cars on it carries them, at their own offsets (the road ${order})`,
+        riders.length > 0 && onCopy.length === riders.length
+        && riders.every((c) => onCopy.some((k) => k.dims.offset === c.dims.offset && k.style === c.style
+          && k.reverse === c.reverse && k.drift === c.drift)),
+        JSON.stringify({ riders: riders.map((c) => c.dims.offset), onCopy: onCopy.map((k) => k.dims.offset) }));
+      check(`and the road that was copied keeps exactly the cars it had (the road ${order})`,
+        yard3.elements.filter((e) => e.road === road4.id).length === riders.length);
+    }
   }
 
   /* -------- a group is a group of its own -------- */
@@ -4045,6 +4072,13 @@ function suiteClone() {
     const doc = deepClone(yard);
     const { made, left } = cloneElements(doc, ids);
     check('every piece of the starter yard but its pads has a copy', made.length === ids.length - left.length && left.length === 1);
+    const ridersOf = (d, id) => d.elements.filter((e) => e.road === id).length;
+    const roads = yard.elements.filter((e) => e.type === 'road');
+    const copiedRoads = made.map((id) => elementById(doc, id)).filter((e) => e.type === 'road');
+    check('and each road keeps its own traffic: the originals carry what they did, and the copies as much again',
+      roads.every((r) => ridersOf(doc, r.id) === ridersOf(yard, r.id))
+      && copiedRoads.reduce((n, r) => n + ridersOf(doc, r.id), 0) === roads.reduce((n, r) => n + ridersOf(yard, r.id), 0),
+      JSON.stringify({ originals: roads.map((r) => ridersOf(doc, r.id)), copies: copiedRoads.map((r) => ridersOf(doc, r.id)) }));
     const settled = seatDocument(doc).placed;
     check('and the doubled yard places, with at least the solids of the first and of a second', settled.solids.length >= before.solids.length * 1.5,
       `${settled.solids.length} against ${before.solids.length}`);
