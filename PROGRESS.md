@@ -64327,3 +64327,58 @@ so it could not be the sentinel it was last time: `view3d.js` was polled every 2
   door draws uses none of them.
 - Neither of the other two repositories had anything on its branch to push.
 - **The fly it pass from the entry above is still open.** The push does not stand in for it.
+
+## 2026-10-02 | review | Every pull request read, and the patch notes brought up to 2 October (the owner's ask)
+
+Nothing here changes the physics, the plant, the module ABI or the build, and `git diff --stat vendor/betaflight` is empty. No code in this repository changed: this entry is the record of a review, which the working rules ask for whether or not a finding was acted on. The patch notes live in the front door's repository, and the work on them went there, on its branch.
+
+### The ask
+
+"review all pr's and update the patch notes". Taken as: read every pull request on the three repositories, find what the patch notes had not said, and bring them up to what has landed. Nothing was merged, closed, commented on or pushed on any pull request. A review of someone else's pull request, and above all one that is already merged, is the owner's to act on.
+
+### What was read
+
+31 pull requests. Here, 21: #1 to #22, where #20 is an issue (a reader asking to fly any drone on any track, answered by the owner and closed by the reader on 28 September). The board, 4. The front door, 6. State and bodies from GitHub, every head commit fetched from refs/pull/N/head and tested against main. The three clones were shallow, so they were fetched whole before anything was reasoned from them.
+
+- 27 are merged and their work is on main. For 24 of them the head is itself an ancestor of main. Three were squash merged, the board's #2 and #3 and the front door's #3, so their heads are not ancestors; their squash commits are on main (242757a, 818d416, 6c6fca7) and their content is there (`support_click` in the board's validate, store and server; `/cw/webfpv` in the board's app.js).
+- 3 are closed unmerged, all here: #2 (a draft, closed on 28 August), #17 (replaced by #19, which says so: #17 had grown to 44 commits) and #18 (closed as folded into #17). Their work is not on main, correctly.
+- 1 is open: the board's #4.
+- Against the patch notes: #3 to #14 (26 and 27 August) are the 22 August section; #15, the board's #1 and the front door's #1 and #2 are 25 September; #19, the board's #2 and #3 and the front door's #3 and #4 are 26 and 27 September; the front door's #5 is "Back in the wiki opens the article". Not in the notes, on purpose, and left so: #1 (14 August, before the notes begin), #16 (a pilotless replay link for recording clips: a capture tool and not something a pilot flies), #21 (a dev script) and the front door's #6 (a cache address). Not in the notes and should have been: #22, which is in them now.
+
+### Findings
+
+1. **#22, Matt's Flooring as a maps only partner, was merged by cursor[bot] ten seconds after it was opened (14:04:51 to 14:05:01 UTC on 1 October), with no review and no comment.** Its one check, GitGuardian, finished at 14:06:40, after the merge. What it does is sound: `npm run lint:partners` is 59 of 59 on main and leaves the tree clean, the made file is current, and the logo is transparent, not on white as its body says (70 per cent of its pixels are clear), so the one colour file is a proper cream silhouette. Four things it does not say:
+   - `roster.js` is vendored byte for byte into the board (public/sim/partners/) and the front door (src/sim/partners/), and #22 changes it, so the body's "no vendor re-run is needed" is true of behaviour and not of the copies. `cmp` finds both copies different from this repository's file. Nothing fails, because each repository holds its copy to its own manifest and neither reads the new export. The three CLAUDE.md files say the copies are byte for byte, so `node scripts/vendor.js ../WebFPVSimulator` in each is owed.
+   - A found mark's callout reads `${roleTitle(partner)} · found`, and `roleTitle` is empty for a partner with no role, so Matt's Flooring's second line reads " · found" with nothing before the dot (roster.js, ui.js partnerFound). The results row "Partner marks found" filters on PARTNERS alone (ui.js partnerRows), so a find never reaches it.
+   - The board refuses every event for the slug (`kind: 'mark'`, seen or found): its closed list is its own copy of PARTNERS, which does not have it (validate.js, "That is not a partner of this board."). That fits "not on the board", and it means nothing is counted for this partner and each seen and found sends a request that is turned away.
+   - The logo's own tagline, GET LAID BY MATT, goes on every freestyle map's wall. Said so it is a decision and not a surprise.
+2. **The board's #4, "Patreon tiers: show the live $3, $8, $20 prices", is open, conflicted, and still wanted.** It is a six line change (the note in app.js and the three anchors in index.html, and 14 checks in the self test). `git merge-tree` against main conflicts in public/index.html and src/selftest.js, both places main rewrote on 1 October. The simulator says $3, $8 and $20 a month (src/share/patreon.js). The board still says $5, $12 and $25, plus GST on join (public/app.js:70, public/index.html three anchors), and so does the front door (src/config.js:63, index.html, wiki/index.html twice, notes/index.html), which never had a pull request for it. So two of the three products tell a visitor the old price while the 26 September notes say it came down. Not fixed here: the numbers are the owner's, the front door's change needs the stamp rule, and #4 is the owner's own.
+3. **#21, "add URL validation in boardcards.js (CWE-918)", an automated outside change merged on 28 September, does nothing a pilot or the board needs.** `--board` is typed by whoever runs the script, so there is no attacker to keep from the metadata address. It refuses two hosts by name, which any other address gets round, and its own body says it is unverified and "a suggestion". It breaks nothing: the default and the board's own address pass. Left as it is.
+4. **The front door still says "Tracks and Times" in six places** (index.html twice, wiki/index.html, notes/index.html, src/main.js, one wiki article), where the owner's glossary of 1 October (MENUS-PLAN.md 3.1) says "Tracks and times" and the board and the simulator now do. The plan sized 3.1 as small on each side and did not name the front door. Not changed: the same letter in a module needs the stamp rule.
+
+### What the patch notes needed, and what was done
+
+The newest section was 29 September, written that morning. Missing from it: that afternoon's three changes (the outline switch, the floating fix, Mantis FPV's card), all of 30 September, 1 October and 2 October, and #22. The front door's notes/index.html now has those, in the page's voice, with the kicker, the jump list, the three descriptions and the footer moved to 2 October, and the velocity graph regenerated to the same day (53 days, 1,139 commits). Perth days, taken from the day each change reached main.
+
+Five read only readers digested the slices of this file, the commits and the board's history, and each claim that went into the notes was then held to its source here, in the log or in the code. That corrected three digest lines before they were written: the iPhone and iPad words say "use a computer", not "try Chrome"; a road copied alone carries no cars, only a road copied with its cars does; and Page Up and Page Down raise and sink a piece, they do not "step a gap". Three more wordings follow a caution in a digest or in the log: Fly order is N now, so the O in the whoop entries is not quoted; the Firefox fix is told without a cause, because this log, the code's comment and the ticket give three; and the qualifier is said to be rebuilt from the event's diagram, which is what the log's own account of it says, and not from a published plan.
+
+### Checked, and not
+
+    lint:page            32 of 32 before the change and 32 of 32 after it, with the graph regenerated to 2 October
+                         (its last line checks that the graph reaches the newest entry)
+    lint:wiki            ok
+    npm test             13, 10 and 16 tests passed
+    the page             looked at in headless Chromium at 1280, 900, 430 and 360 wide: no horizontal overflow of the
+                         page, no console error, every jump link has its section, the graph and the new sections read
+                         at 1280 and 430. The Site end label is dropped at 1280 by the generator's own rule (a label
+                         that would sit on another), and the key above the graph carries it
+    dashes               none in notes/index.html
+    not run              npm run verify (nothing here is physics, the plant, the ABI or the build), node scripts/shots.js
+                         (it drives the simulator's shell, which did not change), and nobody has looked at the notes on a
+                         real phone
+
+### For the owner
+
+- #4: close it and have the prices ported onto the board's main and the front door, or have it rebased. Either way the front door is owed the same change, which is a module and so a stamp.
+- #22: the two vendor re-runs, whether the empty role line and the results row should read as they do, whether the board should count a maps only partner's marks, and whether the tagline is meant to be on every map.
+- The notes carry one sentence you may want to reword before they ship: the board's list of bug reports was readable by anyone until the fix of 1 October, and the 1 October section says so. It is true, and it is also a disclosure.
