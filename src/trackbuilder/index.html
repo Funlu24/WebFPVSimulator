@@ -892,6 +892,8 @@
          panel whose only content was that a map has none (MENUS-PLAN.md
          1.26). The inspector, which on a map carries a style picker and a
          column of sizes, takes the room. app.js sets the class. */
+      body.tb-flighting #tb-inspector { flex: 1 1 70%; }
+      body.tb-flighting #tb-sequence, body.tb-flighting #tb-results { flex: 1 1 15%; }
       body.tb-map #tb-inspector { flex: 1 1 62%; }
       body.tb-map #tb-sequence { display: none; }
       body.tb-map #tb-results { flex: 1 1 38%; }
@@ -1231,6 +1233,55 @@
         margin: var(--s3) 0 var(--s4);
       }
       .tb-side-grid .tb-fig-card svg { height: 52px; }
+
+      /* The flight path of a pass: each figure is its own picture, three across because a loop wants width, and the
+         choices of the one that is laid are rows of words under the grid. A slot is a heading of its own so that
+         "Then" and "Into it" are two decisions and not one long list. */
+      .tb-fp .tb-fig-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); margin: var(--s2) 0 var(--s3); }
+      .tb-fp .tb-fig-card { padding: var(--s1) var(--s1) var(--s2); gap: 1px; }
+      .tb-fp .tb-fig-card svg { height: 46px; }
+      .tb-fp .tb-fig-card strong {
+        font-size: var(--t-small);
+        line-height: 1.2;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .tb-fp h3.tb-fp-slot { margin-top: var(--s5); }
+      #tb-flight { scroll-margin-top: 48px; }
+      .tb-fp .tb-seg-btn.has::before {
+        content: '';
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: var(--mint);
+        vertical-align: 1px;
+      }
+      .tb-fp-laid { margin: var(--s2) 0 0; color: var(--slate); font-size: var(--t-small); }
+      /* A card button that says what is laid, cut with an ellipsis when the name is longer than half a row. */
+      .tb-seg-btn.tb-card-wide { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* The run tool's choices, under its button while it is in hand: small, because the palette is narrow, and quiet,
+         because they are the tool's and not the track's. */
+      .tb-run-opts {
+        margin: 0 0 var(--s2) var(--s2);
+        padding: var(--s2);
+        border: 1px solid var(--rule);
+        border-radius: var(--r-ctl);
+        background: var(--raised);
+      }
+      .tb-run-opts[hidden] { display: none; }
+      .tb-run-label {
+        margin: var(--s2) 0 var(--s1);
+        font-size: var(--t-small);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--slate);
+      }
+      .tb-run-label:first-child { margin-top: 0; }
+      .tb-run-shapes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1); }
+      .tb-run-opts .tb-seg-btn { padding: 4px 6px; font-size: var(--t-small); }
 
       /* A gate's four sides, laid out the way the gate stands: the top bar
          over the two uprights over the bottom bar, with the hole in the

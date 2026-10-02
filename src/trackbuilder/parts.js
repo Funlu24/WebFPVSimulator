@@ -1,8 +1,8 @@
 /*
  * parts.js: the 5 inch canvas's pieces that are made of pieces.
  *
- * A wall, a hurdle, an up gate, a spiral round a flag, and flags that come and go
- * on a gate. None is an element. Each is a way of writing ordinary elements,
+ * A wall, a hurdle (a board, or a bar on legs) and the sizes and ways it is flown, an up gate,
+ * a spiral round a flag, and flags that come and go on a gate. None is an element. Each is a way of writing ordinary elements,
  * so the document holds only what it always could (gates in a group, a barrier
  * with flags, a dive gate with a tilt, waypoints) and every reader of it, the
  * game, the board, the lap GIF and the card, needs to learn nothing. See
@@ -30,7 +30,7 @@
  */
 
 import {
-  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, flagSideOf,
+  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, elementHeight, flagSideOf,
   flagSideSigns, isPlain, trackClassOf, wallPitchFor,
 } from './elements.js';
 import {
@@ -40,6 +40,7 @@ import {
 import { addToSequence } from './sequence.js';
 import { applyAutoFaces, defaultYawFor, lastAnchorOf } from './faces.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
+import { runGhosts } from './runs.js';
 import { GATE_SCALE } from '../units.js';
 import { GATE_BANNER_H } from '../art/banners.js';
 
@@ -540,6 +541,10 @@ export function placeHurdle(doc, at, opts = {}) {
   el.yawOverridden = true;
   el.name = 'Hurdle';
   doc.elements.push(el);
+  /* Another size than the plan's, which is what a hurdle was before there were sizes: the same piece, then resized. */
+  if (opts.size && opts.size !== 'plan') {
+    setHurdleSize(doc, el.id, opts.size);
+  }
   let waypointId = null;
   if (opts.join !== false) {
     const wp = createElement(doc, 'waypoint', { x: at.x, y: at.y, z: HURDLE.height + HURDLE_LINE_OVER }, 0);
@@ -548,6 +553,9 @@ export function placeHurdle(doc, at, opts = {}) {
     addToSequence(doc, wp.id, 0);
     waypointId = wp.id;
     applyAutoFaces(doc);
+    if (opts.size && opts.size !== 'plan') {
+      setHurdleLine(doc, el.id, 'over');
+    }
   }
   return { id: el.id, waypointId };
 }
@@ -561,16 +569,281 @@ export function placeHurdle(doc, at, opts = {}) {
  */
 export function flyOver(doc, id) {
   const el = elementById(doc, id);
-  if (!el || el.type !== 'barrier') {
+  if (!el || !canFlyOver(el)) {
     return null;
   }
-  const top = (el.dims.height ?? HURDLE.height) + HURDLE_LINE_OVER;
+  const top = hurdleTop(el) + HURDLE_LINE_OVER;
   const wp = createElement(doc, 'waypoint', { x: el.position.x, y: el.position.y, z: top }, 0);
-  wp.name = 'Over the hurdle';
+  wp.name = `Over the ${overName(el)}`;
   doc.elements.push(wp);
   addToSequence(doc, wp.id, 0);
   applyAutoFaces(doc);
   return { id: el.id, waypointId: wp.id };
+}
+
+/* ------------------------------------------------------------------ */
+/* The hurdle family                                                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * HURDLES COME IN A FEW SIZES, and are flown a few ways. The owner's catalogue: a hurdle 10 ft by 5 ft, flown over, under,
+ * skimmed or at 45 degrees; an h-hurdle; a super hurdle. MultiGP's course book gives the first two: the standard
+ * hurdle is a panel 10 ft wide and 5 ft tall, and the h-hurdle is that hurdle with a gate leg panel on top, a pole
+ * rising another 5 ft from one end. The pole is the hurdle's own flag mast, one end only and tall, so an h-hurdle is
+ * a hurdle with a flag on one side and a mast 10 ft high, and nothing in the document is new. The super hurdle is
+ * "just like the hurdle but massive", with no figure given anywhere I could find, so it is twice the standard one, the
+ * assumption written here and in the plan, and its width and height are the dimension fields' to change.
+ *
+ * `flagSide` null is no flags, which is the standard hurdle: its panel has pole pockets and nothing else. The plan's
+ * hurdle is the 2026 Nationals' own, four metres between its flags, and stays the default.
+ */
+export const HURDLE_SIZES = [
+  {
+    id: 'plan', label: 'Nationals', width: 4, height: 1, flagSide: 'both', flagH: 2,
+    hint: 'The Drone Nationals plan’s hurdle: a board 4 m between its flags and 1 m high.',
+  },
+  {
+    id: 'multigp', label: '10 x 5 ft', width: 3.048, height: 1.524, flagSide: null, flagH: 2,
+    hint: 'MultiGP’s hurdle: a panel 10 ft wide and 5 ft tall.',
+  },
+  {
+    id: 'h', label: 'h-hurdle', width: 3.048, height: 1.524, flagSide: 'left', flagH: 3.048,
+    hint: 'The 10 by 5 ft hurdle with a pole another 5 ft tall standing on one end: the line goes over the board and round the pole.',
+  },
+  {
+    id: 'super', label: 'Super', width: 6.096, height: 3.048, flagSide: null, flagH: 2,
+    hint: 'A supersized hurdle, twice the standard one, 20 ft wide and 10 ft tall: the lap has to climb to clear it. MultiGP gives no figure for it, so this is twice the hurdle; the dimensions are in the details.',
+  },
+];
+
+/* The ways a hurdle is flown, as how far above its top the line goes (under has no clearance: it goes beneath). */
+export const HURDLE_LINES = [
+  { id: 'over', label: 'Over', clear: HURDLE_LINE_OVER, hint: 'A metre above the top, a hop over it with room to spare' },
+  { id: 'skim', label: 'Skim', clear: 0.3, hint: 'A hand above the top: as low as it can be flown without touching it' },
+  { id: 'under', label: 'Under', clear: null, hint: 'Beneath the bar, between its legs. Only a bar hurdle has anything to go under' },
+];
+
+/* What a hurdle can be: a board on the ground, or a bar on two legs. */
+export const HURDLE_TYPES = ['barrier', 'horizontalPole'];
+
+/* The bar of a bar hurdle, its width, its height off the ground and how thick it is: 10 ft by 5 ft, one inch and a half of pipe. */
+export const BAR_HURDLE = { width: 3.048, height: 1.524, thick: 0.045 };
+
+/* How high the top of a hurdle is: a board's height, or a bar's height off the ground and half its thickness. */
+export function hurdleTop(el) {
+  if (el.type === 'horizontalPole') {
+    return (el.position?.z ?? BAR_HURDLE.height) + (el.dims.height ?? BAR_HURDLE.thick) / 2;
+  }
+  /* A gate is flown over by the top of its frame, however high it stands. */
+  if (ELEMENTS[el.type]?.kind === KIND.APERTURE) {
+    return (el.position?.z ?? 0) + elementHeight(ELEMENTS[el.type], el.dims);
+  }
+  return el.dims.height ?? HURDLE.height;
+}
+
+/* What can be flown over, and has the line over it chosen: a hurdle, or a gate the lap hops over rather than through. */
+export function canFlyOver(el) {
+  return Boolean(el) && (HURDLE_TYPES.includes(el.type) || ELEMENTS[el.type]?.kind === KIND.APERTURE);
+}
+
+/* What the line over a piece calls it. */
+function overName(el) {
+  if (el.type === 'horizontalPole') {
+    return 'bar';
+  }
+  return ELEMENTS[el.type]?.kind === KIND.APERTURE ? 'gate' : 'hurdle';
+}
+
+const HURDLE_LINE_NAME = /^(Over|Skim|Under) the (hurdle|bar|gate)$/;
+
+/* The waypoint that is the line over (or under) a hurdle: at its middle, named for how it goes. */
+function hurdleWaypoint(doc, el) {
+  for (const q of doc.sequence) {
+    const wp = elementById(doc, q.elementId);
+    if (wp && wp.type === 'waypoint' && HURDLE_LINE_NAME.test(wp.name)
+      && Math.hypot(wp.position.x - el.position.x, wp.position.y - el.position.y) < 0.05) {
+      return wp;
+    }
+  }
+  return null;
+}
+
+/* How a hurdle is flown now: 'over', 'skim', 'under', or null when nothing puts the lap there. */
+export function hurdleLineOf(doc, id) {
+  const el = elementById(doc, id);
+  const wp = el ? hurdleWaypoint(doc, el) : null;
+  return wp ? HURDLE_LINE_NAME.exec(wp.name)[1].toLowerCase() : null;
+}
+
+/* Which size a hurdle is, or null when it has been changed from all of them. */
+export function hurdleSizeOf(el) {
+  if (!el || !HURDLE_TYPES.includes(el.type)) {
+    return null;
+  }
+  const near = (a, b) => Math.abs(a - b) < 0.01;
+  if (el.type === 'horizontalPole') {
+    if (near(el.dims.width, BAR_HURDLE.width) && near(el.position.z, BAR_HURDLE.height)) {
+      return 'multigp';
+    }
+    return near(el.dims.width, 2 * BAR_HURDLE.width) && near(el.position.z, 2 * BAR_HURDLE.height) ? 'super' : null;
+  }
+  const flags = FLAG_SIDES.includes(el.flagSide) ? el.flagSide : null;
+  const found = HURDLE_SIZES.find((h) => near(el.dims.width, h.width) && near(el.dims.height, h.height)
+    && flags === h.flagSide && (flags === null || near(el.dims.flagH ?? 0, h.flagH)));
+  return found ? found.id : null;
+}
+
+/*
+ * RESIZE A HURDLE to one of the sizes, in place: its board and its flags, and the line over it, which is put at the height
+ * it had above the old top, so that a hurdle made taller is still flown over and not through. A bar is resized by its width
+ * and its height off the ground, 'multigp' or 'super'. Returns whether it changed.
+ */
+export function setHurdleSize(doc, id, sizeId) {
+  const el = elementById(doc, id);
+  const size = HURDLE_SIZES.find((h) => h.id === sizeId);
+  if (!el || !size || !HURDLE_TYPES.includes(el.type)) {
+    return false;
+  }
+  const line = hurdleLineOf(doc, id);
+  if (el.type === 'horizontalPole') {
+    if (sizeId !== 'multigp' && sizeId !== 'super') {
+      return false;
+    }
+    const k = sizeId === 'super' ? 2 : 1;
+    el.dims.width = BAR_HURDLE.width * k;
+    el.position.z = BAR_HURDLE.height * k;
+  } else {
+    el.dims.width = size.width;
+    el.dims.height = size.height;
+    if (size.flagSide === null) {
+      delete el.flagSide;
+      delete el.dims.flagH;
+    } else {
+      el.flagSide = size.flagSide;
+      el.dims.flagH = size.flagH;
+    }
+  }
+  if (line) {
+    setHurdleLine(doc, id, line);
+  }
+  return true;
+}
+
+/*
+ * FLY A HURDLE OVER, SKIMMED OR UNDER: the waypoint that puts the lap there is put at the height that says it, and named
+ * for it, which is how it is read back. A hurdle that nothing flew gets the waypoint at the end of the lap, as flyOver gives
+ * it. Under is for a bar, which has a gap beneath it, and a board on the ground has none. Returns whether it changed.
+ */
+export function setHurdleLine(doc, id, lineId) {
+  const el = elementById(doc, id);
+  const line = HURDLE_LINES.find((l) => l.id === lineId);
+  if (!el || !line || !canFlyOver(el)) {
+    return false;
+  }
+  if (line.id === 'under' && el.type !== 'horizontalPole') {
+    return false;
+  }
+  let wp = hurdleWaypoint(doc, el);
+  if (!wp) {
+    const made = flyOver(doc, id);
+    wp = made ? elementById(doc, made.waypointId) : null;
+  }
+  if (!wp) {
+    return false;
+  }
+  const bar = el.type === 'horizontalPole';
+  const underside = bar ? el.position.z - (el.dims.height ?? BAR_HURDLE.thick) / 2 : 0;
+  wp.position.z = Math.round((line.id === 'under' ? underside / 2 : hurdleTop(el) + line.clear) * 1000) / 1000;
+  wp.name = `${line.label} the ${overName(el)}`;
+  applyAutoFaces(doc);
+  return true;
+}
+
+/*
+ * PUT A BAR HURDLE DOWN: a horizontal pole 10 ft wide at 5 ft up, on two legs, turned square to the line the course is
+ * on, with a waypoint over the middle of it in the flying order. Under it, over it and skimming it are the card's choice
+ * afterwards, which moves that waypoint (setHurdleLine). Returns { id, waypointId }.
+ */
+export function placeBarHurdle(doc, at, opts = {}) {
+  const yaw = hurdleYaw(doc, at, opts.square);
+  const el = createElement(doc, 'horizontalPole', { x: at.x, y: at.y, z: BAR_HURDLE.height }, yaw);
+  Object.assign(el.dims, { width: BAR_HURDLE.width, depth: BAR_HURDLE.thick, height: BAR_HURDLE.thick });
+  el.yawOverridden = true;
+  el.name = 'Bar hurdle';
+  doc.elements.push(el);
+  const wp = createElement(doc, 'waypoint', { x: at.x, y: at.y, z: hurdleTop(el) + HURDLE_LINE_OVER }, 0);
+  wp.name = 'Over the bar';
+  doc.elements.push(wp);
+  addToSequence(doc, wp.id, 0);
+  applyAutoFaces(doc);
+  return { id: el.id, waypointId: wp.id };
+}
+
+/*
+ * SET A HURDLE AT AN ANGLE to the line: square across it, or turned forty five degrees one way or the other, which is
+ * how a hurdle is flown on the bias. The line is the way the lap goes through the waypoint over it, from the piece before
+ * (or to the one after, when it is the first). Returns whether it changed.
+ */
+export function setHurdleAngle(doc, id, angle) {
+  const el = elementById(doc, id);
+  if (!el || !HURDLE_TYPES.includes(el.type) || !['square', 'left', 'right'].includes(angle)) {
+    return false;
+  }
+  const wp = hurdleWaypoint(doc, el);
+  const at = wp ? doc.sequence.findIndex((q) => q.elementId === wp.id) : -1;
+  const n = doc.sequence.length;
+  let from = null;
+  let to = null;
+  if (at >= 0 && n > 1) {
+    const before = entryAnchor(doc, doc.sequence[(at - 1 + n) % n]);
+    const after = entryAnchor(doc, doc.sequence[(at + 1) % n]);
+    if (before && at > 0) {
+      from = before;
+      to = el.position;
+    } else if (after) {
+      from = el.position;
+      to = after;
+    }
+  }
+  const course = from && to ? Math.atan2(to.y - from.y, to.x - from.x) : null;
+  if (course === null) {
+    return false;
+  }
+  const quarter = Math.PI / 2;
+  const turn = angle === 'square' ? 0 : (angle === 'left' ? 1 : -1) * (Math.PI / 4);
+  el.yaw = Math.round(wrapAngle(course + quarter + turn) * 1e6) / 1e6;
+  el.yawOverridden = true;
+  return true;
+}
+
+/* How a hurdle is set to the line now: 'square', 'left', 'right', or null when it is some other angle (or unflown). */
+export function hurdleAngleOf(doc, id) {
+  const el = elementById(doc, id);
+  const wp = el ? hurdleWaypoint(doc, el) : null;
+  const at = wp ? doc.sequence.findIndex((q) => q.elementId === wp.id) : -1;
+  const n = doc.sequence.length;
+  if (at < 0 || n < 2) {
+    return null;
+  }
+  const before = at > 0 ? entryAnchor(doc, doc.sequence[at - 1]) : null;
+  const after = entryAnchor(doc, doc.sequence[(at + 1) % n]);
+  const from = before ?? el.position;
+  const to = before ? el.position : after;
+  if (!to) {
+    return null;
+  }
+  const course = Math.atan2(to.y - from.y, to.x - from.x);
+  /* A board and a bar are the same turned half a turn, so the angle is read modulo that. */
+  const rel = ((wrapAngle(el.yaw - course - Math.PI / 2) % Math.PI) + Math.PI) % Math.PI;
+  /* A hurdle is put down on the nearest fifteen degrees to square, so square is anything within half of that. */
+  const slack = (7.5 * Math.PI) / 180 + 0.01;
+  if (Math.min(rel, Math.PI - rel) < slack) {
+    return 'square';
+  }
+  if (Math.abs(rel - Math.PI / 4) < slack) {
+    return 'left';
+  }
+  return Math.abs(rel - (3 * Math.PI) / 4) < slack ? 'right' : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -749,25 +1022,51 @@ export function removeSpiral(doc, seqId) {
 /* Round the flag on `side`, as flown, which has to carry one (flagsAsFlown), `opts.turns` whole turns besides the
  * arc that joins the circle. Returns { waypoints: [ids], mast, radius, sweep }, or null when the pass is not a
  * standing gate's or that side has no flag. */
-export function addSpiral(doc, seqId, side, opts = {}) {
+/*
+ * THE FLAGGED LEG OF A PASS, as the world stands it: where the pennant is on `side` (as flown), how far it is from the
+ * middle of the opening (the radius of a circle round it that goes through the opening), and the way the pass goes.
+ * The field builds a gate GATE_SCALE larger and does not move it, so a mast on the header stands that much further
+ * from the middle of the opening than the document's does, and a gate in the full dress carries its pennant beside
+ * the sleeve. Null when that side has no flag.
+ */
+export function legOf(doc, seqId, side) {
   if ((side !== 'left' && side !== 'right') || !flagsAsFlown(doc, seqId)[side]) {
     return null;
   }
   const seq = doc.sequence.find((s) => s.id === seqId);
   const el = elementById(doc, seq.elementId);
+  const levels = aperturesOf(el);
+  const top = levels[levels.length - 1];
+  const centre = apertureCenter(el, seq.apertureIndex ?? 0);
+  /* The way the quad goes through it, on the ground: the right of that is the right as flown. */
+  const { travel, right } = travelOf(el, seq);
+  const scale = trackClassOf(doc) === 'micro' ? 1 : GATE_SCALE;
+  const radius = scale * (top.clearW / 2 + FRAME_TUBE_OD + (isPlain(el) ? 0 : SLEEVE_W));
+  const out = side === 'right' ? 1 : -1;
+  return {
+    el,
+    seq,
+    top,
+    centre,
+    travel,
+    right,
+    scale,
+    radius,
+    mast: { x: centre.x + right.x * radius * out, y: centre.y + right.y * radius * out },
+  };
+}
+
+export function addSpiral(doc, seqId, side, opts = {}) {
+  const leg = legOf(doc, seqId, side);
+  if (!leg) {
+    return null;
+  }
+  const { seq, el, top, centre, travel, scale, mast } = leg;
+  const r = leg.radius;
   /* The figure already in front of this pass comes out first. */
   removeSpiral(doc, seqId);
   const at = doc.sequence.indexOf(seq);
   const index = seq.apertureIndex ?? 0;
-  const levels = aperturesOf(el);
-  const top = levels[levels.length - 1];
-  const centre = apertureCenter(el, index);
-  /* The way the quad goes through it, on the ground: the right of that is the right as flown. */
-  const { travel, right } = travelOf(el, seq);
-  const scale = trackClassOf(doc) === 'micro' ? 1 : GATE_SCALE;
-  const r = scale * (top.clearW / 2 + FRAME_TUBE_OD + (isPlain(el) ? 0 : SLEEVE_W));
-  const out = side === 'right' ? 1 : -1;
-  const mast = { x: centre.x + right.x * r * out, y: centre.y + right.y * r * out };
   /* Clockwise round a flag on the right, anticlockwise round one on the left. */
   const turn = side === 'right' ? -1 : 1;
   const end = Math.atan2(centre.y - mast.y, centre.x - mast.x);
@@ -874,6 +1173,31 @@ export function partGhosts(doc, type, a, b = a, opts = {}) {
           dims: { ...defaultDims('barrier', cls), width: HURDLE.width, depth: HURDLE.depth, height: HURDLE.height, flagH: HURDLE.flagH },
           flagSide: 'both',
         },
+      }],
+    };
+  }
+  if (type === 'run') {
+    return { plan: null, items: runGhosts(doc, a, opts.run ?? {}, { square: opts.square }) };
+  }
+  if (type === 'launchGate') {
+    return {
+      plan: null,
+      items: [{
+        type: 'diveGate',
+        position: { x: a.x, y: a.y, z: 0 },
+        yaw: opts.square ? wrapAngle(Math.round(defaultYawFor(doc, a) / (Math.PI / 2)) * (Math.PI / 2)) : defaultYawFor(doc, a),
+        props: { dims: { ...defaultDims('diveGate', cls) }, pitch: ELEMENTS.diveGate.pitch },
+      }],
+    };
+  }
+  if (type === 'barHurdle') {
+    return {
+      plan: null,
+      items: [{
+        type: 'horizontalPole',
+        position: { x: a.x, y: a.y, z: BAR_HURDLE.height },
+        yaw: hurdleYaw(doc, a, opts.square),
+        props: { dims: { ...defaultDims('horizontalPole', cls), width: BAR_HURDLE.width, depth: BAR_HURDLE.thick, height: BAR_HURDLE.thick } },
       }],
     };
   }

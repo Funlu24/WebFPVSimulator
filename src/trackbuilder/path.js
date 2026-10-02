@@ -193,7 +193,18 @@ export function buildKnots(doc, { closeLoop = false } = {}) {
       || (el.yawOverridden ? travelPastFixedMarker(el, prev, Math.max(0.05, k.seq.clearance ?? 0)) : null)
       || chainDir;
     const off = scale(markerPassDir(el, k.seq, travel), k.seq.clearance ?? 0);
-    const flat = normalize({ x: travel.x, y: travel.y, z: 0 }, { x: 1, y: 0, z: 0 });
+    const level = normalize({ x: travel.x, y: travel.y, z: 0 }, { x: 1, y: 0, z: 0 });
+    /*
+     * A WAYPOINT TURNED BY HAND POINTS THE LINE UP OR DOWN AS WELL AS ALONG, by its pitch. A turn flown on the
+     * level never needed it, and every waypoint in a document that exists has a pitch of nothing, so none of
+     * them moves. A loop does need it: the waypoints of a power loop point up, over and down (manoeuvres.js),
+     * and a knot that said "level" at the side of one would put a kink in the line there. Only a waypoint
+     * the author turned, and never a flag or a cone, whose tangent stays on the plan for the reason above.
+     */
+    const lift = el.type === 'waypoint' && el.yawOverridden ? (Number(el.pitch) || 0) : 0;
+    const flat = lift === 0
+      ? level
+      : { x: Math.cos(lift) * level.x, y: Math.cos(lift) * level.y, z: Math.sin(lift) };
     /*
      * HEIGHT. A marker has no face and no sill and its anchor is the foot of
      * the pole, so the knot used to sit on the floor, and every pass round a

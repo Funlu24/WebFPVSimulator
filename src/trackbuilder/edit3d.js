@@ -51,7 +51,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, defaultDims, trackClassOf } from './elements.js';
+import { ELEMENTS, KIND, defaultDims, isFiveInchPiece, trackClassOf } from './elements.js';
 import { elementById, kindOf, apertureCenter, aperturesOf } from './model.js';
 import {
   cubeItems, measuresFor, placementFor, rowPlan, rulerPoint, rulerReading, snapTurn, spacingTone,
@@ -551,7 +551,7 @@ export class RoomEditor {
       return;
     }
     /* The five inch pieces made of pieces: a wall, a hurdle, an up gate. */
-    if (h.armed === 'wall' || h.armed === 'hurdle' || h.armed === 'upGate') {
+    if (isFiveInchPiece(h.armed)) {
       this.showPartGhost(e);
       return;
     }
@@ -691,9 +691,9 @@ export class RoomEditor {
       v.clearMeasures();
       return;
     }
-    const at = h.snap(p, e.altKey, { type: h.armed });
+    const at = h.snap(p, e.altKey, { type: h.armed === 'run' ? 'gate' : h.armed });
     v.setGuides(h.guides);
-    const { items } = partGhosts(h.doc, h.armed, at, at, { square: h.square });
+    const { items } = partGhosts(h.doc, h.armed, at, at, { square: h.square, run: h.runSpec });
     v.setGhosts(items);
     v.setMeasures(measuresFor(h.doc, { x: at.x, y: at.y, z: scaleOf(h.doc).measureH }));
   }

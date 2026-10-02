@@ -55,9 +55,12 @@ import { elementById, elementNormal, kindOf, startPadsOf } from './model.js';
  * it floats, which is why it is owned there. */
 import { SEAT_SLACK } from './seat.js';
 import { gateNumberOf, sequenceLabel, unsequencedElements } from './sequence.js';
-import { dist, insideYawedBox, lerp, wrapAngle, yawVector } from './geometry.js';
+import {
+  dist, dot, insideYawedBox, length, lerp, sub, wrapAngle, yawVector,
+} from './geometry.js';
 import { markerSquare } from './path.js';
 import { ROUND_NAME } from './parts.js';
+import { isFigureName, isLaunchName } from './manoeuvres.js';
 /* How much flying the race asks for between two stations, which is what
  * two stations in a row closer than it are warned against. */
 import { stationLegMin } from '../game/race.js';
@@ -247,6 +250,8 @@ export function collectWarnings(doc, path) {
   }
 
   closeStationWarnings(doc, path, out);
+  figureWarnings(doc, path, out);
+  overFlagWarnings(doc, path, out);
 
   /* -------- curvature -------- */
 
@@ -278,7 +283,7 @@ export function collectWarnings(doc, path) {
    */
   const loopKnot = (k) => {
     const name = k.elementId ? elementById(doc, k.elementId)?.name ?? '' : '';
-    return ROUND_NAME.test(name) || /^Loop (left|right)$/.test(name);
+    return ROUND_NAME.test(name) || /^Loop (left|right)$/.test(name) || isFigureName(name) || isLaunchName(name);
   };
   for (const smp of path.samples) {
     const seg = path.segments[smp.segment];
@@ -468,6 +473,90 @@ function reversed(tangent, from, to, tol = 0) {
    * that chord. Past about a degree beyond square it is a face sending the line back. A whoop canvas
    * keeps the rule it had. */
   return (tangent.x * cx + tangent.y * cy) / (th * ch) < -tol;
+}
+
+/*
+ * A FIGURE THAT DOES NOT CONNECT. A figure's own curvature is what the author asked for and is not warned about
+ * (the curvature check below skips it), so what is checked is the two places it can go wrong: where it begins and
+ * where it ends. A turn that ends facing away from the next piece leaves the line a hairpin to get there, and a
+ * figure that is flown into from a piece facing the other way begins with one. The point of the figure is where the
+ * line goes, so it says what the figure does and what to move.
+ */
+function figureWarnings(doc, path, out) {
+  const knots = path.knots;
+  const isFigure = (k) => Boolean(k && k.seq && k.role !== 'finish'
+    && elementById(doc, k.seq.elementId)?.type === 'waypoint'
+    && isFigureName(elementById(doc, k.seq.elementId).name));
+  const cosine = (v, t) => {
+    const m = length(v) * length(t);
+    return m > 1e-9 ? dot(v, t) / m : 1;
+  };
+  for (let i = 0; i < knots.length; i += 1) {
+    if (!isFigure(knots[i]) || (i > 0 && isFigure(knots[i - 1]))) {
+      continue;
+    }
+    let j = i;
+    while (j + 1 < knots.length && isFigure(knots[j + 1])) {
+      j += 1;
+    }
+    const name = elementById(doc, knots[i].seq.elementId).name.replace(/, (back through|back through reversed)$/, '');
+    const prev = i > 0 ? knots[i - 1] : null;
+    const next = j + 1 < knots.length ? knots[j + 1] : null;
+    if (next) {
+      const v = sub(next.pos, knots[j].pos);
+      if (length(v) > 0.5 && cosine(v, knots[j].tangent) < -0.35) {
+        out.push(warn('figure-exit', `${name} ends facing away from ${describe(doc, next)}, so the line has to turn back on itself to reach it. Put ${describe(doc, next)} where the figure ends, or turn the figure the other way.`, {
+          seqId: knots[i].seq.id,
+          elementId: knots[i].elementId,
+        }));
+      }
+    }
+    if (prev && prev.role !== 'finish') {
+      const v = sub(knots[i].pos, prev.pos);
+      if (length(v) > 0.5 && cosine(v, prev.tangent) < -0.35) {
+        out.push(warn('figure-entry', `${describe(doc, prev)} leaves backwards into ${name}, so the line has to turn back on itself to start it. Turn ${describe(doc, prev)} the other way, or move the figure.`, {
+          seqId: knots[i].seq.id,
+          elementId: knots[i].elementId,
+        }));
+      } else if (length(v) > 0.5 && cosine(v, knots[i].tangent) < -0.35) {
+        out.push(warn('figure-entry', `${name} starts heading back towards ${describe(doc, prev)}, so the line has to turn back on itself to begin it. Put ${describe(doc, prev)} where the figure starts, or turn the figure the other way.`, {
+          seqId: knots[i].seq.id,
+          elementId: knots[i].elementId,
+        }));
+      }
+    }
+  }
+}
+
+/*
+ * A LINE OVER A FLAG. The line of a flag goes up for ever: the flag is flown round and never over, and a line that goes
+ * over the top of one is going somewhere the rules do not let a pilot fly. The derived line does it when a hop or a loop
+ * is laid where a flag stands, or a waypoint is dragged over one, and the pass round the flag, which is scored, was never
+ * the problem. One warning for a flag, at the first sample that is over it: above the mast and within a pole and a
+ * half a metre of it, which is a quad's own width on each side. Poles and cones are not in it: a cone is a ground marker, and a pole is the
+ * RaceGOW one, whose rules are its own.
+ */
+const OVER_FLAG_REACH = 0.5;
+
+function overFlagWarnings(doc, path, out) {
+  if (!path || path.samples.length < 2) {
+    return;
+  }
+  for (const flag of doc.elements) {
+    if (flag.type !== 'flag') {
+      continue;
+    }
+    const top = (flag.position.z ?? 0) + (flag.dims.height ?? ELEMENTS.flag.dims.height);
+    const reach = OVER_FLAG_REACH + (flag.dims.poleRadius ?? 0);
+    const over = path.samples.find((p) => p.pos.z > top && Math.hypot(p.pos.x - flag.position.x, p.pos.y - flag.position.y) < reach);
+    if (over) {
+      out.push(warn('over-flag', `The line goes over ${flag.name || 'a flag'} at ${over.s.toFixed(1)} m along the lap. A flag\u2019s line goes up for ever, so it is flown round and never over: move the line to one side of it.`, {
+        s: over.s,
+        pos: over.pos,
+        elementId: flag.id,
+      }));
+    }
+  }
 }
 
 function describe(doc, knot) {

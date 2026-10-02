@@ -45,11 +45,20 @@ import { labelOf, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './eleme
 import { replacementsFor } from './snap.js';
 import {
   canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
+  HURDLE_LINES, HURDLE_SIZES, HURDLE_TYPES, canFlyOver, hurdleAngleOf, hurdleLineOf, hurdleSizeOf,
 } from './parts.js';
 import { scaleOf, say as sayLength } from './scale.js';
 import { passList, reuseOf } from './passes.js';
 import { standsOnGround } from './seat.js';
-import { figuresFor, matchingFigure, figureBlurb, levelName } from './figures.js';
+import {
+  HANDED_FIGURES, consecutiveEntries, figureBlurb, figureHandOf, figuresFor, levelName, matchingFigure,
+} from './figures.js';
+import { RUN_SHAPES, RUN_SPACINGS, runShapeById } from './runs.js';
+import { MANOEUVRES, figureName, manoeuvreById, parseFigureName } from './manoeuvres.js';
+import { figureGlyph, GLYPH_H, GLYPH_W } from './glyphs.js';
+import {
+  aroundOf, defaultAroundHand, figureHolding, intoOf, thenOf,
+} from './flightpaths.js';
 import { elevationProfile } from './path.js';
 import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
@@ -154,6 +163,34 @@ function svgEl(name, attrs) {
 }
 
 /*
+ * A FLIGHT PATH'S PICTURE: the figure's own curve, drawn small (glyphs.js), the piece it is flown after a dot on it and
+ * the way it goes out an arrowhead, with a small arrow where height is the point.
+ */
+function figureGlyphSvg(spec, cls) {
+  const svg = svgEl('svg', { viewBox: `0 0 ${GLYPH_W} ${GLYPH_H}`, 'aria-hidden': 'true' });
+  if (spec === null) {
+    /* Nothing laid: the line, dashed and quiet, with no arrow, so it is not read as a figure that goes straight on. */
+    svg.append(svgEl('path', {
+      d: `M7 ${GLYPH_H / 2} L${GLYPH_W - 7} ${GLYPH_H / 2}`, fill: 'none', stroke: '#9db3c8', 'stroke-width': 1.5,
+      'stroke-linecap': 'round', 'stroke-dasharray': '3 3',
+    }));
+    return svg;
+  }
+  const g = figureGlyph(spec, cls);
+  const line = (d) => svgEl('path', {
+    d, fill: 'none', stroke: '#7dffb4', 'stroke-width': 1.7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+  });
+  svg.append(line(g.d));
+  const head = (back) => `M${g.end.x} ${g.end.y} l${(-5 * Math.cos(g.angle + back)).toFixed(2)} ${(-5 * Math.sin(g.angle + back)).toFixed(2)}`;
+  svg.append(line(`${head(-0.45)} ${head(0.45)}`));
+  svg.append(svgEl('circle', { cx: g.piece.x, cy: g.piece.y, r: 2.2, fill: '#ffd45c' }));
+  if (g.badge) {
+    svg.append(svgEl('path', { d: g.badge === 'up' ? 'M62 10 l4 -7 l4 7 z' : 'M62 3 l4 7 l4 -7 z', fill: '#ffd45c' }));
+  }
+  return svg;
+}
+
+/*
  * A tiny diagram of a stacked gate and how it is flown. The inspector is
  * where an author decides the figure, so the picture has to carry the
  * meaning: which holes, which way, wrap or invert.
@@ -212,6 +249,10 @@ function figureIcon(figId, levels) {
     arrow(left, midY(n - 1), right, midY(n - 1));
     arrow(right, midY(n - 1), right, midY(0), true);
     arrow(right, midY(0), left, midY(0));
+  } else if (figId === 'revSplitS') {
+    arrow(left, midY(0), right, midY(0));
+    arrow(right, midY(0), right, midY(n - 1), true);
+    arrow(right, midY(n - 1), left, midY(n - 1));
   } else if (figId === 'spiralDown') {
     for (let i = n - 1; i >= 0; i -= 1) {
       const fromLeft = (n - 1 - i) % 2 === 0;
@@ -347,6 +388,14 @@ export class Panels {
   constructor(host, nodes) {
     this.host = host;
     this.nodes = nodes;
+    /* The choices a flight path is laid with, kept between pieces: which way, how far round, how big. A figure that is
+     * there reads its own back into this, so what is shown is what is laid. */
+    const draft = () => ({
+      hand: 'left', deg: 180, sense: 'up', size: 'standard', count: 4, bias: 'none',
+    });
+    this.flight = { then: draft(), into: draft(), around: draft() };
+    /* Which of a pass's flight paths the details are showing: 'then', 'into' or, for a flag, 'around'. */
+    this.flightTab = 'then';
     this.buildPalette();
     /* The lap bar is as tall as what is in it: a chip is a finger on a touched screen
      * and the figures wrap on a narrow one. The coach and a card docked to the foot sit
@@ -417,6 +466,12 @@ export class Panels {
       if (cls !== 'micro' && def.group === 'track') {
         for (const part of FIVE_INCH_PIECES.filter((p) => p.after === def.id)) {
           track.append(this.toolButton(part.id, part.key, part.label, part.note));
+          /* The run of gates has choices to make before it is laid, so they stand under its button while it is in hand. */
+          if (part.id === 'run') {
+            this.runBox = el('div', 'tb-run-opts');
+            this.runBox.hidden = true;
+            track.append(this.runBox);
+          }
         }
       }
     }
@@ -541,11 +596,70 @@ export class Panels {
     host.append(el('p', 'tb-help', 'Press a key or click a tool, then click the plot. The tool stays armed. Buildings, containers and the skate set keep to the compass; everything else turns freely. Escape or right click puts it away.'));
   }
 
+  /*
+   * THE RUN TOOL'S CHOICES, under its button while it is in hand: the shape, which way it turns, how many gates, how far
+   * apart, and for a step sequence whether it climbs or drops. They are set before the click and the ghost in the room shows
+   * what the click will lay; afterwards the gates are ordinary and there is nothing here to keep in step with them.
+   */
+  renderRunOptions() {
+    const box = this.runBox;
+    if (!box) {
+      return;
+    }
+    const armed = this.host.armed === 'run';
+    box.hidden = !armed;
+    box.textContent = '';
+    if (!armed) {
+      return;
+    }
+    const spec = this.host.runSpec;
+    const def = runShapeById(spec.shape);
+    const row = (heading, className, items) => {
+      box.append(el('div', 'tb-run-label', heading));
+      const seg = el('div', className);
+      seg.setAttribute('role', 'group');
+      seg.setAttribute('aria-label', heading);
+      for (const it of items) {
+        const b = button(it.label, it.on ? 'tb-seg-btn on' : 'tb-seg-btn', () => this.host.setRunSpec(it.patch), it.title);
+        b.setAttribute('aria-pressed', it.on ? 'true' : 'false');
+        seg.append(b);
+      }
+      box.append(seg);
+    };
+    row('Shape', 'tb-run-shapes', RUN_SHAPES.map((s) => ({
+      label: s.label, on: spec.shape === s.id, patch: { shape: s.id, count: null }, title: s.hint,
+    })));
+    if (def.hand) {
+      row('Which way', 'tb-seg', [['Left', 'left'], ['Right', 'right']].map(([label, hand]) => ({
+        label, on: spec.hand === hand, patch: { hand }, title: `${label} as flown: the first bend is to the ${hand}`,
+      })));
+    }
+    if (def.rise) {
+      row('Steps go', 'tb-seg', [['Up', 'up'], ['Down', 'down']].map(([label, rise]) => ({
+        label, on: spec.rise === rise, patch: { rise }, title: `Each gate is a step ${rise === 'up' ? 'higher' : 'lower'} than the one before`,
+      })));
+    }
+    const [lo, hi] = def.count;
+    const things = def.piece === 'flag' ? 'flags' : 'gates';
+    if (hi > lo) {
+      row(def.piece === 'flag' ? 'Flags' : 'Gates', 'tb-seg', Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map((n) => ({
+        label: String(n), on: spec.count === n, patch: { count: n }, title: `${n} ${things}`,
+      })));
+    }
+    if (def.id !== 'dutch8') {
+      row(def.id === 'hairpin' ? 'Size' : 'Gap', 'tb-seg', RUN_SPACINGS.map((s) => ({
+        label: s.label, on: spec.spacing === s.id, patch: { spacing: s.id },
+        title: def.id === 'hairpin' ? `${s.label}: how wide the half circle is` : `${s.label}: how far apart the ${things} are`,
+      })));
+    }
+  }
+
   renderPalette() {
     for (const [id, b] of this.paletteButtons) {
       b.classList.toggle('on', this.host.armed === id);
       b.setAttribute('aria-pressed', this.host.armed === id ? 'true' : 'false');
     }
+    this.renderRunOptions();
     /* What the pointer does now is said by the coach line, and whether the card
      * shows changes the moment a tool is armed or put away. */
     this.renderCoach();
@@ -733,6 +847,8 @@ export class Panels {
   renderInspector() {
     const host = this.nodes.inspector;
     host.textContent = '';
+    /* The details give the inspector most of the drawer while a flight path is in it: a grid of pictures wants the height. */
+    document.body.classList.remove('tb-flighting');
     const doc = this.host.doc;
     const ids = [...this.host.selection];
 
@@ -806,6 +922,20 @@ export class Panels {
     if (def.kind === KIND.VEHICLE) {
       this.renderVehicleInspector(host, element, def);
       return;
+    }
+
+    /* What the line does after, into and round a piece is a flying order question too: a figure from the owner's
+     * catalogue of manoeuvres. A waypoint that belongs to one says so, and takes the whole figure out. */
+    if (!freestyle && element.type === 'waypoint') {
+      this.renderFigureNote(host, doc, element);
+    }
+    if (!freestyle && (def.kind === KIND.APERTURE || (def.kind === KIND.MARKER && element.type !== 'waypoint'))) {
+      const entries = doc.sequence.filter((q) => q.elementId === element.id);
+      const focusId = this.host.focusedPass?.(false) ?? null;
+      const at = entries.find((q) => q.id === focusId) ?? entries[0] ?? null;
+      if (at) {
+        this.renderFlightPath(host, doc, element, at);
+      }
     }
 
     /* How a stack is flown is a flying order question, and a map has none. */
@@ -1460,12 +1590,276 @@ export class Panels {
       b.addEventListener('click', () => this.host.applyFigure(element.id, fig.id));
     }
     host.append(grid);
+    /* A spiral goes round the side of the structure, and it is flown round either: the way it turns is the pilot's left or right. */
+    if (current && HANDED_FIGURES.includes(current)) {
+      const hand = figureHandOf(consecutiveEntries(doc, element.id));
+      this.segRow(host, 'Which way it turns', [['Left', 'left'], ['Right', 'right']].map(([label, value]) => ({
+        label, on: hand === value, run: () => this.host.applyFigure(element.id, current, { hand: value }),
+        title: `${label} of the structure as flown: the line goes round that side between the holes`,
+      })));
+    }
     const blurb = current
       ? figureBlurb(element, current)
       : 'This mix is not a named figure. Each hole you listed still counts as its own gate.';
     if (blurb) {
       host.append(el('p', 'tb-fig-blurb', blurb));
     }
+  }
+
+  /* ---------------- flight path ---------------- */
+
+  /*
+   * THE FLIGHT PATH OF A PASS, in the details. The owner's catalogue of manoeuvres, laid as figures (manoeuvres.js,
+   * flightpaths.js): what the line does after the piece, into it, and, for a flag, round it. Each is a card with the
+   * figure's own picture, so a choice is made by looking, and each is a run of waypoints in the flying order that
+   * can be dragged to reshape it and taken out in one press. The options under a figure that is laid change that
+   * figure where it is.
+   */
+  renderFlightPath(host, doc, element, at) {
+    const kind = kindOf(element);
+    const cls = trackClassOf(doc);
+    const number = gateNumberOf(doc, at.id);
+    const slots = kind === KIND.MARKER ? ['around', 'then', 'into'] : ['then', 'into'];
+    /* A figure round a flag stands on both sides of its pass, so it is that and not also a Then and an Into. */
+    const around = kind === KIND.MARKER ? aroundOf(doc, at.id) : null;
+    const found = {
+      then: around ? null : thenOf(doc, at.id),
+      into: around ? null : intoOf(doc, at.id),
+      around,
+    };
+    if (!slots.includes(this.flightTab)) {
+      this.flightTab = 'then';
+    }
+    const section = el('div', 'tb-fp');
+    section.id = 'tb-flight';
+    document.body.classList.add('tb-flighting');
+    section.append(el('h3', null, 'Flight path'));
+    section.append(el('p', 'tb-help', `What the line does ${number != null ? `at pass ${number}` : 'here'}: ${kind === KIND.MARKER ? 'round the flag, ' : ''}after it, or into it. Left and right are as flown. A figure is waypoints, so it can be dragged into shape, and one press takes it out.`));
+    /* One slot at a time, because a grid of fourteen pictures is a screen of its own: a dot on a tab says there is a figure laid in it. */
+    const seg = el('div', 'tb-seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Which flight path');
+    const labels = { around: 'Round it', then: 'Then', into: 'Into it' };
+    const titles = {
+      around: 'A turn round the flag: flown round it and never over it',
+      then: 'What the line does after this pass',
+      into: 'What the line does before this pass, on the way in',
+    };
+    for (const slot of slots) {
+      const on = this.flightTab === slot;
+      const b = button(labels[slot], `${on ? 'tb-seg-btn on' : 'tb-seg-btn'}${found[slot] ? ' has' : ''}`, () => {
+        this.flightTab = slot;
+        this.renderInspector();
+      }, `${titles[slot]}${found[slot] ? `. Laid: ${figureName(found[slot].spec)}` : ''}`);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      seg.append(b);
+    }
+    section.append(seg);
+    section.append(el('p', 'tb-fp-laid', found[this.flightTab] ? `Laid: ${figureName(found[this.flightTab].spec)}` : 'Nothing laid.'));
+    if (this.flightTab === 'around') {
+      this.flightAround(section, doc, at, cls);
+    } else {
+      this.flightSlot(section, doc, at, this.flightTab, cls);
+    }
+    if (kind === KIND.APERTURE) {
+      this.flightPiece(section, doc, at);
+    }
+    host.append(section);
+  }
+
+  /* A card of the grid: the figure's picture and its name, lit when it is the one that is laid. A null spec is None. */
+  flightCard(spec, label, on, onClick, title, cls) {
+    const b = el('button', on ? 'tb-fig-card on' : 'tb-fig-card');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.append(figureGlyphSvg(spec, cls));
+    b.append(el('strong', null, label));
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  /* The choices a flight path is laid with, for the figure that is laid, as rows of words; changing one lays it again. */
+  flightOptions(host, at, slot, current) {
+    const def = manoeuvreById(current.id);
+    if (!def) {
+      return;
+    }
+    /* Whatever else the figure did (a pass back through the gate) is the figure it was, and a figure laid again at a
+     * size or a heading of its own is a plain one: the pass it came back through goes with it. */
+    const lay = (patch) => {
+      const next = { ...current, ...patch };
+      delete next.again;
+      this.host.setFlightPath(at.id, slot, next);
+    };
+    const row = (heading, items) => this.segRow(host, heading, items.map(([label, key, value, title]) => ({
+      label, on: current[key] === value, run: () => lay({ [key]: value }), title,
+    })));
+    if (def.hand) {
+      row('Which way', [['Left', 'hand', 'left'], ['Right', 'hand', 'right']]);
+    }
+    if (def.degs) {
+      row('How far round', def.degs.map((d) => [`${d}°`, 'deg', d]));
+    }
+    if (def.sense) {
+      row(def.id === 'hop' ? 'Over or under' : 'Up or down', def.id === 'hop'
+        ? [['Over', 'sense', 'up'], ['Under', 'sense', 'down']]
+        : [['Up', 'sense', 'up'], ['Down', 'sense', 'down']]);
+    }
+    if (def.count) {
+      row('Weaves', def.count.map((n) => [String(n), 'count', n]));
+    }
+    if (def.bias) {
+      row('Exit leans', [['Straight', 'bias', 'none'], ['Left', 'bias', 'left'], ['Right', 'bias', 'right'], ['Up', 'bias', 'up'], ['Down', 'bias', 'down']]);
+    }
+    if (def.id !== 'straight') {
+      row('Size', [['Tight', 'size', 'tight'], ['Standard', 'size', 'standard'], ['Wide', 'size', 'wide']]);
+    }
+  }
+
+  /* The slot after a pass, or the one before it: None, then the manoeuvres. */
+  flightSlot(host, doc, at, slot, cls) {
+    const found = slot === 'then' ? thenOf(doc, at.id) : intoOf(doc, at.id);
+    const draft = this.flight[slot];
+    if (found && found.spec) {
+      for (const key of ['hand', 'deg', 'sense', 'size', 'count', 'bias']) {
+        if (found.spec[key] !== undefined) {
+          draft[key] = found.spec[key];
+        }
+      }
+    }
+    const grid = el('div', 'tb-fig-grid');
+    grid.append(this.flightCard(null, 'None', !found,
+      () => this.host.clearFlightPath(at.id, slot),
+      slot === 'then' ? 'Nothing laid after this pass: the line goes on to the next piece.' : 'Nothing laid into this pass: the line comes in from the piece before it.', cls));
+    for (const m of MANOEUVRES) {
+      const spec = { ...draft, id: m.id };
+      const on = Boolean(found && found.spec.id === m.id);
+      grid.append(this.flightCard(spec, m.label, on, () => this.host.setFlightPath(at.id, slot, spec),
+        `${m.hint}${m.also.length ? ` Also called ${m.also.join(', ')}.` : ''}`, cls));
+    }
+    host.append(grid);
+    if (found && found.spec) {
+      this.flightOptions(host, at, slot, found.spec);
+    }
+  }
+
+  /* Round a flag, a cone or a pole: a turn of 90, 180 or 360 degrees round it, flat, climbing or descending. */
+  flightAround(host, doc, at, cls) {
+    const found = aroundOf(doc, at.id);
+    const draft = this.flight.around;
+    if (found && found.spec) {
+      draft.hand = found.spec.hand;
+      draft.deg = found.spec.deg;
+    } else {
+      draft.hand = defaultAroundHand(doc, at.id);
+    }
+    const grid = el('div', 'tb-fig-grid');
+    grid.append(this.flightCard(null, 'None', !found,
+      () => this.host.clearFlightPath(at.id, 'around'),
+      'The line passes the flag and goes on: no turn round it.', cls));
+    for (const id of ['turn', 'climb', 'descend']) {
+      const m = manoeuvreById(id);
+      const spec = { ...draft, id };
+      grid.append(this.flightCard(spec, m.label, Boolean(found && found.spec.id === id),
+        () => this.host.setFlightPath(at.id, 'around', spec),
+        `${m.hint} Round the flag at the turn clearance, so it is flown round and never over.`, cls));
+    }
+    host.append(grid);
+    if (found && found.spec) {
+      const lay = (patch) => this.host.setFlightPath(at.id, 'around', { ...found.spec, ...patch });
+      this.segRow(host, 'Which way', [['Left', 'left'], ['Right', 'right']].map(([label, hand]) => ({
+        label, on: found.spec.hand === hand, run: () => lay({ hand }),
+      })));
+      this.segRow(host, 'How far round', [90, 180, 360].map((deg) => ({
+        label: `${deg}°`, on: found.spec.deg === deg, run: () => lay({ deg }),
+      })));
+    }
+  }
+
+  /*
+   * THE FIGURES THAT ARE A GATE'S OWN: round a flagged leg, a turnaround, a power loop gate. Each is a figure and
+   * usually a second pass through the gate, laid in one press, and then it is the gate's "Then" like any other.
+   */
+  flightPiece(host, doc, at) {
+    const flags = flagsAsFlown(doc, at.id);
+    const act = (heading, items) => this.segRow(host, heading, items.map(([label, run, title]) => ({
+      label, on: false, run, title,
+    })));
+    host.append(el('h3', 'tb-fp-slot', 'Round this gate'));
+    for (const side of ['left', 'right']) {
+      if (flags[side]) {
+        act(`Round the ${side} flag`, [
+          ['Hairpin', () => this.host.setPieceFlight(at.id, 'leg', side, 'hairpin'), 'Through, then a flat 180 round the flagged leg'],
+          ['Spiral up', () => this.host.setPieceFlight(at.id, 'leg', side, 'spiralUp'), 'Through, then a climbing 180 round the flagged leg'],
+          ['Spiral down', () => this.host.setPieceFlight(at.id, 'leg', side, 'spiralDown'), 'Through, then a descending 180 round the flagged leg'],
+          ['Orbit', () => this.host.setPieceFlight(at.id, 'leg', side, 'orbit'), 'Through, a full circle round the flagged leg, and back through the gate the way it went in'],
+        ]);
+      }
+    }
+    if (flags.left && flags.right) {
+      act('Both flags', [['Figure 8', () => this.host.setPieceFlight(at.id, 'leg', 'left', 'figure8'), 'Through, round one leg, back through, round the other, back through']]);
+    }
+    act('Turnaround', [
+      ['Hairpin left', () => this.host.setPieceFlight(at.id, 'turnaround', 'flat', 'left'), 'Through, a flat 180 to the left, and back through the same gate reversed'],
+      ['Hairpin right', () => this.host.setPieceFlight(at.id, 'turnaround', 'flat', 'right'), 'Through, a flat 180 to the right, and back through the same gate reversed'],
+      ['Over the top', () => this.host.setPieceFlight(at.id, 'turnaround', 'over'), 'Through, a reverse Split-S over the top, and a drop back through the gate reversed'],
+    ]);
+    act('Power loop gate', [['Loop', () => this.host.setPieceFlight(at.id, 'powerLoop'), 'Through, a loop over the top that starts at the gate, and through again the same way']]);
+  }
+
+  /* A waypoint that is a point of a figure says which, and takes the whole figure out. */
+  renderFigureNote(host, doc, element) {
+    const spec = parseFigureName(element.name);
+    if (!spec) {
+      return;
+    }
+    const entry = doc.sequence.find((q) => q.elementId === element.id);
+    const held = entry ? figureHolding(doc, entry.id) : null;
+    host.append(el('h3', null, 'Figure'));
+    host.append(el('p', 'tb-help', `One point of ${figureName(spec)}. The points of a figure are waypoints: drag them to reshape it, or take the whole figure out.`));
+    if (held) {
+      const row = el('div', 'tb-row-btns');
+      row.append(button('Take the figure out', 'tb-btn tb-danger', () => this.host.clearFigureOf(entry.id),
+        'Every point of it goes, and a second pass through its gate with them'));
+      host.append(row);
+    }
+  }
+
+  /*
+   * THE CARD'S WAY IN: what is after the piece, into it and, for a flag, round it, in a word each, and a press opens
+   * the details at the flight path, where the choices are. The card is the room's and this is a row of it; the
+   * figures themselves are a screen of pictures, which a floating card is not the place for.
+   */
+  cardFlight(card, element, at, touched = false) {
+    const kind = kindOf(element);
+    /* On a screen that is touched the card is the small bar and the choices are left to the details (More), which has the
+     * Flight path in it: three rows at finger size were a card a third taller, over the room it is for. */
+    if (touched || !at || element.type === 'waypoint' || (kind !== KIND.APERTURE && kind !== KIND.MARKER)) {
+      return;
+    }
+    const doc = this.host.doc;
+    const say = (found) => (found && found.spec ? figureName(found.spec) : 'None');
+    const around = kind === KIND.MARKER ? aroundOf(doc, at.id) : null;
+    /* A button says what is laid in its place and opens the details at it. Two share a row, because the card is over the room
+     * and a row each was a third taller; a long name is cut with an ellipsis and is in its title whole. */
+    const button1 = (slot, label, found, what) => ({
+      label: `${label ? `${label}: ` : ''}${say(found)} \u25be`,
+      on: Boolean(found),
+      toggle: true,
+      className: 'tb-card-wide',
+      run: () => this.host.openFlightPath(at.id, slot),
+      title: `${what}${found ? ` Laid: ${figureName(found.spec)}.` : ''} Opens the flight path in the details`,
+    });
+    const thenFound = around ? null : thenOf(doc, at.id);
+    const intoFound = around ? null : intoOf(doc, at.id);
+    if (kind === KIND.MARKER) {
+      card.append(this.cardChoice('Round it', [button1('around', '', around, 'A turn round the flag, flown round and never over.')], 'A turn round the flag'));
+    }
+    card.append(this.cardChoice('Flight path', [
+      button1('then', 'Then', thenFound, 'What the line does after this pass: a turn, a loop, a hop and the rest.'),
+      button1('into', 'Into', intoFound, 'What the line does before this pass.'),
+    ], 'What the line does after this pass and before it'));
   }
 
   /*
@@ -2145,9 +2539,11 @@ export class Panels {
         'Another pass through it, at the end of the lap'), copyBtn);
     }
     /* A hurdle is not a gate: the lap goes over it, and this is what puts the lap there. */
-    if (element.type === 'barrier' && !this.host.isWhoopRace()) {
-      actions.insertBefore(button('Fly over', 'tb-btn', () => this.host.routeTo(element.id),
-        'Add a pass over the middle of it, a metre above the board, at the end of the lap'), copyBtn);
+    if (canFlyOver(element) && !this.host.isWhoopRace()) {
+      const gate = !HURDLE_TYPES.includes(element.type);
+      actions.insertBefore(button('Fly over', 'tb-btn', () => this.host.flyOverPiece(element.id), gate
+        ? 'Hop over the top of it instead of through it: a pass a metre above it, at the end of the lap'
+        : 'Add a pass over the middle of it, a metre above the top, at the end of the lap'), copyBtn);
     }
     if (flown > 1) {
       removeBtn.textContent = 'Remove piece';
@@ -2164,7 +2560,9 @@ export class Panels {
     this.cardFacing(card, element);
     this.cardPassOn(card, element, at);
     this.cardFlags(card, element);
+    this.cardHurdle(card, element, touched);
     this.cardRound(card, element, at);
+    this.cardFlight(card, element, at, touched);
 
     if (touched) {
       /* The small bar: what a keyboard's Q, E and X did, as buttons. */
@@ -2301,7 +2699,7 @@ export class Panels {
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', label);
     for (const it of items) {
-      const b = button(it.label, it.on ? 'tb-seg-btn on' : 'tb-seg-btn', () => {
+      const b = button(it.label, `${it.on ? 'tb-seg-btn on' : 'tb-seg-btn'}${it.className ? ` ${it.className}` : ''}`, () => {
         /* The lit one of a choice is already chosen; a toggle is pressed to turn it off as well as on. */
         if (it.toggle || !it.on) {
           it.run();
@@ -2314,6 +2712,53 @@ export class Panels {
     }
     row.append(seg);
     return row;
+  }
+
+  /*
+   * A HURDLE'S OWN CHOICES: its size (the plan's, MultiGP's 10 by 5 ft, the h-hurdle with its tall pole, a super hurdle),
+   * how the lap goes past it (over, skimming, or under a bar), and the angle it is set at to the line, square or forty
+   * five degrees. The line and the angle are about the waypoint that puts the lap over it, so they are offered once
+   * there is one: Fly over puts it there.
+   */
+  cardHurdle(card, element, touched = false) {
+    if (!canFlyOver(element) || this.host.isWhoopRace()) {
+      return;
+    }
+    const doc = this.host.doc;
+    /* A gate that is hopped over has a line over it to choose, and nothing else of a hurdle's: its size and its angle are the gate's. */
+    if (!HURDLE_TYPES.includes(element.type)) {
+      const over = hurdleLineOf(doc, element.id);
+      if (over) {
+        card.append(this.cardChoice('Flown', HURDLE_LINES.map((l) => ({
+          label: l.label, on: over === l.id, disabled: l.id === 'under',
+          run: () => this.host.setHurdleLine(element.id, l.id),
+          title: l.id === 'under' ? 'A gate has nothing to go under' : l.hint,
+        })), 'How the lap goes over it'));
+      }
+      return;
+    }
+    const bar = element.type === 'horizontalPole';
+    const size = hurdleSizeOf(element);
+    const sizes = bar ? HURDLE_SIZES.filter((s) => s.id === 'multigp' || s.id === 'super') : HURDLE_SIZES;
+    /* On a screen that is touched only how it is flown is on the card: its size is a field of the details and its angle the Turn. */
+    if (!touched) {
+      card.append(this.cardChoice('Size', sizes.map((s) => ({
+        label: s.label, on: size === s.id, run: () => this.host.setHurdleSize(element.id, s.id), title: s.hint,
+      })), 'How big the hurdle is'));
+    }
+    const line = hurdleLineOf(doc, element.id);
+    card.append(this.cardChoice('Flown', HURDLE_LINES.map((l) => ({
+      label: l.label, on: line === l.id, disabled: l.id === 'under' && !bar,
+      run: () => this.host.setHurdleLine(element.id, l.id),
+      title: l.id === 'under' && !bar ? 'A board stands on the ground and has nothing to go under. A bar hurdle has.' : l.hint,
+    })), 'How the lap goes past it'));
+    if (line && !touched) {
+      const angle = hurdleAngleOf(doc, element.id);
+      card.append(this.cardChoice('Set at', [['Square', 'square'], ['45° left', 'left'], ['45° right', 'right']].map(([label, value]) => ({
+        label, on: angle === value, run: () => this.host.setHurdleAngle(element.id, value),
+        title: value === 'square' ? 'Across the line the lap flies' : `Turned forty five degrees to the ${value}, as flown`,
+      })), 'The angle it is set at to the line'));
+    }
   }
 
   /*
@@ -2879,6 +3324,12 @@ export class Panels {
       text = touched
         ? 'Drag along the ground, from the bay that is flown first, to lay a wall. A tap lays three. One wall, then the tool is put away.'
         : 'Drag along the ground, from the bay that is flown first, to lay a wall of gates that share their uprights, two to six. A click lays three. One wall, then the tool is put away. Alt turns it freely.';
+    } else if (room && !whoop && armed === 'run') {
+      text = `${touched ? 'Tap' : 'Click'} where the section starts: the first piece stands there, facing the way the track is going, and the rest follow the shape picked under the tool. One section, then the tool is put away.${touched && this.host.onPhone() ? ' The shapes are under Tools.' : ''}`;
+    } else if (room && !whoop && armed === 'launchGate') {
+      text = `${touched ? 'Tap' : 'Click'} where the launch gate goes: a horizontal gate 15 ft up, flown up through from below, with the pull up and push over that fly it laid as waypoints. One gate, then the tool is put away.`;
+    } else if (room && !whoop && armed === 'barHurdle') {
+      text = `${touched ? 'Tap' : 'Click'} where the bar hurdle goes: a bar 10 ft wide and 5 ft up on two legs, turned across the track, with the lap passing over it. The card says under or skimming. One hurdle, then the tool is put away.`;
     } else if (room && !whoop && armed === 'hurdle') {
       text = `${touched ? 'Tap' : 'Click'} where the hurdle goes: a board 4 m long and 1 m high with a flag at each end, turned across the track, with the lap passing over it. One hurdle, then the tool is put away.`;
     } else if (room && !whoop && armed === 'upGate') {

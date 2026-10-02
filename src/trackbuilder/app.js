@@ -46,16 +46,24 @@ import {
   neighboursOf, pinFacesAt, removeElement, removeFromSequence, setApertureIndex,
 } from './sequence.js';
 import { applyFigure, upgradeStackedFigures } from './figures.js';
+import { runSpecOf } from './runs.js';
 import { apertureAt, flyAgain, focusFor, removeLastPass, MAX_PASSES } from './passes.js';
 import {
   QUARTER, copyElements, magnetFor, moveToPlace, nearestQuarter, placeCube, placementFor, placeOnTrack, placeRow as layRow,
   replaceWith, rowPlan, turnGroups, turnStepFor,
 } from './snap.js';
 import {
-  addSpiral, flyOver, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
+  addSpiral, flyOver, placeBarHurdle, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
+  setHurdleAngle, setHurdleLine, setHurdleSize,
   setWallSize, setWallWeave, wallOf,
 } from './parts.js';
 import { cloneElements, anyCloneable } from './clone.js';
+import {
+  applyAround, applyInto, applyLeg, applyPowerLoopGate, applyThen, applyTurnaround, clearAround, clearInto, clearThen,
+  figureHolding,
+  placeLaunchGate,
+  placeSection,
+} from './flightpaths.js';
 import { scaleOf } from './scale.js';
 import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
@@ -536,6 +544,8 @@ export class App {
      * the card) and the one under the pointer for the moment. Views of the
      * builder, never stored, and cleared when a track opens. See passes.js. */
     this.passPinned = null;
+    /* What the run tool lays when it is clicked: its shape, which way it turns, how many gates and how far apart. */
+    this.runSpec = runSpecOf({});
     this.passHover = null;
     /* One side of the selected gate, picked in the 3D view to be taken away
      * with Delete: { id, side } or null. See FRAME_SIDES in elements.js. */
@@ -1184,7 +1194,7 @@ export class App {
       return null;
     }
     /* A hurdle is not a gate, and nothing scores on it: the lap goes OVER it, which is a waypoint above its middle. */
-    if (el.type === 'barrier' && !this.isWhoopRace()) {
+    if ((el.type === 'barrier' || el.type === 'horizontalPole') && !this.isWhoopRace()) {
       if (this.doc.sequence.length >= MAX_PASSES) {
         this.toast(`A lap of ${MAX_PASSES} passes is as long as this builder will make one.`);
         return null;
@@ -2102,8 +2112,22 @@ export class App {
       return;
     }
     let made = null;
+    if (type === 'run') {
+      let gates = [];
+      this.edit('lay a section', (d) => { gates = placeSection(d, world, this.runSpec, { square: this.square }); });
+      if (gates.length) {
+        this.setSelection(gates.map((g) => g.id));
+        this.disarm();
+        this.sayOnce('run laid', 'A section is ordinary pieces, flown in the order laid. Move, turn or resize them like any other, or press Undo and lay it again with another shape.');
+      }
+      return;
+    }
     if (type === 'hurdle') {
       this.edit('place a hurdle', (d) => { made = placeHurdle(d, world, { square: this.square }); });
+    } else if (type === 'barHurdle') {
+      this.edit('place a bar hurdle', (d) => { made = placeBarHurdle(d, world, { square: this.square }); });
+    } else if (type === 'launchGate') {
+      this.edit('place a launch gate', (d) => { made = placeLaunchGate(d, world, { square: this.square }); });
     } else if (type === 'upGate') {
       this.edit('place an up gate', (d) => { made = placeUpGate(d, world, { square: this.square }); });
     }
@@ -2113,6 +2137,46 @@ export class App {
        * away, which is what shows the card. A gate stays armed, because ten gates are ten clicks. */
       this.disarm();
     }
+  }
+
+  /* A pass OVER a piece: the waypoint a metre above its top, at the end of the lap, which is how a hurdle is flown and how a gate is
+   * hopped over instead of flown through. One undo step; the waypoint is what is selected after, as the Fly order tool leaves it. */
+  flyOverPiece(id) {
+    if (this.doc.sequence.length >= MAX_PASSES) {
+      this.toast(`A lap of ${MAX_PASSES} passes is as long as this builder will make one.`);
+      return null;
+    }
+    let made = null;
+    this.edit('fly over it', (d) => { made = flyOver(d, id); });
+    if (made) {
+      this.setSelection([made.waypointId]);
+    }
+    return made;
+  }
+
+  /* A hurdle's size, how the lap goes past it and the angle it is set at: each one undo step, and the piece stays selected. */
+  setHurdleSize(id, sizeId) {
+    this.edit('hurdle size', (d) => { setHurdleSize(d, id, sizeId); });
+  }
+
+  setHurdleLine(id, lineId) {
+    this.edit('how the hurdle is flown', (d) => { setHurdleLine(d, id, lineId); });
+  }
+
+  setHurdleAngle(id, angle) {
+    this.edit('hurdle angle', (d) => {
+      if (!setHurdleAngle(d, id, angle)) {
+        this.toast('The angle is to the line the lap flies over the hurdle, so a hurdle has to be flown first: Fly over puts the lap there.');
+      }
+    });
+  }
+
+  /* The run tool's choices: its shape, which way it turns, how many gates and how far apart, as the palette sets them. */
+  setRunSpec(patch) {
+    this.runSpec = runSpecOf({ ...this.runSpec, ...patch });
+    this.panels.renderRunOptions();
+    this.clearGhost();
+    this.requestDraw();
   }
 
   /* A wall dragged out from `a` to `b`, or a click, which is a wall of three on the spot. */
@@ -2204,6 +2268,90 @@ export class App {
       this.toast('The line already comes into the gate past that flag, so there is nothing to go round. Spiral down goes round it once.');
     }
     return made;
+  }
+
+  /*
+   * A FLIGHT PATH: what the line does after a pass, into it or round it, a figure from manoeuvres.js laid in the
+   * flying order as waypoints (flightpaths.js). One undo step, and the piece stays selected so the next choice is
+   * one more press. `slot` is 'then', 'into' or 'around' (a flag).
+   */
+  setFlightPath(seqId, slot, spec) {
+    let made = null;
+    this.edit('flight path', (d) => {
+      if (slot === 'into') {
+        made = applyInto(d, seqId, spec);
+      } else if (slot === 'around') {
+        made = applyAround(d, seqId, spec);
+      } else {
+        made = applyThen(d, seqId, spec);
+      }
+    });
+    if (!made) {
+      this.toast('A flight path goes after, into or round a gate or a flag: the pieces the lap flies.');
+    }
+    return made;
+  }
+
+  clearFlightPath(seqId, slot) {
+    this.edit('no flight path', (d) => {
+      if (slot === 'into') {
+        clearInto(d, seqId);
+      } else if (slot === 'around') {
+        clearAround(d, seqId);
+      } else {
+        clearThen(d, seqId);
+      }
+    });
+  }
+
+  /* One of the figures a flagged leg, a turnaround or a power loop gate is flown by, which are figures with a pass
+   * of their own as well (flightpaths.js). `kind` is 'leg', 'turnaround' or 'powerLoop'. */
+  setPieceFlight(seqId, kind, a, b) {
+    let made = null;
+    this.edit('flight path', (d) => {
+      if (kind === 'leg') {
+        made = applyLeg(d, seqId, a, b);
+      } else if (kind === 'turnaround') {
+        made = applyTurnaround(d, seqId, a, b);
+      } else {
+        made = applyPowerLoopGate(d, seqId);
+      }
+    });
+    if (!made) {
+      this.toast(kind === 'leg'
+        ? 'That side of the gate has no flag. Flags puts one there.'
+        : 'That figure goes after a pass through a gate.');
+    }
+    return made;
+  }
+
+  /*
+   * THE CARD'S MORE FOR A FLIGHT PATH: pin the pass the card is about, open the details and bring the Flight path
+   * section into view, because the figures are a screen of pictures and the floating card is not the place for them.
+   * The details are drawn when the selection and the drawer change, so the scroll waits for the frame after.
+   */
+  openFlightPath(seqId, slot = null) {
+    if (slot) {
+      this.panels.flightTab = slot;
+    }
+    this.setPassPinned(seqId);
+    this.toggleDrawer(true);
+    this.panels.renderInspector();
+    requestAnimationFrame(() => {
+      const section = document.getElementById('tb-flight');
+      if (section) {
+        section.scrollIntoView({ block: 'start', behavior: 'auto' });
+      }
+    });
+  }
+
+  /* Take out the whole figure a waypoint belongs to. */
+  clearFigureOf(seqId) {
+    const held = figureHolding(this.doc, seqId);
+    if (!held) {
+      return;
+    }
+    this.clearFlightPath(held.ownerId, held.slot);
   }
 
   /*
@@ -2591,8 +2739,8 @@ export class App {
     this.edit('fly another level', (d) => { addNextLevel(d, elementId); });
   }
 
-  applyFigure(elementId, figureId) {
-    this.edit(`fly ${figureId}`, (d) => { applyFigure(d, elementId, figureId); });
+  applyFigure(elementId, figureId, opts = {}) {
+    this.edit(`fly ${figureId}`, (d) => { applyFigure(d, elementId, figureId, opts); });
     if (figureId !== 'single' && !this.pathVisible) {
       this.togglePath();
     }
