@@ -64042,3 +64042,19 @@ pass's `wrap` on one side and an asset's pitch, sink floor and `fitDims` on the 
   `node scripts/vendor.js ../WebFPVSimulator` there. Not done: the yard it draws uses none of this work. The board
   vendors only the lettering and the roster, which this does not touch.
 - Neither of the other two repositories had anything on its branch to push.
+
+### The push, and what the live site serves
+
+`git fetch origin main` was the last command before the push. Main was still f758c1d, an ancestor of this branch's
+head, so `git push origin HEAD:main` was a fast forward: f758c1d..dabe12f at 03:59:17 UTC. The branch
+`claude/zealous-einstein-mol664` is the same commit.
+
+Before the push, three served files (`ui.js`, `fresh.js`, `types.js`) were read from https://webfpv.org/sim/ through
+a cache busting query and were main's to the byte, so the comparison after it could tell a deploy from none. After
+it, a script asked for `src/fresh.js` every 20 seconds until it was main's (84 seconds, five polls), and only then
+for the other files, so the new `clone.js` was never asked for before it existed: the last push found that a 404 for
+a file not yet deployed is kept at the edge for four hours.
+
+    live              19 of 19 served files this push changed answer 200 and are identical to main by sha256,
+                      clone.js among them
+    not run           a browser against the live site; nobody has flown or built with this on the live site
