@@ -17,6 +17,14 @@
  *                  number finite, every part a real box or capsule, no solid
  *                  box on an asset that turns freely, quarter turns that are
  *                  exact permutations to the bit, nothing inflated
+ *   1c. on end     the assets that stand on end (containers, the ledge), both
+ *                  ways, at the same dims: the same boxes in the same sizes,
+ *                  to a nanometre, with the lowest on the ground, the footprint
+ *                  centred along the heading, z untouched, and no taller
+ *                  than the builder says; and, in the module, a drop onto
+ *                  a container stood on its end and onto one half sunk in the
+ *                  ground, each landing on the part of it that is above the
+ *                  paving, at the height it is
  *   1b. envelope   the same dims, what is solid against what is drawn: no
  *                  solid over the drawn top, the chimney's solids on its
  *                  brick, no stair drawn where the layout built none
@@ -64,7 +72,7 @@
  * contact, on the five inch, which is the only craft freestyle is offered
  * on. Every flight is flown twice and must agree with itself to the bit.
  *
- * Usage: node scripts/props-check.js [--only=assets|envelope|furniture|determinism|physics|starter|scene|egg] [--verbose]
+ * Usage: node scripts/props-check.js [--only=assets|tilt|envelope|furniture|determinism|physics|starter|scene|egg] [--verbose]
  *        node scripts/props-check.js --selftest    prove each detector sees a planted fault
  * Exit code is the number of failed checks.
  *
@@ -92,7 +100,7 @@ import { dirname, join, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { loadSim, SIM_OK, simErrorName } from '../tests/lib/simmod.js';
-import { PROPS, FURNITURE, partsOf } from '../src/props/catalog.js';
+import { PROPS, FURNITURE, partsOf, placedPartsOf } from '../src/props/catalog.js';
 import { styleDims, approxHeight } from '../src/props/types.js';
 import { GAP_MIN, seededRandom, hashString } from '../src/props/parts.js';
 import { placeSolids, placedYaw, addSolids } from '../src/props/solids.js';
@@ -284,7 +292,7 @@ function numbersOfSolid(s) {
  * Check one element (a prop or a piece of furniture) at one set of dims.
  * Returns a map of problem name to example strings; empty means it passed.
  */
-function checkElement(el, turns, expectSolid, label, problems, tally) {
+function checkElement(el, turns, expectSolid, label, problems, tally, partsFn = partsOf) {
   const add = (what, example) => {
     if (!problems.has(what)) {
       problems.set(what, []);
@@ -298,7 +306,7 @@ function checkElement(el, turns, expectSolid, label, problems, tally) {
   };
   let parts;
   try {
-    parts = partsOf(el);
+    parts = partsFn(el);
   } catch (e) {
     add('layout throws', e.message);
     return;
@@ -496,10 +504,99 @@ function assetsBlock() {
       const sets = dimSets(type, style);
       for (const [name, dims] of sets) {
         checkElement(assetEl(type, style, dims), def.turns, def.zone ? false : true, name, problems, tally);
+        /* An asset that stands on end is checked as it stands too, both
+         * ways: the same checks, on the parts as placedPartsOf gives them. */
+        if (def.tilt) {
+          for (const pitch of [Math.PI / 2, -Math.PI / 2]) {
+            checkElement({ ...assetEl(type, style, dims), pitch }, def.turns, true,
+              `${name}, on end ${pitch > 0 ? '+' : '-'}90`, problems, tally, placedPartsOf);
+          }
+        }
       }
-      report(`${type}${style ? ` ${style}` : ''} (${def.turns})`, problems, tally, `${sets.length} dim sets x ${HEADINGS.length} headings`);
+      report(`${type}${style ? ` ${style}` : ''} (${def.turns})`, problems, tally, `${sets.length} dim sets x ${HEADINGS.length} headings${def.tilt ? ', and on end both ways' : ''}`);
     }
   }
+}
+
+/*
+ * 1c. ON END. What standing an asset on its end must keep, over every style,
+ * every dim set and both ways. It moves boxes and changes nothing else:
+ * the same boxes in the same sizes, to the bit; the lowest on the ground
+ * exactly, because Base is where it stands; the footprint centred along the
+ * heading, because the origin is the middle of it; z untouched, because a
+ * quarter about z does not move it; and no taller than the builder's drag
+ * handle and readout say, which must never come out under what is drawn.
+ */
+function tiltBlock() {
+  console.log('\n1c. on end: every asset that stands on end, both ways, at every dim set');
+  const live = (parts) => parts.filter((p) => p.solid || p.draw);
+  const lows = (parts, k) => Math.min(...live(parts).map((p) => (p.t === 'box' ? p.lo[k] : Math.min(p.a[k], p.b[k]) - p.r)));
+  const highs = (parts, k) => Math.max(...live(parts).map((p) => (p.t === 'box' ? p.hi[k] : Math.max(p.a[k], p.b[k]) + p.r)));
+  /* To a nanometre, not to the bit: each box is moved by the two offsets
+   * that centre and seat it, and a sum is not exact, so a box's size can
+   * differ from the layout's in its last place. The geometry between boxes
+   * is not rounded at all: parts the layout put on one plane are the same
+   * double, and the same offset keeps them so. */
+  const sig = (parts) => parts.filter((p) => p.t === 'box')
+    .map((p) => [p.hi[0] - p.lo[0], p.hi[1] - p.lo[1], p.hi[2] - p.lo[2]]
+      .map((v) => Math.round(v * 1e9) / 1e9).sort((a, b) => a - b).join(','))
+    .sort().join('|');
+  let any = false;
+  for (const [type, def] of Object.entries(PROPS)) {
+    if (!def.tilt) {
+      continue;
+    }
+    any = true;
+    for (const style of def.styles ?? [null]) {
+      const problems = new Map();
+      const tally = { parts: [] };
+      const add = (what, example) => {
+        const list = problems.get(what) ?? [];
+        problems.set(what, list);
+        if (list.length < 3) {
+          list.push(example);
+        }
+      };
+      const sets = dimSets(type, style);
+      for (const [name, dims] of sets) {
+        for (const pitch of [Math.PI / 2, -Math.PI / 2]) {
+          const el = { ...assetEl(type, style, dims), pitch };
+          const up = partsOf(el);
+          const on = placedPartsOf(el);
+          const label = `${name}, ${pitch > 0 ? '+' : '-'}90`;
+          tally.parts.push(on.length);
+          if (on.length !== up.length) {
+            add('as many parts as upright', `${label}: ${on.length} from ${up.length}`);
+            continue;
+          }
+          if (sig(on) !== sig(up)) {
+            add('the same boxes in the same sizes, to a nanometre', label);
+          }
+          if (lows(on, 1) !== 0) {
+            add('the lowest part is on the ground', `${label}: ${lows(on, 1)}`);
+          }
+          const xs = [lows(on, 0), highs(on, 0)];
+          if (Math.abs(xs[0] + xs[1]) > 1e-9) {
+            add('the footprint is centred along the heading', `${label}: ${xs.join(' to ')}`);
+          }
+          if (lows(on, 2) !== lows(up, 2) || highs(on, 2) !== highs(up, 2)) {
+            add('z is untouched', `${label}`);
+          }
+          const said = approxHeight(type, dims, style, 1);
+          if (!(said >= highs(on, 1) - 1e-9)) {
+            add('no taller than the builder says', `${label}: ${highs(on, 1)} over ${said}`);
+          }
+          /* Both ways stand it on its end: the same height, up to which end. */
+          const other = placedPartsOf({ ...el, pitch: -pitch });
+          if (Math.abs(highs(other, 1) - highs(on, 1)) > 0.8) {
+            add('both ways stand it as tall', `${label}`);
+          }
+        }
+      }
+      report(`${type}${style ? ` ${style}` : ''} on end`, problems, tally, `${sets.length} dim sets, both ways`);
+    }
+  }
+  check('some asset stands on end', any);
 }
 
 /* ------------------------------------------------------------------ */
@@ -789,6 +886,14 @@ function everythingDoc() {
     }
   }
   entries.push({ type: 'gap', z: 1.2, name: 'CHECK GAP', points: 500 });
+  /* Stood on end both ways, a ledge on end, and a container sunk 1.3 m: the
+   * map of everything holds them like any other, so determinism, the module
+   * and the grid all see them, and the drops in physicsBlock can land on
+   * one (stack 2 so its top clears 3 m even sunk, which roofSpot asks). */
+  entries.push({ type: 'containers', style: '40ft', pitch: Math.PI / 2, tag: 'stood' });
+  entries.push({ type: 'containers', style: '40ft open', pitch: -Math.PI / 2, tag: 'stood open' });
+  entries.push({ type: 'ledge', pitch: Math.PI / 2, tag: 'stood' });
+  entries.push({ type: 'containers', style: '40ft', z: -1.3, tag: 'sunk' });
   entries.forEach((e, i) => {
     const x = CELL / 2 + (i % COLS) * CELL;
     const y = CELL / 2 + Math.floor(i / COLS) * CELL;
@@ -802,6 +907,12 @@ function everythingDoc() {
     }
     if (e.points) {
       el.points = e.points;
+    }
+    if (e.pitch != null) {
+      el.pitch = e.pitch;
+    }
+    if (e.tag) {
+      el.name = e.tag;
     }
     doc.elements.push(el);
   });
@@ -1419,15 +1530,23 @@ function roofSpot(world, range) {
   return null;
 }
 
-async function roofScenario(world, f, ranges) {
-  const range = ranges.find((r) => r.item.el.type === 'building' && r.item.el.style === 'flats');
+async function roofScenario(world, f, ranges, label = '(a) roof', pick = (r) => r.item.el.type === 'building' && r.item.el.style === 'flats', what = 'the flats', topBand = null) {
+  const range = ranges.find(pick);
   if (!range) {
-    fail('(a) roof: the map has a block of flats', 'none found');
+    fail(`${label}: the map has ${what}`, 'none found');
     return;
   }
   const spot = roofSpot(world, range);
-  if (!check('(a) roof: a spot on the flats roof with 3.5 m of clear air over it', Boolean(spot),
+  if (!check(`${label}: a spot on ${what} with 3.5 m of clear air over it`, Boolean(spot),
     spot ? `roof top ${r3(spot.top)} m at (${r3(spot.x)}, ${r3(spot.z)}), nearest solid ${spot.clear === Infinity ? 'none' : `${r3(spot.clear)} m`} from the column` : 'no clear spot')) {
+    return;
+  }
+  /* WHERE THE ROOF MUST BE, for a case that is about where a thing is: a
+   * drop that lands on SOME roof of the container proves nothing about
+   * whether it was stood on end or half sunk, since flat it has a roof too.
+   * (A first version of this passed with the placement ignoring the tilt.) */
+  if (topBand && !check(`${label}: its roof is where it stands, ${topBand[0]} to ${topBand[1]} m`,
+    spot.top >= topBand[0] && spot.top <= topBand[1], `${r3(spot.top)} m`)) {
     return;
   }
   /* Dropped, motors idle, from 3 m over the roof. */
@@ -1443,18 +1562,18 @@ async function roofScenario(world, f, ranges) {
   if (verbose) {
     note(`first ground contact at ${landed?.ms} ms, ${r3(impact)} m/s, support ${landed?.support}; end y ${r3(endW[1])}, ${r3(end.spd)} m/s, up ${r3(end.up)}, support ${end.support}`);
   }
-  check('(a) roof: two drops agree to the bit', res.hash === res2.hash);
+  check(`${label}: two drops agree to the bit`, res.hash === res2.hash);
   const onRoof = end.support >= range.from && end.support < range.to;
-  check('(a) roof: the roof is the ground under it at rest', onRoof,
-    `support shape ${end.support}, the flats are ${range.from} to ${range.to - 1}`);
+  check(`${label}: it is the ground under the craft at rest`, onRoof,
+    `support shape ${end.support}, ${what} is ${range.from} to ${range.to - 1}`);
   /* At rest on the roof: level and still, the CG at the parked height over
    * the roof's top. 3 cm is "a few centimetres": the street is metres
    * below, so this cannot be confused with falling through. */
   const dz = endW[1] - (spot.top + REST);
-  check('(a) roof: comes to rest on the roof, not the street', end.spd < 0.05 && Math.abs(dz) <= 0.03 && end.up > 0.99,
-    `CG ${r3(endW[1])} m against a roof at ${r3(spot.top)} m (${r3(dz * 1000)} mm off parked), ${r3(end.spd)} m/s, up ${r3(end.up)}, arrived at ${r3(impact)} m/s`);
+  check(`${label}: comes to rest on it, not the street`, end.spd < 0.05 && Math.abs(dz) <= 0.03 && end.up > 0.99,
+    `CG ${r3(endW[1])} m against a top at ${r3(spot.top)} m (${r3(dz * 1000)} mm off parked), ${r3(end.spd)} m/s, up ${r3(end.up)}, arrived at ${r3(impact)} m/s`);
   const deepest = Math.max(...rows.map((r) => r.depth));
-  check('(a) roof: no contact deeper than 5 cm', deepest <= 0.05, `${r3(deepest)} m`);
+  check(`${label}: no contact deeper than 5 cm`, deepest <= 0.05, `${r3(deepest)} m`);
 }
 
 /*
@@ -1854,6 +1973,22 @@ async function physicsBlock(world) {
     await roofScenario(w, f, ranges);
   } catch (e) {
     fail('(a) roof', e.stack);
+  }
+  /* The same drop onto a container stood on its end and onto one half sunk in
+   * the ground: each is a surface where it is drawn, at the height it is,
+   * which for the stood one is twelve metres up on a box the layout never
+   * put there, and for the sunk one is a roof 1.3 m lower than a flat one.
+   * Held by the module, not by the placement's own arithmetic. */
+  try {
+    /* Two 40 foot containers: stood, the roof is the end of the stack, 12.19 m
+     * up and a little over for the offset of the upper one; flat it would be
+     * 5.18 m. Sunk 1.3 m it is 5.18 - 1.3 = 3.88 m. */
+    await roofScenario(w, f, ranges, '(a2) stood',
+      (r) => r.item.el.type === 'containers' && r.item.el.name === 'stood', 'a container stood on end', [12.1, 13.1]);
+    await roofScenario(w, f, ranges, '(a3) sunk',
+      (r) => r.item.el.type === 'containers' && r.item.el.name === 'sunk', 'a container half sunk in the ground', [3.8, 3.95]);
+  } catch (e) {
+    fail('(a2, a3) stood and sunk', e.stack);
   }
   try {
     await mastScenario(w, f, ranges);
@@ -3810,6 +3945,7 @@ console.log('props-check: the freestyle assets, their placement, and the physics
 const world = {};
 const blocks = args.includes('--selftest') ? [['selftest', selftestBlock], ['selftest', selftestFlights], ['selftest', selftestEgg]] : [
   ['assets', assetsBlock],
+  ['tilt', tiltBlock],
   ['envelope', envelopeBlock],
   ['furniture', furnitureBlock],
   ['determinism', determinismBlock],

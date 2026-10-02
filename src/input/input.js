@@ -54,7 +54,7 @@
  */
 
 import {
-  stickChannels, stickCaption, stickSideOf, DEFAULT_STICK_MODE, normaliseStickMode,
+  stickChannels, stickCaption, stickSideOf, DEFAULT_STICK_MODE, normaliseStickMode, STICK_MODES,
 } from './stickmode.js';
 import { hoverStickPercent } from '../../configs/rates.js';
 
@@ -162,6 +162,52 @@ function isAetrGuess(map) {
   const t = map.throttle;
   return Boolean(t && t.axis === DEFAULT_MAP.throttle.axis && t.low === DEFAULT_MAP.throttle.low
     && t.high === DEFAULT_MAP.throttle.high && !t.sprung);
+}
+
+/*
+ * A SAVED MAP THAT IS STILL THE STANDARD LAYOUT, untouched, on a radio that
+ * Firefox has dressed as a gamepad. bug-52a66f69, "pitch is not reaching
+ * sim", a Radiomaster Pocket in Firefox on Linux.
+ *
+ * The case above, one rung over. Check sticks opens with whatever is flying
+ * as its draft and Save writes it, and from 27 September until firefoxRadio
+ * landed on the 28th a Firefox radio flew the standard layout, so a pilot who
+ * pressed Save then wrote that layout down as their own. A saved map
+ * outranks every guess, so the Firefox guess never reached them: yaw,
+ * throttle, roll and pitch on axes 0 to 3 reads pitch from channel 5, a
+ * switch, and reads the throttle stick from nothing. The ticket's map is that
+ * one to the digit, and calibrating is the only way out of it.
+ *
+ * The wizard never writes this map. It measures rest and the ends, and a
+ * Firefox radio's throttle is on axis 4 and does not spring, so its answer
+ * differs from the standard layout in the axes alone. What is exactly the
+ * standard layout in some stick mode, a sprung throttle included, is the
+ * guess saved as if it were a measurement. The pilot's reversals ride on top
+ * of it and are ignored: they were set against the wrong axes.
+ *
+ * Only a Firefox radio sets it aside, and only in memory. On a real gamepad
+ * this very map is right, so storage is left alone.
+ */
+function isStandardGuess(map) {
+  if (!map) {
+    return false;
+  }
+  const t = map.throttle;
+  for (const mode of STICK_MODES) {
+    const std = standardGuessMap(mode);
+    let same = Boolean(t && t.axis === std.throttle.axis && t.low === std.throttle.low
+      && t.high === std.throttle.high && Boolean(t.sprung) === Boolean(std.throttle.sprung));
+    for (const ch of ['roll', 'pitch', 'yaw']) {
+      const m = map[ch];
+      const s = std[ch];
+      same = same && Boolean(m && m.axis === s.axis && m.center === s.center
+        && m.pos === s.pos && m.neg === s.neg);
+    }
+    if (same) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export const CAL_STEPS = ['center', 'sweep', 'throttle', 'roll', 'pitch', 'yaw', 'confirm'];
@@ -2142,13 +2188,18 @@ export class InputManager {
   guessKey(gp) {
     const own = this.ownMap;
     const standard = Boolean(gp && gp.mapping === 'standard');
-    const mine = own.stored && !(standard && isAetrGuess(own));
+    const radio = standard && firefoxRadio(gp);
+    /* The saved AETR guess on any standard pad, and the saved standard layout
+     * on a Firefox radio, are guesses somebody pressed Save on. See
+     * isAetrGuess and isStandardGuess. */
+    const mine = own.stored && !(standard && isAetrGuess(own))
+      && !(radio && isStandardGuess(own));
     if (mine || !standard) {
       return 'own';
     }
     /* A radio Firefox has called a gamepad. Not in the stick mode's key: a
      * radio applies its own mode. See firefoxRadio. */
-    return firefoxRadio(gp) ? 'firefox' : `standard${this.stickMode}`;
+    return radio ? 'firefox' : `standard${this.stickMode}`;
   }
 
   /* The map a given pad would fly, without making it the one that flies.

@@ -63508,3 +63508,94 @@ preview that was taken this morning is asked for afresh.
 
 One more thing went wrong: a `pkill -f` meant for the rehearsal board matched the shell running it and took the
 rest of that command with it. Nothing had been sent; the board was stopped by its process id instead.
+
+## 2026-10-02 | input, builder | The bug inbox read, one real bug fixed, and the freestyle builder's first three asks (the owner's ask)
+
+The owner: read the board's bug inbox, assess every ticket, fix the ones with a real root cause, and enhance the
+freestyle map builder as ticket bug-e605ff6a asks ("Trackbuilder ideas", BAGRIANYI): 1) a clone to duplicate
+objects, 2) objects that can go below ground level to hide part of them, 3) objects that can stand on end, a
+container vertical for one, 4) hollow chimneys with an opening in the bottom to dive through, 5) wind turbines.
+This entry is the checkpoint after the fix and the first three; the chimney, the turbine and the ticket by ticket
+assessment follow in the entry's second part below it.
+
+Nothing here changes the physics model's shape, the module ABI or the build: `src/native/world.c` is untouched, and
+a container stood on end is four axis aligned boxes, which the module already holds (the proof is the flights
+below). `git diff --stat vendor/betaflight` is empty.
+
+### Reading the inbox
+
+The board's list is behind `BUGS_TOKEN` and fails closed, so the owner set one on the board's host and the pull was
+read only: `GET /api/bugs?status=open&limit=500`, then `GET /api/bugs/:id` for each. 39 tickets, none written to,
+none closed: closing a ticket is the owner's call. The token lives in the session's scratchpad and in no repository.
+
+### The one real bug: bug-52a66f69, "pitch is not reaching sim"
+
+The ticket carried the pilot's stored `stick.map`, which was the evidence. Firefox on Linux calls an EdgeTX radio a
+"standard" gamepad and reorders its axes (0 aileron, 1 elevator, 2 rudder, 3 channel five, 4 throttle), and
+`guessKey` in `src/input/input.js` already knew that, giving it its own `firefox` layout. But it let a STORED map win
+first, and a stored map made on a real standard gamepad (a DualSense, say) has the standard layout, so the radio
+was read with a gamepad's axes: the elevator stick landed on channel five and nothing reached pitch.
+
+- **The fix.** `isStandardGuess(map)` says a stored map IS the standard layout (every stick mode's `standardGuessMap`,
+  field for field). `guessKey` sets such a map aside, in memory only, when the pad is a Firefox radio, exactly as it
+  already did for the AETR guess; storage is left alone, so the pilot's real gamepad still finds its own map.
+- **Replicated before fixed.** The new block in `scripts/input-selftest.js` builds the stored standard map by the real
+  calibration flow on a DualSense, then meets it with the Firefox radio: before the fix the elevator read axis 3,
+  after it axis 1; a map the pilot moved off the standard layout stays theirs; a reversed channel is still set aside.
+
+### The three asks of the builder that needed no new asset
+
+1. **Duplicate on a map.** Ctrl+D did nothing on a freestyle map because `copyElements` is the race track's (it
+   follows gates along a line). `src/trackbuilder/clone.js` is the map's: `cloneElements` copies the selection
+   beside it, clear of it by the ground each piece really covers (`cloneOffsetFor`: east first, then west, north and
+   south, the first side the whole copy fits on, 1.5 m clear; a car goes onto its own road, a car's length and
+   3 m further along), keeps groups together under a new group id, clears names but a gap's, and leaves the
+   start pads out, because a map has one set. A Duplicate button sits in the inspector.
+2. **Below ground.** The model already stored a negative `position.z`; the clamp and the inspector refused it.
+   An asset on a map may now sink to `-SINK_MAX` (30 m); `lowestBase(doc, el)` says how low an element may go,
+   which is that for an asset on a map and the ground for everything else (a gate sunk is a shorter gate). The Base field says how much of the asset is under the ground, and `fs-buried`
+   warns when an asset is wholly under it (nothing of it to fly).
+3. **Standing on end.** `tilt: 'quarter'` on `containers` and `ledge` in `src/props/types.js`: the element's `pitch`
+   is 0 (upright) or +-90 degrees (on end), read to the nearest quarter by `tiltOf`. A box turned a quarter about a
+   horizontal axis is still an axis aligned box with two extents swapped, so `tiltParts` in `src/props/solids.js`
+   re-extents the boxes and moves the capsule ends, with two offsets (`tiltMeasure`) that set it back on its base and
+   centre its footprint along the heading. The drawing applies the same turn and offsets as a matrix in
+   `PropKit.element`, so what an asset paints over its parts turns with them and the mesh and the solids cannot
+   disagree. `placedPartsOf` is what the plan, the warnings and the placement read. The inspector has a Stands row
+   (Flat, On end). A stood stack of containers can be 0.7 m taller than its length because each box above the first
+   is set off square by up to 0.35 m along it, which `approxHeight` now says.
+
+### Checks run, this turn
+
+    selftest         node src/trackbuilder/selftest.js: 2031 passed, 0 failed. New: suiteClone (the offsets on all four
+                     sides and a corner, groups, vehicles, pads, names, undo as one step), suiteSink (the clamp, the
+                     repair note, the warning, the placement of a sunk roof) and suiteTilt (the snap, the round trip,
+                     the measure, both ways, the plan, the height)
+    props-check      node scripts/props-check.js: all passed. New: 1c "on end" over every dim set both ways (the same
+                     boxes to a nanometre, the lowest on y = 0, the footprint centred, z untouched, no taller than
+                     the builder says), and in the real module a drop onto a container on end (roof at 12.1 to
+                     13.1 m) and onto one sunk 1.3 m (roof at 3.8 to 3.95 m)
+    input-selftest   node scripts/input-selftest.js: all 380 passed
+    mutation         three planted faults in the tilt code (no lift onto the base, no centring, placement that ignores
+                     the tilt) each turned a check red, so the new checks bite
+    smoke            headless Chromium on the real builder page: Duplicate by Ctrl+D and the button, the Base field
+                     into the ground, the Stands row and its undo, and a rendered 3D preview of containers flat, sunk
+                     and on end; no page errors
+    the rest         lint:preload up to date (245 served), check:fresh 18 passed, no dashes in the lines added
+
+    not run          npm run verify (no physics, plant, ABI or build change); shots.js
+
+### What went wrong, so far
+
+- **I offered to have the owner paste the token into the chat**, against this environment's own advice about secrets,
+  and withdrew it the same message. The owner set `BUGS_TOKEN` on the host, with a value I generated, so it is in
+  this session's transcript: rotate or unset it when the assessment is done.
+- **The first clone corner test failed** (`{"x":0,"y":-15.9}`): a building's own roof extras overhang its footprint by
+  0.4 m, so a strict "wholly inside the plot" fit rejected three of the four sides. `cloneOffsetFor` allows the
+  source's own overhang now. My first replacement test passed vacuously, which I noticed before trusting it, and
+  rewrote it to cut the plot edge 0.4 m into the footprint.
+- **`approxHeight` under-called a stood stack** (80 failures in suiteTilt): the 0.35 m set-off along the length
+  became vertical. Stacks now add 0.75 m.
+- **props-check passed with the placement ignoring the tilt**, because a drop onto a flat container roof lands at a
+  plausible height. A height band on the landing (`topBand`) is what catches it, shown by the mutation.
+- **`serialize` rounds to six decimals**, so a pitch round trip is compared to 1e-6, not to the bit.

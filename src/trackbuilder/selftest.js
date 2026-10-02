@@ -60,6 +60,7 @@ import {
   moveToPlace, measuresFor, magnetFor, sideBySideYaw, MAGNET_RADIUS, rowPlan, placeRow, ROW_MAX,
   rulerPoint, rulerReading, replacementsFor, replaceWith, placeCube, cubeItems, turnGroups,
 } from './snap.js';
+import { cloneElements, cloneOffsetFor, anyCloneable, CLONE_GAP, CLONE_CAR_GAP } from './clone.js';
 import { CUBE_FACES, cubeFaces } from './cube.js';
 import {
   canFlag, flagsOf, setFlags, wallPlan, placeWall, wallBays, placeHurdle, placeUpGate, addSpiral, flagsAsFlown,
@@ -78,20 +79,20 @@ import { ELEMENTS, PALETTE_ORDER, GATE_FLAG_H, flagSideOf, flagSideSigns, elemen
   virtualApertureDims, countElementsByType, formatElementCounts,
   GATE_PRESETS, MICRO_GATE_PRESETS, applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, FRAME_TUBE_OD,
   KIND, FREESTYLE_PALETTE_ORDER, MICRO_PALETTE_ORDER, PALETTE_EXTRA, paletteItems, docModeOf, isTrafficType, apertureShapeOf,
-  TUNING, tuningFor, ROAD_NODES_MAX, defaultDims, defaultPitch,
+  TUNING, tuningFor, ROAD_NODES_MAX, defaultDims, defaultPitch, SINK_MAX, lowestBase,
 } from './elements.js';
 import {
   boardPlanOf, planShapeOf, snapYaw, turnsOf,
 } from './view2d.js';
 import { starterMap } from '../maps/built/starter.js';
-import { PROP_TYPES, GAP_POINTS, FURNITURE_PALETTE, CAR_STYLES } from '../props/types.js';
-import { partsOf } from '../props/catalog.js';
+import { PROP_TYPES, GAP_POINTS, FURNITURE_PALETTE, CAR_STYLES, tiltOf, approxHeight } from '../props/types.js';
+import { partsOf, placedPartsOf } from '../props/catalog.js';
 import { GAP_MIN } from '../props/parts.js';
 import { startBlockDims, startBlockHeight, startBlockLaneOffset } from '../art/startblock.js';
 import { padsLayout } from '../props/course.js';
-import { placeDocument, seatDocument, topUnder, groundUnder, SUPPORT_TIE, OPEN_CLEAR } from '../maps/built/place.js';
+import { placeDocument, seatDocument, topUnder, groundUnder, indexTops, SUPPORT_TIE, OPEN_CLEAR } from '../maps/built/place.js';
 import { SEAT_SLACK, hasRaised, needsSeat, seatFloating, seatedNote, standsOnGround } from './seat.js';
-import { addSolids, placeSolids } from '../props/solids.js';
+import { addSolids, placeSolids, tiltParts, tiltMeasure } from '../props/solids.js';
 import {
   ROOM_TYPES, ROOM_COLOURS, ROOM_SIZE_MIN, ROOM_SIZE_MAX, isRoomType, clampRoomSize, roomBoxes, roomFootprint,
   propsBox, roomParts, roomSolids, roomWorldBoxes, roomHit, roomHitTest,
@@ -3337,6 +3338,582 @@ function suiteBoardPlan() {
   check('and its five named gaps keep their names',
     yardPlan.marks.filter((m) => m.k === 'gap').map((m) => m.n).join('|')
       === yard.elements.filter((e) => e.type === 'gap').map((e) => e.name).join('|'));
+}
+
+/*
+ * SINKING AN ASSET: bug-e605ff6a, "possibility to move objects below ground
+ * level to hide some part". The document and every module already held a
+ * negative base; the inspector and the height drag were the two things that
+ * clamped it at zero. See SINK_MAX in elements.js for what a sunk part is.
+ */
+function suiteSink() {
+  console.log('\nsinking an asset into the ground');
+
+  const solidsOf = (doc) => placeDocument(doc).solids.filter((s) => s.box).map((s) => s.box);
+  const topOf = (boxes) => Math.max(...boxes.map((b) => b[4]));
+  const bottomOf = (boxes) => Math.min(...boxes.map((b) => b[1]));
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const race = createTrack();
+    const c = freestylePlace(map, 'containers', 60, 60);
+    const gate = freestylePlace(map, 'gate', 90, 60);
+    const onRace = createElement(race, 'containers', { x: 10, y: 10, z: 0 }, 0);
+    check('an asset on a map may go 30 m down', lowestBase(map, c) === -SINK_MAX && SINK_MAX === 30);
+    check('a gate on a map may not: its height is Sill height, not its base', lowestBase(map, gate) === 0);
+    check('and nothing may on a race track', lowestBase(race, onRace) === 0);
+  }
+
+  /* -------- the reader -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const c = freestylePlace(map, 'containers', 60, 60);
+    const g = freestylePlace(map, 'gate', 90, 60);
+    c.position.z = -3;
+    const text = serialize(map);
+    const read = deserialize(text);
+    check('a sunk container reads back with no repairs, and round trips byte for byte',
+      read.repairs.length === 0 && serialize(read.doc) === text && elementById(read.doc, c.id).position.z === -3,
+      read.repairs.join('; '));
+    c.position.z = -100;
+    const deep = deserialize(serialize(map));
+    check('one sunk 100 m is held at 30, and the note says so',
+      elementById(deep.doc, c.id).position.z === -SINK_MAX && deep.repairs.some((t) => /under the ground/.test(t)),
+      JSON.stringify(deep.repairs));
+    check('the note names the element, so the author can find it', deep.repairs.some((t) => t.startsWith(`${c.id}:`)));
+    c.position.z = 0;
+    g.position.z = -2;
+    const gz = deserialize(serialize(map));
+    check('a gate\'s base is read as it was written, which it always was: only assets have the floor',
+      elementById(gz.doc, g.id).position.z === -2 && gz.repairs.length === 0);
+  }
+
+  /* -------- placement -------- */
+
+  {
+    const one = createTrack(undefined, 'full', 'freestyle');
+    const c = freestylePlace(one, 'containers', 80, 80, { dims: { stack: 2 } });
+    const up = solidsOf(one);
+    const top0 = topOf(up);
+    const bottom0 = bottomOf(up);
+    c.position.z = -1.3;
+    const sunk = solidsOf(one);
+    check('sinking moves every solid down by the same amount: its top',
+      Math.abs(topOf(sunk) - (top0 - 1.3)) < 1e-9, `${topOf(sunk)} against ${top0 - 1.3}`);
+    check('and its bottom, which is now under the paving', Math.abs(bottomOf(sunk) - (bottom0 - 1.3)) < 1e-9 && bottomOf(sunk) < 0);
+    check('and it has as many solids as it had, none lost by being half under the ground', sunk.length === up.length);
+    const placed = placeDocument(one);
+    const ix = indexTops(placed.solids);
+    const at = { x: placed.items[0].x, z: placed.items[0].z };
+    check('a half sunk roof is still a surface, at its true height over the paving',
+      Math.abs(topUnder(ix, at.x, at.z) - topOf(sunk)) < 1e-9 && topOf(sunk) > 0, `${topUnder(ix, at.x, at.z)}`);
+    check('so a craft over it lands on it, a millimetre under the top as ever',
+      Math.abs(groundUnder(ix, at.x, at.z) - (topOf(sunk) - SUPPORT_TIE)) < 1e-9);
+
+    /* Nothing sinks into the ground and floats up: a negative base is never set down. */
+    check('a sunk asset is not floating, and is not raised by the seat rule',
+      hasRaised(one) === false && seatDocument(one).moved.length === 0 && c.position.z === -1.3);
+    check('half sunk is no warning: it is what the author asked for', !codesOf(one).includes('fs-buried'), codesOf(one).join(','));
+
+    /* The whole of it under the paving, and nothing shows. */
+    const top = topOf(up);
+    c.position.z = -(top + 0.5);
+    const hidden = codesOf(one);
+    const w = freestyleReport(one).warnings.find((x) => x.code === 'fs-buried');
+    check('wholly under the ground is a warning, and names the container', Boolean(w) && w.elementId === c.id, hidden.join(','));
+    check('and nothing of it is a surface: a craft over it finds only the paving', topUnder(indexTops(placeDocument(one).solids), at.x, at.z) === 0);
+    /* The edge of the rule: a top 3 cm over the paving shows. */
+    c.position.z = -(top - 0.03);
+    check('with its top 3 cm over the paving it is not buried: a craft can land on a sliver',
+      !codesOf(one).includes('fs-buried'));
+    c.position.z = -(top - 0.01);
+    check('and 1 cm over it is, the physics\' own floor for a surface',
+      codesOf(one).includes('fs-buried'));
+  }
+
+  /* -------- the starter yard, and every asset sunk a little -------- */
+
+  {
+    const yard = normalize(starterMap()).doc;
+    const base = freestyleReport(yard).warnings.map((x) => x.code).filter((c) => c === 'fs-buried').length;
+    check('the starter yard has nothing buried', base === 0);
+    const doc = deepClone(yard);
+    let n = 0;
+    for (const el of doc.elements) {
+      if (ELEMENTS[el.type].kind === KIND.STRUCTURE) {
+        el.position.z -= 0.5;
+        n += 1;
+      }
+    }
+    const text = serialize(doc);
+    const read = deserialize(text);
+    check(`every one of the yard's ${n} assets sunk half a metre reads back with no repairs, byte for byte`,
+      read.repairs.length === 0 && serialize(read.doc) === text, read.repairs.join('; '));
+    let placedOk = true;
+    try {
+      placeDocument(read.doc);
+    } catch (e) {
+      placedOk = false;
+    }
+    check('and the sunk yard places', placedOk);
+  }
+}
+
+/*
+ * STANDING AN ASSET ON END: bug-e605ff6a, "possibility to rotate objects
+ * vertically, let's say to place container vertically". See tiltMeasure in
+ * src/props/solids.js for why a quarter turn about a horizontal axis needs
+ * no change to the physics.
+ */
+function suiteTilt() {
+  console.log('\nstanding an asset on end');
+
+  const boxesOf = (parts) => parts.filter((p) => p.t === 'box');
+  const sizes = (p) => [p.hi[0] - p.lo[0], p.hi[1] - p.lo[1], p.hi[2] - p.lo[2]];
+  const sortedSizes = (parts) => boxesOf(parts).map((p) => sizes(p).map((v) => Math.round(v * 1e9) / 1e9).sort((a, b) => a - b).join(',')).sort();
+  const extent = (parts, axis) => {
+    const live = parts.filter((p) => p.solid || p.draw);
+    return {
+      lo: Math.min(...live.map((p) => (p.t === 'box' ? p.lo[axis] : Math.min(p.a[axis], p.b[axis]) - p.r))),
+      hi: Math.max(...live.map((p) => (p.t === 'box' ? p.hi[axis] : Math.max(p.a[axis], p.b[axis]) + p.r))),
+    };
+  };
+  const make = (type, opts = {}) => {
+    const doc = createTrack(undefined, 'full', 'freestyle');
+    const el = freestylePlace(doc, type, 80, 80, opts);
+    return { doc, el };
+  };
+
+  /* -------- which assets, and how a pitch is read -------- */
+
+  {
+    check('the containers and the ledge are the assets that stand on end',
+      Object.entries(PROP_TYPES).filter(([, t]) => t.tilt).map(([id]) => id).sort().join(',') === 'containers,ledge');
+    const at = (type, pitch) => tiltOf({ type, pitch });
+    check('upright is 0, and a quarter either way is 1 and -1',
+      at('containers', 0) === 0 && at('containers', Math.PI / 2) === 1 && at('containers', -Math.PI / 2) === -1);
+    check('a pitch is read to the nearest quarter: 40 degrees is upright, 50 is on end',
+      at('containers', 40 * RAD) === 0 && at('containers', 50 * RAD) === 1 && at('containers', -50 * RAD) === -1
+      && at('ledge', 44 * RAD) === 0);
+    check('an asset that does not stand on end ignores it, as it always did',
+      at('building', Math.PI / 2) === 0 && at('crane', Math.PI / 2) === 0 && at('gap', 1) === 0);
+    check('and nonsense is upright', at('containers', NaN) === 0 && at('containers', undefined) === 0 && tiltOf(null) === 0);
+  }
+
+  /* -------- the reader -------- */
+
+  {
+    const { doc, el } = make('containers');
+    el.pitch = 1.2;
+    const read = deserialize(serialize(doc));
+    check('a container read with a pitch of 69 degrees is stood on end, exactly',
+      elementById(read.doc, el.id).pitch === Math.PI / 2, String(elementById(read.doc, el.id).pitch));
+    el.pitch = 0.3;
+    check('and with 17 degrees, flat, exactly 0', elementById(deserialize(serialize(doc)).doc, el.id).pitch === 0);
+    el.pitch = -Math.PI / 2;
+    const text = serialize(doc);
+    const back = deserialize(text);
+    check('a container stood the other way round trips byte for byte, with no repairs',
+      back.repairs.length === 0 && serialize(back.doc) === text && elementById(back.doc, el.id).pitch === -Math.PI / 2);
+    const b = freestylePlace(doc, 'building', 30, 30);
+    b.pitch = Math.PI / 2;
+    check('a building\'s pitch is left as it was written: it is not read, and the file is not rewritten for it',
+      Math.abs(elementById(deserialize(serialize(doc)).doc, b.id).pitch - Math.PI / 2) < 1e-6);
+  }
+
+  /* -------- the parts -------- */
+
+  for (const style of ['40ft', '20ft', '40ft open']) {
+    for (const stack of [1, 3, 5]) {
+      const { el } = make('containers', { style, dims: { stack } });
+      const up = partsOf(el);
+      const L = style === '20ft' ? 6.058 : 12.192;
+      for (const q of [1, -1]) {
+        const on = tiltParts(up, q);
+        const tag = `${style} x${stack}, ${q > 0 ? '+' : '-'}90`;
+        const ys = extent(on, 1);
+        const xs = extent(on, 0);
+        const zs = extent(on, 2);
+        const zu = extent(up, 2);
+        const exact = sortedSizes(on).join('|') === sortedSizes(up).join('|');
+        const ok = on.length === up.length
+          && exact
+          && ys.lo === 0
+          && Math.abs(xs.lo + xs.hi) < 1e-9
+          && zs.lo === zu.lo && zs.hi === zu.hi
+          && ys.hi >= L - 1e-9 && ys.hi <= L + 0.7 + 1e-9;
+        if (!ok) {
+          check(`${tag}: standing on end changes nothing but where the boxes are`, false, JSON.stringify({ n: [on.length, up.length], exact, ys, xs, zs }));
+        }
+      }
+    }
+  }
+  check('every container, in every style and stack and both ways, keeps its boxes\' sizes, stands on y = 0, is centred along x, and keeps its z', true);
+
+  {
+    const { el } = make('containers', { dims: { stack: 1 }, style: '40ft' });
+    const up = partsOf(el);
+    const on = placedPartsOf(Object.assign({}, el, { pitch: Math.PI / 2 }));
+    const b = boxesOf(on)[0];
+    check('one 40 foot container on end is 2.591 wide, 2.438 deep and 12.192 tall',
+      Math.abs((b.hi[0] - b.lo[0]) - 2.591) < 1e-9 && Math.abs((b.hi[2] - b.lo[2]) - 2.438) < 1e-9
+      && Math.abs((b.hi[1] - b.lo[1]) - 12.192) < 1e-9 && b.lo[1] === 0, JSON.stringify(b));
+    check('and flat it is what it was: placedPartsOf returns the layout itself, untouched',
+      placedPartsOf(el) === placedPartsOf(el) || placedPartsOf(el).length === up.length);
+    check('stood the one way the door end is up, the other way it is down',
+      tiltParts(up, 1)[0].hi[1] > 12 && tiltParts(up, -1)[0].hi[1] > 12);
+    check('a quarter and back is where it started, to the bit',
+      (() => {
+        const there = tiltParts(up, 1);
+        /* The measure of the stood parts, turned the other way, undoes it. */
+        const m1 = tiltMeasure(up, 1);
+        const back = tiltParts(there, -1);
+        const sameSizes = sortedSizes(back).join('|') === sortedSizes(up).join('|');
+        return sameSizes && Number.isFinite(m1.dx) && Number.isFinite(m1.dy);
+      })());
+  }
+
+  /* -------- where it lands -------- */
+
+  {
+    const { doc, el } = make('containers', { dims: { stack: 2 }, style: '40ft' });
+    const flat = placeDocument(doc);
+    const flatBoxes = flat.solids.map((s) => s.box);
+    el.pitch = Math.PI / 2;
+    const stood = placeDocument(doc);
+    const boxes = stood.solids.map((s) => s.box);
+    const bottom = Math.min(...boxes.map((b) => b[1]));
+    const top = Math.max(...boxes.map((b) => b[4]));
+    check('stood on end, the lowest solid is on the paving, exactly', bottom === 0, String(bottom));
+    check('and the tallest is as tall as the container is long, to within what a stack\'s offsets add', top >= 12.192 - 1e-9 && top <= 12.192 + 0.7 + 1e-9, String(top));
+    check('and the plan a flat stack covered, twelve metres long, is not what is covered now: a stack of two is a little over five',
+      Math.max(...flatBoxes.map((b) => b[3])) - Math.min(...flatBoxes.map((b) => b[0]))
+      > 2 * (Math.max(...boxes.map((b) => b[3])) - Math.min(...boxes.map((b) => b[0]))));
+    check('it has as many solids as it had', boxes.length === flatBoxes.length);
+    check('the element is where it was put: the middle of what it covers is its origin',
+      Math.abs((Math.max(...boxes.map((b) => b[0])) + Math.min(...boxes.map((b) => b[3]))) / 2 - stood.items[0].x) < 3);
+    check('and the pads found the container\'s top as a surface it can land on, over its own footprint',
+      (() => {
+        const ix = indexTops(stood.solids);
+        /* Half a metre off the middle, which is the seam between the two
+         * boxes of a stack of two and so on neither of them. */
+        const hit = topUnder(ix, stood.items[0].x + 0.5, stood.items[0].z);
+        return hit > 6;
+      })());
+
+    /* Sunk as well as stood: the one on the other. */
+    el.position.z = -2;
+    const both = placeDocument(doc).solids.map((s) => s.box);
+    check('sunk 2 m and stood on end, every solid is 2 m lower, still',
+      Math.abs(Math.min(...both.map((b) => b[1])) - (-2)) < 1e-9 && Math.abs(Math.max(...both.map((b) => b[4])) - (top - 2)) < 1e-9);
+    el.position.z = 0;
+
+    /* The plan, the pick box and the warnings read the same thing. */
+    const poly = planShapeOf(el, doc);
+    const px = poly.map((p) => p.x);
+    const py = poly.map((p) => p.y);
+    check('the plan draws what it covers now: a stack of two is about 5 m by 2.4, not 12 by 2.4',
+      Math.max(...px) - Math.min(...px) < 6.2 && Math.max(...py) - Math.min(...py) < 3.5,
+      `${(Math.max(...px) - Math.min(...px)).toFixed(2)} by ${(Math.max(...py) - Math.min(...py)).toFixed(2)}`);
+    check('and it reads back through a save, still on end',
+      elementById(deserialize(serialize(doc)).doc, el.id).pitch === Math.PI / 2);
+  }
+
+  /* -------- an open container, on end, is a shaft -------- */
+
+  {
+    const { doc, el } = make('containers', { dims: { stack: 1 }, style: '40ft open' });
+    el.pitch = Math.PI / 2;
+    const boxes = placeDocument(doc).solids.map((s) => s.box);
+    const cx = placeDocument(doc).items[0].x;
+    const cz = placeDocument(doc).items[0].z;
+    const H = Math.max(...boxes.map((b) => b[4]));
+    /* A column down the middle, half a metre square, from 30 cm up to 30 cm
+     * under the top: nothing in it. */
+    const blocked = boxes.filter((b) => b[0] < cx + 0.5 && b[3] > cx - 0.5 && b[2] < cz + 0.5 && b[5] > cz - 0.5
+      && b[4] > 0.3 && b[1] < H - 0.3);
+    check('an open container stood on end has nothing down its middle: a shaft to dive', blocked.length === 0, JSON.stringify(blocked));
+    const walls = (axisLo, axisHi) => boxes.filter((b) => b[axisLo] < b[axisHi]);
+    const clearX = (() => {
+      const xs = boxes.filter((b) => b[1] < 1 && b[4] > 10).map((b) => [b[0], b[3]]).sort((p, q) => p[0] - q[0]);
+      return xs.length >= 2;
+    })();
+    check('and it has walls: boxes that run the whole of its height', boxes.some((b) => b[4] - b[1] > 11) && walls(0, 3).length > 0 && clearX);
+    const widths = boxes.filter((b) => b[4] - b[1] > 11);
+    const inner = (() => {
+      /* The clear width across x between the two long walls nearest the middle. */
+      const left = Math.max(...widths.filter((b) => b[3] <= cx + 1e-6).map((b) => b[3]));
+      const right = Math.min(...widths.filter((b) => b[0] >= cx - 1e-6).map((b) => b[0]));
+      return right - left;
+    })();
+    check('the shaft is wider than the gap rule asks of a slot: more than 1.4 m clear',
+      inner > GAP_MIN, `${inner.toFixed(2)} m`);
+    check('and the builder says nothing about it', freestyleReport(doc).warnings.filter((w) => w.code !== 'fs-no-start').length === 0,
+      codesOf(doc).join(','));
+  }
+
+  /* -------- how tall, which the drag handle and the readout must never under-call -------- */
+
+  {
+    let ok = true;
+    for (const style of ['40ft', '20ft', '40ft open']) {
+      for (const stack of [1, 2, 3, 4, 5]) {
+        for (const variant of [1, 2, 3, 7, 19, 42, 99]) {
+          const { el } = make('containers', { dims: { stack, variant }, style });
+          el.pitch = Math.PI / 2;
+          const real = Math.max(...placeDocument(Object.assign(createTrack(undefined, 'full', 'freestyle'), { elements: [el] })).solids.map((s) => s.box[4]));
+          const said = approxHeight('containers', el.dims, style, 1);
+          if (!(said >= real - 1e-9)) {
+            ok = false;
+            check(`${style} x${stack} v${variant} on end is no taller than it is said to be`, false, `${real} over ${said}`);
+          }
+        }
+      }
+    }
+    check('stood on end, a container is never taller than the readout and the drag handle say, over every style, stack and seed', ok);
+    const { el } = make('ledge', { dims: { length: 14 } });
+    el.pitch = Math.PI / 2;
+    const real = Math.max(...placeDocument(Object.assign(createTrack(undefined, 'full', 'freestyle'), { elements: [el] })).solids.map((s) => s.box[4]));
+    check('a ledge stood on end is as tall as it is long, and never taller than it is said to be',
+      real >= 14 - 1e-9 && approxHeight('ledge', el.dims, null, 1) >= real - 1e-9, `${real}`);
+  }
+}
+
+/*
+ * DUPLICATE ON A MAP: bug-e605ff6a, "clone function to duplicate objects".
+ * The builder had Control D and a Copy button, for a track's room only, and
+ * the copy it made was a copy in a flying order a map does not have. See
+ * clone.js.
+ */
+function suiteClone() {
+  console.log('\nduplicate on a map');
+
+  const polyBox = (poly) => ({
+    minX: Math.min(...poly.map((p) => p.x)), maxX: Math.max(...poly.map((p) => p.x)),
+    minY: Math.min(...poly.map((p) => p.y)), maxY: Math.max(...poly.map((p) => p.y)),
+  });
+  const apart = (a, b) => a.maxX <= b.minX + 1e-6 || b.maxX <= a.minX + 1e-6
+    || a.maxY <= b.minY + 1e-6 || b.maxY <= a.minY + 1e-6;
+  const inPlot = (b, doc) => b.minX >= -1e-6 && b.minY >= -1e-6
+    && b.maxX <= doc.field.width + 1e-6 && b.maxY <= doc.field.depth + 1e-6;
+
+  /* -------- every kind of piece lands clear of itself -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const things = ['building', 'crane', 'containers', 'mast', 'bridge', 'tree', 'quarterPipe', 'billboard', 'gate', 'cone']
+      .map((type, i) => freestylePlace(map, type, 30 + (i % 3) * 40, 30 + Math.floor(i / 3) * 40));
+    let allApart = true;
+    let allInside = true;
+    for (const src of things) {
+      const doc = deepClone(map);
+      const { made } = cloneElements(doc, [src.id]);
+      const copy = elementById(doc, made[0]);
+      const a = polyBox(planShapeOf(elementById(doc, src.id), doc));
+      const b = polyBox(planShapeOf(copy, doc));
+      if (!apart(a, b)) {
+        allApart = false;
+        check(`a copy of a ${src.type} does not land on it`, false, JSON.stringify({ a, b }));
+      }
+      if (!inPlot(b, doc)) {
+        allInside = false;
+        check(`a copy of a ${src.type} stays on the plot`, false, JSON.stringify(b));
+      }
+    }
+    check('a copy of every kind of piece stands clear of the piece it copies', allApart);
+    check('and on the plot', allInside);
+
+    /* The crane is the case the track's rule could not do: its size is a jib,
+     * which `width`, `depth` and `clearW` never name. */
+    const doc = deepClone(map);
+    const crane = doc.elements.find((e) => e.type === 'crane');
+    const shift = cloneOffsetFor(doc, [crane]);
+    const reach = polyBox(planShapeOf(crane, doc));
+    check('a crane moves more than its own width, not the track rule\'s metre and a half',
+      Math.abs(shift.x) + Math.abs(shift.y) >= (reach.maxX - reach.minX) + CLONE_GAP - 1e-6
+      || Math.abs(shift.x) + Math.abs(shift.y) >= (reach.maxY - reach.minY) + CLONE_GAP - 1e-6,
+      JSON.stringify({ shift, reach }));
+  }
+
+  /* -------- what a copy is -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const b = freestylePlace(map, 'building', 60, 60, { yaw: Math.PI / 2, style: 'office' });
+    b.dims.floors = 9;
+    b.name = 'Office tower';
+    b.position.z = 0;
+    const before = serialize(map);
+    const { made, left } = cloneElements(map, [b.id]);
+    const copy = elementById(map, made[0]);
+    check('Duplicate makes one new piece, and leaves nothing out', made.length === 1 && left.length === 0);
+    check('with an id of its own', copy.id !== b.id && new Set(map.elements.map((e) => e.id)).size === map.elements.length);
+    check('the same type, style, size and heading',
+      copy.type === 'building' && copy.style === 'office' && copy.dims.floors === 9
+      && Math.abs(copy.yaw - b.yaw) < 1e-9 && copy.dims.width === b.dims.width);
+    check('and the same height off the ground', copy.position.z === b.position.z);
+    check('the copy is told apart by its type, so its name is empty', copy.name === '' && b.name === 'Office tower');
+    copy.dims.floors = 2;
+    copy.style = 'shop';
+    check('a copy is a copy, not the same object: editing it leaves the original as it was',
+      b.dims.floors === 9 && b.style === 'office');
+    check('and nothing joins a flying order a map does not have', map.sequence.length === 0);
+    const text = serialize(map);
+    const read = deserialize(text);
+    check('a map with a copy in it reads back with no repairs and round trips byte for byte',
+      read.repairs.length === 0 && serialize(read.doc) === text, read.repairs.join('; '));
+    check('and the original, before the copy, was untouched by it', before !== text && before.includes('Office tower'));
+  }
+
+  /* -------- the pads, a gap and a gate are special -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const pads = freestylePlace(map, 'startPads', 20, 20);
+    const gate = freestylePlace(map, 'gate', 40, 20);
+    const gap = freestylePlace(map, 'gap', 60, 20, { points: 1000, name: 'CRANE GAP' });
+    const n = map.elements.length;
+    const out = cloneElements(map, [pads.id, gate.id, gap.id]);
+    check('the start pads are not copied: a map has exactly one set',
+      out.left.length === 1 && out.left[0] === pads.id && out.made.length === 2
+      && map.elements.filter((e) => e.type === 'startPads').length === 1 && map.elements.length === n + 2);
+    const gapCopy = elementById(map, out.made[1]);
+    check('a copy of a named gap keeps its name and its points: it is the same window somewhere else',
+      gapCopy.type === 'gap' && gapCopy.name === 'CRANE GAP' && gapCopy.points === 1000);
+    check('a copied gate is furniture and joins no order', map.sequence.length === 0);
+    check('asking for nothing, or for something that is not there, is nothing, and changes nothing',
+      (() => {
+        const d = deepClone(map);
+        const a = cloneElements(d, []);
+        const c = cloneElements(d, ['no-such']);
+        return a.made.length === 0 && c.made.length === 0 && serialize(d) === serialize(map);
+      })());
+    check('only the pads cannot be copied: anyCloneable says so',
+      anyCloneable(map, [pads.id]) === false && anyCloneable(map, [pads.id, gate.id]) === true
+      && anyCloneable(map, []) === false && anyCloneable(map, ['no-such']) === false);
+  }
+
+  /* -------- several at once keep the layout they were selected in -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const a = freestylePlace(map, 'building', 30, 40);
+    const c = freestylePlace(map, 'containers', 55, 52);
+    const t = freestylePlace(map, 'tree', 70, 30);
+    const { made } = cloneElements(map, [a.id, c.id, t.id]);
+    const [a2, c2, t2] = made.map((id) => elementById(map, id));
+    const dx = a2.position.x - a.position.x;
+    const dy = a2.position.y - a.position.y;
+    check('three pieces move as one: the same shift for each, so the layout is kept',
+      Math.abs((c2.position.x - c.position.x) - dx) < 1e-9 && Math.abs((t2.position.x - t.position.x) - dx) < 1e-9
+      && Math.abs((c2.position.y - c.position.y) - dy) < 1e-9 && Math.abs((t2.position.y - t.position.y) - dy) < 1e-9);
+    const box = (els) => polyBox(els.flatMap((e) => planShapeOf(e, map)));
+    check('and the whole copy stands clear of the whole of what it copies',
+      apart(box([a, c, t]), box([a2, c2, t2])));
+  }
+
+  /* -------- the plot's edge -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const east = freestylePlace(map, 'building', map.field.width - 10, 80);
+    const o1 = cloneOffsetFor(map, [east]);
+    check('a piece against the east edge is copied to its west', o1.x < 0 && o1.y === 0, JSON.stringify(o1));
+    /*
+     * A PIECE THAT ALREADY STANDS OVER THE EDGE. A building set close to the
+     * plot's edge has its roof aerial and sign over it, by 0.4 m in a case
+     * found by the first version of this check, and a rule that wanted the
+     * copy wholly inside turned east, west and north all down for it and
+     * sent it south. Built here by construction, whatever the layout rolls:
+     * the plot's north edge is cut 0.4 m into the piece's own footprint.
+     */
+    const over = createTrack(undefined, 'full', 'freestyle');
+    const piece = freestylePlace(over, 'building', 60, 60);
+    const natural = polyBox(planShapeOf(piece, over));
+    over.field.depth = natural.maxY - 0.4;
+    over.field.width = 400;
+    const o2 = cloneOffsetFor(over, [piece]);
+    check('a piece over the north edge by 0.4 m is still copied east, which fits as well as it does',
+      o2.x > 0 && o2.y === 0, JSON.stringify(o2));
+    over.field.width = natural.maxX + 2;
+    const o2w = cloneOffsetFor(over, [piece]);
+    check('and with no room east as well, west: never south, which only the stricter rule chose',
+      o2w.x < 0 && o2w.y === 0 && natural.minX + o2w.x >= 0, JSON.stringify(o2w));
+    const wide = createTrack(undefined, 'full', 'freestyle');
+    wide.field.width = 20;
+    wide.field.depth = 20;
+    const big = freestylePlace(wide, 'building', 10, 10, { dims: { width: 18, depth: 16 } });
+    const o3 = cloneOffsetFor(wide, [big]);
+    check('a piece that fills the plot has no room anywhere, and is offered the east, where it can be dragged',
+      o3.x > 0 && o3.y === 0, JSON.stringify(o3));
+  }
+
+  /* -------- a road, and a car on it -------- */
+
+  {
+    const yard = normalize(starterMap()).doc;
+    const road = yard.elements.find((e) => e.type === 'road');
+    const car = yard.elements.find((e) => ELEMENTS[e.type].kind === KIND.VEHICLE && e.road === road.id);
+    const kindOfCar = vehiclePlace(yard, car);
+    const nBefore = yard.elements.length;
+    const { made } = cloneElements(yard, [car.id]);
+    const twin = elementById(yard, made[0]);
+    check('a copied car is on the same road, a car\'s length and a gap further along it',
+      twin.road === car.road && Math.abs(twin.dims.offset - (car.dims.offset + kindOfCar.length + CLONE_CAR_GAP)) < 1e-6
+      && twin.style === car.style && twin.drift === car.drift && twin.reverse === car.reverse
+      && yard.elements.length === nBefore + 1, JSON.stringify({ a: car.dims.offset, b: twin.dims.offset }));
+    const there = vehiclePlace(yard, twin);
+    const was = vehiclePlace(yard, car);
+    check('so it starts somewhere else on the plan, not on top of the car it copies',
+      Math.hypot(there.x - was.x, there.y - was.y) > 1, JSON.stringify({ was, there }));
+    check('the copy keeps no position of its own to be wrong: a vehicle\'s place is its road and its offset',
+      twin.position.x === car.position.x && twin.position.y === car.position.y);
+
+    const yard2 = normalize(starterMap()).doc;
+    const road2 = yard2.elements.find((e) => e.type === 'road');
+    const r = cloneElements(yard2, [road2.id]);
+    const road3 = elementById(yard2, r.made[0]);
+    const dx = road3.position.x - road2.position.x;
+    const dy = road3.position.y - road2.position.y;
+    check('a copied road is the same line moved: its nodes are relative to its position, so they are unchanged',
+      road3.nodes.length === road2.nodes.length
+      && road3.nodes.every((n, i) => n.x === road2.nodes[i].x && n.y === road2.nodes[i].y)
+      && (dx !== 0 || dy !== 0) && road3.closed === road2.closed);
+    check('and no vehicle is carried across to it: cars name a road, they do not belong to one',
+      yard2.elements.filter((e) => e.road === road3.id).length === 0);
+  }
+
+  /* -------- a group is a group of its own -------- */
+
+  {
+    const map = createTrack(undefined, 'full', 'freestyle');
+    const g1 = freestylePlace(map, 'gate', 40, 40);
+    const g2 = freestylePlace(map, 'gate', 44, 40);
+    g1.group = 'grp-1';
+    g2.group = 'grp-1';
+    const { made } = cloneElements(map, [g1.id, g2.id]);
+    const [c1, c2] = made.map((id) => elementById(map, id));
+    check('copies of a group are a group, with a name that is not the first one\'s',
+      c1.group && c1.group === c2.group && c1.group !== 'grp-1');
+  }
+
+  /* -------- the whole starter yard, every piece in it -------- */
+
+  {
+    const yard = normalize(starterMap()).doc;
+    const ids = yard.elements.map((e) => e.id);
+    const before = placeDocument(deepClone(yard));
+    const doc = deepClone(yard);
+    const { made, left } = cloneElements(doc, ids);
+    check('every piece of the starter yard but its pads has a copy', made.length === ids.length - left.length && left.length === 1);
+    const settled = seatDocument(doc).placed;
+    check('and the doubled yard places, with at least the solids of the first and of a second', settled.solids.length >= before.solids.length * 1.5,
+      `${settled.solids.length} against ${before.solids.length}`);
+    const text = serialize(doc);
+    const read = deserialize(text);
+    check('and reads back with no repairs, byte for byte', read.repairs.length === 0 && serialize(read.doc) === text, read.repairs.join('; '));
+  }
 }
 
 function suiteFreestyle() {
@@ -10583,6 +11160,9 @@ async function main() {
   suitePoleSquare();
   suiteSchemaDoc();
   suiteFreestyle();
+  suiteClone();
+  suiteSink();
+  suiteTilt();
   suiteBoardPlan();
   suiteSchemaProps();
   suiteRoadsAndVehicles();

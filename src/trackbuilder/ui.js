@@ -34,7 +34,7 @@ import {
   ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, countElementsByType,
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
   applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
-  elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits,
+  elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits, lowestBase,
 } from './elements.js';
 import {
   aperturesOf, elementById, kindOf, isSequenceable, logosOf, logoForDecal,
@@ -55,7 +55,7 @@ import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
 import { localBoundsOf, turnsOf } from './view2d.js';
 import {
-  PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf,
+  PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf, tiltOf,
 } from '../props/types.js';
 /* What a room's furniture may be sized to, so the fields hold to it. */
 import { isRoomType, clampRoomSize, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
@@ -746,6 +746,7 @@ export class Panels {
     }
     if (ids.length > 1) {
       host.append(el('p', 'tb-help', 'Drag to move them together. Delete removes them. Select one to edit its dimensions.'));
+      this.appendDuplicate(host, ids);
       /*
        * A PRESET APPLIES TO THE WHOLE SELECTION, and this is the half of
        * the request the single element picker does not answer. "So the
@@ -774,6 +775,9 @@ export class Panels {
     const def = ELEMENTS[element.type];
     const freestyle = docModeOf(doc) === 'freestyle';
     host.append(el('p', 'tb-kind', `${def.label}. ${def.note}`));
+    /* A map has no card in the room to hold Copy, so Duplicate is the first
+     * thing on its inspector, for every kind of piece. */
+    this.appendDuplicate(host, [element.id]);
 
     if (def.kind === KIND.ZONE) {
       this.renderGapInspector(host, element, def);
@@ -968,6 +972,24 @@ export class Panels {
   }
 
   /*
+   * DUPLICATE, ON A MAP ONLY. A track's Copy is on the card in the room and
+   * is Control D; a map keeps the plan and the orbiting preview, so it has
+   * no card, and the button is here. Nothing at all on a track, where the
+   * card has it and a second button would be a second way to do one thing.
+   * See cloneElements in ./clone.js for where the copy goes and what it
+   * leaves out.
+   */
+  appendDuplicate(host, ids) {
+    if (docModeOf(this.host.doc) !== 'freestyle') {
+      return;
+    }
+    const many = ids.length > 1;
+    host.append(button('Duplicate', 'tb-btn', () => this.host.copySelection(), many
+      ? 'A copy of all of them, beside them, keeping how they stand to each other. Control D'
+      : 'A copy beside it. Control D'));
+  }
+
+  /*
    * The heading, in degrees because that is how people think about a
    * heading, stored in radians. It goes through the app rather than
    * straight to setYaw, because a building keeps to the compass: the field
@@ -1001,8 +1023,12 @@ export class Panels {
         this.host.edit('move', (d) => { elementById(d, element.id).position.y = val; });
       }, { suffix: 'm' }),
       this.field(`z-${element.id}`, 'Base', element.position.z, (val) => {
-        this.host.edit('height', (d) => { elementById(d, element.id).position.z = Math.max(0, val); });
-      }, { suffix: 'm' }),
+        /* An asset on a map may be sunk, to hide some of it: lowestBase. */
+        this.host.edit('height', (d) => {
+          const e2 = elementById(d, element.id);
+          e2.position.z = Math.max(lowestBase(d, e2), val);
+        });
+      }, { suffix: 'm', min: lowestBase(this.host.doc, element) }),
     );
     host.append(grid);
   }
@@ -1069,7 +1095,35 @@ export class Panels {
     }
 
     this.appendPositionGrid(host, element);
+    if (element.position.z < -0.005) {
+      /* Said in plain words, because a part that is gone from the preview is
+       * otherwise a bug report: it is under the ground, which hides it. */
+      host.append(el('p', 'tb-help', `Sunk ${show(-element.position.z, 2)} m into the ground. What is under the ground is neither drawn nor solid; a negative Base is how a piece is half hidden.`));
+    }
     this.appendYawField(host, element);
+    /*
+     * STANDING ON END, for the assets that can: a container is as tall as it
+     * is long, and an open one is then a square shaft with both ends open.
+     * Two words, not a number: a quarter turn is the only thing a box can be
+     * turned about a horizontal axis and stay a box, which is why the
+     * document's pitch is read to the nearest quarter (tiltOf).
+     */
+    if (def.tilt) {
+      const q = tiltOf(element);
+      const stand = (pitch, label) => () => this.host.edit(label, (d) => {
+        const e2 = elementById(d, element.id);
+        if (e2) {
+          e2.pitch = pitch;
+        }
+      });
+      this.segRow(host, 'Stands', [
+        { label: 'Flat', on: q === 0, run: stand(0, 'lay it flat') },
+        { label: 'On end', on: q !== 0, run: stand(Math.PI / 2, 'stand it on end') },
+      ]);
+      host.append(el('p', 'tb-help', element.type === 'containers'
+        ? 'On end it stands as tall as it is long, with the stack beside it. The open style stood on end is a square shaft, open at both ends: a line to dive down.'
+        : 'On end it stands as tall as it is long.'));
+    }
 
     host.append(el('h3', null, 'Size'));
     const dims = el('div', 'tb-grid2');
@@ -1102,8 +1156,9 @@ export class Panels {
 
     /* What that adds up to, in the terms a pilot thinks in. */
     const b = localBoundsOf(element);
-    const tall = elementHeight(def, element.dims, propStyleOf(element));
-    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground.`));
+    const tall = elementHeight(def, element.dims, propStyleOf(element), tiltOf(element));
+    const sunk = element.position.z < -0.005 ? `, with ${show(-element.position.z, 1)} m of it under the ground` : '';
+    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground${sunk}.`));
   }
 
   /* A heading and a row of segment buttons, one of them on: the inspector's

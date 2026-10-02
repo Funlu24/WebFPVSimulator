@@ -32,6 +32,7 @@
 
 import {
   ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
+  lowestBase,
 } from './elements.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
@@ -54,6 +55,7 @@ import {
   addSpiral, flyOver, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
   setWallSize, setWallWeave, wallOf,
 } from './parts.js';
+import { cloneElements, anyCloneable } from './clone.js';
 import { scaleOf } from './scale.js';
 import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
@@ -2034,7 +2036,9 @@ export class App {
       if (!element || this.isGrounded(element)) {
         continue;
       }
-      const wanted = Math.max(0, fromZ + dz);
+      /* An asset on a map may be pulled down under the ground, to hide part
+       * of it (lowestBase in ./elements.js); everything else stops at it. */
+      const wanted = Math.max(lowestBase(this.doc, element), fromZ + dz);
       element.position.z = fine ? wanted : Math.round(wanted * 4) / 4;
     }
     applyAutoFaces(this.doc);
@@ -2206,13 +2210,34 @@ export class App {
    * COPY WHAT IS SELECTED, beside it (Control D). One undo step, and the
    * copies are what is selected afterwards, so a second press copies the copy
    * one gate further on.
+   *
+   * A TRACK AND A MAP COPY DIFFERENTLY. A track's copy is a copy in its
+   * flying order, laid by the gate's own width (copyElements). A map has no
+   * flying order and its pieces are not gates, so its copy is laid clear of
+   * the ground the piece covers and goes onto no order (cloneElements, in
+   * ./clone.js). This used to return for a map, and the key was left to the
+   * browser, which bookmarked the page: bug-e605ff6a, "Clone function to
+   * duplicate objects".
    */
   copySelection() {
-    if (!this.selection.size || !this.buildsIn3D()) {
+    if (!this.selection.size) {
       return;
     }
+    const ids = [...this.selection];
     let made = [];
-    this.edit('copy', (d) => { made = copyElements(d, [...this.selection]); });
+    if (this.buildsIn3D()) {
+      this.edit('copy', (d) => { made = copyElements(d, ids); });
+    } else {
+      if (!anyCloneable(this.doc, ids)) {
+        this.toast('A map has one set of start pads, so they are not copied.');
+        return;
+      }
+      let left = [];
+      this.edit('duplicate', (d) => { ({ made, left } = cloneElements(d, ids)); });
+      if (left.length) {
+        this.toast('The start pads were left out of the copy: a map has one set.');
+      }
+    }
     if (made.length) {
       this.setSelection(made);
     }
@@ -5588,9 +5613,10 @@ export class App {
         this.setSelection(this.doc.elements.map((el) => el.id));
         return;
       }
-      /* Control D copies on a track, and would otherwise be the browser's
-       * bookmark. On a map it is left to the browser. */
-      if (mod && e.key.toLowerCase() === 'd' && this.buildsIn3D()) {
+      /* Control D copies, on a track and on a map, and would otherwise be the
+       * browser's bookmark. It was left to the browser on a map, where a
+       * pilot pressing it to duplicate a building got a bookmark dialog. */
+      if (mod && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         this.copySelection();
         return;

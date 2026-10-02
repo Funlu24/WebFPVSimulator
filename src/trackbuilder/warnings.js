@@ -864,6 +864,8 @@ function label(el) {
  *   fs-gap-blocked   warn  a named gap with a solid across its window
  *   fs-outside       warn  an element standing outside the plot, or
  *                          reaching past its edge
+ *   fs-buried        warn  an asset sunk wholly under the ground: nothing
+ *                          of it is drawn or solid
  *   fs-solids        warn  more solids than a map is budgeted
  *   fs-crowded       warn  a patch of the physics' grid holding more shapes
  *                          than it looks at round the craft at once, so
@@ -937,6 +939,10 @@ const OVERLAP_EPS = 0.01;
 /* How far past the edge of the plot a solid may reach before it counts as
  * outside it. */
 const PLOT_SLACK = 0.5;
+
+/* A box whose top is no higher than this over the paving is under the ground
+ * as far as a craft is concerned: the physics' own 2 cm (WORLD_BURIED). */
+const BURIED_TOP = 0.02;
 
 /* A named gap's window is shrunk by this at its edges before testing, so a
  * gap drawn to exactly fill the space between two walls is not blocked by
@@ -1119,6 +1125,22 @@ export function freestyleReport(doc) {
     if (b && (b.box[0] < -W / 2 - PLOT_SLACK || b.box[3] > W / 2 + PLOT_SLACK
       || b.box[2] < -D / 2 - PLOT_SLACK || b.box[5] > D / 2 + PLOT_SLACK)) {
       out.push(warn('fs-outside', `${cap(names(el))} reaches past the edge of the plot.`, { elementId: el.id }));
+    }
+  }
+
+  /*
+   * SUNK OUT OF SIGHT. A negative Base hides what is under the ground, which
+   * is the point (lowestBase in ./elements.js), and an asset hidden wholly
+   * is gone from the preview and from the air with nothing in the plan to
+   * say why. Its highest solid top is at or under the paving, the same floor
+   * the physics gives a box before it stops being a surface (indexTops in
+   * src/maps/built/place.js, WORLD_BURIED in src/native/world.c).
+   */
+  for (const b of bodies) {
+    if (b.box[4] <= BURIED_TOP) {
+      out.push(warn('fs-buried', `${cap(names(b.el))} is sunk wholly under the ground, so nothing of it shows and nothing of it is solid. Raise its Base to bring it up.`, {
+        elementId: b.el.id,
+      }));
     }
   }
 

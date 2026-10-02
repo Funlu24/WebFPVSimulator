@@ -45,7 +45,8 @@ import * as TownTex from '../maps/city/vendored/core/textures.js';
 import { buildCar, CAR } from '../art/cars.js';
 import { makeVendingMachine } from '../maps/city/vendored/world/vending.js';
 import { paintGateHeader, paintGateSleeve, bannerCanvas, BANNER_SIZE } from '../art/banners.js';
-import { styleOf } from './types.js';
+import { styleOf, tiltOf } from './types.js';
+import { tiltMeasure, tiltParts } from './solids.js';
 import { assetOf, partsOf, FAMILY_MATERIALS, FAMILY_PAINTERS } from './catalog.js';
 import * as PT from './textures.js';
 
@@ -1013,7 +1014,9 @@ export class PropKit {
 
   /*
    * Draw an element in the current frame: its parts, then its paint.
-   * Returns its parts, which the caller may want for its solids.
+   * Returns its parts AS IT STANDS, which the caller may want for its solids
+   * or its pick boxes: the layout's own, or stood on end if it is, so what
+   * comes back is where the drawn thing is.
    */
   element(el) {
     const a = assetOf(el);
@@ -1023,13 +1026,40 @@ export class PropKit {
     const style = styleOf(el);
     const view = style && style !== el.style ? { ...el, style } : el;
     const parts = partsOf(view);
-    for (const p of parts) {
-      this.part(p);
+    /*
+     * STOOD ON END (tiltMeasure in ./solids.js): the whole element turns, the
+     * parts and everything an asset's draw() paints over them, because both
+     * are written in the upright frame. The matrix is the turn itself, with
+     * cosine 0 and sine q, written out so no engine's cosine of a quarter pi
+     * leaves a sliver of skew in it, and the two offsets the solids use.
+     * Restored afterwards, so the next element is placed from the frame it
+     * was begun in.
+     */
+    const q = tiltOf(view);
+    let saved = null;
+    if (q) {
+      const m = tiltMeasure(parts, q);
+      saved = this.place.clone();
+      this.place.multiply(new THREE.Matrix4().set(
+        0, -q, 0, m.dx,
+        q, 0, 0, m.dy,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ));
     }
-    if (a.draw) {
-      a.draw(view, parts, this);
+    try {
+      for (const p of parts) {
+        this.part(p);
+      }
+      if (a.draw) {
+        a.draw(view, parts, this);
+      }
+    } finally {
+      if (saved) {
+        this.place.copy(saved);
+      }
     }
-    return parts;
+    return q ? tiltParts(parts, q) : parts;
   }
 
   /*

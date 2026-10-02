@@ -304,7 +304,9 @@ async function loadFreestyle() {
           trafficError = e.message ?? String(e);
         }
       }
-      FS = { assetOf: catalog.assetOf, partsOf: catalog.partsOf, placedYaw: solids.placedYaw };
+      FS = {
+        assetOf: catalog.assetOf, partsOf: catalog.partsOf, placedPartsOf: catalog.placedPartsOf, placedYaw: solids.placedYaw,
+      };
       return FS;
     })().catch((e) => {
       /* Forgotten, so the next time the view opens on a map it asks again
@@ -4139,7 +4141,9 @@ export class View3D {
     const g = new THREE.Group();
     let parts;
     try {
-      parts = FS.partsOf(el);
+      /* As it stands, stood on end if it is: this is what is drawn when the
+       * kit is not, so it has to be where the solids are. */
+      parts = FS.placedPartsOf(el);
     } catch (e) {
       console.error(`3D preview: the ${el.type} asset has no layout`, e);
       return g;

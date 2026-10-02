@@ -224,9 +224,9 @@ course; that is what `sequence` is for.
 | `id` | string | `el-` and a number. Unique within the document. Referenced by `sequence[].elementId`. |
 | `type` | string | One of the element types below. An unknown type means the whole element is dropped on read. |
 | `name` | string | The author's label for it. May be empty, in which case the tool shows the type's name. |
-| `position` | object | Where the element's **base** sits: `x` and `y` on the ground, `z` the height of the base above what it stands on. `0` for nearly everything: a bar, a waypoint, a named gap, an opening with no pipe and, on a map, something stood on a roof or on another asset are the only ones with any other. Anything else with a `z` over 5 cm and nothing under it is set down when it is read: see **Nothing floats**. |
+| `position` | object | Where the element's **base** sits: `x` and `y` on the ground, `z` the height of the base above what it stands on. `0` for nearly everything: a bar, a waypoint, a named gap, an opening with no pipe and, on a map, something stood on a roof or on another asset are the only ones with any other. Anything else with a `z` over 5 cm and nothing under it is set down when it is read: see **Nothing floats**. A map's **asset** may have a negative `z`, down to -30 m: it is sunk into the ground to hide part of it, and what is under the ground is neither drawn nor solid (`SINK_MAX` and `lowestBase` in `elements.js`). Nothing else may go under the ground. |
 | `yaw` | number, radians | Which way the element faces. See the conventions above. |
-| `pitch` | number, radians | Tilt of the aperture plane. Meaningful only for aperture elements; written as `0` for everything else. |
+| `pitch` | number, radians | Tilt of the aperture plane. Meaningful only for aperture elements, and for the freestyle assets that stand on end (see **Standing on end**), where it is `0` upright and a quarter turn, plus or minus 90 degrees, on end; written as `0` for everything else. |
 | `yawOverridden` | boolean | `true` when the AUTHOR set the heading, which stops the tool re-deriving it. See **Faces and pass sides**. |
 | `dims` | object | Dimensions, in metres, whose keys depend on `type`. Always complete: a missing key is filled from the default on read. |
 | `text` | string | **Labels only.** The text drawn on the field. |
@@ -263,6 +263,12 @@ goes. The stored file is not rewritten, so a track on the board keeps the layout
 its times were set on, and the builder says what it set down. Lifting a gate's
 opening off the ground is what `sillH` is for: the legs stand on the ground and
 the opening is up on them.
+
+A negative `z` is not floating and is never set down: it is the opposite, an
+asset sunk on purpose, and the rule above does not look at it. The part under the
+ground is not drawn (the plot is drawn over it) and is never a surface (a box whose
+top is under the paving is not one), and the part over it is as solid as it is drawn.
+The builder warns, `fs-buried`, when an asset is sunk wholly out of sight.
 
 Four kinds of thing are left alone, because nothing built is held up:
 
@@ -631,6 +637,34 @@ The world holds two shapes, boxes that cannot turn and capsules that can
   (`placedYaw` in `src/props/solids.js`), so the drawing and the solids
   always agree.
 
+### Standing on end
+
+The containers and the ledge can stand on one end, so a container is as tall as
+it is long: a shaft to dive down when it is the open style. It is the
+element's `pitch`, read to the **nearest quarter turn** (`tiltOf` in
+`src/props/types.js`): `0` is upright, `1.570796` (90 degrees) and `-1.570796`
+are on end, the two ways round, and what is between is read as the nearer, so
+the document holds the pitch that is built and the builder writes `0` or a
+quarter. Any other asset ignores its `pitch`, as it always did.
+
+The world holds axis aligned boxes, and a box turned a quarter about a
+horizontal axis is one, with two of its extents swapped, so this needs nothing
+of the physics. The turn is about the asset's own right axis (`+z`), so a
+positive quarter raises the end it faces (a container's door end), and the
+asset is **set back on its base** and **centred along its heading**: its lowest
+point is on `position.z`, and the middle of what it covers is its origin, not
+the end of a stack that used to be up. `tiltMeasure` and `tiltParts` in
+`src/props/solids.js` are the one answer, read by the solids (`placedPartsOf`
+in `src/props/catalog.js`) and by the drawing (the kit turns everything an
+asset paints with the same turn and offsets), so they cannot disagree. A stack
+of containers lies beside itself on end, and the offset of each along its
+length, up to 0.35 m, is now up and down.
+
+The `pitch` rule for a heading is the one for `yaw`: an asset with boxes keeps
+to the compass, and `turns` above still says so. Standing on end composes with
+it, and with a negative `z`: a container stood on end and sunk 2 m has its
+foot 2 m under the ground.
+
 ### An asset's own frame
 
 Every asset is laid out in its own frame (`src/props/parts.js`): `+x` is its
@@ -785,6 +819,7 @@ through is a trap, not a line.
 | `fs-slot` | warn | a space between two elements' solids wider than 5 cm and narrower than 1.4 m |
 | `fs-gap-blocked` | warn | a named gap has a solid across its window |
 | `fs-outside` | warn | an element stands outside the plot, or its solids reach more than half a metre past its edge |
+| `fs-buried` | warn | an asset is sunk wholly under the ground (its highest solid top is within 2 cm of the paving or under it), so nothing of it is drawn or solid |
 | `fs-solids` | warn | the map has more than 20000 solids |
 | `fs-crowded` | warn | two by two cells of the physics' 8 m grid hold more than the 1024 shapes it checks round a craft, so some would be left out |
 

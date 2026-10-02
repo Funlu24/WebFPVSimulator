@@ -25,6 +25,12 @@
  *   styles    optional list of looks; the first is the default
  *   note      one line for the palette's tooltip and the inspector
  *   zone      true for a scoring zone: never solid, never drawn in the air
+ *   tilt      'quarter' for an asset that may stand on its end: the element's
+ *             `pitch` is then 0 (upright) or +-90 degrees (on end), and
+ *             tiltOf below says which. A box turned a quarter about a
+ *             horizontal axis is still an axis aligned box, which is the
+ *             whole of why this needs no change to the physics. An asset
+ *             without it ignores `pitch`, as every asset always has.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -192,8 +198,9 @@ export const PROP_TYPES = {
     key: '8',
     group: 'industrial',
     turns: 'quarter',
+    tilt: 'quarter',
     styles: CONTAINER_STYLES,
-    note: 'A stack of shipping containers. The open style leaves the bottom one empty with both ends off: a tunnel.',
+    note: 'A stack of shipping containers. The open style leaves the bottom one empty with both ends off: a tunnel. Stood on end it is a shaft to dive down.',
     dims: { stack: 2, variant: 1 },
     limits: { stack: [1, 5, INT], variant: [1, 99, INT] },
     labels: { stack: 'Stack', variant: 'Variant' },
@@ -290,7 +297,8 @@ export const PROP_TYPES = {
     key: 'M',
     group: 'skate',
     turns: 'quarter',
-    note: 'A concrete ledge with a steel edge on its front.',
+    tilt: 'quarter',
+    note: 'A concrete ledge with a steel edge on its front. Stood on end it is a slab, as tall as it is long.',
     dims: { length: 6, height: 0.5, depth: 0.9 },
     limits: { length: [1, 30, M], height: [0.2, 2, M], depth: [0.3, 4, M] },
     labels: { length: 'Length', height: 'Height', depth: 'Depth' },
@@ -353,6 +361,30 @@ export function styleOf(el) {
     return null;
   }
   return def.styles.includes(el.style) ? el.style : def.styles[0];
+}
+
+/*
+ * THE QUARTER TURNS AN ELEMENT IS STOOD ON END BY: 0 upright, 1 or -1 on
+ * end, about the asset's own right axis (parts.js's +z), so that +1 raises
+ * the end the asset faces. Only an asset with `tilt` has any, and its pitch
+ * is read to the nearest quarter, so a hand edited 40 degrees is upright
+ * and 50 is on end, the way a building's heading is read to the nearest
+ * compass point (placedYaw in ./solids.js). Plain comparisons against pi,
+ * no trigonometry: this is on the physics' path.
+ */
+export function tiltOf(el) {
+  const def = PROP_TYPES[el?.type];
+  if (!def || !def.tilt) {
+    return 0;
+  }
+  const p = Number(el.pitch);
+  if (!Number.isFinite(p)) {
+    return 0;
+  }
+  if (p > Math.PI / 4) {
+    return 1;
+  }
+  return p < -Math.PI / 4 ? -1 : 0;
 }
 
 /* A dimension, clamped into its limits, a count rounded. Never throws. */
@@ -425,8 +457,26 @@ const CAR_H = { kei: 1.7, keivan: 1.88, hatch: 1.52, sedan: 1.44, wagon: 1.54, m
  */
 const TREE_H = { sakura: 8.35, street: 8.35, pine: 15.35 };
 
-export function approxHeight(type, dims, style) {
+/* A container's length by its style, m: what it stands tall when it is stood on its end. */
+const CONTAINER_LEN = { '40ft': 12.192, '20ft': 6.058, '40ft open': 12.192 };
+
+export function approxHeight(type, dims, style, tilt = 0) {
   const d = dims || {};
+  /* Stood on end, an asset is as tall as it was long, and the stack that was
+   * up is now beside it. Only the two assets that tilt (tilt in PROP_TYPES).
+   * A container above the first is set down off square by up to 0.35 m along
+   * its length (containerSpec in ./industrial.js), which on end is UP and
+   * down: one that is 0.35 m low and one that is 0.35 m high stand 0.7 m
+   * apart, and it is the lowest that sits on the ground. A single one has no
+   * offset. Measured over every style, stack and seed by suiteTilt. */
+  if (tilt) {
+    if (type === 'containers') {
+      return (CONTAINER_LEN[style] ?? CONTAINER_LEN['40ft']) + ((d.stack ?? 1) > 1 ? 0.75 : 0.05);
+    }
+    if (type === 'ledge') {
+      return (d.length ?? 6) + 0.05;
+    }
+  }
   switch (type) {
     case 'building': {
       const b = BUILDING_H[style] ?? BUILDING_H.flats;
