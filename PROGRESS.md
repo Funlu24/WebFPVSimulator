@@ -64287,3 +64287,43 @@ handle; and a map's copy is the other session's `cloneElements`, not this work's
   holds its copy to its own manifest, so nothing there breaks and it stays as it is until somebody runs
   `node scripts/vendor.js ../WebFPVSimulator` there.
 - **Pushing to main** is not done. The owner asked for the build, not the push, and the branch has everything.
+
+## 2026-10-02 | builder | The push to main, and what the live site serves (the owner's ask)
+
+The owner: "push to main". Nothing here changes the physics, the plant, the module ABI or the build, and
+`git diff --stat vendor/betaflight` is empty.
+
+### The push
+
+Fetched first. Main was 13b9a1b, the other session's last commit, and an ancestor of this branch's head 7f3b3a1, which
+is the merge of that main into the branch (the entry above). So `git push origin HEAD:main` was a fast forward:
+13b9a1b..7f3b3a1 at 06:15:00 UTC. Nothing was rewritten or forced. The branch `claude/cool-faraday-kc254c` is the same
+commit. What went is the map built in the room (two commits) and the merge, which brings the work of the six commits
+before it into the room.
+
+### The live site
+
+Before the push, the 10 served files it changes (`place.js`, `app.js`, `edit3d.js`, `elements.js`, `index.html`, `seat.js`,
+`selftest.js`, `ui.js`, `view2d.js`, `view3d.js`) were read from https://webfpv.org/sim/ through a cache busting query and
+each was main's to the byte, so the comparison after it could tell a deploy from none. `src/fresh.js` is not among them,
+so it could not be the sentinel it was last time: `view3d.js` was polled every 20 seconds, still the old one at 1, 22 and
+42 s and the new one at 63 s. Only then were the others asked for. All ten already existed on the site, so there was no
+404 for the edge to keep.
+
+    live              10 of 10 changed served files answer 200 and are identical to main by sha256; the front page
+                      and the builder page answer 200
+    deploy stamp      Last-Modified 06:15:54 UTC on the builder page, 54 s after the push, which is the stamp
+                      src/fresh.js turns into the modules' addresses, so a returning browser asks for this deploy's
+                      scripts and not the ones it kept
+    not run           a browser against the live site; nobody has built a map in the room on the live site, or flown
+                      one built there
+
+### For the owner
+
+- **The landing page vendors `place.js` and `elements.js`** among the files this push changes, copied from an older
+  simulator commit. Its lint holds its copies to its own manifest, so nothing there breaks, and they stay as they are
+  until somebody runs `node scripts/vendor.js ../WebFPVSimulator` there. This work adds `supportsFor` to the first and
+  `MAP_TOOLS` and a mode argument on `toolByKey` to the second, and changes no answer either gave; the yard the front
+  door draws uses none of them.
+- Neither of the other two repositories had anything on its branch to push.
+- **The fly it pass from the entry above is still open.** The push does not stand in for it.
