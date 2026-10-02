@@ -63620,3 +63620,40 @@ The one change to the document, `wrap`, is optional and additive, and is put to 
 The questions in the plan's section 6: roll on a gate (a banked angled gate), what a tunnel and a sky bridge are, the
 arch and the keyhole, the board's vocabulary, a crossover rule, a check for something over a climbing turn, and the
 new word. And two readings to confirm: what a slurdle is, and how big a super hurdle is.
+
+## 2026-10-02 | builder | The push to main, and a stale fresh.js (the owner's ask)
+
+The owner: "Push to main". Nothing here changes the physics, the plant, the module ABI or the build, and
+`git diff --stat vendor/betaflight` is empty.
+
+### The push
+
+Fetched main first. `git merge-base origin/main HEAD` answered 3d6fe3a, which is main itself, so this was a fast
+forward and nothing was rewritten or forced. `git push origin HEAD:main`: 3d6fe3a..7373d52, the three commits of the
+variants work (the builder's figures, sections, hurdles, handed stacks and launch gate; the checks and the write up;
+`src/fresh.js`). The branch `claude/cool-faraday-kc254c` is the same commit.
+
+### What went wrong
+
+- **`src/fresh.js` was stale, and my earlier check of it was not evidence.** Straight before the push `lint:preload` said
+  STALE (249 served where the file said 245). `gen-preload` counts the files git tracks, and when I ran it during the work
+  the four new modules (`flightpaths.js`, `glyphs.js`, `manoeuvres.js`, `runs.js`) were not yet committed, so it said up to
+  date about a tree it could not see. Regenerated with `node scripts/gen-preload.js`; `lint:preload` up to date, `check:fresh`
+  18 passed (versioned 249). Without it a returning browser would have asked for the new modules at the address it
+  already had, which is how a stylesheet once met an old script on the front door. It went to main in the same push.
+
+### The live site, after the push
+
+About two and a half minutes after the push (the first two polls still served the old files), the 16 served files that
+changed (`src/fresh.js`, `index.html` and the 14 modules under `src/trackbuilder/`) were compared with what main holds,
+by sha256, through a cache busting query: 16 same, 0 differ.
+
+    self test            2139 passed, 0 failed, on the tree that went to main
+    lint:preload         up to date, boot 127 modules, city 75, built 33; 249 served
+    check:fresh          18 passed, 0 failed
+    lint:nouns           PASS
+    mission-preset       --check clean
+    live                 16 of 16 served files identical to main
+    other repositories   no change, nothing to push
+    not run              a browser against the live site (headless Chromium here has no route out); `npm run verify`
+                         (no physics, plant, ABI or build change); and nobody has flown a figure
