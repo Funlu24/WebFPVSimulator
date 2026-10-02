@@ -63657,3 +63657,109 @@ by sha256, through a cache busting query: 16 same, 0 differ.
     other repositories   no change, nothing to push
     not run              a browser against the live site (headless Chromium here has no route out); `npm run verify`
                          (no physics, plant, ABI or build change); and nobody has flown a figure
+
+## 2026-10-02 | builder, plan | The freestyle map is built in the room, as the whoop and the five inch are (the owner's ask)
+
+The owner, after the variants work: "excellent work, now lets improve the freestyle builder to allow for the 3d building like
+we've done with the whoop and 5 inch tracks". Nothing here changes the physics, the plant, the module ABI or the build, no
+field is added to the document (`schemaVersion` stays 3), and `git diff --stat vendor/betaflight` is empty. The plan is
+FREESTYLE-3D-BUILD-PLAN.md; section 6 of it lists the decisions it takes on the owner's behalf, and section 8 what differs.
+
+### How it was read
+
+The map was the one canvas built on the 2D plan, with its 3D view a preview where "a click there places nothing". The whoop
+and the five inch are built in the room: a ghost follows the pointer, a click puts the piece down, a press takes it, a ring
+turns it, a card floats beside it, a line at the foot says what the pointer does. A map is the same gestures with a map's
+things in them: assets that stand on other assets (seat.js), a few that keep to the compass, roads laid node by node, cars
+dropped on roads, named gaps, paint, and no flying order.
+
+### What changed
+
+- **`app.js`.** `buildsIn3D()` is yes on every canvas, so a map opens in the room by itself (waiting for the kit as well as
+  Three.js) with the room's chrome: the drawer, the card, the coach line, the empty state, the bar along the foot.
+  `previewing()`, the hop to 2D a picked tool made, the preview's height drag (`raiseSelected`, `isGrounded`) and the preview's
+  other handlers in `view3d.js` are gone. New: a height on `placeAt`, `moveSelected` carries a piece's height and, with
+  `carriedBy`, what stands on it (an arrow key nudge too); `turnWanted` (the plan's own `snapYaw` on a map, so the room and
+  the plan agree about a heading); `roadAt`, `carGhostAt`; Page Up and Page Down step a gap; F frames what a selection takes
+  on the ground and in the air; Control D puts a copy of a car further along its road; the road draft redraws the coach.
+- **`edit3d.js`.** The ghost of a map's piece, the surface under the pointer for a click and a drag, the grab point kept under
+  the pointer at the height the piece has been carried to, the ring's turn on a roof, the road tool (a click a node, the first
+  node closes, a right click puts a draft away), the car drop and slide, a road's nodes and the knob between two, a press on
+  tarmac selecting the road, and the plan's own rule for what a box takes.
+- **`view3d.js`.** `stage()` (the ghost, guides, distances, ruler and ring were put in the race scene's root, which a map
+  never renders), `surfaceAt` (the nearest solid thing the pointer ray meets, or the ground, then the highest top under it),
+  `landings`, `standAt`, the ghost of a map's piece (its solids, mint, see-through, no depth), the ring sized in pixels
+  (`fitRing`), a hover outline, a selected road's line and handles, a selected car's box, the road being laid, the car about
+  to be dropped, the overlay (warning marks, distances) over a map.
+- **`ui.js`.** The map's card (style, X, Y, Base, Turn, size; a road's shape and lanes; a car's driving and direction; a
+  gap's name and points; paint's size; a label's text; the small bar on a touched screen), its coach line, its empty state,
+  its bar (Things, Solids, Warnings, Plot, Details), the card kept off the whole piece, the palette's Tools group and its
+  help, and the preview note taken out. The inspector's choices for a road and a car are shared with the card.
+- **`place.js`.** `supportsOf` gains `under(x, y, z, ignore)`, `seatFor` is `under` for an element, and `supportsFor(doc)`
+  is exported. Every answer the seat gave is the same.
+- **`seat.js`, `roadtool.js`, `elements.js`, `index.html`, `view2d.js`.** `standingOn`; `copyOffsetAlong`; `MAP_TOOLS` and a
+  mode argument to `toolByKey` (the ruler has no key on a map, because M is the ledge); the dead preview hints and note
+  removed from the page; a map's plan keeps the ten metre grid it had.
+- **`FREESTYLE-3D-BUILD-PLAN.md` (new), `FREESTYLE-MAPS-PLAN.md`, `MENUS-PLAN.md`, `TRACK-BUILDER-5IN-PLAN.md`, `schema.md`.**
+  The plan and what was done against it, and a line in each older document that said a map's 3D was a preview.
+
+### Checked, this turn
+
+    self test            2158 passed, 0 failed (2139 before this work; it holds the seat suite, which is unchanged,
+                         and the 15 map room checks and the 4 for a copy of a car)
+    check:builder        712 PASS, 0 FAIL over 61 cases, one full run started after the last change to the code
+                         (81 of the PASS lines are the six map cases; the five inch's and the whoop's are in the
+                         rest, and are the ones that say the same gestures still work where they were)
+    lint:devices         PASS: every row reachable on every device, every builder bar control on a laptop, the whoop
+                         room with fingers on a tablet, the builder on a phone both ways round on every canvas (the
+                         map's included), the results page clear of its menu, the flight OSD clear of the centre third
+    lint:nouns           PASS
+    lint:preload         up to date, boot 127 modules, city 75, built 33; 249 served (no new module this turn)
+    check:fresh          18 passed, 0 failed
+    check:path           12 passed, 0 failed
+    check:props          all passed
+    check:roads          all passed (8.4 s)
+    vendor/betaflight    git diff --stat empty
+    not run              npm run verify (no physics, plant, ABI or build change), node scripts/shots.js, lint:board,
+                         lint:shell, lint:input, lint:responsive; and nobody has built a map in it with a real mouse
+                         on a real GPU, so nothing here says how it feels
+
+The device check's tablet row is the whoop room's; the map in the room on a touched screen is the flow check's
+"map: by touch" case (the card is the small bar, its buttons finger sized, the ring and a road's handles grabbed by
+touch), not the device check's.
+
+### What went wrong, this turn
+
+- **`group.add(...[])` is an error in Three.js.** A spread of an empty list calls `add` with no argument, which logs "object
+  not an instance of THREE.Object3D". The first road probe showed it as the page's one error; found by the page's own
+  error trap, not by looking. The draft's dots are added one at a time.
+- **The coach did not move while a road was being laid.** It said "lay the first node" after three nodes, because the
+  draft changes `roadDraft` and nothing told the coach. `draftClick`, `finishDraft`, `cancelDraft` and `undoDraftNode` do.
+- **The first screenshot showed Bend line and Square on a map's bar.** They are a track's (a racing line to bend, gates to
+  square), and `room` was now true for a map. Hidden on a map, in the bar and in the phone's More.
+- **The card's size fields had a stray "m" under each.** The unit is in the label on the card, as X and Y are.
+- **Three of my checks were timing, not code.** The ring is made on the frame after a selection, so a press at the knob
+  right after a click was on the last piece's; a road tool button is below the fold of a palette longer than the screen,
+  so a click on it landed on something else; and a car or a road mesh is rebuilt on the next frame, not the one a click
+  was in. Each now waits for the thing it needs, and `tool()` scrolls the button into view.
+- **I edited served files while a full flow run was in progress,** twice, so the cases after the edit loaded the new code
+  and the ones before it the old. That run proved nothing about the final tree and was not counted: the full run in the
+  table above is one started after the last change to the code.
+- **A plan section I wrote claimed counts I had not measured** ("the 25 seat and 20 map checks") and named the wrong
+  scripts: `scripts/seat-selftest.js` is the aircraft's seat, not the map's. Caught on a re-read before the commit and
+  rewritten to say what ran.
+- **A horizontal pole pointed at a roof would have been made at the roof's height,** with its legs through it. A bar on
+  legs (`standsFree`) starts at its own height whatever it is over; the ghost says so too.
+
+### The owner's word
+
+No approval was asked or taken: no change here alters the physics model's shape, the module ABI or the build. The decisions
+the plan takes on the owner's behalf, and how to reverse each, are in its section 6.
+
+### Left open
+
+- Snapping an asset to another's faces (walls and containers that meet), which the plan puts outside this work.
+- A lift handle: a built thing takes its height from what it is put on, and a gap steps with Page Up and Page Down.
+- Nobody has built a map in it with a real mouse on a real GPU: everything here ran in headless Chromium on a software
+  rasteriser, which gives no frame rate, so nothing rests on one. The room's rebuild on the 76 element showpiece is 7 ms
+  and a pointer move is about a millisecond of picking; the pipeline's frame is the rasteriser's.

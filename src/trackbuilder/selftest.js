@@ -118,7 +118,7 @@ import { roadOf, nearestOn } from '../maps/built/road.js';
 import { trafficOf, DRIFT, roadKeepOut } from '../maps/built/traffic.js';
 import {
   addDraftNode, closesDraft, endsDraft, roadFromDraft, legCount, legMidpoints, insertNode, moveNode, deleteNode,
-  pickNode, pickLeg, snapToRoad, vehiclePlace, PARK, bodiesOverlap, moduleRoad, laneXyz, lapTable, laneClashes,
+  pickNode, pickLeg, snapToRoad, copyOffsetAlong, vehiclePlace, PARK, bodiesOverlap, moduleRoad, laneXyz, lapTable, laneClashes,
   roadReach,
 } from './roadtool.js';
 import { CLASH_HORIZON } from './warnings.js';
@@ -4360,6 +4360,20 @@ function suiteRoadTool() {
   check('two bodies on top of each other overlap, two apart do not',
     bodiesOverlap({ x: 0, y: 0, tx: 1, ty: 0, length: 4, width: 2 }, { x: 2.5, y: 0.5, tx: 0, ty: 1, length: 4, width: 2 })
     && !bodiesOverlap({ x: 0, y: 0, tx: 1, ty: 0, length: 4, width: 2 }, { x: 4.5, y: 0, tx: 1, ty: 0, length: 4, width: 2 }));
+
+  /* -------- a copy of a car goes on along its own road -------- */
+
+  const there = copyOffsetAlong(d, car);
+  check('a copy of a car is put on along the same road, a dozen metres further, and not on the car it copies',
+    near(there, snap.offset + 12, 0.011) || near(there, (snap.offset + 12) % r.centre.length, 0.011), `${snap.offset} to ${there}`);
+  const wrap = addCar(d, road, r.centre.length - 5);
+  check('round a loop it wraps past the end', copyOffsetAlong(d, wrap) < 12 && copyOffsetAlong(d, wrap) >= 0, `${copyOffsetAlong(d, wrap)}`);
+  const strip = roadMap({ closed: false });
+  const stripRoad = roadOf(strip.road);
+  const atEnd = addCar(strip.d, strip.road, stripRoad.centre.length - 3);
+  check('and on an open road a car near the end has its copy put back, not off the end',
+    near(copyOffsetAlong(strip.d, atEnd), stripRoad.centre.length - 3 - 12, 0.011), `${copyOffsetAlong(strip.d, atEnd)}`);
+  check('a car with no road is not moved', copyOffsetAlong(d, lost) === lost.dims.offset);
 
   /* -------- the module's lap time, restated -------- */
 

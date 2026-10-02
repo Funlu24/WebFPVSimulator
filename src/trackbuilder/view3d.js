@@ -1,5 +1,5 @@
 /*
- * view3d.js: the 3D preview. Three.js, orbit, and one editing gesture.
+ * view3d.js: the 3D view, the room every canvas is built in. Three.js, orbit, and the scene edit3d.js's gestures work on.
  *
  * THE Y UP CONVERSION HAPPENS ONCE, HERE, ON LINE ONE OF build(): the scene
  * root is rotated -90 degrees about X, which maps the document's right
@@ -10,20 +10,15 @@
  * builder's separate one. If a gate ever appears lying on its side, this
  * rotation is the only line that can be responsible.
  *
- * On the five inch and freestyle canvases the preview is read only except for
- * one thing: dragging an element's height. Drag on empty space orbits, drag on
- * an element that can hold a height raises or lowers it (a bar, a waypoint, and
- * on a map any asset, which is set down on what is under it when let go: see
- * seat.js), drag on anything that stands on the ground orbits, middle or right
- * drag pans, the wheel zooms.
- *
- * ON A WHOOP CANVAS THE ROOM IS THE TOOL. Its gestures are edit3d.js's (place
- * with a click and a ghost, pull a gate across the floor, turn it by the ring at
- * its foot, box select), and this file draws what they need: the ghost, the
- * ring, a translucent pane in every opening in RaceGOW's own colour, an arrow
- * through it, and the flying order's numbers as HTML bubbles over the canvas so
- * they stay one size and can be clicked. The two sets of gestures never run
- * together: roomEditing() says which.
+ * EVERY CANVAS IS BUILT IN THE ROOM: the whoop's, the five inch's and, since
+ * FREESTYLE-3D-BUILD-PLAN.md, the map's. Its gestures are edit3d.js's (place
+ * with a click and a ghost, pull a piece across the floor, turn it by the ring at
+ * its foot, box select; on a map also lay a road and drop a car), and this file
+ * draws what they need: the ghost, the ring, a translucent pane in every opening
+ * in RaceGOW's own colour, an arrow through it, and the flying order's numbers
+ * as HTML bubbles over the canvas so they stay one size and can be clicked. Drag
+ * on empty space orbits, middle or right drag pans, the wheel zooms. What a
+ * piece stands on, and so where a click puts it, is surfaceAt's.
  *
  * The scene is rebuilt wholesale whenever the document changes. A track is
  * tens of objects, not thousands, and a rebuild that cannot get out of step
@@ -41,13 +36,13 @@
  * with it. This mirrors what src/boot.js does for the simulator, for the same
  * reason.
  *
- * A FREESTYLE MAP IS PREVIEWED IN THE GAME'S OWN ART, so the preview is the
- * game. Its assets are drawn by the same src/props/kit.js the built map
+ * A FREESTYLE MAP IS DRAWN IN THE GAME'S OWN ART, so what is built is what is
+ * flown. Its assets are drawn by the same src/props/kit.js the built map
  * draws with, lit by the town's lights under the town's sky, and put through
  * the town's ink and grade (src/maps/city/vendored/core/post.js). All of that
  * is fetched the same lazy way as Three.js and later still: only when the 3D
  * view opens on a freestyle document. A race or whoop document never loads a
- * line of it, and its preview is the one described above, untouched. The
+ * line of it, and its scene is the race scene described above, untouched. The
  * freestyle half has its own scene with its own root, rotated by the same
  * one conversion; the kit's assets are Y up in their own frame, and the one
  * extra frame change that brings them into the document is written down
@@ -90,7 +85,6 @@ import { aroundPass, arrowLanes, spreadTags, stretchOf, tagsOf } from './passes.
 import { RoomEditor } from './edit3d.js';
 import { planShapeOf } from './view2d.js';
 import { absNodes, footprint, legMidpoints, vehiclePlace } from './roadtool.js';
-import { roadOf } from '../maps/built/road.js';
 import { frameRectFor } from './snap.js';
 import { levelName } from './figures.js';
 import { travelDirection, markerPassDir } from './faces.js';
@@ -441,9 +435,6 @@ const LINE_GRAB_PX = 9;
  * pad of a finger is about a centimetre across. */
 const FINGER_SLOP_PX = 18;
 const BEND_START_PX = 4;
-/* How far a pull upward on something that stands on the ground travels before
- * it is told why nothing rose: more than a click's wobble, less than a drag. */
-const GROUNDED_PULL_PX = 12;
 let pickUnit = null;
 let pickMaterial = null;
 
@@ -945,11 +936,11 @@ export class View3D {
     if (!this.fsPending) {
       this.fsPending = loadFreestyle().then(() => {
         if (celError) {
-          this.host.toast?.(`The cel kit did not load (${celError}), so the 3D preview draws each asset as its plain solids. The map is unaffected.`);
+          this.host.toast?.(`The cel kit did not load (${celError}), so the 3D view draws each asset as its plain solids. The map is unaffected.`);
         }
       }, (e) => {
         this.fsFailed = e.message ?? String(e);
-        this.host.toast?.(`The 3D preview could not load the freestyle assets (${this.fsFailed}), so it shows the plot without them. The 2D view is unaffected.`);
+        this.host.toast?.(`The 3D view could not load the freestyle assets (${this.fsFailed}), so it shows the plot without them. The 2D view is unaffected.`);
       }).then(() => {
         this.fsPending = null;
         this.dirty = true;
@@ -1577,87 +1568,16 @@ export class View3D {
     this.canvas.style.cursor = shown ? 'grab' : '';
   }
 
+  /*
+   * EVERY CANVAS IS BUILT IN THE ROOM, so every press, move and lift is edit3d.js's. What is left of the 3D view's
+   * own handlers is the racing line's bend, which the room's editor hands over once a press is on the line (it
+   * sets `drag`), and it is only that gesture that onMove, onUp and onCancel carry on.
+   */
   onDown(e) {
     if (!this.enabled || !this.renderer) {
       return;
     }
-    if (this.roomEditing()) {
-      this.editor.onDown(e);
-      return;
-    }
-    this.canvas.setPointerCapture(e.pointerId);
-    const at = { x: e.clientX, y: e.clientY };
-    if (e.button === 1 || e.button === 2) {
-      this.drag = { kind: 'pan', last: at };
-      return;
-    }
-    if (e.button !== 0) {
-      return;
-    }
-    const hit = this.pickHit(e);
-    /*
-     * THE LINE WINS WHERE IT IS NEARER THAN WHAT IS HIT, or where what is
-     * hit is only the invisible pane across an opening with no pipe, which
-     * the line runs through the middle of. A gate standing in front of the
-     * line still takes the click.
-     */
-    const line = this.pathHit(e);
-    if (line && (!hit || hit.weak || line.distance < hit.distance)) {
-      this.drag = { kind: 'bend-pending', start: at, last: at, line };
-      return;
-    }
-    const id = hit ? hit.id : null;
-    const picked = id ? elementById(this.host.doc, id) : null;
-    /* A car is selected and nothing more: it has no height of its own, and
-     * the drag orbits. */
-    if (picked && ELEMENTS[picked.type]?.kind === KIND.VEHICLE) {
-      this.host.setSelection([id]);
-      this.drag = { kind: 'orbit', last: at };
-      return;
-    }
-    if (id) {
-      if (e.shiftKey) {
-        this.host.toggleSelection(id);
-      } else if (!this.host.selection.has(id)) {
-        this.host.setSelection([id]);
-      } else if (hit.side && this.host.selection.size === 1) {
-        /* A second click on a gate, on one of its four sides: pick that
-         * pipe, and Delete takes just it away. See pickSide in app.js. */
-        this.host.pickSide(id, hit.side);
-      }
-      const el = elementById(this.host.doc, id);
-      /*
-       * A BUILT THING ON A TRACK STANDS ON THE GROUND and has no height to
-       * drag (seat.js), so the drag orbits, as it does on a car. The first
-       * real pull upward says why, once: a click to select one must stay
-       * quiet, and a pilot who does pull is owed the reason and the way to
-       * what they wanted.
-       */
-      if (el && this.host.isGrounded(el)) {
-        this.drag = { kind: 'orbit', last: at, grounded: el.type, pulled: 0 };
-        return;
-      }
-      /*
-       * A WAYPOINT IS A HANDLE ON THE LINE, so a drag on one moves it across
-       * the level it is at, the same gesture as pulling the line itself, and
-       * Alt moves it up and down. Every other element that can hold a height
-       * keeps the height drag.
-       */
-      if (el && el.type === 'waypoint' && !e.shiftKey && docModeOf(this.host.doc) !== 'freestyle') {
-        this.beginWaypointGrab(e, id, at);
-        return;
-      }
-      this.host.beginEdit('height');
-      this.drag = {
-        kind: 'height',
-        id,
-        last: at,
-        startZ: el.position.z,
-        origin: new Map([...this.host.selection].map((sid) => [sid, elementById(this.host.doc, sid).position.z])),
-      };
-      return;
-    }
-    this.drag = { kind: 'orbit', last: at };
+    this.editor.onDown(e);
   }
 
   /* A press on a waypoint: a drag on one moves it across its own level, and Alt
@@ -1755,28 +1675,9 @@ export class View3D {
       return;
     }
 
+    /* A press on the line that could not drop a waypoint there looks round instead. */
     if (this.drag.kind === 'orbit') {
-      if (this.drag.grounded && !this.drag.told) {
-        /* Screen up is height up, so up is negative. */
-        this.drag.pulled += dy;
-        if (this.drag.pulled < -GROUNDED_PULL_PX) {
-          this.drag.told = true;
-          const def = ELEMENTS[this.drag.grounded];
-          this.host.toast(`${def ? def.label : 'That'} stands on the ground, so it has no height to drag.${def && def.kind === KIND.APERTURE ? ' To lift the opening on its legs, set Sill height.' : ''}`);
-        }
-      }
       this.orbitBy(dx, dy);
-      return;
-    }
-    if (this.drag.kind === 'pan') {
-      this.panBy(dx, dy);
-      return;
-    }
-    if (this.drag.kind === 'height') {
-      /* Screen up is height up. The scale follows the zoom so the gesture
-       * feels the same close in and far out. */
-      const k = this.orbit.radius * 0.0022;
-      this.host.raiseSelected(this.drag.origin, -dy * k, e.altKey);
     }
   }
 
@@ -1784,9 +1685,6 @@ export class View3D {
     if (!this.drag && this.roomEditing()) {
       this.editor.onCancel(e);
       return;
-    }
-    if (this.drag && this.drag.kind === 'height') {
-      this.host.cancelEdit();
     }
     /* A bend the browser took away is put back, waypoint and all. */
     if (this.drag && this.drag.kind === 'bend') {
@@ -1805,9 +1703,6 @@ export class View3D {
         this.editor.onUp(e);
       }
       return;
-    }
-    if (this.drag.kind === 'height') {
-      this.host.endEdit();
     }
     if (this.drag.kind === 'bend') {
       if (this.drag.moved) {

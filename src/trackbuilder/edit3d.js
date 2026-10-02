@@ -744,7 +744,8 @@ export class RoomEditor {
     }
     const at = h.snap(p, e.altKey, { type });
     v.setGuides([]);
-    v.setGhost({ type, position: { x: at.x, y: at.y, z: p.z }, yaw: h.newYawFor(type) });
+    /* What is on legs from a bar starts at the height it is made with, whatever it is over. */
+    v.setGhost({ type, position: { x: at.x, y: at.y, z: ELEMENTS[type].standsFree ? undefined : p.z }, yaw: h.newYawFor(type) });
     v.clearMeasures();
   }
 

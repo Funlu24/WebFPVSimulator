@@ -31,8 +31,9 @@
  */
 
 import {
-  ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
+  ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, elementHeight, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
 } from './elements.js';
+import { styleOf as propStyleOf } from '../props/types.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
@@ -67,7 +68,7 @@ import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
 /* Nothing built stands in the air: see seat.js. A map is seated with what is
  * under it, which needs the map placed, so that half is place.js's. */
-import { hasRaised, needsSeat, seatFloating, seatedNote, standingOn, standsOnGround } from './seat.js';
+import { hasRaised, needsSeat, seatFloating, seatedNote, standingOn } from './seat.js';
 import { seatDocument } from '../maps/built/place.js';
 import { vehicleStart } from '../maps/built/traffic.js';
 import { History } from './history.js';
@@ -103,7 +104,7 @@ import { starterMap, STARTER_ID } from '../maps/built/starter.js';
 import { showpieceMap } from '../maps/built/showpiece.js';
 import { normaliseLogo, drawBannerPreview, drawGroundPreview } from './logo.js';
 import {
-  View2D, boardPlanOf, snapYaw, turnsOf, offCompass, QUARTER_TURN,
+  View2D, boardPlanOf, planShapeOf, snapYaw, turnsOf, offCompass, QUARTER_TURN,
 } from './view2d.js';
 import { View3D } from './view3d.js';
 import { Panels } from './ui.js';
@@ -997,13 +998,6 @@ export class App {
     return docModeOf(this.doc) === 'freestyle' ? standingOn(this.doc, ids, this.view3d.landings()) : [];
   }
 
-  /* Whether this element's base is the ground and nothing else in this
-   * document, so it has no height to edit: the 3D view asks, and the
-   * inspector asks seat.js the same question directly. */
-  isGrounded(element) {
-    return standsOnGround(this.doc, element);
-  }
-
   refresh() {
     /*
      * DERIVE ALWAYS, DRAW ON REQUEST. The line used to be built only while
@@ -1613,7 +1607,7 @@ export class App {
     if (newId) {
       this.setSelection([newId]);
     }
-    this.sayOnce('laid', 'Road laid. Drag a node to reshape it, drag the + between two nodes to add one, click a node and press Delete to take it out. Pick Vehicle and click on it to put a car on it.');
+    this.sayOnce('laid', 'Road laid. Drag a node to reshape it, drag the knob between two nodes to add one, click a node and press Delete to take it out. Pick Vehicle and click on it to put a car on it.');
   }
 
   cancelDraft() {
@@ -1909,8 +1903,8 @@ export class App {
       this.edit(`place ${def.label}`, (d) => {
         const yaw = def.kind === KIND.ANNOTATION ? 0 : this.newYawFor(type);
         /* It stands at the height the room found under the pointer (`world.z`): a roof, a container, the
-         * paving. Paint has no height to take and the plan gives none. */
-        const high = def.kind !== KIND.DECAL && def.kind !== KIND.ANNOTATION && Number.isFinite(world.z) && world.z > 0;
+         * paving. Paint has no height to take and the plan gives none, and a bar on legs starts at its own. */
+        const high = def.kind !== KIND.DECAL && def.kind !== KIND.ANNOTATION && !def.standsFree && Number.isFinite(world.z) && world.z > 0;
         const element = createElement(d, type, high ? world : { x: world.x, y: world.y }, yaw);
         if (def.kind === KIND.DECAL && this.armedLogoId
           && logosOf(d).some((l) => l.id === this.armedLogoId)) {
@@ -2054,26 +2048,6 @@ export class App {
     /* A turned marker's square swings with the line's knot, so the knot has
      * to move with the handle: see rebuildPathForDrag. */
     this.rebuildPathForDrag();
-    this.requestDraw();
-    this.panels.renderInspector();
-  }
-
-  /* The one edit the 3D view is allowed to make. A built thing on a track
-   * stands on the ground and has no height to change (seat.js), so a
-   * selection that holds one leaves it where it is and moves the rest. What
-   * is let go over nothing on a map is set down by settle() on release. */
-  raiseSelected(origin, dz, fine) {
-    for (const [id, fromZ] of origin) {
-      const element = elementById(this.doc, id);
-      if (!element || this.isGrounded(element)) {
-        continue;
-      }
-      const wanted = Math.max(0, fromZ + dz);
-      element.position.z = fine ? wanted : Math.round(wanted * 4) / 4;
-    }
-    applyAutoFaces(this.doc);
-    this.rebuildPathForDrag();
-    this.view3d.markDirty();
     this.requestDraw();
     this.panels.renderInspector();
   }
@@ -2442,8 +2416,10 @@ export class App {
     const dir = this.arrowAxis(name);
     const step = big ? scaleOf(this.doc).nudgeBig : this.doc.field.gridSize;
     const round6 = (v) => Math.round(v * 1e6) / 1e6;
+    /* On a map what stands on a piece goes with it, as it does when the piece is pulled. */
+    const going = [...ids, ...this.carriedBy(ids)];
     this.edit('nudge', (d) => {
-      for (const id of ids) {
+      for (const id of going) {
         const e = elementById(d, id);
         e.position.x = round6(e.position.x + dir.x * step);
         e.position.y = round6(e.position.y + dir.y * step);
@@ -2640,7 +2616,25 @@ export class App {
       }
     }
     this.view2d.centerOn(c);
-    this.view3d.focusDoc(c, Math.max(1.4, reach * 3 + 1.2));
+    if (docModeOf(this.doc) === 'freestyle') {
+      /* A map's pieces are as big as a warehouse and as tall as a crane, so the camera stands off by what the
+       * selection takes on the ground and in the air, and not by how far apart the middles of its pieces are. */
+      let high = 1;
+      for (const id of this.selection) {
+        const e = elementById(this.doc, id);
+        const def = e && ELEMENTS[e.type];
+        if (!e) {
+          continue;
+        }
+        for (const q of planShapeOf(e, this.doc)) {
+          reach = Math.max(reach, Math.hypot(q.x - c.x, q.y - c.y));
+        }
+        high = Math.max(high, e.position.z + (def.kind === KIND.STRUCTURE ? elementHeight(def, e.dims, propStyleOf(e)) : 1));
+      }
+      this.view3d.focusDoc({ x: c.x, y: c.y, z: Math.min(high, 30) * 0.4 }, Math.max(reach * 2.6, high * 1.8) + 10);
+    } else {
+      this.view3d.focusDoc(c, Math.max(1.4, reach * 3 + 1.2));
+    }
     this.requestDraw();
   }
 
@@ -4967,16 +4961,16 @@ export class App {
     this.redoBtn = btn('Redo', () => this.redo(), 'Control Shift Z');
     /*
      * ONE VIEW VOCABULARY (MENUS-PLAN.md 4.2): 2D and 3D on every canvas, and
-     * V goes between them. On the five inch and map canvases 2D is where a
-     * track is built and 3D previews it; on the whoop canvas 3D is where it is
-     * built, so 3D comes first there. The whoop's view straight down was a
-     * third view called Plan beside one called 2D, two plans; it is a camera
-     * now, Top, beside Fit, because it is the same room seen from above.
-     * Any press on a view button is the author's own choice, and the room
-     * opening by itself on a whoop canvas never overrules it.
+     * V goes between them. 3D is where every canvas is built (the whoop's, the
+     * five inch's and, since FREESTYLE-3D-BUILD-PLAN.md, the map's), so 3D
+     * comes first, and 2D is the plan, one key away. The view straight down
+     * was a third view called Plan beside one called 2D, two plans; it is a
+     * camera now, Top, beside Fit, because it is the same room seen from
+     * above. Any press on a view button is the author's own choice, and the
+     * room opening by itself on a canvas never overrules it.
      */
     this.mode2d = btn('2D', () => this.show2d(), 'Top down authoring view');
-    this.mode3d = btn('3D', () => this.show3d(), 'Preview');
+    this.mode3d = btn('3D', () => this.show3d(), 'Build here, in 3D');
     this.topBtn = btn('Top', () => this.toggleTop(), 'Look straight down on the room, north up, for measuring. Press again for the angle you had. Every gesture is the same.');
     /* Plain, not primary. There is one green button on this bar and it is
      * the one that leaves for the air; a second would make neither read as
@@ -5302,8 +5296,8 @@ export class App {
     for (const b of view.children) {
       check(b, b.dataset.choice === this.mode);
     }
-    /* 3D first where it is the tool, as on the bar. */
-    const lead = view.querySelector(`[data-choice="${room ? '3d' : '2d'}"]`);
+    /* 3D first, as on the bar. */
+    const lead = view.querySelector('[data-choice="3d"]');
     if (view.firstElementChild !== lead) {
       view.prepend(lead);
     }
@@ -5312,10 +5306,10 @@ export class App {
     check(p.get('top'), room && plan);
     p.get('line').hidden = map;
     check(p.get('line'), this.pathVisible);
-    p.get('bend').hidden = !room;
+    p.get('bend').hidden = !room || map;
     check(p.get('bend'), this.bendLine);
-    /* Square is a field's: a whoop's gates are always on a quarter turn. */
-    p.get('square').hidden = !(room && !this.isWhoopRace());
+    /* Square is a field's: a whoop's gates are always on a quarter turn, and a map has no gates to square. */
+    p.get('square').hidden = !(room && !this.isWhoopRace() && !map);
     check(p.get('square'), this.square);
     check(p.get('labels'), this.labelsVisible);
     p.get('new').textContent = map ? 'New map' : 'New track';
@@ -5365,39 +5359,34 @@ export class App {
     this.undoBtn.title = this.history.canUndo() ? `Undo ${this.history.undoLabel()}` : 'Nothing to undo';
     this.redoBtn.title = this.history.canRedo() ? `Redo ${this.history.redoLabel()}` : 'Nothing to redo';
     const whoop = this.isWhoopRace();
-    /* A track, of either class, is built in the room: Room, Plan and 2D. A map has 2D and 3D. */
+    const map = docModeOf(this.doc) === 'freestyle';
+    /* Every canvas is built in the room: 3D first, then 2D, with Top beside Fit. */
     const room = this.buildsIn3D();
     const plan = this.mode === '3d' && this.view3d.isPlan();
     this.mode2d.classList.toggle('on', this.mode === '2d');
     this.mode3d.classList.toggle('on', this.mode === '3d');
     this.mode2d.setAttribute('aria-pressed', this.mode === '2d' ? 'true' : 'false');
     this.mode3d.setAttribute('aria-pressed', this.mode === '3d' ? 'true' : 'false');
-    /* 3D first where it is the tool, which is in a room (the whoop's, and the five inch's), and 2D first where it
-     * is, which is on a map. */
-    const lead = room ? this.mode3d : this.mode2d;
+    const lead = this.mode3d;
     if (this.viewGroup && this.viewGroup.firstElementChild !== lead) {
       this.viewGroup.prepend(lead);
     }
-    this.mode2d.title = room
-      ? 'The plan from above, the canvas this builder has always had. V for 3D'
-      : 'Build here, on the plan from above. V for the 3D preview';
-    this.mode3d.title = room
-      ? `Build here, in 3D: pick a piece on the left, click the ${whoop ? 'floor' : 'ground'}, drag a piece to move it. V for 2D`
-      : 'A 3D preview: building is in 2D. Drag a horizontal pole or a waypoint here to change its height; everything else stands on the ground, or on what is under it on a map. V for 2D';
+    this.mode2d.title = 'The plan from above, the canvas this builder has always had. V for 3D';
+    this.mode3d.title = `Build here, in 3D: pick a piece on the left, click the ${whoop ? 'floor' : (map ? 'plot' : 'ground')}, drag a piece to move it. V for 2D`;
     /* Top is a camera of the room's 3D, beside Fit, lit while it looks down. */
     this.topBtn.style.display = room && this.mode === '3d' ? '' : 'none';
     this.topBtn.classList.toggle('on', room && plan);
     this.topBtn.setAttribute('aria-pressed', room && plan ? 'true' : 'false');
-    this.bendBtn.style.display = room ? '' : 'none';
+    /* The racing line is a track's, and so is bending it and squaring its gates: a map has none of the three. */
+    this.bendBtn.style.display = room && !map ? '' : 'none';
     this.bendBtn.classList.toggle('on', this.bendLine);
     /* Square is for a field: a whoop's gates are always on a quarter turn. */
-    this.squareBtn.style.display = room && !whoop ? '' : 'none';
+    this.squareBtn.style.display = room && !whoop && !map ? '' : 'none';
     this.squareBtn.classList.toggle('on', this.square);
     /* The room's layout: the side column is a drawer and the room's own chrome is shown. See the block in
      * index.html. The class is named for the canvas it was made for and is the room's on every track. */
     document.body.classList.toggle('tb-whoop', room);
-    this.fitBtn.title = room ? 'Frame the track' : `Frame the whole ${wordsFor(this.doc).place}`;
-    const map = docModeOf(this.doc) === 'freestyle';
+    this.fitBtn.title = map ? `Frame the whole ${wordsFor(this.doc).place}` : 'Frame the track';
     if (this.classBtns) {
       const canvas = canvasOf(this.doc);
       for (const [id, b] of this.classBtns) {

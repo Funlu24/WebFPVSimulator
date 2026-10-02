@@ -4315,6 +4315,12 @@ kase('map: build by pointer', async () => {
     await drag(page, c0, c1, { steps: 12 });
     const cy = (await placed(page)).find((e) => e.type === 'crane').yaw;
     check('the same ring turns a crane in fifteen degree steps', Math.abs(cy / (Math.PI / 12) - Math.round(cy / (Math.PI / 12))) < 1e-6 && Math.abs(cy) > 0.01 && Math.abs(Math.abs(cy) - Math.PI / 2) > 0.01, `yaw ${cy}`);
+    /* The card's Turn is a quarter: from a heading nobody chose it squares the piece up first, as it does a gate. */
+    await cardClick(page, 'Turn');
+    const sq = (await placed(page)).find((e) => e.type === 'crane').yaw;
+    await cardClick(page, 'Turn');
+    const sq2 = (await placed(page)).find((e) => e.type === 'crane').yaw;
+    check('and the card\'s Turn squares a crane up and then turns it a quarter', Math.abs(sq) < 1e-6 && Math.abs(Math.abs(sq2) - Math.PI / 2) < 1e-6, `${cy} to ${sq} to ${sq2}`);
 
     /* A box, a copy, a removal. The box is on the screen, so it is drawn round where the two pieces are seen. */
     await key(page, 'Escape');
@@ -4419,6 +4425,17 @@ kase('map: standing on things', async () => {
     const after = (await placed(page)).filter((e) => e.type === 'containers');
     check('the one under it is moved and the one on it goes along, still standing on it',
       Math.abs(after[1].x - after[0].x - (stack[1].x - stack[0].x)) < 1e-6 && Math.abs(after[1].z - cTop) < 1e-6 && after[0].x < stack[0].x - 5, after.map((e) => `${e.x},${e.y},${e.z}`).join(' | '));
+
+    /* A bar on legs starts at the height it is made with, whatever it is pointed at: the roof is not its ground. */
+    await tool(page, 'Horizontal pole');
+    const poleOver = await screenOf(page, 'view3d', b1.x + 6, b1.y + 2, roof);
+    await mouse(page, 'mouseMoved', poleOver.x, poleOver.y, 0);
+    await page.sleep(400);
+    const poleGhost = await app('a.view3d.ghost && a.view3d.ghost.items[0].position.z');
+    await click(page, poleOver.x, poleOver.y);
+    await key(page, 'Escape');
+    const pole = (await placed(page)).find((e) => e.type === 'horizontalPole');
+    check('a horizontal pole pointed at a roof is made at its own height, in the ghost and when it is put down', poleGhost === undefined && pole && Math.abs(pole.z - 1.6) < 1e-6, `ghost ${poleGhost}, placed ${pole && pole.z}`);
 
     /* Page Up and Page Down step a gap, and say what they will not step. */
     await layAt(page, 'Named gap', 30, 130);
@@ -4566,6 +4583,130 @@ kase('map: roads and cars', async () => {
     road = (await json(page, 'window.trackBuilder.doc.elements.filter((e) => e.type === "road")'))[0];
     check('Delete takes the picked node out again, and not the road', road && road.nodes.length === 4);
     check('the cars were kept on the road through every bend', (await json(page, 'window.trackBuilder.doc.elements.filter((e) => e.type === "vehicle").every((e) => e.road === window.trackBuilder.doc.elements.find((r) => r.type === "road").id)')));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+/*
+ * A MAP BY TOUCH, ON A TABLET (FREESTYLE-3D-BUILD-PLAN.md): a tap puts the piece down, a tap
+ * on it selects it, and its card is the small bar of Turn, Copy, Remove and More and nothing
+ * else, because a card of fields at finger size covers the map it is for. A road is laid by
+ * taps, the last again finishing it, and a finger has no right button to put a draft away with,
+ * so the coach says where the tool is put away.
+ */
+kase('map: by touch', async () => {
+  const page = await openMap(1024, 768, { touch: true });
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    const toolAt = async (label) => {
+      await page.evaluate(`(() => { const b = [...document.querySelectorAll('#tb-palette .tb-tool')].find((x) => x.querySelector('.tb-tool-label')?.textContent === ${JSON.stringify(label)}); b.scrollIntoView({ block: 'center' }); })()`);
+      await page.sleep(200);
+      return json(page, `(() => {
+        const b = [...document.querySelectorAll('#tb-palette .tb-tool')].find((x) => x.querySelector('.tb-tool-label')?.textContent === ${JSON.stringify(label)});
+        const r = b.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      })()`);
+    };
+    await tap(page, await toolAt('Containers'));
+    check('a finger arms a tool, and the coach says tap', (await app('a.armed')) === 'containers' && /Tap the plot to place it/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    await tap(page, await screenOf(page, 'view3d', 60, 60, 0));
+    const first = (await placed(page))[0];
+    check('a tap on the ground puts the piece there', first && first.type === 'containers' && Math.abs(first.x - 60) < 0.51 && Math.abs(first.y - 60) < 0.51, JSON.stringify(first));
+    await tap(page, await toolAt('Containers'));
+    await tap(page, await screenOf(page, 'view3d', first.x, first.y, 1));
+    await page.until('!window.trackBuilder.view3d.dirty', 20000);
+    check('a tap on it selects it, and its card is up', (await app('a.selection.size')) === 1 && (await page.evaluate("!document.getElementById('tb-card').hidden")));
+    const card = await json(page, `(() => {
+      const c = document.getElementById('tb-card');
+      const r = c.getBoundingClientRect();
+      const s = document.getElementById('tb-stage').getBoundingClientRect();
+      return {
+        words: [...c.querySelectorAll('button')].map((b) => b.textContent.trim()),
+        inputs: c.querySelectorAll('input').length,
+        tall: [...c.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().height)),
+        inside: r.left >= s.left - 0.5 && r.right <= s.right + 0.5 && r.top >= s.top - 0.5 && r.bottom <= s.bottom + 0.5,
+        share: r.height / s.height,
+      };
+    })()`);
+    check('the card is the small bar: Turn, Copy, Remove and More, with no field on it', ['Turn', 'Copy', 'Remove', 'More'].every((w) => card.words.includes(w)) && card.inputs === 0, JSON.stringify(card.words));
+    check('every button on it is a finger tall, it is inside the drawing and well under the 45 percent the check allows', card.tall.every((h) => h >= 44) && card.inside && card.share < 0.45, `${card.tall.join()} ${card.share.toFixed(2)}`);
+    const before = await undoCount(page);
+    await tap(page, await json(page, `(() => {
+      const b = [...document.querySelectorAll('#tb-card button')].find((x) => x.textContent.trim() === 'Turn');
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`));
+    check('a tap on Turn turns it a quarter, as one undo step', Math.abs(Math.abs((await placed(page))[0].yaw) - Math.PI / 2) < 1e-6 && (await undoCount(page)) === before + 1);
+
+    /* Moved by a finger: a drag on the piece. */
+    await tap(page, await json(page, `(() => { const b = [...document.querySelectorAll('#tb-card .tb-card-x')][0]; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+    const at = (await placed(page))[0];
+    const from = await screenOf(page, 'view3d', at.x, at.y, 1);
+    const to = await screenOf(page, 'view3d', at.x + 20, at.y, 1);
+    await swipe(page, from, to, { steps: 10 });
+    const moved = (await placed(page))[0];
+    check('a finger dragged on a piece moves it', Math.abs(moved.x - (at.x + 20)) < 2.1, `${at.x} to ${moved.x}`);
+
+    /* A road by taps. */
+    await tap(page, await json(page, `(() => { const b = [...document.querySelectorAll('#tb-card .tb-card-x')][0]; if (!b) return { x: 5, y: 5 }; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+    await tap(page, await toolAt('Road'));
+    check('the coach says what a finger does with the road tool', /Tap the ground to lay the road/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    for (const [x, y] of [[20, 120], [80, 120], [80, 140]]) {
+      await tap(page, await screenOf(page, 'view3d', x, y, 0));
+    }
+    check('three taps are three nodes of a draft', (await app('a.roadDraft && a.roadDraft.length')) === 3);
+    check('and the coach says how a finger finishes it', /tap the last again to finish/.test(await page.evaluate("document.getElementById('tb-coach').textContent")));
+    await tap(page, await screenOf(page, 'view3d', 80, 140, 0));
+    const road = (await json(page, 'window.trackBuilder.doc.elements.filter((e) => e.type === "road")'))[0];
+    check('a tap on the last node finishes the road, open, as one road', road && road.nodes.length === 3 && road.closed === false, JSON.stringify(road && road.nodes));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+/*
+ * EVERY TOOL ON A MAP'S PALETTE ARMS, SHOWS ITS GHOST, PLACES ONE PIECE AND HAS A CARD. The
+ * ghost, the drop and the card are written for kinds (a solid asset, a window, paint, a note,
+ * the pads, the furniture gates and flags), and a kind with no branch is a tool that does
+ * nothing, which is how `pole` once went undrawn and unsolid. So each tool is walked: armed
+ * by its button, hovered, clicked, selected, and taken away again.
+ */
+kase('map: every tool', async () => {
+  const page = await openMap();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    const ids = await json(page, "[...document.querySelectorAll('#tb-palette .tb-tool')].map((b) => b.dataset.tool).filter((id) => id !== 'road' && id !== 'vehicle' && id !== 'ruler')");
+    check('the palette has the whole map vocabulary to walk: the assets, the gap, the pads, the paint, the label and the furniture', ids.length >= 30, `${ids.length} tools`);
+    const spot = await screenOf(page, 'view3d', 80, 80, 0);
+    const bad = [];
+    for (const id of ids) {
+      await page.evaluate(`window.trackBuilder.pickTool(${JSON.stringify(id)}), 1`);
+      await mouse(page, 'mouseMoved', spot.x - 3, spot.y - 3, 0);
+      await mouse(page, 'mouseMoved', spot.x, spot.y, 0);
+      await page.sleep(120);
+      const ghost = await app('!!a.view3d.ghost && a.view3d.ghost.items.length === 1 && !!a.view3d.ghostGroup && a.view3d.ghostGroup.children.length > 0');
+      const before = await app('a.doc.elements.length');
+      await click(page, spot.x, spot.y);
+      const made = await json(page, 'window.trackBuilder.doc.elements.slice(-1).map((e) => ({ type: e.type, n: window.trackBuilder.doc.elements.length }))');
+      const placedOne = made[0] && made[0].type === id && made[0].n === before + 1;
+      const ok = ghost && placedOne;
+      if (!ok) {
+        bad.push(`${id}: ${ghost ? '' : 'no ghost '}${placedOne ? '' : 'not placed'}`);
+      }
+      await page.evaluate('window.trackBuilder.disarm(), window.trackBuilder.setSelection([]), 1');
+      /* The card of what was just put down, by selecting it. */
+      await page.evaluate(`(() => { const a = window.trackBuilder; const e = a.doc.elements[a.doc.elements.length - 1]; a.setSelection([e.id]); return 1; })()`);
+      const card = await page.evaluate("(() => { const c = document.getElementById('tb-card'); return !c.hidden && c.querySelector('strong') && [...c.querySelectorAll('button')].some((b) => b.textContent === 'Remove') && [...c.querySelectorAll('button')].some((b) => b.textContent === 'More'); })()");
+      if (!card) {
+        bad.push(`${id}: no card`);
+      }
+      await page.evaluate('window.trackBuilder.deleteSelection(), 1');
+    }
+    check('every one of them arms, shows a ghost, puts one piece down where it was clicked, and has a card with Remove and More', bad.length === 0, bad.join('; '));
+    check('and the plot is as empty as it started, so nothing was left behind', (await app('a.doc.elements.length')) === 0);
     check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
   } finally {
     await page.close();

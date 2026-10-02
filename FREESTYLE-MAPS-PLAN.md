@@ -4,6 +4,9 @@ A plan for the owner, 24 September 2026. Nothing has been built yet: no source
 file has moved. The plan is written to be argued with, and section 12 lists the
 decisions it is waiting on.
 
+*Since 2 October 2026 a map is built in the 3D room, as the whoop and the five inch
+are, and the "3D preview" below is the room: FREESTYLE-3D-BUILD-PLAN.md.*
+
 ## 0. What was asked
 
 In the owner's words:

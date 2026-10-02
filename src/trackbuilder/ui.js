@@ -1252,14 +1252,6 @@ export class Panels {
     host.append(seg);
   }
 
-  /*
-   * A ROAD: whether it closes into a loop, its lanes, how wide it is and
-   * how wide its bends are eased, where it starts, and what that adds up to.
-   * Its nodes are edited on the plan, not here: drag one, drag a + between
-   * two to add one, click one and press Delete. A change that moves the
-   * road's line (closing it, a radius) keeps every car on it where it was
-   * on the plan (reseatVehicles in app.js).
-   */
   /* Whether a road closes and how many lanes it has, as the choices the inspector and the card both offer. */
   roadShapeItems(element) {
     const id = element.id;
@@ -1286,6 +1278,14 @@ export class Panels {
     ];
   }
 
+  /*
+   * A ROAD: whether it closes into a loop, its lanes, how wide it is and
+   * how wide its bends are eased, where it starts, and what that adds up to.
+   * Its nodes are edited on the road, not here: drag one, drag the knob between
+   * two to add one, click one and press Delete. A change that moves the
+   * road's line (closing it, a radius) keeps every car on it where it was
+   * (reseatVehicles in app.js).
+   */
   renderRoadInspector(host, element, def) {
     const doc = this.host.doc;
     const r = roadOf(element);
@@ -1360,13 +1360,6 @@ export class Panels {
     host.append(list);
   }
 
-  /*
-   * A VEHICLE: which of the town's cars, how it drives, where it starts and
-   * its colour. Its speed is m/s in the document and km/h here, the unit a
-   * driver reads, converted at this boundary and nowhere else. Where it is
-   * comes from its road and its start along it, so there is no X and Y:
-   * drag it along the road on the plan, or type how far along it starts.
-   */
   /* How a car drives and which way, as the choices the inspector and the card both offer. */
   vehicleDrivingItems(element, def) {
     const id = element.id;
@@ -1404,6 +1397,13 @@ export class Panels {
     ];
   }
 
+  /*
+   * A VEHICLE: which of the town's cars, how it drives, where it starts and
+   * its colour. Its speed is m/s in the document and km/h here, the unit a
+   * driver reads, converted at this boundary and nowhere else. Where it is
+   * comes from its road and its start along it, so there is no X and Y:
+   * drag it along the road, or type how far along it starts.
+   */
   renderVehicleInspector(host, element, def) {
     const doc = this.host.doc;
     const id = element.id;
@@ -1475,7 +1475,7 @@ export class Panels {
           : 'Forward goes round in the order the road was laid, Reverse the other way.'));
     host.append(el('p', 'tb-fig-blurb', onRoad
       ? `On ${road.name || 'its road'}, starting ${show(element.dims.offset, 1)} m round from its first node, at ${Math.round(element.dims.speed * KMH)} km/h on the straights. It slows for every bend by itself. ${ways}`
-      : 'This vehicle has no road, so it stays parked in the row along the south edge of the plot. Drag it onto a road on the plan.'));
+      : 'This vehicle has no road, so it stays parked in the row along the south edge of the plot. Drag it onto a road.'));
     if (onRoad) {
       const row = el('div', 'tb-row-btns');
       row.append(button('Select its road', 'tb-btn', () => {
@@ -1484,7 +1484,7 @@ export class Panels {
       }));
       host.append(row);
     }
-    host.append(el('p', 'tb-help', 'Drag the car on the plan to slide it along its road. A car dropped on the right hand half of a two lane loop drives the other lane.'));
+    host.append(el('p', 'tb-help', 'Drag the car to slide it along its road. A car dropped on the right hand half of a two lane loop drives the other lane.'));
   }
 
   /*
@@ -2668,7 +2668,20 @@ export class Panels {
             grid.append(this.propDimField(element, def, key, 'card-dim'));
           }
         }
+        /* Paint has its footprint, and a label its words. */
+        if (def.kind === KIND.DECAL) {
+          for (const [key, label] of [['width', 'Width (m)'], ['depth', 'Depth (m)']]) {
+            grid.append(this.field(`card-dim-${id}-${key}`, label, element.dims[key], (val) => {
+              this.host.edit('resize', (d) => { elementById(d, id).dims[key] = round6(Math.max(0.2, val)); });
+            }, { step: 0.5, places: 2, min: 0.2 }));
+          }
+        }
         card.append(grid);
+        if (def.kind === KIND.ANNOTATION) {
+          card.append(this.field(`card-text-${id}`, 'Text', element.text ?? '', (val) => {
+            this.host.edit('label', (d) => { elementById(d, id).text = val; });
+          }, { text: true }));
+        }
       }
     }
     card.append(actions);

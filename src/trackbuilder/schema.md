@@ -162,7 +162,7 @@ once) and skipping anything that carries no printed vinyl (a flag or a cone is
 scored through a square in the air beside it). Structure *i* wears logo
 *i* mod *n*. Fifteen gates and five logos is three gates each, spread down the
 lap rather than bunched at the start. The rule is `dressOrder()` in
-`model.js`, and both the race field and the builder's own 3D preview read it
+`model.js`, and both the race field and the builder's own 3D view read it
 from there so they cannot disagree.
 
 A gate's own header pennants wear THAT GATE'S logo in both accents. The run of
@@ -555,7 +555,7 @@ simulator flies it as a freestyle map in the town's art style
 
 A map's time of day and its ground, the two things that change its mood
 more than any single asset does. Chosen on the builder's Map panel and
-drawn by the simulator (`src/maps/built/looks.js`); the builder's 3D preview
+drawn by the simulator (`src/maps/built/looks.js`); the builder's 3D view
 follows both.
 
 ```jsonc

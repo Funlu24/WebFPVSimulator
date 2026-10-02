@@ -3,8 +3,9 @@
 A plan for the owner, 2 October 2026. It is written to be argued with. Section 6
 lists the decisions it takes on the owner's behalf, and how to reverse each one.
 
-Status is kept at the top and updated as stages land. As of 2 October 2026 nothing
-below has been built.
+Status is kept at the top and updated as stages land. As of 2 October 2026 stages A
+to C are built and their checks pass; section 8 says what was done against this plan
+and where it differs.
 
 ## 0. What was asked
 
@@ -80,14 +81,17 @@ instead of for an element, so what the ghost shows is what `seat()` keeps.
 - A drag works the same, with the dragged pieces left out of what the ray can
   hit, so a container lifted over another stands on it and lifted off it comes
   down. The grab point stays under the pointer: the plan's own rule, on the plane
-  the press landed on.
-- What stands on a piece goes with it. A move or a turn of a container takes the
-  billboard on its roof along (the transitive set the seat already knows:
-  `seatFor` names what each thing stands on). Stage B.
-- Page Up and Page Down step Base by a quarter metre (a metre with Shift), and
-  Base is a field on the card, because a gap sill or a start pad is sometimes
-  meant to be somewhere nothing is. The old height drag is gone: a drag on a
-  piece moves it.
+  the press landed on, raised by the height the piece has been carried to.
+- What stands on a piece goes with it. A move of a container, by a drag or an arrow
+  key, takes the billboard on its roof along (the transitive set the seat already
+  knows: `seatFor` names what each thing stands on). A turn does not: what was on
+  the roof is left where it is and the seat sets it down if the turn took the roof
+  from under it.
+- Page Up and Page Down step a named gap by a quarter metre (a metre with Shift),
+  and Base is a field on the card, because a gap's sill is sometimes meant to be
+  somewhere nothing is. What is built, the start pads included, stands on what is
+  under it and sets itself down (`seat.js`), so a step is not a thing it can take.
+  The old height drag is gone: a drag on a piece moves it.
 - Paint and notes stay on the ground whatever is under the pointer: a decal is
   never raised, a label has no height, a road is on the paving.
 
@@ -104,11 +108,12 @@ the one thing in `view3d.js` that has to learn there are two.
 
 ### 2.4 Turning
 
-The ring's radius comes from the asset's footprint, not an opening's width, and
-its line, its grab band and its knob grow with it, because a 26 m building seen
-from 180 m has a ring a hand cannot take at gate scale. Turning goes through the
-same `snapYaw` the plan's handle uses, so a building cannot be left at 40 degrees
-and the plan and the room agree about what a heading is.
+The ring's radius comes from the asset's footprint, not an opening's width, with
+a fingertip's span as the least, and its line, its grab band and its knob are a few
+pixels wide wherever the camera is, because a ring at gate scale is a hairline on a
+26 m building seen from 180 m and a hoop on a lamp. Turning goes through the same
+`snapYaw` the plan's handle uses, so a building cannot be left at 40 degrees and
+the plan and the room agree about what a heading is.
 
 ### 2.5 Roads and cars
 
@@ -129,7 +134,7 @@ The room's layout is `body.tb-whoop`, and `buildsIn3D()` decides it, so a map
 gets the drawer, the card, the coach line, the empty state and the lap bar when
 it is true. Each has a map's words: the coach says "Click the plot to place it"
 and, for the road, what the next click does; the empty state offers the starter
-yard; the lap bar reads Things, Solids, Warnings, Field and the drawer's toggle
+yard; the lap bar reads Things, Solids, Warnings, Plot and the drawer's toggle
 (Details). The "Build in 2D" note, the hop to 2D in `pickTool` and
 `armGroundLogo`, `previewing()` and the preview's own height drag go with the
 premise they were written for.
@@ -143,12 +148,12 @@ ledge on a map, so a map's ruler has no key.
 
 ## 3. Stages
 
-| Stage | What |
-| --- | --- |
-| A | The room takes a map: `buildsIn3D`, the chrome and its words, the scene plumbing (`stage()`, groups, hover, overlay), select, box select, move on the ground, turn by the ring, copy, nudge, delete, the map card, the asset ghost, place on the ground. The 2D plan is untouched. |
-| B | Standing on things: the landing query in `place.js`, the ghost and the drop on a roof, a move over and off other pieces, what stands on a piece goes with it, Base on the card, Page Up and Page Down. |
-| C | Roads and cars in the room. |
-| D | The flow cases for all of it, the self test for the rules, the dead preview code taken out, the docs. |
+| Stage | What | Status |
+| --- | --- | --- |
+| A | The room takes a map: `buildsIn3D`, the chrome and its words, the scene plumbing (`stage()`, groups, hover, overlay), select, box select, move on the ground, turn by the ring, copy, nudge, delete, the map card, the asset ghost, place on the ground. The 2D plan is untouched. | done |
+| B | Standing on things: the landing query in `place.js`, the ghost and the drop on a roof, a move over and off other pieces, what stands on a piece goes with it, Base on the card, Page Up and Page Down. | done |
+| C | Roads and cars in the room. | done |
+| D | The flow cases for all of it, the self test for the rules, the dead preview code taken out, the docs. | done |
 
 Each stage ends green on `node src/trackbuilder/selftest.js` and the flow cases it
 adds, and is committed on its own.
@@ -180,16 +185,17 @@ adds, and is committed on its own.
 
 1. `node src/trackbuilder/selftest.js`, with a section for the landing rule
    (stands on a roof, on a stack, never on itself, edges are not over, the height
-   of the pointer limits what is stood on), what stands on a piece, the yaw
-   rule, and a copy of a car.
+   of the pointer limits what is stood on), what stands on a piece, a map's tool
+   list, and where a copy of a car goes.
 2. `scripts/builder-flow-check.js`, which drives the real page: the map opens in
    the room with the right chrome, a building is placed by click and a billboard on
    its roof, a container is dragged on to another and off it, the ring turns a
    crane freely and a building by quarters, a road is laid and a car dropped on
    it, a node dragged, and the same by touch.
-3. The existing seat, props and roads checks, because `place.js` is touched.
+3. The self test's seat suite (which places maps and seats what floats on them) and
+   `check:props` and `check:roads`, because `place.js` is touched.
 4. `lint:devices` for the card on touch tablets, `lint:preload`, `check:fresh`,
-   `lint:nouns`.
+   `lint:nouns`, `check:path`.
 
 `npm run verify` is not needed: nothing in the plant, the module, the build or the
 control loop changes. PROGRESS.md says so, with the run log.
@@ -219,3 +225,48 @@ Each is the plan's answer, in force until the owner says otherwise.
 Snapping an asset to another's faces, a lift gizmo, rotating a box off the compass
 (the physics), a road on a roof, publishing a map from the room differently from
 the plan, and the board's own copy of any of it.
+
+## 8. What was done, against the plan
+
+Everything in sections 2.1 to 2.7 was built. Where the build differs from what is
+written above:
+
+- **Page Up and Page Down** step a gap only, and say so once on anything else (2.2,
+  corrected). A start pad is built, so it is seated like the rest.
+- **The ring is sized in pixels.** The plan grew it with the footprint; it is the
+  footprint's reach or a fingertip's span, whichever is larger, with a line, a knob
+  and a band to take that are a few pixels wide wherever the camera is, made again
+  when the camera has come in or out by a fifth (`fitRing`). A gate's ring on the
+  other canvases is untouched.
+- **A pointer ray, not a plane, finds the height.** `surfaceAt` takes the nearest
+  solid thing the ray meets (a window, a car, a label and a ring are not solid) or
+  the ground, reads the highest box top under that point at or below the ray's
+  height (`under` in `place.js`), and a drag carries the grab point up with the piece
+  (the plane it is pulled across rises by the height it has been carried to).
+- **`place.js`.** `supportsOf` now offers `under(x, y, z, ignore)` as well as
+  `seatFor(el, z)`, which is `under` for an element, and `supportsFor(doc)` exports
+  it. Every answer the seat gave is the same (the self test's seat suite, which
+  places maps and seats what floats on them, and the props and roads checks all pass
+  as they did).
+- **`seat.js` `standingOn`** is the carry: the ids that stand, directly or through
+  another, on a set of pieces, read off `seatFor`. A gap on a roof is not carried, as
+  it stands on nothing.
+- **A hover outline** on the asset under the pointer, which the plan did not list,
+  because a room with no word for what a click would take is a room where a click
+  takes the wrong thing.
+- **The card keeps off the whole piece** on screen (`selectionArea`), not off a point
+  in it, because a map's pieces run from a lamp to a warehouse.
+- **Bend line and Square are not on a map's bar.** They were the room's and are a
+  track's: a map has no racing line to bend and no gates to square.
+- **The preview's own handlers are gone from `view3d.js`**: the height drag, the
+  plain orbit with its toast about things that stand on the ground, and the pan,
+  with `raiseSelected` and `isGrounded` in `app.js`. What `view3d.js` still carries
+  is the racing line's bend, which the room's editor hands over.
+- **`buildsIn3D()` is a question that is always yes.** It is kept as the one place a
+  canvas that is a preview again would change, and every call site reads as the
+  question it asks.
+
+### What was measured
+
+See PROGRESS.md for the run log: the self test, the flow check, the device check and
+the cheap checks.

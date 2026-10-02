@@ -1154,6 +1154,10 @@ Proposed, and the owner's call:
 > *Superseded for the five inch on 2026-10-01 by TRACK-BUILDER-5IN-PLAN.md,
 > decision 16: the five inch canvas is built in the room as the whoop's is, so
 > its 3D is not a preview. The freestyle canvas keeps everything below.*
+>
+> *Update, 2 October 2026, FREESTYLE-3D-BUILD-PLAN.md: the freestyle canvas is built
+> in the room too, so no canvas has a preview any more, and the palette's "Build in
+> 2D" note, the hop to 2D a tool made, and the 2D first order of the switch are gone.*
 
 - **What.** On the five inch and freestyle canvases, "2D | 3D" means build in
   2D and preview in 3D. A palette tool still arms in the 3D preview, where a

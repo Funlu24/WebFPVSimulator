@@ -418,7 +418,9 @@ Each is the plan's answer, in force until the owner says otherwise.
     between 3D and 2D) and a map keeps the preview. Everything the menus plan
     gated on the whoop for the sake of "3D is the tool" reads `buildsIn3D()` now.
     Reverse: make `buildsIn3D` false for the full class, which brings back the
-    plan as the five inch's canvas and the preview note with it.
+    plan as the five inch's canvas and the preview note with it. (The map was
+    brought across the next day, FREESTYLE-3D-BUILD-PLAN.md, and the preview note
+    went with it, so the reverse there is that plan's.)
 17. **The qualifier stays in Load after it is on the board.** It was shipped for
     the acceptance run and as a starter that works offline, and it was then put on
     the board (2026-10-01). MENUS-PLAN.md 4.2b would rather ship no second copy of

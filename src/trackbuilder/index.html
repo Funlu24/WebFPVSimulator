@@ -1873,8 +1873,6 @@
       body.tb-whoop #tb-card:not([hidden]) { display: block; }
       /* The five inch canvas's way in from empty, too (renderEmpty in ui.js). */
       body:not(.tb-map) #tb-empty:not([hidden]) { display: block; }
-      /* The two hints the room has no use for: a line to drag, a pipe to pick. */
-      body.tb-whoop [data-classic] { display: none; }
       body:not(.tb-whoop) [data-whoop] { display: none; }
 
       #tb-lapbar {
@@ -2478,16 +2476,13 @@
             -->
             <span class="tb-keys">
               <!-- What a finger does, in place of the keys a touched screen
-                   has none of: the room, a plan, and the five inch and map
-                   preview, each its own. -->
-              <span class="tb-touch-hint" data-whoop data-3d-only>Tap a gate to select it. Drag it to move it. Two fingers slide, pinch and twist the room.</span>
+                   has none of: the room and the plan, each its own. -->
+              <span class="tb-touch-hint" data-whoop data-3d-only>Tap a piece to select it. Drag it to move it. Two fingers slide, pinch and twist the room.</span>
               <span class="tb-touch-hint" data-2d-only>Tap a tool, then tap the plan to place it. Drag a piece to move it, or empty ground to select several. Two fingers slide and pinch the plan.</span>
-              <span class="tb-touch-hint" data-classic data-3d-only>One finger turns the preview round. Tap a piece to select it.</span>
               <span><kbd>Wheel</kbd>zoom</span>
               <span><kbd>Mid</kbd>pan</span>
               <span><kbd>Click</kbd>select</span>
               <span><kbd>Shift</kbd>add</span>
-              <span data-classic><kbd>Drag</kbd>box select</span>
               <span data-whoop><kbd>Drag</kbd>move</span>
               <span data-whoop><kbd>Shift drag</kbd>box select</span>
               <span data-whoop><kbd>Ring</kbd>turn</span>
@@ -2496,8 +2491,6 @@
               <span><kbd>Q E</kbd>rotate</span>
               <span><kbd>Alt</kbd>off grid</span>
               <span data-race-only><kbd>X</kbd>flip face</span>
-              <span data-race-only data-3d-only data-classic><kbd>Drag line</kbd>bend it</span>
-              <span data-race-only data-3d-only data-classic><kbd>Click pipe</kbd>pick a side</span>
               <span><kbd>V</kbd>2D and 3D</span>
               <span><kbd>Del</kbd>remove</span>
               <span><kbd>Ctrl Z</kbd>undo</span>
