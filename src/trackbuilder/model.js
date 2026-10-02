@@ -46,7 +46,7 @@ import {
 } from './elements.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
 import {
-  styleOf as propStyleOf, clampDim, gapPointsOf, styleDims, GAP_POINTS, CAR_STYLES, tiltOf,
+  styleOf as propStyleOf, clampDim, fitDims, gapPointsOf, styleDims, GAP_POINTS, CAR_STYLES, tiltOf,
 } from '../props/types.js';
 import { isRoomType, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
 
@@ -996,6 +996,10 @@ export function normalize(raw) {
         dims[key] = fallback;
       }
     }
+    /* Dimensions that hold one another to a limit, now each is in its own. */
+    if (isProp) {
+      fitDims(type, dims);
+    }
 
     /*
      * A HOOP AND A HEX GATE HAVE ONE OPENING. There is no such thing as a stack of hoops, and
@@ -1345,6 +1349,9 @@ export function toPlain(doc) {
           ? num(clampDim(el.type, key, el.dims[key]))
           : (road || vehicle ? num(clampByLimits(def, key, el.dims[key]))
             : (key === 'levels' ? int(el.dims[key], def.dims[key], 1, 24) : num(el.dims[key], def.dims[key])));
+      }
+      if (isProp) {
+        fitDims(el.type, out.dims);
       }
       if (road) {
         out.nodes = roadNodesRead(el.nodes).nodes;

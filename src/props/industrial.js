@@ -50,7 +50,7 @@
  */
 
 import { Parts, seededRandom, seedOf, around, lerp3 } from './parts.js';
-import { CONTAINER_STYLES } from './types.js';
+import { CONTAINER_STYLES, hollowDoorHeight } from './types.js';
 import { canvas } from './textures.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -1598,6 +1598,197 @@ export function chimneyDraw(el, parts, K) {
 }
 
 /* ------------------------------------------------------------------ *
+ * THE HOLLOW CHIMNEY. A brick stack you can fly down: open at the top, with
+ * a doorway in its foot on the side it faces, so a pilot dives in over the
+ * rim, drops the length of the bore and goes out through the door. A map
+ * builder asked for exactly that on 1 October 2026 (bug-e605ff6a, "hollow
+ * chimneys with opening in the bottom to dive through").
+ *
+ * THE WALL IS STAVES. The chimney above is solid and its shaft is one
+ * capsule on the axis; this one is a ring of capsules that lean with the
+ * taper, each as thick as the wall (a stave's diameter is the brick's
+ * thickness: 45 cm on the smallest stack, 80 on the biggest), as many round
+ * as keeps the groove between two within 4 cm, which is what the chimney's
+ * own staves keep. Nothing is across the middle: the bore is clear from the
+ * rim to the ground, and the drawing leaves it open too (K.shell has no
+ * caps, where K.cyl has a ceiling at each end).
+ *
+ * THE DOORWAY IS WHAT IS LEFT OUT. Stave 0 is the middle of it, on the
+ * heading, and the staves round it that would stand in it are cut short to
+ * stand only over the door, from its lintel to the rim. Its two edges are
+ * jamb columns, one more capsule each, set at the exact angle that leaves
+ * the width asked for between them, and they are DRAWN as what they are: the
+ * door's edges are round columns, so what is solid there is what is drawn,
+ * and no flat reveal stands up to 20 cm proud of a round solid at its
+ * corners. A jamb that sat on the ring of staves would quantize the width in
+ * steps of half a metre, which is not what a field called Doorway says. The
+ * width is the clear between the jambs at the top of the door, where the
+ * wall has leaned in furthest. Its height is half as much again, and never
+ * over half the stack. It opens at most 75 degrees either side of the
+ * heading: past that the back of the wall is too short to be one, so a
+ * doorway is never wider than the bore. src/props/types.js holds the field
+ * to a radius and a quarter, which that stop never reaches.
+ *
+ * THE RIM AND THE LINTEL are the staves' own domes. The drawing rolls a
+ * bullnose over them (K.rim, round the top, and between the jambs under the
+ * wall over the door), so a craft that lands on the rim or grazes the lintel
+ * meets what is drawn: a flat underside over round solids stood up to 17 cm
+ * proud of them at its corners, which the first version of this had.
+ *
+ * ONE SPEC, TWO READERS. hollowShape is what the layout builds from and what
+ * the drawing paints from, and what scripts/props-check.js measures, so the
+ * three cannot disagree about where the brick is.
+ * ------------------------------------------------------------------ */
+
+const TAU = Math.PI * 2;
+/* The deepest groove left between two staves. */
+const HOLLOW_GROOVE = 0.04;
+/* The furthest round a doorway may open from the heading, 75 degrees, in radians. */
+const HOLLOW_DOOR_ANGLE = 1.309;
+const HOLLOW_SEG = 48;
+
+export function hollowShape(el) {
+  const d = el.dims;
+  const H = clamp(d.height, 8, 80);
+  const r0 = clamp(d.radius, 2.4, 7);
+  const r1 = 0.3 * r0 <= CHIMNEY_TAPER_MAX * H ? r0 * 0.7 : r0 - CHIMNEY_TAPER_MAX * H;
+  const w = clamp(0.16 * r0, 0.45, 0.8);
+  const rs = w / 2;
+  const k = (r0 - r1) / H;
+  /* A capsule leaning with the wall is cut by a level plane in a slice wider
+   * than it is round, by this. */
+  const lean = rs * rootOf(1 + k * k);
+  /* The brick's outer radius at height y, as the shell is drawn. */
+  const R = (y) => r0 + (r1 - r0) * (y / H);
+  /* Where a stave's axis is at height y: its outer face against the brick,
+   * a hair inside it. */
+  const axis = (y) => CHIMNEY_FIT * R(y) - lean;
+  /* The staves' upper ends, whose domes reach the rim exactly. */
+  const top = H - rs;
+  const groove = 2 * rootOf(rs * rs - (rs - HOLLOW_GROOVE) * (rs - HOLLOW_GROOVE));
+  const n = Math.max(16, Math.ceil((TAU * axis(0)) / groove));
+  const wanted = clamp(d.door, 1.6, 8);
+  const heightFor = (width) => hollowDoorHeight(width, H);
+  /* The jambs stand at +-jamb round the axis: the smallest angle at which
+   * the clear between their faces, at the top of a door dh high, is what was
+   * asked for, or the widest there may be. Found by halving, with this
+   * module's own sine, so it is the same angle in every engine. */
+  const clearAt = (a, dh) => 2 * around(axis(dh), a)[1] - w;
+  const solve = (dh) => {
+    if (clearAt(HOLLOW_DOOR_ANGLE, dh) <= wanted) {
+      return HOLLOW_DOOR_ANGLE;
+    }
+    let lo = 0;
+    let hi = HOLLOW_DOOR_ANGLE;
+    for (let i = 0; i < 48; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (clearAt(mid, dh) < wanted) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    return hi;
+  };
+  /* The door is half as high again as it is wide, as wide as it turns out to
+   * be: asked for more than the wall allows, it is the width the wall allows
+   * and not a slit twelve metres tall. The width depends a little on the
+   * height (the wall leans), so the two settle together, which a few passes
+   * do to a micrometre; asked for what the wall allows, the first is the
+   * last. */
+  let dh = heightFor(wanted);
+  for (let i = 0; i < 8; i += 1) {
+    dh = heightFor(clearAt(solve(dh), dh));
+  }
+  const jamb = solve(dh);
+  /* Staves 0 to j - 1, and the same number the other way, are in the doorway. */
+  const j = Math.max(1, Math.ceil((jamb * n) / TAU - 1e-9));
+  return {
+    H, r0, r1, w, rs, k, lean, R, axis, top, n, j, dh, wanted, jamb, clear: clearAt(jamb, dh),
+    /* The bore's radius at height y, as the drawing paints it: a centimetre
+     * inside the solid's face, so there is brick wherever there is solid. */
+    bore: (y) => axis(y) - lean - 0.01,
+  };
+}
+
+export function hollowChimneyLayout(el) {
+  const s = hollowShape(el);
+  const P = new Parts();
+  for (let i = 0; i < s.n; i += 1) {
+    const a = (i / s.n) * TAU;
+    /* Stave i is over the doorway: stave 0 and the ones either side of it. */
+    const over = i < s.j || i > s.n - s.j;
+    const y0 = over ? s.dh + s.rs : 0;
+    const [ax, az] = around(s.axis(y0), a);
+    const [bx, bz] = around(s.axis(s.top), a);
+    P.cap('brick', [ax, y0, az], [bx, s.top, bz], s.rs, { draw: false, name: over ? 'lintel' : 'stave', kind: 'wall' });
+  }
+  /* The jambs, from the ground into the wall over the door. */
+  for (const a of [s.jamb, TAU - s.jamb]) {
+    const [ax, az] = around(s.axis(0), a);
+    const [bx, bz] = around(s.axis(s.dh + s.rs), a);
+    P.cap('brick', [ax, 0, az], [bx, s.dh + s.rs, bz], s.rs, { draw: false, name: 'jamb', kind: 'wall' });
+  }
+  return P.list;
+}
+
+export function hollowChimneyDraw(el, parts, K) {
+  const s = hollowShape(el);
+  /* What is left of the wall round the back, under the doorway's top. */
+  const notch = [s.jamb, TAU - s.jamb];
+  /* Where the wall is whole again: the lintel staves' domes start at the
+   * door's top, and the wall over the doorway starts where they are widest,
+   * a stave's radius higher, with the bullnose between. */
+  const whole = s.dh + s.rs;
+  /* A band of the shell, or of the bore, in two pieces where the doorway
+   * cuts it: below `whole` the doorway is out of it. */
+  const wall = (mat, y0, y1, inside) => {
+    const rad = inside ? s.bore : s.R;
+    if (y0 < whole) {
+      const e = Math.min(y1, whole);
+      K.shell(mat, y0, e, rad(y0), rad(e), notch, inside, HOLLOW_SEG);
+    }
+    if (y1 > whole) {
+      const b = Math.max(y0, whole);
+      K.shell(mat, b, y1, rad(b), rad(y1), null, inside, HOLLOW_SEG);
+    }
+  };
+  /* The outside: brick, then the red and white rings a tall stack wears or
+   * the soot a short one has, up to the rim. */
+  const banded = s.H >= 30;
+  const paint = banded ? s.top - 3.6 : s.top - 2;
+  wall('brick', 0, paint, false);
+  if (banded) {
+    for (let b = 0; b < 3; b += 1) {
+      wall(b % 2 === 0 ? 'mastRed' : 'mastWhite', paint + b * 1.2, paint + (b + 1) * 1.2, false);
+    }
+  } else {
+    wall('indSoot', paint, paint + 1, false);
+    wall('indSootDeep', paint + 1, s.top, false);
+  }
+  /* The inside, sooted all the way up: the dark the pilot dives into. */
+  wall('indSootDeep', 0, s.top, true);
+  /* The jambs, drawn as the columns they are, up to where the wall over the
+   * door is whole, which buries their tops. */
+  for (const a of [s.jamb, TAU - s.jamb]) {
+    const [ax, az] = around(s.axis(0), a);
+    const [bx, bz] = around(s.axis(whole), a);
+    K.cyl('brick', [ax, 0, az], [bx, whole, bz], s.rs, 14);
+  }
+  /* The lintel's underside, the staves' domes rolled over between the jambs,
+   * and the rim's, the same all the way round the top. */
+  K.rim('brick', whole, s.axis(whole), s.rs, 56, [-s.jamb, s.jamb]);
+  K.rim('indBrickDark', s.top, s.axis(s.top), s.rs, 56);
+  /* Iron hoops up the brick, from over the door. */
+  for (let y = s.dh + 1.6; y < paint - 0.6; y += 3.2) {
+    K.rim('indHoop', y, s.R(y) + 0.03, 0.05, HOLLOW_SEG);
+  }
+  /* A ladder up the back, on the side the doorway is not. */
+  const lad = (y, o) => [-(s.R(y) + 0.3 + o), y, 0];
+  K.ladder('rod', lad(0.2, 0.05), lad(s.top - 0.4, 0), 0.42);
+}
+
+/* ------------------------------------------------------------------ *
  * THE POWER PYLON. A tapering four legged lattice with three pairs of
  * lattice cross arms and insulator strings. The wires between pylons are
  * drawn by the map, which knows where the neighbours are, from the bottom
@@ -1714,6 +1905,142 @@ export function pylonDraw(el, parts, K) {
   const [px, , pz] = pylonAt(s, [1, 1], 2.3);
   K.sign('dangerPlate', px, 2.3, pz + 0.12, 0.6, 0.45, '+z', 0);
   K.sign('indPylonPlate', -px, 2.3, pz + 0.12, 0.6, 0.3, '+z', 0);
+}
+
+/* ------------------------------------------------------------------ *
+ * THE WIND TURBINE. A tapering white tower, a nacelle and a hub on it, and
+ * three blades, PARKED: the rotor faces the way the turbine is pointed and
+ * does not turn. A map builder asked for wind turbines on 1 October 2026
+ * (bug-e605ff6a).
+ *
+ * WHY THE BLADES STAND STILL. The module holds a world that does not move:
+ * its shapes are fixed for the life of the map, and a rotor that turned
+ * would be drawn in one place and solid in another. So a blade is where
+ * Rotor puts it (0 to 1 is a third of a turn, which is all the rotor has,
+ * three blades being alike), and a pilot who wants a line between two blades
+ * turns the rotor until there is one. A turning rotor is a different thing,
+ * a mover the physics would have to be taught, and is not built here.
+ *
+ * ALL CAPSULES, SO IT FACES ANY HEADING. The tower and every blade are cones,
+ * and a cone is capsules chained along its axis (coneChain), each as thick as
+ * the cone is at its far end, so the solid is never outside what is drawn.
+ * The nacelle and the hub are single capsules drawn as themselves. The blades
+ * are round in section, as the tower is, and not the flat airfoils of a real
+ * one: a flat blade is a row of capsules across its width at every step along
+ * it, hundreds of them to a rotor, to get a shape that is 30 cm thick.
+ *
+ * THE GAP RULE. A blade pointing straight down runs parallel to the tower, so
+ * the rotor stands far enough ahead of the tower that the clear between them
+ * is 1.5 m at the root and more along it, and the blade is held to what the
+ * hub's height leaves it, its lowest tip 2.5 m over the ground.
+ * ------------------------------------------------------------------ */
+
+/* The lowest a blade tip may hang over the ground, and the most a section of
+ * a cone may stand off its solid, m. */
+const TURBINE_FOOT = 2.5;
+const TURBINE_SHORT = 0.05;
+
+/*
+ * A cone, solid, as capsules chained end to end along its axis from a to b,
+ * `ra` round at a and `rb` at b. Every one is as thick as the cone is at its
+ * far end, where it is thinnest, less what keeps its round end inside the
+ * cone's slanting side (1 / sqrt(1 + k^2)) and a hair more (CHIMNEY_FIT), as
+ * the chimney's shaft is. A section is as long as keeps its near end, where
+ * the cone stands furthest off it, within `short`. The last stops where its
+ * dome meets b, so nothing is solid past the tip.
+ */
+function coneChain(P, m, name, a, b, ra, rb, short) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const dz = b[2] - a[2];
+  const L = rootOf(dx * dx + dy * dy + dz * dz);
+  if (!(L > 0)) {
+    return;
+  }
+  const slope = (ra - rb) / L;
+  const fit = CHIMNEY_FIT / rootOf(1 + slope * slope);
+  const at = (s) => [a[0] + (dx * s) / L, a[1] + (dy * s) / L, a[2] + (dz * s) / L];
+  const rad = (s) => ra - slope * s;
+  const end = (L - fit * ra) / (1 - fit * slope);
+  let s0 = 0;
+  for (let i = 0; i < 400; i += 1) {
+    if (!(end > s0 + 1e-9)) {
+      break;
+    }
+    const len = slope > 1e-9 ? clamp((short - (1 - fit) * rad(s0)) / slope, 0.1, L) : L;
+    const last = s0 + len >= end;
+    const s1 = last ? end : s0 + len;
+    const r = fit * rad(s1);
+    P.cap(m, at(s0), at(s1), r, { draw: false, name, kind: r > 0.3 ? 'wall' : 'pole' });
+    if (last) {
+      break;
+    }
+    s0 = s1;
+  }
+}
+
+export function turbineShape(el) {
+  const d = el.dims;
+  const H = clamp(d.height, 15, 100);
+  const spin = clamp(d.spin, 0, 1);
+  const wanted = clamp(d.blade, 6, 60);
+  /* The nacelle goes by the blade the hub's height allows, so a long blade
+   * on a short tower does not put a big head on a thin neck. */
+  const reach = Math.min(wanted, H - TURBINE_FOOT);
+  const rn = clamp(0.035 * reach + 0.6, 0.9, 2.6);
+  const rh = 0.8 * rn;
+  /* The blade starts inside the hub, half a hub radius from its middle. */
+  const s0 = 0.5 * rh;
+  const L = Math.min(wanted, H - TURBINE_FOOT - s0);
+  const rb = 1 + 0.016 * H;
+  const rt = Math.min(rb, Math.max(0.62 * rb, 0.75 * rn));
+  const rootR = clamp(0.017 * L + 0.18, 0.25, 1.1);
+  const tipR = Math.max(0.1, 0.2 * rootR);
+  /* How far ahead of the tower's axis the rotor stands: its own nacelle's
+   * length, or what leaves the gap rule's clear between a blade that hangs
+   * straight down and the tower. */
+  const xb = Math.max(2.3 * rn, rt + rootR + 1.5);
+  const blades = [];
+  for (let i = 0; i < 3; i += 1) {
+    const [c, sn] = around(1, ((spin + i) / 3) * TAU);
+    blades.push({
+      a: [xb, H + s0 * c, s0 * sn],
+      b: [xb, H + (s0 + L) * c, (s0 + L) * sn],
+    });
+  }
+  return { H, spin, L, rn, rh, s0, rb, rt, rootR, tipR, xb, blades, ht: H - 0.6 * rn };
+}
+
+export function turbineLayout(el) {
+  const s = turbineShape(el);
+  const P = new Parts();
+  /* The tower, up into the nacelle. */
+  coneChain(P, 'mastWhite', 'tower', [0, 0, 0], [0, s.ht, 0], s.rb, s.rt, TURBINE_SHORT);
+  /* The nacelle, drawn and solid as the one capsule it is, from behind the
+   * tower to where the hub begins, and the hub on its nose. */
+  P.cap('tankPaint', [-1.9 * s.rn, s.H, 0], [s.xb - s.rn, s.H, 0], s.rn, { look: 'capsule', seg: 16, name: 'nacelle', kind: 'wall' });
+  P.cap('tankPaint', [s.xb - 0.25 * s.rh, s.H, 0], [s.xb + 0.25 * s.rh, s.H, 0], s.rh, { look: 'capsule', seg: 14, name: 'hub', kind: 'wall' });
+  for (const b of s.blades) {
+    coneChain(P, 'mastWhite', 'blade', b.a, b.b, s.rootR, s.tipR, TURBINE_SHORT);
+  }
+  return P.list;
+}
+
+export function turbineDraw(el, parts, K) {
+  const s = turbineShape(el);
+  K.cyl('mastWhite', [0, 0, 0], [0, s.ht, 0], s.rb, 28, s.rt);
+  /* A blade is a white cone with its last seventh red: the cone drawn
+   * whole, and the red over its tip, split where the colour changes so the
+   * two never share a surface. */
+  const t = 6 / 7;
+  for (const b of s.blades) {
+    const m = [b.a[0], b.a[1] + (b.b[1] - b.a[1]) * t, b.a[2] + (b.b[2] - b.a[2]) * t];
+    const rm = s.rootR - (s.rootR - s.tipR) * t;
+    K.cyl('mastWhite', b.a, m, s.rootR, 10, rm);
+    K.cyl('mastRed', m, b.b, rm, 10, s.tipR);
+  }
+  /* The obstruction light on the nacelle's roof, over the tower. */
+  K.ball('lampRed', [0, s.H + s.rn + 0.12, 0], 0.18);
 }
 
 /* ------------------------------------------------------------------ *

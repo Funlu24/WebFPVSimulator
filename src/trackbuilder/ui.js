@@ -55,7 +55,7 @@ import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
 import { localBoundsOf, turnsOf } from './view2d.js';
 import {
-  PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf, tiltOf,
+  PROP_GROUPS, GAP_POINTS, clampDim, fitDims, hollowDoorHeight, styleDims, styleOf as propStyleOf, tiltOf,
 } from '../props/types.js';
 /* What a room's furniture may be sized to, so the fields hold to it. */
 import { isRoomType, clampRoomSize, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
@@ -1047,6 +1047,7 @@ export class Panels {
         const e2 = elementById(d, element.id);
         if (e2) {
           e2.dims[key] = clampDim(element.type, key, val);
+          fitDims(element.type, e2.dims);
         }
       });
     }, {
@@ -1158,7 +1159,10 @@ export class Panels {
     const b = localBoundsOf(element);
     const tall = elementHeight(def, element.dims, propStyleOf(element), tiltOf(element));
     const sunk = element.position.z < -0.005 ? `, with ${show(-element.position.z, 1)} m of it under the ground` : '';
-    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground${sunk}.`));
+    const doorway = element.type === 'hollowChimney'
+      ? ` Its doorway is ${show(element.dims.door, 1)} m wide and ${show(hollowDoorHeight(element.dims.door, element.dims.height), 1)} m high.`
+      : '';
+    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground${sunk}.${doorway}`));
   }
 
   /* A heading and a row of segment buttons, one of them on: the inspector's

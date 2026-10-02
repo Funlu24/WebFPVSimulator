@@ -595,9 +595,11 @@ different wreck, advert or colour.
 | `waterTower` | 5 | Industrial | any |  | `height` 16 m [6, 40], `radius` 3.6 m [1.5, 7], `tank` 0.8 m [0, 10] |
 | `mast` | 6 | Industrial | any |  | `height` 32 m [8, 90], `width` 1.8 m [1, 4] |
 | `chimney` | 7 | Industrial | any |  | `height` 24 m [6, 80], `radius` 1.3 m [0.5, 5] |
+| `hollowChimney` | none | Industrial | any |  | `height` 30 m [8, 80], `radius` 3 m [2.4, 7], `door` 2.8 m [1.6, 8] |
 | `pylon` | Y | Industrial | any |  | `height` 28 m [12, 60] |
+| `turbine` | none | Industrial | any |  | `height` 48 m [15, 100], `blade` 28 m [6, 60], `spin` 0 [0, 1] fraction |
 | `containers` | 8 | Industrial | quarter | `40ft` `20ft` `40ft open` | `stack` 2 [1, 5] count, `variant` 1 [1, 99] count |
-| `scaffold` | K | Industrial | quarter | `open` `netted` | `width` 10 m [2.5, 40], `height` 10 m [2, 40], `depth` 1.3 m [1, 2.5] |
+| `scaffold` | K | Industrial | quarter | `open` `netted` | `width` 10 m [2.5, 40], `height` 10 m [2, 40], `depth` 1.55 m [1.55, 2.5] |
 | `bridge` | 9 | Street | quarter | `road` `footbridge` | `span` 24 m [6, 80], `width` 8 m [2, 20], `height` 6 m [3, 20], `piers` 1 [0, 6] count |
 | `billboard` | 0 | Street | any |  | `width` 8 m [2, 20], `height` 3.2 m [1.2, 8], `lift` 5 m [1.5, 30], `variant` 1 [1, 99] count |
 | `utilityPole` | none | Street | any |  | `height` 10 m [5, 16] |
@@ -664,6 +666,35 @@ The `pitch` rule for a heading is the one for `yaw`: an asset with boxes keeps
 to the compass, and `turns` above still says so. Standing on end composes with
 it, and with a negative `z`: a container stood on end and sunk 2 m has its
 foot 2 m under the ground.
+
+### A chimney to fly down, and a turbine that stands still
+
+Two assets a map builder asked for (bug-e605ff6a), both built of capsules, so
+both face any heading.
+
+**`hollowChimney`** is a brick stack with its bore open from the rim to the
+ground and a doorway in its foot on the side it faces (its heading, `+x`), so
+a pilot dives in over the rim and out through the door. `radius` is the
+OUTER radius at the base, from 2.4 m up, so the bore at the rim is never under
+2.4 m across; the wall is 45 cm thick on the smallest stack and 80 cm on the
+biggest. `door` is the clear width of the doorway at the top of the door,
+where the wall has leaned in furthest, and the door is half as high again as
+it is wide, within 3.2 m and half the stack. A doorway is never wider than one
+and a quarter base radii, so `door` is held to `1.25 * radius` wherever
+dimensions are held to their limits (the file's reader and writer and the
+builder's field), and a larger one is read as that; the layout would stop it at
+75 degrees either side of the heading in any case. The wall is a ring of
+leaning capsules, 54 to 120 of them, with the groove between two never over
+4 cm.
+
+**`turbine`** is a tapering tower, a nacelle and hub, and three blades,
+parked: the rotor faces the heading and does not turn, because the physics
+holds a world that does not move. `spin` sets where the blades stand, as a
+fraction of the third of a turn the rotor has (0 has one blade straight up, 0.5
+has one straight down, 1 is 0 again). `height` is the hub's, and `blade` is
+held to what that leaves it: the lowest blade tip hangs at least 2.5 m over the
+ground. The rotor stands ahead of the tower far enough that a blade hanging
+straight down clears the tower by the gap rule's 1.4 m.
 
 ### An asset's own frame
 

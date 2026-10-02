@@ -41,7 +41,8 @@ import * as COURSE from './course.js';
 import { buildingLayout, buildingDraw, bandoLayout, bandoDraw } from './buildings.js';
 import {
   craneLayout, craneDraw, waterLayout, waterDraw, mastLayout, mastDraw, chimneyLayout, chimneyDraw,
-  pylonLayout, pylonDraw, containerLayout, containerDraw, scaffoldLayout, scaffoldDraw,
+  hollowChimneyLayout, hollowChimneyDraw, pylonLayout, pylonDraw, turbineLayout, turbineDraw,
+  containerLayout, containerDraw, scaffoldLayout, scaffoldDraw,
 } from './industrial.js';
 import {
   bridgeLayout, bridgeDraw, billboardLayout, billboardDraw, poleLayout, poleDraw, lampLayout, lampDraw,
@@ -62,7 +63,9 @@ const CODE = {
   waterTower: [waterLayout, waterDraw],
   mast: [mastLayout, mastDraw],
   chimney: [chimneyLayout, chimneyDraw],
+  hollowChimney: [hollowChimneyLayout, hollowChimneyDraw],
   pylon: [pylonLayout, pylonDraw],
+  turbine: [turbineLayout, turbineDraw],
   containers: [containerLayout, containerDraw],
   scaffold: [scaffoldLayout, scaffoldDraw],
   bridge: [bridgeLayout, bridgeDraw],

@@ -183,6 +183,16 @@ export const PROP_TYPES = {
     limits: { height: [6, 80, M], radius: [0.5, 5, M] },
     labels: { height: 'Height', radius: 'Base radius' },
   },
+  hollowChimney: {
+    label: 'Hollow chimney',
+    key: '',
+    group: 'industrial',
+    turns: 'any',
+    note: 'A brick stack you can fly down: open at the top, with a doorway in its foot on the side you face it. Dive in over the rim and out through the door. The doorway is never wider than a radius and a quarter.',
+    dims: { height: 30, radius: 3, door: 2.8 },
+    limits: { height: [8, 80, M], radius: [2.4, 7, M], door: [1.6, 8, M] },
+    labels: { height: 'Height', radius: 'Base radius', door: 'Doorway' },
+  },
   pylon: {
     label: 'Power pylon',
     key: 'Y',
@@ -192,6 +202,16 @@ export const PROP_TYPES = {
     dims: { height: 28 },
     limits: { height: [12, 60, M] },
     labels: { height: 'Height' },
+  },
+  turbine: {
+    label: 'Wind turbine',
+    key: '',
+    group: 'industrial',
+    turns: 'any',
+    note: 'A three blade turbine parked with its rotor facing the way you point it. The tower, nacelle and every blade are solid, and the blades do not turn: Rotor sets where they stand, one third of a turn from 0 to 1. A blade is never longer than the hub is high.',
+    dims: { height: 48, blade: 28, spin: 0 },
+    limits: { height: [15, 100, M], blade: [6, 60, M], spin: [0, 1, FRAC] },
+    labels: { height: 'Hub height', blade: 'Blade length', spin: 'Rotor' },
   },
   containers: {
     label: 'Containers',
@@ -405,6 +425,41 @@ export function clampDim(type, key, value) {
   return Math.min(lim[1], Math.max(lim[0], v));
 }
 
+/*
+ * A HOLLOW CHIMNEY'S DOORWAY is what the wall can have cut in it: never wider
+ * than one and a quarter base radii, which the layout can give at every radius
+ * and height the builder offers (scripts/props-check.js, block 1d, sweeps
+ * them). The field says Doorway, and a number typed past what the wall allows
+ * would be shown and not built, so it is held to this where every dimension
+ * is held to its limits, and the layout's own stop at 75 degrees either side
+ * of the heading is only the last word. The door is half as high again as it
+ * is wide, within 3.2 m and half the stack.
+ */
+export const HOLLOW_DOOR_PER_RADIUS = 1.25;
+
+export function hollowDoorMax(radius) {
+  return HOLLOW_DOOR_PER_RADIUS * radius;
+}
+
+export function hollowDoorHeight(width, height) {
+  const h = 1.5 * width;
+  const hi = 0.5 * height;
+  return h < 3.2 ? 3.2 : (h > hi ? hi : h);
+}
+
+/*
+ * Dimensions that hold one another to a limit, applied after each has been
+ * clamped to its own: today a hollow chimney's doorway to its radius. Changes
+ * `dims` and returns it. A dimension that is not a number is left for
+ * clampDim to have repaired.
+ */
+export function fitDims(type, dims) {
+  if (type === 'hollowChimney' && dims && Number.isFinite(dims.door) && Number.isFinite(dims.radius)) {
+    dims.door = Math.min(dims.door, hollowDoorMax(dims.radius));
+  }
+  return dims;
+}
+
 /* A named gap's points, snapped to the nearest tier. */
 export function gapPointsOf(value) {
   const n = Number(value);
@@ -460,6 +515,27 @@ const TREE_H = { sakura: 8.35, street: 8.35, pine: 15.35 };
 /* A container's length by its style, m: what it stands tall when it is stood on its end. */
 const CONTAINER_LEN = { '40ft': 12.192, '20ft': 6.058, '40ft open': 12.192 };
 
+/*
+ * A wind turbine's top: the highest blade tip, or the nacelle's roof and its
+ * lamp when no blade reaches as high. The three blades stand a third of a
+ * turn apart, so the one nearest straight up is at most a sixth of a turn off
+ * it, and which one is `spin`'s doing. The blade is held to what the hub's
+ * height leaves it (the layout keeps its lowest tip 2.5 m up), which is
+ * counted here without the hub's own reach, so it can only be generous. A
+ * tip is at most 1.1 m further from the hub than the blade is long (its root
+ * starts inside the hub), and the nacelle's roof and lamp stand at most 3 m
+ * over the hub's height. This is the builder's readout and never the
+ * physics' path, so the cosine is the engine's.
+ */
+function turbineTop(d) {
+  const H = d.height ?? 48;
+  const spin = Math.min(1, Math.max(0, d.spin ?? 0));
+  const f = spin - Math.floor(spin);
+  const off = Math.min(f, 1 - f) * ((2 * Math.PI) / 3);
+  const L = Math.min(d.blade ?? 28, H - 2.5);
+  return H + Math.max(3, (L + 1.1) * Math.cos(off)) + 0.05;
+}
+
 export function approxHeight(type, dims, style, tilt = 0) {
   const d = dims || {};
   /* Stood on end, an asset is as tall as it was long, and the stack that was
@@ -492,8 +568,12 @@ export function approxHeight(type, dims, style, tilt = 0) {
     case 'mast': return (d.height ?? 32) + 3.3;
     /* The corbel and the flue, drawn 0.9 over the brick. */
     case 'chimney': return (d.height ?? 24) + 1;
+    /* The staves end in domes and the rim is rolled over them: nothing
+     * stands over the height. */
+    case 'hollowChimney': return (d.height ?? 30) + 0.05;
     /* The peak's capsule, 0.25 over the lattice. */
     case 'pylon': return (d.height ?? 28) + 0.3;
+    case 'turbine': return turbineTop(d);
     /* Drawn 5 cm over the pole's height. */
     case 'utilityPole': return (d.height ?? 10) + 0.1;
     /* Drawn 2 cm over the top box. */

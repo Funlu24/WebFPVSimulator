@@ -522,6 +522,28 @@ function roundBlob() {
   }
   return g;
 }
+
+/*
+ * A geometry turned inside out: every triangle wound the other way and every
+ * normal reversed, so the face the eye in the middle of a tube sees is lit
+ * and shaded as a front face is. Done on the geometry itself, because a
+ * negative scale in a batch's matrix is a determinant three.js turns the
+ * winding back for and the bake does not.
+ */
+function turnedInside(g) {
+  const index = g.index;
+  for (let i = 0; i < index.count; i += 3) {
+    const b = index.getX(i + 1);
+    index.setX(i + 1, index.getX(i + 2));
+    index.setX(i + 2, b);
+  }
+  const n = g.attributes.normal;
+  for (let i = 0; i < n.count; i += 1) {
+    n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  }
+  return g;
+}
+
 const CYL = new Map();
 function unitCyl(seg) {
   let g = CYL.get(seg);
@@ -773,6 +795,55 @@ export class PropKit {
     const edge = new THREE.CylinderGeometry(r1, r1, thick, 32, 1, true);
     edge.translate(c[0], c[1] - thick / 2, c[2]);
     this.add(mat, edge);
+  }
+
+  /*
+   * A TAPERED TUBE, OPEN AT BOTH ENDS, on the element's vertical axis: from
+   * height y0, where it is r0 round, to y1, where it is r1, over the arc
+   * [a0, a1] (radians, counted from +x toward +z, which is how ./parts.js's
+   * `around` counts, so a layout and its drawing name an angle the same
+   * way) or all the way round. `inward` turns it inside out, so that what
+   * the eye in the middle sees is its face: the bore of a chimney.
+   *
+   * Open, so nothing is lidded by accident: the cylinder `cyl` draws has a
+   * cap at each end, which across a chimney is a ceiling.
+   */
+  shell(mat, y0, y1, r0, r1, arc = null, inward = false, seg = 48) {
+    if (!(y1 - y0 > 1e-4) || !(r0 > 0) || !(r1 > 0)) {
+      return;
+    }
+    const a0 = arc ? arc[0] : 0;
+    const len = arc ? arc[1] - arc[0] : Math.PI * 2;
+    if (!(len > 1e-4)) {
+      return;
+    }
+    const n = Math.max(2, Math.ceil((seg * len) / (Math.PI * 2)));
+    /* three's cylinder runs its angle from +z toward +x, ours from +x toward
+     * +z, so the arc is mirrored: its start is the far end of ours. */
+    const g = new THREE.CylinderGeometry(r1, r0, y1 - y0, n, 1, true, Math.PI / 2 - a0 - len, len);
+    g.translate(0, (y0 + y1) / 2, 0);
+    this.add(mat, inward ? turnedInside(g) : g);
+  }
+
+  /* A round bar bent into a level ring, or into part of one over the arc
+   * [a0, a1] (as `shell` counts angles): a hoop round a stack, a rolled
+   * rim, the rounded underside of a lintel. `R` is the radius of the ring,
+   * `t` the radius of the bar. */
+  rim(mat, y, R, t, seg = 48, arc = null) {
+    const a0 = arc ? arc[0] : 0;
+    const len = arc ? arc[1] - arc[0] : Math.PI * 2;
+    if (!(len > 1e-4)) {
+      return;
+    }
+    const g = new THREE.TorusGeometry(R, t, 8, Math.max(2, Math.ceil((seg * len) / (Math.PI * 2))), len);
+    /* The torus lies in the XY plane from angle 0; laid flat it runs from +x
+     * toward +z, and turned by -a0 about up it starts at a0. */
+    g.rotateX(Math.PI / 2);
+    if (a0) {
+      g.rotateY(-a0);
+    }
+    g.translate(0, y, 0);
+    this.add(mat, g);
   }
 
   /* A dish: a shallow cone facing `dir`. */

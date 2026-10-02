@@ -85,7 +85,9 @@ import {
   boardPlanOf, planShapeOf, snapYaw, turnsOf,
 } from './view2d.js';
 import { starterMap } from '../maps/built/starter.js';
-import { PROP_TYPES, GAP_POINTS, FURNITURE_PALETTE, CAR_STYLES, tiltOf, approxHeight } from '../props/types.js';
+import {
+  PROP_TYPES, GAP_POINTS, FURNITURE_PALETTE, CAR_STYLES, tiltOf, approxHeight, fitDims, hollowDoorHeight,
+} from '../props/types.js';
 import { partsOf, placedPartsOf } from '../props/catalog.js';
 import { GAP_MIN } from '../props/parts.js';
 import { startBlockDims, startBlockHeight, startBlockLaneOffset } from '../art/startblock.js';
@@ -3677,6 +3679,142 @@ function suiteTilt() {
     const real = Math.max(...placeDocument(Object.assign(createTrack(undefined, 'full', 'freestyle'), { elements: [el] })).solids.map((s) => s.box[4]));
     check('a ledge stood on end is as tall as it is long, and never taller than it is said to be',
       real >= 14 - 1e-9 && approxHeight('ledge', el.dims, null, 1) >= real - 1e-9, `${real}`);
+  }
+}
+
+/*
+ * A CHIMNEY TO FLY DOWN AND A TURBINE THAT STANDS STILL: bug-e605ff6a, "hollow
+ * chimneys with opening in the bottom to dive through" and "wind turbines".
+ * What each is, to the document, the palette and the placement; what a pilot
+ * is promised of their solids is scripts/props-check.js's block 1d, and the
+ * module's flights through them are its (h) and (t).
+ */
+function suiteHollowTurbine() {
+  console.log('\na chimney to fly down and a turbine that stands still');
+  const make = (type, opts = {}) => {
+    const doc = createTrack(undefined, 'full', 'freestyle');
+    doc.field.width = 200;
+    doc.field.depth = 120;
+    const el = freestylePlace(doc, type, 100, 60, opts);
+    return { doc, el };
+  };
+  /* The element's solids as the map places them, and the item they came from. */
+  const solidsOf = (doc, el) => {
+    const item = placeDocument(doc).items.find((it) => it.el.id === el.id);
+    return { own: placeSolids(item.parts, item.x, item.y, item.z, item.yaw, item.turns, []), item };
+  };
+
+  /* -------- on the palette -------- */
+
+  for (const id of ['hollowChimney', 'turbine']) {
+    const def = ELEMENTS[id];
+    check(`${id} is on the palette, under Industrial, with no hotkey, and faces any heading`,
+      Boolean(def) && def.propGroup === 'industrial' && def.key === '' && def.turns === 'any' && def.kind === KIND.STRUCTURE,
+      def ? `${def.propGroup}, key '${def.key}', ${def.turns}` : 'missing');
+    check(`and a new ${id} starts at defaults that are inside its limits`,
+      Object.entries(PROP_TYPES[id].dims).every(([k, v]) => v >= PROP_TYPES[id].limits[k][0] && v <= PROP_TYPES[id].limits[k][1]));
+  }
+
+  /* -------- the reader holds each to its limits -------- */
+
+  {
+    const { doc, el } = make('hollowChimney', { dims: { height: 500, radius: 0.5, door: 0.1 } });
+    const e = elementById(deserialize(serialize(doc)).doc, el.id);
+    check('a hollow chimney read with a height of 500 m, a radius of half a metre and a doorway of 10 cm is 80 m, 2.4 m and 1.6 m',
+      e.dims.height === 80 && e.dims.radius === 2.4 && e.dims.door === 1.6, JSON.stringify(e.dims));
+    el.dims = { height: 8, radius: 7, door: 8 };
+    const text = serialize(doc);
+    const back = deserialize(text);
+    check('and one at its extremes round trips byte for byte, with no repairs',
+      back.repairs.length === 0 && serialize(back.doc) === text, back.repairs.join('; '));
+    /* A doorway is never wider than a radius and a quarter: typed past that it
+     * is read as that, so the field never says what the wall does not have. */
+    el.dims = { height: 30, radius: 2.4, door: 8 };
+    check('a doorway of 8 m on a stack 2.4 m in radius is read as 3 m, a radius and a quarter',
+      elementById(deserialize(serialize(doc)).doc, el.id).dims.door === 3, String(elementById(deserialize(serialize(doc)).doc, el.id).dims.door));
+    el.dims = { height: 30, radius: 6, door: 7 };
+    check('and the same doorway on a stack of 6 m is left alone, 7 m being under 7.5',
+      elementById(deserialize(serialize(doc)).doc, el.id).dims.door === 7);
+    el.dims.radius = 2.4;
+    const shrunk = deserialize(serialize(doc));
+    check('the stack made narrower under it pulls the doorway in: a 7 m door on a stack taken down to 2.4 m is 3 m',
+      elementById(shrunk.doc, el.id).dims.door === 3 && serialize(deserialize(serialize(shrunk.doc)).doc) === serialize(shrunk.doc));
+    check('fitDims leaves every other asset and a dimension that is not a number alone',
+      fitDims('turbine', { door: 99, radius: 1 }).door === 99 && fitDims('hollowChimney', { door: NaN, radius: 3 }).door !== 3.75
+      && fitDims('hollowChimney', { door: 5, radius: 3 }).door === 3.75 && fitDims('hollowChimney', null) === null);
+    check('the door is half as high again as it is wide, within 3.2 m and half the stack',
+      Math.abs(hollowDoorHeight(2.8, 30) - 4.2) < 1e-12 && hollowDoorHeight(1.6, 30) === 3.2 && hollowDoorHeight(8, 30) === 12 && hollowDoorHeight(8, 16) === 8);
+  }
+  {
+    const { doc, el } = make('turbine', { dims: { height: 1, blade: 500, spin: 9 } });
+    const e = elementById(deserialize(serialize(doc)).doc, el.id);
+    check('a turbine read with a hub 1 m high, a blade of 500 m and a rotor turned 9 is 15 m, 60 m and 1',
+      e.dims.height === 15 && e.dims.blade === 60 && e.dims.spin === 1, JSON.stringify(e.dims));
+    el.dims.spin = -3;
+    check('and a rotor turned -3 is 0', elementById(deserialize(serialize(doc)).doc, el.id).dims.spin === 0);
+    el.dims = { height: 100, blade: 60, spin: 0.375 };
+    const text = serialize(doc);
+    const back = deserialize(text);
+    check('and one with a long blade on a tall hub round trips byte for byte, with no repairs',
+      back.repairs.length === 0 && serialize(back.doc) === text, back.repairs.join('; '));
+  }
+
+  /* -------- placed: each faces the way it is pointed, at any heading -------- */
+
+  for (const yaw of [0, 0.7, 2.2, -1.9]) {
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    {
+      const { doc, el } = make('hollowChimney', { yaw });
+      const { own, item } = solidsOf(doc, el);
+      const jambs = own.filter((o) => o.name === 'jamb');
+      const mid = [(jambs[0].cap[0] + jambs[1].cap[0]) / 2 - item.x, (jambs[0].cap[2] + jambs[1].cap[2]) / 2 - item.z];
+      const len = Math.hypot(mid[0], mid[1]);
+      check(`a hollow chimney turned ${yaw} has its doorway on the heading: the jambs stand either side of it`,
+        jambs.length === 2 && Math.abs(mid[0] / len - c) < 1e-6 && Math.abs(mid[1] / len + s) < 1e-6,
+        `the jambs' middle is (${(mid[0] / len).toFixed(4)}, ${(mid[1] / len).toFixed(4)}) from the axis, the heading (${c.toFixed(4)}, ${(-s).toFixed(4)})`);
+    }
+    {
+      const { doc, el } = make('turbine', { yaw });
+      const { own } = solidsOf(doc, el);
+      const nacelle = own.find((o) => o.name === 'nacelle');
+      const hub = own.find((o) => o.name === 'hub');
+      const dir = [hub.cap[0] - nacelle.cap[0], hub.cap[2] - nacelle.cap[2]];
+      const len = Math.hypot(dir[0], dir[1]);
+      /* The blades all stand in the plane square to the heading, through the middle of the hub. */
+      const mid = [(hub.cap[0] + hub.cap[3]) / 2, (hub.cap[2] + hub.cap[5]) / 2];
+      const ahead = (p) => (p[0] - mid[0]) * c + (p[2] - mid[1]) * -s;
+      const blades = own.filter((o) => o.name === 'blade');
+      check(`a turbine turned ${yaw} faces the heading: its hub is ahead of its nacelle, and every blade stands in the plane square to it`,
+        Math.abs(dir[0] / len - c) < 1e-6 && Math.abs(dir[1] / len + s) < 1e-6 && blades.length > 0
+        && blades.every((b) => Math.abs(ahead(b.cap.slice(0, 3))) < 1e-6 && Math.abs(ahead(b.cap.slice(3, 6))) < 1e-6),
+        `from the nacelle to the hub (${(dir[0] / len).toFixed(4)}, ${(dir[1] / len).toFixed(4)}), the heading (${c.toFixed(4)}, ${(-s).toFixed(4)})`);
+    }
+  }
+
+  /* -------- the plan, the readout, the warnings -------- */
+
+  {
+    const { doc, el } = make('hollowChimney');
+    const poly = planShapeOf(el, doc);
+    const wide = Math.max(...poly.map((p) => p.x)) - Math.min(...poly.map((p) => p.x));
+    const deep = Math.max(...poly.map((p) => p.y)) - Math.min(...poly.map((p) => p.y));
+    check('the plan draws the hollow chimney about as wide as it is round: a base radius of 3 m is about 6 m across',
+      Math.abs(wide - 6) < 1 && Math.abs(deep - 6) < 1, `${wide.toFixed(2)} by ${deep.toFixed(2)} m`);
+    check('its height readout is its height and a hair for the rolled rim, 30.05 m',
+      Math.abs(elementHeight(ELEMENTS.hollowChimney, el.dims, null) - 30.05) < 1e-9);
+  }
+  {
+    const { doc, el } = make('turbine', { dims: { height: 48, blade: 28, spin: 0 } });
+    const poly = planShapeOf(el, doc);
+    const deep = Math.max(...poly.map((p) => p.y)) - Math.min(...poly.map((p) => p.y));
+    /* Blades at 120 and 240 degrees, each (blade + a hub radius's half) long: they spread to either side by that times the sine of 120 degrees. */
+    check('the plan draws the turbine across its rotor: 28 m blades at rotor 0 spread about 50 m sideways, on the plan',
+      Math.abs(deep - 2 * 28.63 * Math.sin((2 * Math.PI) / 3)) < 2, `${deep.toFixed(1)} m across`);
+    check('a turbine in the middle of a big plot has nothing to warn about but pads it does not have',
+      codesOf(doc).filter((code) => code !== 'fs-no-start').length === 0, codesOf(doc).join(', '));
+    el.position.y = 6;
+    check('and one whose rotor reaches past the edge of the plot is told so', codesOf(doc).includes('fs-outside'), codesOf(doc).join(', '));
   }
 }
 
@@ -11163,6 +11301,7 @@ async function main() {
   suiteClone();
   suiteSink();
   suiteTilt();
+  suiteHollowTurbine();
   suiteBoardPlan();
   suiteSchemaProps();
   suiteRoadsAndVehicles();

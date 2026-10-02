@@ -63515,8 +63515,8 @@ The owner: read the board's bug inbox, assess every ticket, fix the ones with a 
 freestyle map builder as ticket bug-e605ff6a asks ("Trackbuilder ideas", BAGRIANYI): 1) a clone to duplicate
 objects, 2) objects that can go below ground level to hide part of them, 3) objects that can stand on end, a
 container vertical for one, 4) hollow chimneys with an opening in the bottom to dive through, 5) wind turbines.
-This entry is the checkpoint after the fix and the first three; the chimney, the turbine and the ticket by ticket
-assessment follow in the entry's second part below it.
+The first half, the fix and the first three, was committed and pushed as a checkpoint; the second half, the chimney,
+the turbine and the ticket by ticket assessment, follows it.
 
 Nothing here changes the physics model's shape, the module ABI or the build: `src/native/world.c` is untouched, and
 a container stood on end is four axis aligned boxes, which the module already holds (the proof is the flights
@@ -63565,7 +63565,7 @@ was read with a gamepad's axes: the elevator stick landed on channel five and no
    (Flat, On end). A stood stack of containers can be 0.7 m taller than its length because each box above the first
    is set off square by up to 0.35 m along it, which `approxHeight` now says.
 
-### Checks run, this turn
+### Checks run, first half
 
     selftest         node src/trackbuilder/selftest.js: 2031 passed, 0 failed. New: suiteClone (the offsets on all four
                      sides and a corner, groups, vehicles, pads, names, undo as one step), suiteSink (the clamp, the
@@ -63585,7 +63585,7 @@ was read with a gamepad's axes: the elevator stick landed on channel five and no
 
     not run          npm run verify (no physics, plant, ABI or build change); shots.js
 
-### What went wrong, so far
+### What went wrong, first half
 
 - **I offered to have the owner paste the token into the chat**, against this environment's own advice about secrets,
   and withdrew it the same message. The owner set `BUGS_TOKEN` on the host, with a value I generated, so it is in
@@ -63599,3 +63599,152 @@ was read with a gamepad's axes: the elevator stick landed on channel five and no
 - **props-check passed with the placement ignoring the tilt**, because a drop onto a flat container roof lands at a
   plausible height. A height band on the landing (`topBand`) is what catches it, shown by the mutation.
 - **`serialize` rounds to six decimals**, so a pitch round trip is compared to 1e-6, not to the bit.
+
+### The last two asks: a chimney to fly down, and a wind turbine
+
+Both are new assets (`src/props/types.js`, `catalog.js`, `industrial.js`), built of capsules only, so both face any
+heading, and neither needs a change to the module: the flights below are the proof. Neither has a hotkey; both are
+under Industrial.
+
+- **`hollowChimney`, "Hollow chimney".** A new type and not a style of the chimney, because its radius has a floor of
+  its own (2.4 m: a bore under 1.4 m is a slot, the gap rule), the document has no style dependent limits, and the
+  chimney's name plate, gallery and lidded flue are everything a hollow one is not. The wall is a ring of leaning
+  capsules ("staves", 56 to 121 solids), each as thick as the brick (45 to 80 cm), as many round as keeps the groove
+  between two within 4 cm. The top is open and nothing crosses the bore: at the smallest and tallest it is 2.43 m
+  across. The doorway is on the heading, and what is left out of the wall: the staves that would stand in it are
+  cut short to start over the door, and its two edges are jamb columns set at the exact angle that leaves the width
+  asked for, drawn as the round columns they are, so the solid and the drawing are the same at the door. Doorway is
+  the clear width at the top of the opening, the door is half as high again as it is wide (3.2 m to half the stack),
+  and a doorway is held to a radius and a quarter by `fitDims` where every dimension is held to its limit (reader,
+  writer and the inspector's field), because a number typed past what the wall allows would be shown and not built.
+  The inspector says "Its doorway is 2.8 m wide and 4.2 m high." The rim and the lintel's underside are the staves'
+  own domes, drawn rolled over (`K.rim`), so a craft that grazes either meets what is drawn.
+- **`turbine`, "Wind turbine".** A tapering tower (capsules chained along a cone, `coneChain`), a nacelle and a hub
+  that are single capsules drawn as themselves, and three blades that are cones with a red tip (25 to 76 solids).
+  PARKED: the rotor faces the heading and does not turn, and Rotor (0 to 1 is a third of a turn, which is all a
+  three blade rotor has) says where the blades stand. The module holds a world that does not move; its movers are
+  boxes with a velocity and road vehicles that yaw (`sim_world_mover`, `vehicle_pose` in `src/native/world.c`), so a
+  rotor turning about a horizontal axis would be a change to the module's ABI, which is the owner's to decide and is
+  not made. Blades are round in section and not airfoils: a flat blade is a row of capsules across it at every step
+  along it, hundreds to a rotor, to make a shape 30 cm thick. A blade is held to what the hub's height leaves it
+  (its lowest tip is never under 2.5 m), and the rotor stands far enough ahead of the tower that a blade hanging
+  straight down clears it by 1.5 m, over the gap rule's 1.4.
+- **Kit.** `K.shell` (a tapered tube open at both ends, over an arc, outward or inward) and `K.rim` (a ring, or part
+  of one) in `src/props/kit.js`, in the kit's vocabulary so the draws stay Node recordable and the check can read
+  them. `K.sector` was written for the lintel and taken out again when the lintel was rounded.
+- **Nothing for the board.** The board's `inspectMap` accepted a map holding both, a container stood on end and one
+  sunk 1.3 m, run from the leaderboard checkout (570ea3d): it keeps no list of piece types, only a short word.
+
+### The inbox, ticket by ticket (39 open on 2 October)
+
+Earlier entries in this file already assessed most of the device tickets; this table says what each is now.
+
+    fixed here          bug-52a66f69   pitch is not reaching sim. Recorded twice above as "not replicable, left open".
+                                       The report's map is the standard gamepad layout (yaw 0, throttle 1, roll 2,
+                                       pitch 3), which the Firefox radio layout contradicts on three sticks; see the
+                                       fix above. The ticket does not say which device made the stored map, so the
+                                       cause is the one the data fits and that replicates, not one a pilot confirmed
+    built here          bug-e605ff6a   Trackbuilder ideas: duplicate, below ground, stand on end, hollow chimney,
+                                       wind turbines. All five done
+    left open, known    bug-f5ed55e4   Jumper T20 on Android: four axes, the fourth parked at -1 (`yawParked`), the
+    class                              class the last pass answered with the Stick help's radio side recipe
+                        bug-20aa17e3   ELRS BLE joystick on Linux Firefox: the browser lists no pad at all. The page
+                                       can only read what the browser lists
+                        bug-1e3a3a1b,  Radiomaster and Zorro on Windows: the browser lists no pad (earlier entry)
+                        bug-47e0e9ee
+                        bug-abfeffe6   HDZero: axes parked outside -1 to 1 (earlier entry)
+                        bug-cd48337e   "joystick off": a Radiomaster Pocket on Firefox 115 on a Mac, flown 95 s, still
+                                       listed as connected when the report was sent. Nothing to replicate
+                        bug-cddc182a,  Android flicker and no drone drawn: the low latency canvas lead (earlier entry)
+                        bug-a18b2ed9
+    for the owner       bug-17b6248e   Acro keeps becoming Angle. The setting's default is Acro, and only the M key (a
+                                       keyboard) and the Flight mode row in Quad or the FC screen change it: no pad
+                                       button and no row on the pause menu, where this report was sent from. Why this
+                                       pilot's row was Angle is not in the report
+                        bug-5328aa13   an Xbox pad's throttle rest at half: reverses the 19 September decision
+                                       (bug-93400859) that a sprung throttle rests at ZERO, so a pad does not take
+                                       off on its own. An opt in per device could be offered, not changed on one report
+                        bug-2b2b44aa   crashing is too unforgiving; and bug-aedd8b24's wish to skim smooth surfaces:
+                                       one design question, the crash rule
+    praise              bug-424133cc
+    feel, 25            bug-6f9d59a9 and 24 more: about right 9, soft 7, stiff 4, twitchy 3, floppy 2. The free text
+                        repeats the known themes (the whoop too quick and floaty, a heavy quad, no punch on a five
+                        inch), pointing opposite ways at the same weights. Nothing changed on a feel report
+
+### Checks run, second half
+
+    selftest         node src/trackbuilder/selftest.js: 2058 passed, 0 failed (2031 at the checkpoint). New: a suite
+                     for the two assets (the palette, the reader's limits and byte for byte round trips, the doorway
+                     on the heading at four headings and a rotor square to the heading, the plan, the readout, the
+                     warning for a rotor past the plot's edge) and the doorway's hold to a radius and a quarter
+    props-check      node scripts/props-check.js: all passed. New block 1d, on the placed solids: bore clear over 50
+                     dim sets, the doorway as wide as asked and nothing solid in it, no slot between solids (a gap
+                     with another solid in it is closed), the drawing against the solids both ways to 1 cm and 9 cm,
+                     the turbine's tip over 2.5 m, clear of the tower by the gap rule and under its readout at nine
+                     rotor positions over 17 dim sets. In the module: (h1) a drop down the bore, 2.86 s, nothing
+                     touched, on the floor 4 mm from the axis; (h2) in through the doorway at 5 m/s, a millimetre
+                     off its middle; (h3) at the wall opposite it, stopped; (t1) at the tower, stopped; (t2) at a
+                     blade, stopped; (t3) through the open air between two blades, nothing touched
+    props-check      node scripts/props-check.js --selftest: all passed, with planted faults for a bar across the
+                     bore, a post in the doorway, a missing jamb, a solid outside the brick, brick with nothing
+                     behind it, a slot and its closing, a blade beside the tower, and the control flights with the
+                     module handed no world
+    mutation         ten faults planted in the real layouts (a shut doorway, no jambs, fat staves, a thin drawn wall,
+                     a doorway cut too wide, a stave down the bore, the rotor too near the tower, a blade to 1 m, a
+                     short tip, a thin tower) were each caught by block 1d, and the shut doorway, the stave in the
+                     bore and a filled rotor by the real flights
+    smoke            headless Chromium on the real builder page: the palette entries, the inspector's rows, the
+                     doorway line, a doorway of 8 m typed on a 3 m stack held to 3.75 and the field showing it, and
+                     Duplicate on a turbine; no page errors. Rendered in the 3D preview from the doorway, the rim and
+                     the whole stack, and three turbines at three rotor positions; not committed
+    builder flow     npm run check:builder: PASS, 620 checks, 0 failed. It drives the real builder in headless
+                     Chromium, and model.js, ui.js and app.js are all touched
+    input lint       npm run lint:input: 219 passed, 1 failed, and the same one fails on 3d6fe3a, the commit before
+                     this work, which I ran in a scratch worktree to find out. "A key pressed at the question does
+                     nothing behind it" expects the 2D view after two stray keys at the builder's first question, and
+                     the five inch builder has opened in 3D since the builder stages of 1 October: read in the page,
+                     the view is 3d before the first key and after the last, so the keys ARE held. The assertion is
+                     stale, not the product, and is not changed here: a threshold is never changed to pass. One line
+                     would fix it, comparing the view before and after the keys and not with '2d'
+    the rest         input-selftest 380; lint:nouns; lint:preload up to date at 246 served after the regeneration
+                     below; check:fresh 18; no dashes in the lines added
+
+    not run          npm run verify (no physics, plant, ABI or build change); shots.js, lint:shell, lint:responsive
+
+### What went wrong, second half
+
+- **The checkpoint commit (cd059b2) was red in two places I had not run.** `props-check --selftest` failed: when I
+  generalized `roofScenario` I renamed its "comes to rest on the roof" line, and the self test finds it by that
+  name. And `lint:preload` was stale: `src/fresh.js` lists every file git tracks, and `clone.js` was untracked when
+  I ran the lint. Both are fixed in the commit after it; at the checkpoint I had run only the plain checks.
+- **The first doorway was quantized.** Jambs sitting on the ring of staves gave a doorway in steps of half a metre:
+  2.8 m asked, 3.14 m built. The jambs are now their own columns at the exact angle, found by halving with the
+  module's own sine.
+- **The first run of block 1d failed three lines.** The width was measured at the jambs' buried tops, which lean in
+  (7.967 against 8); the door height settled in two passes and was 1.39 times the width, not 1.5, where the wall
+  caps the width (eight passes now); and the third was real: the lintel's underside was flat over round solids, so
+  drawn brick stood up to 17 cm from any solid at its corners. It is rolled over now, as the rim is.
+- **A slot detector by pairs of capsules would have flagged every ring of overlapping staves**, because a stave two
+  along has a 6 cm gap to this one with a third stave filling it. A slot has to have free space between the nearest
+  points, which is what `narrowestSlot` checks.
+- **My scratch worktree for the baseline run stopped on an error when I removed it.** `dist/sim.wasm` is tracked, so the
+  checkout had its own `dist/` and my symlink to share the build had landed inside it. I removed only the link,
+  then the worktree, and looked at the real `dist/` before going on; nothing was lost.
+- **Smaller:** a draft of the document suite had a check that could not fail (`|| true`) and another that tested
+  nothing, which I removed before running it; a variable called `near` collided with one in the self test; the
+  blades' plane was measured from the hub's near end and not its middle; 2.8 times 1.5 is not 4.2 in floating point;
+  and two `node -e` calls with an apostrophe in the text broke the shell's quoting, so the patches are script files.
+
+### For the owner
+
+1. **A turning rotor** needs the module to move capsules about a horizontal axis: an ABI change, not made. The
+   turbine is parked, and Rotor sets where the blades stand.
+2. **Angle and Acro for a pad pilot** (bug-17b6248e): a row on the pause menu, or a pad button, is a small change to
+   the shell if wanted.
+3. **A throttle that rests at half** (bug-5328aa13): an opt in, per device, against the 19 September decision.
+4. **The crash rule** (bug-2b2b44aa, and the wish to skim in bug-aedd8b24).
+5. **The board.** Nothing was written to it. bug-52a66f69 and bug-e605ff6a are the two this turn answers, and neither
+   has been flown by a pilot.
+6. **`BUGS_TOKEN`** is in this session's transcript: rotate or unset it.
+7. **`lint:input` has one stale line**, described above, failing on main before this work. It wants either the
+   one line fix or your word that the builder should open in 2D.

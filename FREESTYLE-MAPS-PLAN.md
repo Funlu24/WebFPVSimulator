@@ -176,11 +176,13 @@ cannot fit through is a trap, not a line.
 | Water tower | height, tank size | capsule legs, box tank | through the legs, orbit the tank |
 | Lattice mast | height | capsules | orbits, knife edge through the braces |
 | Chimney stack | height, radius | capsule | the one tall thing to fly round |
+| Hollow chimney | height, base radius, doorway width | a ring of leaning capsules, the doorway left out | dive in over the rim and out through the door (added 2 October 2026, bug-e605ff6a) |
 | Containers | stack of 1 to 4, colours, open ends | boxes | through open ends, gaps between stacks |
 | Scaffold | width, height, lifts, netting | capsule tubes, box boards | threading between lifts |
 | Bridge | span, deck height, piers | box deck (landable), box piers | under the deck, between the piers |
 | Billboard | width, height on poles | box panel, capsule poles | the gap under the board |
 | Power pylon | height | capsules | through the body, wires are visual only |
+| Wind turbine | hub height, blade length, where the rotor stands | capsules: tower, nacelle, hub, three blades, parked | orbits of the tower, between two blades (added 2 October 2026, bug-e605ff6a) |
 | Skate set | quarter pipe, ledge, rail, stair set, kicker | boxes and capsules | rail and ledge skims, the skate game feel at ground level |
 | Trees | kind (street tree, sakura, pine), size | capsule trunk | gaps between canopies |
 | Street furniture | lamp post, bench, cones, barrier, parked car | capsules and boxes | slalom |
