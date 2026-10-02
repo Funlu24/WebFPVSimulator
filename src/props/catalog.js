@@ -31,7 +31,8 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { PROP_TYPES, styleOf } from './types.js';
+import { PROP_TYPES, styleOf, tiltOf } from './types.js';
+import { tiltParts } from './solids.js';
 import * as BUILDINGS from './buildings.js';
 import * as INDUSTRIAL from './industrial.js';
 import * as STREET from './street.js';
@@ -40,7 +41,8 @@ import * as COURSE from './course.js';
 import { buildingLayout, buildingDraw, bandoLayout, bandoDraw } from './buildings.js';
 import {
   craneLayout, craneDraw, waterLayout, waterDraw, mastLayout, mastDraw, chimneyLayout, chimneyDraw,
-  pylonLayout, pylonDraw, containerLayout, containerDraw, scaffoldLayout, scaffoldDraw,
+  hollowChimneyLayout, hollowChimneyDraw, pylonLayout, pylonDraw, turbineLayout, turbineDraw,
+  containerLayout, containerDraw, scaffoldLayout, scaffoldDraw,
 } from './industrial.js';
 import {
   bridgeLayout, bridgeDraw, billboardLayout, billboardDraw, poleLayout, poleDraw, lampLayout, lampDraw,
@@ -61,7 +63,9 @@ const CODE = {
   waterTower: [waterLayout, waterDraw],
   mast: [mastLayout, mastDraw],
   chimney: [chimneyLayout, chimneyDraw],
+  hollowChimney: [hollowChimneyLayout, hollowChimneyDraw],
   pylon: [pylonLayout, pylonDraw],
+  turbine: [turbineLayout, turbineDraw],
   containers: [containerLayout, containerDraw],
   scaffold: [scaffoldLayout, scaffoldDraw],
   bridge: [bridgeLayout, bridgeDraw],
@@ -163,6 +167,21 @@ export function partsOf(el) {
   const style = styleOf(el);
   const view = style && style !== el.style ? { ...el, style } : el;
   return a.layout(view);
+}
+
+/*
+ * An element's parts AS IT STANDS: partsOf, stood on end if it is (tiltOf
+ * and tiltParts in ./solids.js). Everything that asks where the solids are,
+ * how much ground the element covers or how tall it stands reads this, so a
+ * container stood on its end is a tall thin footprint to the plan, the
+ * warnings and the physics alike. The DRAWING reads partsOf and turns the
+ * whole of what it paints with the kit's matrix instead (PropKit.element),
+ * because an asset's draw() puts its paint on in the upright frame.
+ */
+export function placedPartsOf(el) {
+  const parts = partsOf(el);
+  const q = tiltOf(el);
+  return q ? tiltParts(parts, q) : parts;
 }
 
 /* An element's plan rectangle in its own frame, { x0, x1, z0, z1 }: the

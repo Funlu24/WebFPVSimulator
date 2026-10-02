@@ -292,6 +292,7 @@
     'src/trackbuilder/animate.js',
     'src/trackbuilder/app.js',
     'src/trackbuilder/buildsheet.js',
+    'src/trackbuilder/clone.js',
     'src/trackbuilder/cube.js',
     'src/trackbuilder/edit3d.js',
     'src/trackbuilder/elements.js',

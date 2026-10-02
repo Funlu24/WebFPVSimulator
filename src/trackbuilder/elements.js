@@ -195,6 +195,35 @@ export function docModeOf(doc) {
 }
 
 /*
+ * HOW FAR A FREESTYLE ASSET MAY BE SUNK INTO THE GROUND, in metres. A map
+ * builder asked on 1 October 2026 for "the possibility to move objects below
+ * ground level to hide some part" (bug-e605ff6a): bury a container's lower
+ * half, a pylon's foot, a building's ground floor so its first floor is at
+ * street level. The document already held a negative base and every module
+ * handled one; the inspector, the height drag in the 3D view and nothing
+ * else clamped it at zero, so this is only what those two are told.
+ *
+ * WHAT A SUNK PART IS. Nothing. The ground is flat at zero on a map and is
+ * drawn over everything under it, and the physics holds the part as it
+ * holds any other (it bounds no height), but a craft cannot be under the
+ * ground, and a box whose top is under the paving is never a surface
+ * (indexTops in src/maps/built/place.js). So a part under the ground is
+ * neither seen nor met, and the part over it is solid as drawn.
+ *
+ * Thirty metres is more than any asset needs sunk and a long way short of a
+ * hand edited -9999 that would put a building out of reach of its own
+ * inspector. Only an ASSET: a gate sunk into the ground is a shorter gate,
+ * and a gate's height is what Sill height says, not its base.
+ */
+export const SINK_MAX = 30;
+
+/* The lowest base an element may have in this document: under the ground
+ * for an asset on a map, the ground for everything else. */
+export function lowestBase(doc, el) {
+  return docModeOf(doc) === 'freestyle' && ELEMENTS[el?.type]?.kind === KIND.STRUCTURE ? -SINK_MAX : 0;
+}
+
+/*
  * Frame tube diameter. MultiGP does not publish it. Their gates are built
  * from schedule 40 PVC and 1 inch nominal schedule 40 PVC has an outside
  * diameter of 1.315 in, which is what is used here. It sets how thick a gate
@@ -1053,6 +1082,7 @@ for (const [id, t] of Object.entries(PROP_TYPES)) {
     propGroup: t.group,
     kind: t.zone ? KIND.ZONE : KIND.STRUCTURE,
     turns: t.turns,
+    tilt: t.tilt ?? null,
     styles: t.styles ?? null,
     note: t.note,
     dims: { ...t.dims },
@@ -1815,7 +1845,7 @@ export function apertureLevels(dims) {
 
 /* Overall height of an element, for the 3D view and for the height drag
  * limits. Aperture elements are as tall as their top opening plus a tube. */
-export function elementHeight(def, dims, style = null) {
+export function elementHeight(def, dims, style = null, tilt = 0) {
   if (def.kind === KIND.APERTURE) {
     const levels = apertureLevels(dims);
     const top = levels[levels.length - 1];
@@ -1835,7 +1865,8 @@ export function elementHeight(def, dims, style = null) {
     return Math.max(0.08, dims.padSize * 0.40);
   }
   if (def.kind === KIND.STRUCTURE || def.kind === KIND.ZONE) {
-    return approxHeight(def.id, dims, style ?? propStyleOf({ type: def.id }));
+    /* `tilt` is tiltOf(el): stood on end, an asset is as tall as it was long. */
+    return approxHeight(def.id, dims, style ?? propStyleOf({ type: def.id }), tilt);
   }
   if (def.kind === KIND.ROAD) {
     /* Paint. */

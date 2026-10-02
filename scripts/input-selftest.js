@@ -1777,6 +1777,83 @@ section('Firefox on Linux calls an EdgeTX radio a gamepad: bug-c9423f3e, bug-9cc
     rig.step();
     check('a wizard map on the Firefox radio is the pilot\'s', rig.im.mapReport().map === 'calibrated');
   }
+  {
+    /*
+     * THE STANDARD LAYOUT, SAVED, ON A RADIO THAT IS NOT ONE: bug-52a66f69,
+     * "pitch is not reaching sim". From 27 September until the Firefox guess
+     * landed on the 28th this radio flew the standard layout, and Check
+     * sticks opens with whatever is flying as its draft, so a pilot who
+     * pressed Save there wrote the standard layout down as their own map, and
+     * a saved map outranks every guess from then on. The ticket is that map
+     * on a Pocket: yaw, throttle, roll and pitch on axes 0, 1, 2 and 3, with
+     * pitch dead because axis 3 is channel 5. The blob is made the way the
+     * pilot made it, by the real Save on a real standard gamepad.
+     */
+    const stdPad = () => ({
+      ...makePad([0, 0, 0, 0], 17, '054c-0ce6-Sony Interactive Entertainment DualSense Wireless Controller'),
+      mapping: 'standard',
+    });
+    const saved = (reverse) => {
+      const storage = memoryStorage();
+      const maker = new Rig(stdPad(), storage);
+      maker.step();
+      maker.im.startCalibrationCheck();
+      if (reverse) {
+        maker.im.reverseChannel(reverse);
+      }
+      if (!maker.im.acceptCalibration()) {
+        throw new Error('set up: Save refused the standard draft');
+      }
+      return storage;
+    };
+    {
+      const storage = saved();
+      const before = storage.getItem('webfpv_stick_map_v1');
+      const rig = new Rig(ffRadio(), storage);
+      rig.step();
+      check('nothing touched, channel 5 parked at one end: every stick at rest, no pitch from a switch',
+        rig.im.channels.pitch === 0 && rig.im.channels.roll === 0 && rig.im.channels.yaw === 0
+        && rig.im.channels.throttle === 0, JSON.stringify(rig.im.channels));
+      check('and it is the Firefox guess that flies it, not the saved layout',
+        rig.im.mapReport().guess === 'firefox', JSON.stringify(rig.im.mapReport()));
+      rig.ax(4, 1); rig.step();
+      check('the throttle stick fully up is full throttle, from axis 4',
+        near(rig.im.channels.throttle, 1), JSON.stringify(rig.im.channels));
+      /* Channel 5 centred for this one, so a pitch that is only the parked
+       * switch cannot pass for the elevator. */
+      rig.ax(4, -1); rig.ax(3, 0); rig.ax(1, 1); rig.step();
+      check('the elevator is pitch, not the throttle the saved layout made it',
+        Math.abs(rig.im.channels.pitch) > 0.99 && rig.im.channels.throttle === 0, JSON.stringify(rig.im.channels));
+      rig.ax(1, 0); rig.ax(3, 1); rig.step();
+      check('channel 5 thrown is nothing, where the saved layout read it as pitch',
+        rig.im.channels.pitch === 0 && rig.im.channels.roll === 0 && rig.im.channels.yaw === 0, JSON.stringify(rig.im.channels));
+      check('storage is left alone: the same map is right on the gamepad it was made on',
+        storage.getItem('webfpv_stick_map_v1') === before);
+    }
+    {
+      const rig = new Rig(stdPad(), saved());
+      rig.step();
+      check('the same saved layout on a real gamepad in Firefox is still the pilot\'s own',
+        rig.im.mapReport().map === 'calibrated' && rig.im.mapReport().axes.yaw === 0);
+    }
+    {
+      const rig = new Rig(ffRadio(), saved('yaw'));
+      rig.ax(4, 1); rig.step();
+      check('a reversed channel on the saved layout does not make it the pilot\'s: the axes are still wrong',
+        near(rig.im.channels.throttle, 1) && rig.im.mapReport().guess === 'firefox', JSON.stringify(rig.im.channels));
+    }
+    {
+      /* The saved layout with one axis moved is somebody's measurement. */
+      const storage = saved();
+      const blob = JSON.parse(storage.getItem('webfpv_stick_map_v1'));
+      blob.yaw = { ...blob.yaw, axis: 2 };
+      storage.setItem('webfpv_stick_map_v1', JSON.stringify(blob));
+      const rig = new Rig(ffRadio(), storage);
+      rig.step();
+      check('a map that is no longer exactly the standard layout stays the pilot\'s',
+        rig.im.mapReport().map === 'calibrated' && rig.im.mapReport().axes.yaw === 2);
+    }
+  }
 }
 
 section('a standard gamepad that rests like a radio');

@@ -56,7 +56,7 @@ import {
 import { startBlockDims } from '../art/startblock.js';
 /* The freestyle assets. Pure layouts, no Three.js: the plan draws the same
  * parts the physics is given, so a slot on the plan is a slot in the air. */
-import { partsOf, planBounds } from '../props/catalog.js';
+import { placedPartsOf, planBounds } from '../props/catalog.js';
 import { placedYaw } from '../props/solids.js';
 import { isRoomType, roomFootprint, roomWorldBoxes } from '../props/room.js';
 import { styleOf as propStyleOf, styleDims } from '../props/types.js';
@@ -222,7 +222,9 @@ export function localBoundsOf(el) {
     if (boundsCache.size > 4000) {
       boundsCache.clear();
     }
-    b = planBounds(partsOf(el));
+    /* As it stands, stood on end if it is: the plan, the pick box and the
+     * copy offset all cover the ground it covers. */
+    b = planBounds(placedPartsOf(el));
     boundsCache.set(key, b);
   }
   return b;
@@ -1385,7 +1387,7 @@ export class View2D {
       }
       return b;
     };
-    for (const p of partsOf(el)) {
+    for (const p of placedPartsOf(el)) {
       if (!p.solid && !p.draw) {
         continue;
       }

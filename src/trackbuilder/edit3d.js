@@ -53,6 +53,7 @@
 
 import { ELEMENTS, KIND, defaultDims, isFiveInchPiece, trackClassOf } from './elements.js';
 import { elementById, kindOf, apertureCenter, aperturesOf } from './model.js';
+import { SEAT_SLACK } from './seat.js';
 import {
   cubeItems, measuresFor, placementFor, rowPlan, rulerPoint, rulerReading, spacingTone,
 } from './snap.js';
@@ -374,9 +375,15 @@ export class RoomEditor {
         { type: pulled.type, ignore: [...d.origin.keys()] });
       if (v.isFreestyle()) {
         /* It stands on what is under it now at or below where the pointer is looking, with what is moving
-         * left out, and rises or falls by the difference from what it stood on when it was picked up. */
+         * left out, and rises or falls by the difference from what it stood on when it was picked up. A piece
+         * sunk into the ground stays sunk while it is over the ground, and comes up to what it is put on when
+         * that is a roof, which would otherwise leave it inside the building. */
         const look = v.surfaceAt(e, { type: pulled.type, ignore: d.ignore });
-        d.dz = look ? v.standAt(snapped.x, snapped.y, look.look, d.ignore) - d.stoodOn : d.dz;
+        if (look) {
+          const surface = v.standAt(snapped.x, snapped.y, look.look, d.ignore);
+          const above = d.above < -SEAT_SLACK && surface > SEAT_SLACK ? 0 : d.above;
+          d.dz = surface + above - anchor.z;
+        }
       }
       h.moveSelected(d.origin, { x: snapped.x - anchor.x, y: snapped.y - anchor.y, z: d.dz });
       v.movePieces([...d.origin.keys()]);
@@ -443,12 +450,15 @@ export class RoomEditor {
     d.dz = 0;
     d.ignore = null;
     d.stoodOn = 0;
+    d.above = 0;
     if (v.isFreestyle()) {
       for (const id of h.carriedBy([...h.selection])) {
         d.origin.set(id, { ...elementById(h.doc, id).position });
       }
       d.ignore = new Set(d.origin.keys());
       d.stoodOn = v.standAt(anchor.x, anchor.y, anchor.z, d.ignore);
+      /* How far above what it stands on it is: nothing for a piece that is seated, negative for one that is sunk. */
+      d.above = anchor.z - d.stoodOn;
     }
     const g = v.levelPoint(d.start.x, d.start.y, d.plane);
     d.offset = g ? { x: anchor.x - g.x, y: anchor.y - g.y } : { x: 0, y: 0 };

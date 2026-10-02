@@ -34,7 +34,7 @@ import {
   ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, countElementsByType,
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
   applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
-  elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits,
+  elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits, lowestBase,
 } from './elements.js';
 import {
   aperturesOf, elementById, kindOf, isSequenceable, logosOf, logoForDecal,
@@ -64,7 +64,7 @@ import { drawProfile } from './profile.js';
 import { DEG, RAD, wrapAngle } from './geometry.js';
 import { localBoundsOf, planShapeOf, turnsOf } from './view2d.js';
 import {
-  PROP_GROUPS, GAP_POINTS, clampDim, styleDims, styleOf as propStyleOf,
+  PROP_GROUPS, GAP_POINTS, clampDim, fitDims, hollowDoorHeight, styleDims, styleOf as propStyleOf, tiltOf,
 } from '../props/types.js';
 /* What a room's furniture may be sized to, so the fields hold to it. */
 import { isRoomType, clampRoomSize, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
@@ -1085,6 +1085,26 @@ export class Panels {
   }
 
   /*
+   * Whether an asset that can stand on end does, as the two choices the inspector and the card both offer: Flat, and
+   * On end. Two words, not a number: a quarter turn is the only thing a box can be turned about a horizontal axis
+   * and stay a box, which is why the document's pitch is read to the nearest quarter (tiltOf).
+   */
+  standItems(element) {
+    const id = element.id;
+    const q = tiltOf(element);
+    const stand = (pitch, label) => () => this.host.edit(label, (d) => {
+      const e2 = elementById(d, id);
+      if (e2) {
+        e2.pitch = pitch;
+      }
+    });
+    return [
+      { label: 'Flat', on: q === 0, run: stand(0, 'lay it flat') },
+      { label: 'On end', on: q !== 0, run: stand(Math.PI / 2, 'stand it on end') },
+    ];
+  }
+
+  /*
    * The heading, in degrees because that is how people think about a
    * heading, stored in radians. It goes through the app rather than
    * straight to setYaw, because a building keeps to the compass: the field
@@ -1118,8 +1138,12 @@ export class Panels {
         this.host.edit('move', (d) => { elementById(d, element.id).position.y = val; });
       }, { suffix: 'm' }),
       this.field(`z-${element.id}`, 'Base', element.position.z, (val) => {
-        this.host.edit('height', (d) => { elementById(d, element.id).position.z = Math.max(0, val); });
-      }, { suffix: 'm' }),
+        /* An asset on a map may be sunk, to hide some of it: lowestBase. */
+        this.host.edit('height', (d) => {
+          const e2 = elementById(d, element.id);
+          e2.position.z = Math.max(lowestBase(d, e2), val);
+        });
+      }, { suffix: 'm', min: lowestBase(this.host.doc, element) }),
     );
     host.append(grid);
   }
@@ -1141,6 +1165,7 @@ export class Panels {
         const e2 = elementById(d, element.id);
         if (e2) {
           e2.dims[key] = clampDim(element.type, key, val);
+          fitDims(element.type, e2.dims);
         }
       });
     }, {
@@ -1192,7 +1217,22 @@ export class Panels {
     }
 
     this.appendPositionGrid(host, element);
+    if (element.position.z < -0.005) {
+      /* Said in plain words, because a part that is gone from the preview is
+       * otherwise a bug report: it is under the ground, which hides it. */
+      host.append(el('p', 'tb-help', `Sunk ${show(-element.position.z, 2)} m into the ground. What is under the ground is neither drawn nor solid; a negative Base is how a piece is half hidden.`));
+    }
     this.appendYawField(host, element);
+    /*
+     * STANDING ON END, for the assets that can: a container is as tall as it
+     * is long, and an open one is then a square shaft with both ends open.
+     */
+    if (def.tilt) {
+      this.segRow(host, 'Stands', this.standItems(element));
+      host.append(el('p', 'tb-help', element.type === 'containers'
+        ? 'On end it stands as tall as it is long, with the stack beside it. The open style stood on end is a square shaft, open at both ends: a line to dive down.'
+        : 'On end it stands as tall as it is long.'));
+    }
 
     host.append(el('h3', null, 'Size'));
     const dims = el('div', 'tb-grid2');
@@ -1225,8 +1265,12 @@ export class Panels {
 
     /* What that adds up to, in the terms a pilot thinks in. */
     const b = localBoundsOf(element);
-    const tall = elementHeight(def, element.dims, propStyleOf(element));
-    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground.`));
+    const tall = elementHeight(def, element.dims, propStyleOf(element), tiltOf(element));
+    const sunk = element.position.z < -0.005 ? `, with ${show(-element.position.z, 1)} m of it under the ground` : '';
+    const doorway = element.type === 'hollowChimney'
+      ? ` Its doorway is ${show(element.dims.door, 1)} m wide and ${show(hollowDoorHeight(element.dims.door, element.dims.height), 1)} m high.`
+      : '';
+    host.append(el('p', 'tb-fig-blurb', `About ${show(tall, 1)} m tall, taking ${show(b.x1 - b.x0, 1)} by ${show(b.z1 - b.z0, 1)} m of ground${sunk}.${doorway}`));
   }
 
   /* A heading and a row of segment buttons, one of them on: the inspector's
@@ -2641,6 +2685,9 @@ export class Panels {
           label: styleLabel(style), on: current === style, run: () => this.setAssetStyle(element, style),
         })), 'How it looks, and the size that look starts at'));
       }
+      if (def.kind === KIND.STRUCTURE && def.tilt) {
+        card.append(this.cardChoice('Stands', this.standItems(element), 'Upright, or on its end: as tall as it is long'));
+      }
       if (def.kind !== KIND.ROAD && def.kind !== KIND.VEHICLE) {
         const grid = el('div', 'tb-card-grid');
         grid.append(
@@ -2653,9 +2700,13 @@ export class Panels {
         );
         /* The height a built piece stands at, which is what it was put down on: the paving, a roof, a deck. */
         if (needsSeat(element) || def.kind === KIND.ZONE) {
+          /* Under the ground for an asset, to hide some of it (lowestBase); never for anything else. */
           grid.append(this.field(`card-h-${id}`, 'Base (m)', element.position.z, (val) => {
-            this.host.edit('height', (d) => { elementById(d, id).position.z = round6(Math.max(0, val)); });
-          }, { step: 0.25, places: 2, min: 0 }));
+            this.host.edit('height', (d) => {
+              const e2 = elementById(d, id);
+              e2.position.z = round6(Math.max(lowestBase(d, e2), val));
+            });
+          }, { step: 0.25, places: 2, min: lowestBase(doc, element) }));
         }
         if (turns && def.kind !== KIND.ANNOTATION) {
           grid.append(this.field(`card-turn-${id}`, 'Turn (degrees)', element.yaw * DEG, (val) => {
@@ -2677,6 +2728,9 @@ export class Panels {
           }
         }
         card.append(grid);
+        if (element.position.z < -0.005) {
+          card.append(el('p', 'tb-help', `Sunk ${show(-element.position.z, 2)} m into the ground, which hides what is under it. Page Up brings it back.`));
+        }
         if (def.kind === KIND.ANNOTATION) {
           card.append(this.field(`card-text-${id}`, 'Text', element.text ?? '', (val) => {
             this.host.edit('label', (d) => { elementById(d, id).text = val; });
@@ -3128,7 +3182,7 @@ export class Panels {
       }
       const def = ELEMENTS[e2.type];
       const base = e2.position.z;
-      const top = base + (def?.kind === KIND.STRUCTURE ? elementHeight(def, e2.dims, propStyleOf(e2)) : 1);
+      const top = base + (def?.kind === KIND.STRUCTURE ? elementHeight(def, e2.dims, propStyleOf(e2), tiltOf(e2)) : 1);
       const pts = [...planShapeOf(e2, doc).map((q) => ({ x: q.x, y: q.y, z: base })), { x: e2.position.x, y: e2.position.y, z: top }];
       for (const q of pts) {
         const at = project(q);

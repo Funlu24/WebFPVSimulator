@@ -17,20 +17,39 @@
  *                  number finite, every part a real box or capsule, no solid
  *                  box on an asset that turns freely, quarter turns that are
  *                  exact permutations to the bit, nothing inflated
+ *   1c. on end     the assets that stand on end (containers, the ledge), both
+ *                  ways, at the same dims: the same boxes in the same sizes,
+ *                  to a nanometre, with the lowest on the ground, the footprint
+ *                  centred along the heading, z untouched, and no taller
+ *                  than the builder says; and, in the module, a drop onto
+ *                  a container stood on its end and onto one half sunk in the
+ *                  ground, each landing on the part of it that is above the
+ *                  paving, at the height it is
  *   1b. envelope   the same dims, what is solid against what is drawn: no
  *                  solid over the drawn top, the chimney's solids on its
  *                  brick, no stair drawn where the layout built none
+ *   1d. fly through the chimney you can fly down and the turbine that
+ *                  stands still, on their solids: the bore clear, the
+ *                  doorway the width asked for with nothing solid in it, no
+ *                  slot between solids, the drawing and the solids agreeing
+ *                  to centimetres, the blades 2.5 m off the ground and
+ *                  clear of the tower by the gap rule
  *   2. furniture   every course element a freestyle map may hold, the same
  *   3. determinism a map holding one of everything, placed twice from two
  *                  fresh documents, compared as Float64 bits and hashed, and
  *                  src/props/trig.js against the engine's own sine
  *   4. physics     that map uploaded to the module exactly as the shell does
  *                  it, and flown: a roof lands, the crane's mast stops a
- *                  craft, the spawn is clear; and under every box thin
- *                  enough for the height to reach, the height answers
- *                  from under it and a climb meets its underside; and the
- *                  builder's copy of the module's grid (fs-crowded) drops
- *                  what the module drops, and no map here is over it
+ *                  craft, the spawn is clear; a craft dropped down the
+ *                  hollow chimney's bore touches nothing and one flown in
+ *                  through its doorway reaches the axis, while the wall
+ *                  opposite stops it; the turbine's tower and a blade stop
+ *                  a craft and the air between two blades does not; and
+ *                  under every box thin enough for the height to reach,
+ *                  the height answers from under it and a climb meets its
+ *                  underside; and the builder's copy of the module's grid
+ *                  (fs-crowded) drops what the module drops, and no map
+ *                  here is over it
  *   5. starter     the starter map (src/maps/built/starter.js) and the
  *                  showpiece built on it (showpiece.js): no two elements'
  *                  solids overlap, every named gap is clear, the builder
@@ -64,7 +83,7 @@
  * contact, on the five inch, which is the only craft freestyle is offered
  * on. Every flight is flown twice and must agree with itself to the bit.
  *
- * Usage: node scripts/props-check.js [--only=assets|envelope|furniture|determinism|physics|starter|scene|egg] [--verbose]
+ * Usage: node scripts/props-check.js [--only=assets|tilt|envelope|flythrough|furniture|determinism|physics|starter|scene|egg] [--verbose]
  *        node scripts/props-check.js --selftest    prove each detector sees a planted fault
  * Exit code is the number of failed checks.
  *
@@ -92,8 +111,9 @@ import { dirname, join, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { loadSim, SIM_OK, simErrorName } from '../tests/lib/simmod.js';
-import { PROPS, FURNITURE, partsOf } from '../src/props/catalog.js';
-import { styleDims, approxHeight } from '../src/props/types.js';
+import { PROPS, FURNITURE, partsOf, placedPartsOf } from '../src/props/catalog.js';
+import { hollowShape, turbineShape } from '../src/props/industrial.js';
+import { styleDims, approxHeight, fitDims } from '../src/props/types.js';
 import { GAP_MIN, seededRandom, hashString } from '../src/props/parts.js';
 import { placeSolids, placedYaw, addSolids } from '../src/props/solids.js';
 import { sincos, quarterTurns, quarterSinCos } from '../src/props/trig.js';
@@ -284,7 +304,7 @@ function numbersOfSolid(s) {
  * Check one element (a prop or a piece of furniture) at one set of dims.
  * Returns a map of problem name to example strings; empty means it passed.
  */
-function checkElement(el, turns, expectSolid, label, problems, tally) {
+function checkElement(el, turns, expectSolid, label, problems, tally, partsFn = partsOf) {
   const add = (what, example) => {
     if (!problems.has(what)) {
       problems.set(what, []);
@@ -298,7 +318,7 @@ function checkElement(el, turns, expectSolid, label, problems, tally) {
   };
   let parts;
   try {
-    parts = partsOf(el);
+    parts = partsFn(el);
   } catch (e) {
     add('layout throws', e.message);
     return;
@@ -496,10 +516,99 @@ function assetsBlock() {
       const sets = dimSets(type, style);
       for (const [name, dims] of sets) {
         checkElement(assetEl(type, style, dims), def.turns, def.zone ? false : true, name, problems, tally);
+        /* An asset that stands on end is checked as it stands too, both
+         * ways: the same checks, on the parts as placedPartsOf gives them. */
+        if (def.tilt) {
+          for (const pitch of [Math.PI / 2, -Math.PI / 2]) {
+            checkElement({ ...assetEl(type, style, dims), pitch }, def.turns, true,
+              `${name}, on end ${pitch > 0 ? '+' : '-'}90`, problems, tally, placedPartsOf);
+          }
+        }
       }
-      report(`${type}${style ? ` ${style}` : ''} (${def.turns})`, problems, tally, `${sets.length} dim sets x ${HEADINGS.length} headings`);
+      report(`${type}${style ? ` ${style}` : ''} (${def.turns})`, problems, tally, `${sets.length} dim sets x ${HEADINGS.length} headings${def.tilt ? ', and on end both ways' : ''}`);
     }
   }
+}
+
+/*
+ * 1c. ON END. What standing an asset on its end must keep, over every style,
+ * every dim set and both ways. It moves boxes and changes nothing else:
+ * the same boxes in the same sizes, to the bit; the lowest on the ground
+ * exactly, because Base is where it stands; the footprint centred along the
+ * heading, because the origin is the middle of it; z untouched, because a
+ * quarter about z does not move it; and no taller than the builder's drag
+ * handle and readout say, which must never come out under what is drawn.
+ */
+function tiltBlock() {
+  console.log('\n1c. on end: every asset that stands on end, both ways, at every dim set');
+  const live = (parts) => parts.filter((p) => p.solid || p.draw);
+  const lows = (parts, k) => Math.min(...live(parts).map((p) => (p.t === 'box' ? p.lo[k] : Math.min(p.a[k], p.b[k]) - p.r)));
+  const highs = (parts, k) => Math.max(...live(parts).map((p) => (p.t === 'box' ? p.hi[k] : Math.max(p.a[k], p.b[k]) + p.r)));
+  /* To a nanometre, not to the bit: each box is moved by the two offsets
+   * that centre and seat it, and a sum is not exact, so a box's size can
+   * differ from the layout's in its last place. The geometry between boxes
+   * is not rounded at all: parts the layout put on one plane are the same
+   * double, and the same offset keeps them so. */
+  const sig = (parts) => parts.filter((p) => p.t === 'box')
+    .map((p) => [p.hi[0] - p.lo[0], p.hi[1] - p.lo[1], p.hi[2] - p.lo[2]]
+      .map((v) => Math.round(v * 1e9) / 1e9).sort((a, b) => a - b).join(','))
+    .sort().join('|');
+  let any = false;
+  for (const [type, def] of Object.entries(PROPS)) {
+    if (!def.tilt) {
+      continue;
+    }
+    any = true;
+    for (const style of def.styles ?? [null]) {
+      const problems = new Map();
+      const tally = { parts: [] };
+      const add = (what, example) => {
+        const list = problems.get(what) ?? [];
+        problems.set(what, list);
+        if (list.length < 3) {
+          list.push(example);
+        }
+      };
+      const sets = dimSets(type, style);
+      for (const [name, dims] of sets) {
+        for (const pitch of [Math.PI / 2, -Math.PI / 2]) {
+          const el = { ...assetEl(type, style, dims), pitch };
+          const up = partsOf(el);
+          const on = placedPartsOf(el);
+          const label = `${name}, ${pitch > 0 ? '+' : '-'}90`;
+          tally.parts.push(on.length);
+          if (on.length !== up.length) {
+            add('as many parts as upright', `${label}: ${on.length} from ${up.length}`);
+            continue;
+          }
+          if (sig(on) !== sig(up)) {
+            add('the same boxes in the same sizes, to a nanometre', label);
+          }
+          if (lows(on, 1) !== 0) {
+            add('the lowest part is on the ground', `${label}: ${lows(on, 1)}`);
+          }
+          const xs = [lows(on, 0), highs(on, 0)];
+          if (Math.abs(xs[0] + xs[1]) > 1e-9) {
+            add('the footprint is centred along the heading', `${label}: ${xs.join(' to ')}`);
+          }
+          if (lows(on, 2) !== lows(up, 2) || highs(on, 2) !== highs(up, 2)) {
+            add('z is untouched', `${label}`);
+          }
+          const said = approxHeight(type, dims, style, 1);
+          if (!(said >= highs(on, 1) - 1e-9)) {
+            add('no taller than the builder says', `${label}: ${highs(on, 1)} over ${said}`);
+          }
+          /* Both ways stand it on its end: the same height, up to which end. */
+          const other = placedPartsOf({ ...el, pitch: -pitch });
+          if (Math.abs(highs(other, 1) - highs(on, 1)) > 0.8) {
+            add('both ways stand it as tall', `${label}`);
+          }
+        }
+      }
+      report(`${type}${style ? ` ${style}` : ''} on end`, problems, tally, `${sets.length} dim sets, both ways`);
+    }
+  }
+  check('some asset stands on end', any);
 }
 
 /* ------------------------------------------------------------------ */
@@ -756,6 +865,601 @@ function envelopeBlock() {
 }
 
 /* ------------------------------------------------------------------ */
+/* 1d. A chimney to fly down, and a turbine that stands still           */
+/* ------------------------------------------------------------------ */
+
+/*
+ * TWO ASSETS A MAP BUILDER ASKED FOR (bug-e605ff6a), and what each promises a
+ * pilot, measured on the solids the module is given, never on the numbers the
+ * layout built them from:
+ *
+ *   hollowChimney  the bore is clear, nothing within 1.2 m of its axis at any
+ *                  height at any size the builder offers (2.4 m across or
+ *                  more), so the top is open; the doorway is as wide as it
+ *                  was asked for, up to what the wall allows, never under the
+ *                  gap rule, with nothing solid in it; no slot between two of
+ *                  its solids; and the drawing and the solids agree to
+ *                  centimetres: every solid point is inside the drawn brick,
+ *                  and the drawn surface is never more than 9 cm from a
+ *                  solid, so no wall is drawn that is not there and none is
+ *                  there that is not drawn.
+ *   turbine        the lowest blade tip hangs 2.5 m or more over the ground, a
+ *                  blade hanging straight down clears the tower by the gap
+ *                  rule, no slot between two of its solids, the builder's
+ *                  height readout is over its highest solid at every rotor
+ *                  position, and the cones the tower and the blades are drawn
+ *                  as hold their solids and are held by them.
+ *
+ * The drawing is read by running the asset's own draw() against a kit that
+ * writes its calls down (recordDraw), as the chimney's is.
+ */
+const BORE_MIN = 1.2;
+const DOOR_EXACT = 0.02;
+const DOOR_STOP = 1.309;
+const FIT_THICK = 0.09;
+const FOOT_MIN = 2.5;
+const TWO_PI = Math.PI * 2;
+
+/* Every solid of an asset at the origin, heading 0, where the asset's own
+ * frame is the world's: +x the heading, +y up, +z to the right. */
+function solidsAtOrigin(el) {
+  return placeSolids(partsOf(el), 0, 0, 0, 0, 'any', []);
+}
+
+function hitsSolid(p, solids) {
+  for (const s of solids) {
+    if (aabbNear(aabbOf(s), [p[0], p[1], p[2], p[0], p[1], p[2]], 0) && segClearance(p, p, s) <= 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* The nearest any capsule's surface comes to the vertical axis from the
+ * ground to over the top, and which one it is. */
+function boreClearance(solids, top) {
+  let least = Infinity;
+  let who = '';
+  for (const s of solids) {
+    if (!s.cap) {
+      continue;
+    }
+    const [c0, c1, r] = capEnds(s);
+    const d = segSegDist([0, -1, 0], [0, top + 1, 0], c0, c1) - r;
+    if (d < least) {
+      least = d;
+      who = s.name;
+    }
+  }
+  return { least, who };
+}
+
+/*
+ * The doorway as the solids make it: its width is the gap between the two
+ * jamb columns, its height is the lowest underside over it (the lintel
+ * staves'), and `hits` is how many of a grid of points inside the opening are
+ * inside a solid.
+ */
+function doorwayOf(solids) {
+  const jambs = solids.filter((s) => s.name === 'jamb');
+  const lintels = solids.filter((s) => s.name === 'lintel');
+  if (jambs.length !== 2 || lintels.length === 0) {
+    return { width: NaN, height: NaN, hits: Infinity };
+  }
+  let height = Infinity;
+  for (const s of lintels) {
+    const [c0, c1, r] = capEnds(s);
+    height = Math.min(height, Math.min(c0[1], c1[1]) - r);
+  }
+  /* The width is the gap a craft meets at the top of the opening, a hair
+   * under the lintel, not at the jambs' buried tops, which lean in a little
+   * further. */
+  const across = (s) => {
+    const [c0, c1, r] = capEnds(s);
+    const t = (height - 0.01 - c0[1]) / (c1[1] - c0[1]);
+    return [lerp(c0, c1, t), r];
+  };
+  const [pa, ra] = across(jambs[0]);
+  const [pb] = across(jambs[1]);
+  const width = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]) - 2 * ra;
+  let hits = 0;
+  const reach = Math.max(...solids.map((s) => aabbOf(s)[3]));
+  for (let x = 0; x <= reach + 0.5; x += 0.3) {
+    for (let z = -(width / 2 - 0.03); z <= width / 2 - 0.03 + 1e-9; z += 0.3) {
+      for (let y = 0.05; y <= height - 0.05; y += 0.4) {
+        if (hitsSolid([x, y, z], solids)) {
+          hits += 1;
+        }
+      }
+    }
+  }
+  return { width, height, hits };
+}
+
+/* The closest points of two segments, as { a, b, d }. */
+function segSegClosest(p1, q1, p2, q2) {
+  const d1 = sub(q1, p1);
+  const d2 = sub(q2, p2);
+  const r = sub(p1, p2);
+  const a = dot(d1, d1);
+  const e = dot(d2, d2);
+  const f = dot(d2, r);
+  let s;
+  let t;
+  if (a <= 1e-12 && e <= 1e-12) {
+    s = 0;
+    t = 0;
+  } else if (a <= 1e-12) {
+    s = 0;
+    t = clamp(f / e, 0, 1);
+  } else {
+    const c = dot(d1, r);
+    if (e <= 1e-12) {
+      t = 0;
+      s = clamp(-c / a, 0, 1);
+    } else {
+      const b = dot(d1, d2);
+      const den = a * e - b * b;
+      s = den !== 0 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+  const pa = lerp(p1, q1, s);
+  const pb = lerp(p2, q2, t);
+  return { a: pa, b: pb, d: Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]) };
+}
+
+/*
+ * The narrowest SLOT between two of an asset's capsules: a pair whose
+ * surfaces never touch and come closer than the gap rule, with nothing else
+ * solid in the space between their nearest points. A pair that overlaps is
+ * joined, and a pair with a third solid between them (a stave two along in a
+ * ring, a blade root inside the hub) has no space between it. Returns the
+ * width and the pair, or Infinity.
+ */
+function narrowestSlot(solids) {
+  let least = Infinity;
+  let pair = '';
+  for (let i = 0; i < solids.length; i += 1) {
+    for (let j = i + 1; j < solids.length; j += 1) {
+      const A = solids[i];
+      const B = solids[j];
+      if (!A.cap || !B.cap || !aabbNear(aabbOf(A), aabbOf(B), GAP_MIN)) {
+        continue;
+      }
+      const [a0, a1, ra] = capEnds(A);
+      const [b0, b1, rb] = capEnds(B);
+      const near = segSegClosest(a0, a1, b0, b1);
+      const gap = near.d - ra - rb;
+      if (!(gap > 1e-6 && gap < GAP_MIN && gap < least)) {
+        continue;
+      }
+      const n = [(near.b[0] - near.a[0]) / near.d, (near.b[1] - near.a[1]) / near.d, (near.b[2] - near.a[2]) / near.d];
+      const from = [near.a[0] + n[0] * ra, near.a[1] + n[1] * ra, near.a[2] + n[2] * ra];
+      const to = [near.b[0] - n[0] * rb, near.b[1] - n[1] * rb, near.b[2] - n[2] * rb];
+      let free = true;
+      for (let k = 1; k < 8 && free; k += 1) {
+        free = !hitsSolid(lerp(from, to, k / 8), solids);
+      }
+      if (free) {
+        least = gap;
+        pair = `${A.name} and ${B.name}`;
+      }
+    }
+  }
+  return { least, pair };
+}
+
+function pointSegDist(a, b, p) {
+  const d = sub(b, a);
+  const l2 = dot(d, d);
+  const t = l2 > 0 ? clamp(dot(sub(p, a), d) / l2, 0, 1) : 0;
+  const e = sub(p, lerp(a, b, t));
+  return Math.hypot(e[0], e[1], e[2]);
+}
+
+/* Points on and round a capsule's surface, two millimetres inside it so a
+ * point that is on the drawn brick's own surface is not a coin toss. */
+function capSamples(s, nt = 9, na = 8) {
+  const [a, b, r0] = capEnds(s);
+  const r = r0 - 0.002;
+  const d = sub(b, a);
+  const len = Math.hypot(d[0], d[1], d[2]);
+  const ax = len > 1e-9 ? [d[0] / len, d[1] / len, d[2] / len] : [0, 1, 0];
+  const ref = Math.abs(ax[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let u = cross3(ax, ref);
+  const ul = Math.hypot(u[0], u[1], u[2]);
+  u = [u[0] / ul, u[1] / ul, u[2] / ul];
+  const v = cross3(ax, u);
+  const at = (c, k, side, along) => {
+    const ang = (k / na) * TWO_PI;
+    const x = Math.cos(ang) * side;
+    const y = Math.sin(ang) * side;
+    return [0, 1, 2].map((m) => c[m] + r * (x * u[m] + y * v[m]) + along * ax[m]);
+  };
+  const pts = [];
+  for (let i = 0; i < nt; i += 1) {
+    const c = lerp(a, b, i / (nt - 1));
+    for (let k = 0; k < na; k += 1) {
+      pts.push(at(c, k, 1, 0));
+    }
+  }
+  /* The two domes: the tip, and a ring half way up each. */
+  for (const [c, sg] of [[a, -1], [b, 1]]) {
+    pts.push(at(c, 0, 0, sg * r));
+    for (let k = 0; k < na; k += 1) {
+      pts.push(at(c, k, 0.7071, sg * 0.7071 * r));
+    }
+  }
+  return pts;
+}
+
+/* What the hollow chimney's draw says is brick, read off its recorded calls:
+ * between the inward and the outward shell that cover a height and a heading
+ * (the doorway has neither), inside a jamb column, or inside the rim's roll. */
+function hollowDrawn(calls) {
+  const shells = calls.filter((c) => c[0] === 'shell').map((c) => ({ y0: c[2], y1: c[3], r0: c[4], r1: c[5], arc: c[6], inward: c[7] }));
+  const radiusAt = (sh, y) => sh.r0 + ((sh.r1 - sh.r0) * (y - sh.y0)) / (sh.y1 - sh.y0);
+  const covering = (y, phi, inward) => shells.find((sh) => sh.inward === inward && y >= sh.y0 - 1e-9 && y <= sh.y1 + 1e-9
+    && (!sh.arc || (phi >= sh.arc[0] - 1e-9 && phi <= sh.arc[1] + 1e-9)));
+  const cols = calls.filter((c) => c[0] === 'cyl' && c[1] === 'brick');
+  const rims = calls.filter((c) => c[0] === 'rim' && BRICK.has(c[1]));
+  const wall = (y, phi) => {
+    const o = covering(y, phi, false);
+    const i = covering(y, phi, true);
+    return o && i ? [radiusAt(i, y), radiusAt(o, y)] : null;
+  };
+  return {
+    wall,
+    has(p, tol) {
+      const r = Math.hypot(p[0], p[2]);
+      const phi = ((Math.atan2(p[2], p[0]) % TWO_PI) + TWO_PI) % TWO_PI;
+      const w = wall(p[1], phi);
+      if (w && r >= w[0] - tol && r <= w[1] + tol) {
+        return true;
+      }
+      if (cols.some((c) => pointSegDist(c[2], c[3], p) <= c[4] + tol)) {
+        return true;
+      }
+      return rims.some((m) => {
+        const arc = m[6];
+        if (arc && ((((phi - arc[0]) % TWO_PI) + TWO_PI) % TWO_PI) > arc[1] - arc[0] + 1e-9) {
+          return false;
+        }
+        return (r - m[3]) ** 2 + (p[1] - m[2]) ** 2 <= (m[4] + tol) ** 2;
+      });
+    },
+  };
+}
+
+/* How many of `points` the drawing does not cover, and the first, plus the
+ * furthest a point on the drawn surfaces `samples` is from every solid. */
+function fitOf(solids, covers, samples) {
+  const out = { outside: 0, outsideAt: '', far: 0, farAt: '' };
+  for (const s of solids) {
+    for (const p of capSamples(s)) {
+      if (p[1] >= 0 && !covers(p)) {
+        out.outside += 1;
+        if (!out.outsideAt) {
+          out.outsideAt = `${s.name} at ${p.map(r3).join(', ')}`;
+        }
+      }
+    }
+  }
+  for (const [p, where] of samples()) {
+    if (p[1] < 0) {
+      continue;
+    }
+    let near = Infinity;
+    for (const s of solids) {
+      if (aabbNear(aabbOf(s), [p[0], p[1], p[2], p[0], p[1], p[2]], FIT_THICK)) {
+        near = Math.min(near, segClearance(p, p, s));
+      }
+    }
+    if (near > out.far) {
+      out.far = near;
+      out.farAt = where;
+    }
+  }
+  return out;
+}
+
+/* The hollow chimney's drawing against its solids, both ways. */
+function hollowFit(H, solids, calls) {
+  const drawn = hollowDrawn(calls);
+  return fitOf(solids, (p) => drawn.has(p, 0.01), function* samples() {
+    const N = 48;
+    for (let y = 0.15; y < H - 0.05; y += 0.35) {
+      for (let k = 0; k < N; k += 1) {
+        const phi = ((k + 0.37) / N) * TWO_PI;
+        const w = drawn.wall(y, phi);
+        for (const r of w ?? []) {
+          yield [[r * Math.cos(phi), y, r * Math.sin(phi)], `y ${r3(y)}, heading ${r3(phi)}, radius ${r3(r)}`];
+        }
+      }
+    }
+  });
+}
+
+/* What the turbine's draw says is material: the capsules the layout draws as
+ * themselves (nacelle, hub) and the cones the draw() makes. */
+function coneVolumes(parts, calls) {
+  const vols = [];
+  for (const p of parts) {
+    if (p.draw && p.t === 'cap' && p.look === 'capsule') {
+      vols.push({ a: p.a, b: p.b, r0: p.r, r1: p.r, capsule: true });
+    }
+  }
+  for (const c of calls) {
+    if (c[0] === 'cyl') {
+      vols.push({ a: c[2], b: c[3], r0: c[4], r1: c[6] ?? c[4], capsule: false });
+    }
+  }
+  return vols;
+}
+
+function insideVolume(v, p, tol) {
+  const d = sub(v.b, v.a);
+  const l2 = dot(d, d);
+  const t = l2 > 0 ? dot(sub(p, v.a), d) / l2 : 0;
+  if (!v.capsule && (t < -1e-9 || t > 1 + 1e-9)) {
+    return false;
+  }
+  const tt = clamp(t, 0, 1);
+  const e = sub(p, lerp(v.a, v.b, tt));
+  return Math.hypot(e[0], e[1], e[2]) <= v.r0 + (v.r1 - v.r0) * tt + tol;
+}
+
+/* The turbine's drawing against its solids, both ways. */
+function coneFit(solids, parts, calls) {
+  const vols = coneVolumes(parts, calls);
+  return fitOf(solids, (p) => vols.some((v) => insideVolume(v, p, 0.01)), function* samples() {
+    for (const v of vols) {
+      if (v.capsule) {
+        continue;
+      }
+      const d = sub(v.b, v.a);
+      const len = Math.hypot(d[0], d[1], d[2]);
+      const ax = [d[0] / len, d[1] / len, d[2] / len];
+      const ref = Math.abs(ax[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+      let u = cross3(ax, ref);
+      const ul = Math.hypot(u[0], u[1], u[2]);
+      u = [u[0] / ul, u[1] / ul, u[2] / ul];
+      const w = cross3(ax, u);
+      for (let i = 1; i < 24; i += 1) {
+        const t = i / 24;
+        const c = lerp(v.a, v.b, t);
+        const r = v.r0 + (v.r1 - v.r0) * t;
+        for (let k = 0; k < 8; k += 1) {
+          const ang = (k / 8) * TWO_PI;
+          yield [[0, 1, 2].map((m) => c[m] + r * (Math.cos(ang) * u[m] + Math.sin(ang) * w[m])),
+            `cone from ${v.a.map(r3).join(', ')} at ${r3(t)}`];
+        }
+      }
+    }
+  });
+}
+
+/* The dim sets the two assets are checked at: every limit alone, all at the
+ * minimum, all at the maximum, and every corner of the limits. */
+function cornerSets(type) {
+  const def = PROPS[type];
+  const keys = Object.keys(def.limits);
+  const sets = dimSets(type, null);
+  for (let m = 0; m < 1 << keys.length; m += 1) {
+    const d = { ...def.dims };
+    keys.forEach((k, i) => {
+      d[k] = def.limits[k][(m >> i) & 1];
+    });
+    sets.push([`corner ${keys.map((k) => `${k} ${d[k]}`).join(', ')}`, d]);
+  }
+  return sets;
+}
+
+/* One problem list per promise, over every dim set. */
+function hollowProblems(name, dims) {
+  const out = {};
+  const el = assetEl('hollowChimney', null, dims);
+  const solids = solidsAtOrigin(el);
+  const H = dims.height;
+  const bore = boreClearance(solids, H);
+  if (bore.least < BORE_MIN) {
+    out.bore = `${name}: ${r3(bore.least)} m from the axis (${bore.who})`;
+  }
+  const door = doorwayOf(solids);
+  const atStop = hollowShape(el).jamb >= DOOR_STOP - 1e-6;
+  if (atStop && dims.door <= 1.25 * dims.radius + 1e-9) {
+    out.stop = `${name}: a doorway of ${dims.door} m on a stack ${dims.radius} m in radius, which the builder allows, is stopped at 75 degrees`;
+  }
+  if (!(door.width >= GAP_MIN + 0.1)) {
+    out.doorW = `${name}: the doorway is ${r3(door.width)} m, under the gap rule's ${GAP_MIN} m and a margin`;
+  } else if (!atStop && door.width < dims.door - DOOR_EXACT) {
+    out.doorW = `${name}: asked for ${dims.door} m, got ${r3(door.width)} m`;
+  } else if (atStop && door.width > dims.door + DOOR_EXACT) {
+    out.doorW = `${name}: at the stop, ${r3(door.width)} m is over the ${dims.door} m asked for`;
+  }
+  const ratio = door.height / door.width;
+  const onFloor = door.height <= 3.2 + 0.02;
+  const onRoof = door.height >= 0.5 * H - 0.02;
+  if (!(door.height >= 3.2 - 0.02 && door.height <= 0.5 * H + 0.02) || (!onFloor && !onRoof && Math.abs(ratio - 1.5) > 0.075)) {
+    out.doorH = `${name}: ${r3(door.height)} m high on ${r3(door.width)} m wide (${r3(ratio)})`;
+  }
+  if (door.hits !== 0) {
+    out.doorHits = `${name}: ${door.hits} points in the doorway are solid`;
+  }
+  const slot = narrowestSlot(solids);
+  if (slot.least < GAP_MIN) {
+    out.slot = `${name}: ${r3(slot.least)} m between ${slot.pair}`;
+  }
+  const fit = hollowFit(H, solids, recordDraw(el, partsOf(el)));
+  if (fit.outside > 0) {
+    out.fitIn = `${name}: ${fit.outside} solid points outside the drawn brick, the first ${fit.outsideAt}`;
+  }
+  if (fit.far > FIT_THICK) {
+    out.fitFar = `${name}: drawn ${r3(fit.far)} m from any solid at ${fit.farAt}`;
+  }
+  return { out, count: solids.length };
+}
+
+/*
+ * The highest point of what an asset draws: its drawn parts, and every cone
+ * and ball its draw() paints, a cone counted to the rim of its end caps,
+ * which on a cone that leans stand r * sin(lean) over the middle of the end.
+ * A blade's red tip is such a cap, and the turbine's readout once left it
+ * out: 11 cm under the drawn tip of a 60 m blade at Rotor 0.5.
+ */
+function drawnTop(parts, calls) {
+  let top = -Infinity;
+  for (const p of parts) {
+    if (p.draw) {
+      top = Math.max(top, topOf(p));
+    }
+  }
+  for (const c of calls) {
+    if (c[0] === 'cyl') {
+      const [a, b, ra] = [c[2], c[3], c[4]];
+      const rb = c[6] ?? ra;
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const lean = L > 0 ? Math.sqrt(Math.max(0, 1 - ((b[1] - a[1]) / L) ** 2)) : 1;
+      top = Math.max(top, a[1] + ra * lean, b[1] + rb * lean);
+    } else if (c[0] === 'ball') {
+      top = Math.max(top, c[2][1] + c[3]);
+    }
+  }
+  return top;
+}
+
+function turbineProblems(name, dims0, spins) {
+  const out = { foot: [], gap: [], slot: [], top: [], drawn: [] };
+  let count = 0;
+  for (const spin of spins) {
+    const dims = { ...dims0, spin };
+    const label = `${name}, spin ${spin}`;
+    const solids = solidsAtOrigin(assetEl('turbine', null, dims));
+    count = solids.length;
+    const blades = solids.filter((s) => s.name === 'blade');
+    const tower = solids.filter((s) => s.name === 'tower');
+    const lowest = Math.min(...blades.map((s) => Math.min(s.cap[1], s.cap[4]) - s.cap[6]));
+    if (lowest < FOOT_MIN - 1e-6) {
+      out.foot.push(`${label}: a blade reaches down to ${r3(lowest)} m`);
+    }
+    let gap = Infinity;
+    for (const b of blades) {
+      for (const t of tower) {
+        gap = Math.min(gap, clearance(b, t));
+      }
+    }
+    if (gap < GAP_MIN) {
+      out.gap.push(`${label}: ${r3(gap)} m between a blade and the tower`);
+    }
+    const slot = narrowestSlot(solids);
+    if (slot.least < GAP_MIN) {
+      out.slot.push(`${label}: ${r3(slot.least)} m between ${slot.pair}`);
+    }
+    const highest = Math.max(...solids.map((s) => Math.max(s.cap[1], s.cap[4]) + s.cap[6]));
+    const said = approxHeight('turbine', dims, null);
+    if (highest > said + TOP_SLACK) {
+      out.top.push(`${label}: a solid reaches ${r3(highest)} m, the readout says ${r3(said)} m`);
+    }
+    const el = assetEl('turbine', null, dims);
+    const parts = partsOf(el);
+    const drawn = drawnTop(parts, recordDraw(el, parts));
+    if (drawn > said + 1e-6) {
+      out.drawn.push(`${label}: drawn to ${r3(drawn)} m, the readout says ${r3(said)} m`);
+    }
+  }
+  return { out, count };
+}
+
+function flyThroughBlock() {
+  console.log('\n1d. a chimney to fly down and a turbine that stands still: what each promises, on the solids');
+  const hollow = { bore: [], doorW: [], doorH: [], doorHits: [], slot: [], fitIn: [], fitFar: [], stop: [] };
+  const counts = [];
+  const hsets = cornerSets('hollowChimney');
+  /* The builder holds a doorway to a radius and a quarter, so every size it
+   * can ask for is checked too: the corners as the builder holds them, and
+   * every radius against its widest and narrowest doorway at three heights. */
+  for (const [name, dims] of [...hsets]) {
+    const held = fitDims('hollowChimney', { ...dims });
+    if (held.door !== dims.door) {
+      hsets.push([`${name}, held (door ${held.door})`, held]);
+    }
+  }
+  for (const radius of [2.4, 3, 4, 5.5, 7]) {
+    for (const height of [8, 20, 80]) {
+      for (const door of [1.6, 8]) {
+        const dims = fitDims('hollowChimney', { ...PROPS.hollowChimney.dims, radius, height, door });
+        hsets.push([`radius ${radius}, height ${height}, door ${dims.door} held`, dims]);
+      }
+    }
+  }
+  for (const [name, dims] of hsets) {
+    const { out, count } = hollowProblems(name, dims);
+    counts.push(count);
+    for (const k of Object.keys(out)) {
+      hollow[k].push(out[k]);
+    }
+  }
+  const range = `${hsets.length} dim sets, ${Math.min(...counts)} to ${Math.max(...counts)} solids`;
+  const say = (label, list, detail) => check(label, list.length === 0, list.slice(0, 3).join(' | ') || detail);
+  say('hollowChimney: the bore is clear, 2.4 m across at the least, at every size', hollow.bore, range);
+  say('hollowChimney: the doorway is the width asked for, up to what the wall allows, and never under the gap rule', hollow.doorW, range);
+  say('hollowChimney: the door is half as high again as it is wide, within 3.2 m and half the stack', hollow.doorH, range);
+  say('hollowChimney: every doorway the builder allows is built at the width asked, never stopped short', hollow.stop, range);
+  say('hollowChimney: nothing is solid in the doorway', hollow.doorHits, range);
+  say('hollowChimney: no slot between two of its solids', hollow.slot, range);
+  say('hollowChimney: every solid point is inside the drawn brick', hollow.fitIn, range);
+  say('hollowChimney: the drawn brick is never far from a solid', hollow.fitFar, range);
+
+  const turb = { foot: [], gap: [], slot: [], top: [], drawn: [], sym: [], fitIn: [], fitFar: [] };
+  const tcounts = [];
+  const tsets = cornerSets('turbine');
+  const spins = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
+  for (const [name, dims0] of tsets) {
+    const { out, count } = turbineProblems(name, dims0, spins);
+    tcounts.push(count);
+    for (const k of Object.keys(out)) {
+      turb[k].push(...out[k]);
+    }
+    /* Three blades alike: a whole turn of Rotor, 1, is the rotor it started as. */
+    const box = (spin) => {
+      const list = solidsAtOrigin(assetEl('turbine', null, { ...dims0, spin })).filter((s) => s.name === 'blade');
+      return [0, 1, 2].flatMap((k) => [Math.min(...list.map((s) => Math.min(s.cap[k], s.cap[k + 3]))), Math.max(...list.map((s) => Math.max(s.cap[k], s.cap[k + 3])))]);
+    };
+    const A = box(0);
+    const B = box(1);
+    if (A.some((v, i) => Math.abs(v - B[i]) > 1e-3)) {
+      turb.sym.push(`${name}: spin 0 and spin 1 are not the same rotor`);
+    }
+    const el = assetEl('turbine', null, dims0);
+    const parts = partsOf(el);
+    const fit = coneFit(solidsAtOrigin(el), parts, recordDraw(el, parts));
+    if (fit.outside > 0) {
+      turb.fitIn.push(`${name}: ${fit.outside} solid points outside what is drawn, the first ${fit.outsideAt}`);
+    }
+    if (fit.far > FIT_THICK) {
+      turb.fitFar.push(`${name}: drawn ${r3(fit.far)} m from any solid at ${fit.farAt}`);
+    }
+  }
+  const trange = `${tsets.length} dim sets x ${spins.length} rotor positions, ${Math.min(...tcounts)} to ${Math.max(...tcounts)} solids`;
+  say('turbine: the lowest blade tip hangs 2.5 m over the ground or more', turb.foot, trange);
+  say('turbine: a blade hanging down clears the tower by the gap rule', turb.gap, trange);
+  say('turbine: no slot between two of its solids', turb.slot, trange);
+  say('turbine: the readout is over the highest solid at every rotor position', turb.top, trange);
+  say('turbine: the readout is never under what is drawn, blade tips and all, at every rotor position', turb.drawn, trange);
+  say('turbine: a whole turn of Rotor is the rotor it started as', turb.sym, `${tsets.length} dim sets`);
+  say('turbine: every solid point is inside what is drawn', turb.fitIn, `${tsets.length} dim sets`);
+  say('turbine: what is drawn is never far from a solid', turb.fitFar, `${tsets.length} dim sets`);
+}
+
+/* ------------------------------------------------------------------ */
 /* One of everything                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -789,6 +1493,14 @@ function everythingDoc() {
     }
   }
   entries.push({ type: 'gap', z: 1.2, name: 'CHECK GAP', points: 500 });
+  /* Stood on end both ways, a ledge on end, and a container sunk 1.3 m: the
+   * map of everything holds them like any other, so determinism, the module
+   * and the grid all see them, and the drops in physicsBlock can land on
+   * one (stack 2 so its top clears 3 m even sunk, which roofSpot asks). */
+  entries.push({ type: 'containers', style: '40ft', pitch: Math.PI / 2, tag: 'stood' });
+  entries.push({ type: 'containers', style: '40ft open', pitch: -Math.PI / 2, tag: 'stood open' });
+  entries.push({ type: 'ledge', pitch: Math.PI / 2, tag: 'stood' });
+  entries.push({ type: 'containers', style: '40ft', z: -1.3, tag: 'sunk' });
   entries.forEach((e, i) => {
     const x = CELL / 2 + (i % COLS) * CELL;
     const y = CELL / 2 + Math.floor(i / COLS) * CELL;
@@ -802,6 +1514,12 @@ function everythingDoc() {
     }
     if (e.points) {
       el.points = e.points;
+    }
+    if (e.pitch != null) {
+      el.pitch = e.pitch;
+    }
+    if (e.tag) {
+      el.name = e.tag;
     }
     doc.elements.push(el);
   });
@@ -1419,15 +2137,23 @@ function roofSpot(world, range) {
   return null;
 }
 
-async function roofScenario(world, f, ranges) {
-  const range = ranges.find((r) => r.item.el.type === 'building' && r.item.el.style === 'flats');
+async function roofScenario(world, f, ranges, label = '(a) roof', pick = (r) => r.item.el.type === 'building' && r.item.el.style === 'flats', what = 'the flats', topBand = null) {
+  const range = ranges.find(pick);
   if (!range) {
-    fail('(a) roof: the map has a block of flats', 'none found');
+    fail(`${label}: the map has ${what}`, 'none found');
     return;
   }
   const spot = roofSpot(world, range);
-  if (!check('(a) roof: a spot on the flats roof with 3.5 m of clear air over it', Boolean(spot),
+  if (!check(`${label}: a spot on ${what} with 3.5 m of clear air over it`, Boolean(spot),
     spot ? `roof top ${r3(spot.top)} m at (${r3(spot.x)}, ${r3(spot.z)}), nearest solid ${spot.clear === Infinity ? 'none' : `${r3(spot.clear)} m`} from the column` : 'no clear spot')) {
+    return;
+  }
+  /* WHERE THE ROOF MUST BE, for a case that is about where a thing is: a
+   * drop that lands on SOME roof of the container proves nothing about
+   * whether it was stood on end or half sunk, since flat it has a roof too.
+   * (A first version of this passed with the placement ignoring the tilt.) */
+  if (topBand && !check(`${label}: its roof is where it stands, ${topBand[0]} to ${topBand[1]} m`,
+    spot.top >= topBand[0] && spot.top <= topBand[1], `${r3(spot.top)} m`)) {
     return;
   }
   /* Dropped, motors idle, from 3 m over the roof. */
@@ -1443,18 +2169,18 @@ async function roofScenario(world, f, ranges) {
   if (verbose) {
     note(`first ground contact at ${landed?.ms} ms, ${r3(impact)} m/s, support ${landed?.support}; end y ${r3(endW[1])}, ${r3(end.spd)} m/s, up ${r3(end.up)}, support ${end.support}`);
   }
-  check('(a) roof: two drops agree to the bit', res.hash === res2.hash);
+  check(`${label}: two drops agree to the bit`, res.hash === res2.hash);
   const onRoof = end.support >= range.from && end.support < range.to;
-  check('(a) roof: the roof is the ground under it at rest', onRoof,
-    `support shape ${end.support}, the flats are ${range.from} to ${range.to - 1}`);
+  check(`${label}: it is the ground under the craft at rest`, onRoof,
+    `support shape ${end.support}, ${what} is ${range.from} to ${range.to - 1}`);
   /* At rest on the roof: level and still, the CG at the parked height over
    * the roof's top. 3 cm is "a few centimetres": the street is metres
    * below, so this cannot be confused with falling through. */
   const dz = endW[1] - (spot.top + REST);
-  check('(a) roof: comes to rest on the roof, not the street', end.spd < 0.05 && Math.abs(dz) <= 0.03 && end.up > 0.99,
-    `CG ${r3(endW[1])} m against a roof at ${r3(spot.top)} m (${r3(dz * 1000)} mm off parked), ${r3(end.spd)} m/s, up ${r3(end.up)}, arrived at ${r3(impact)} m/s`);
+  check(`${label}: comes to rest on the roof, not the street`, end.spd < 0.05 && Math.abs(dz) <= 0.03 && end.up > 0.99,
+    `CG ${r3(endW[1])} m against a top at ${r3(spot.top)} m (${r3(dz * 1000)} mm off parked), ${r3(end.spd)} m/s, up ${r3(end.up)}, arrived at ${r3(impact)} m/s`);
   const deepest = Math.max(...rows.map((r) => r.depth));
-  check('(a) roof: no contact deeper than 5 cm', deepest <= 0.05, `${r3(deepest)} m`);
+  check(`${label}: no contact deeper than 5 cm`, deepest <= 0.05, `${r3(deepest)} m`);
 }
 
 /*
@@ -1588,6 +2314,159 @@ async function mastScenario(world, f, ranges) {
     `${r3(vAlong(rows[t0 - 1]))} m/s toward it before, ${r3(left)} m/s within 300 ms of the hit`);
   if (verbose) {
     note(`start ${start.map(r3).join(', ')} plant; chord ${legP.map(r3).join(', ')}; hit ${t0} ms`);
+  }
+}
+
+/*
+ * A STRAIGHT FLIGHT, as the mast run is flown: angle mode, the stick forward,
+ * the height held, turned onto a direction and set so the craft first does
+ * 5 m/s `back` metres short of a point. All of it in Three.js world metres:
+ * `at` is the point [x, z], `y` the height held, `dir` the direction of
+ * travel [x, z], a unit vector. Returns two identical runs, so the caller can
+ * hold them to the bit, with where the point is in the plant's frame; or null
+ * when the craft never reaches 5 m/s.
+ */
+async function straightFlight(world, f, o) {
+  const dirP = dirToPlant(f, o.dir[0], 0, o.dir[1]);
+  const atP = toPlant(f, o.at[0], o.y, o.at[1]);
+  const zHold = atP[2];
+  const probe = (q) => ({ empty: true, ms: 6000, p: [0, 0, zHold], q, sticks: approach(0.8, zHold) });
+  const learn = await fly(world, f, probe([1, 0, 0, 0]));
+  const at0 = learn.rows.find((row) => row.spd >= 5);
+  if (!at0) {
+    return null;
+  }
+  const e0l = Math.hypot(at0.p[0], at0.p[1]);
+  const e0 = [at0.p[0] / e0l, at0.p[1] / e0l];
+  const q = yawQuat(e0[0] * dirP[0] + e0[1] * dirP[1], e0[0] * dirP[1] - e0[1] * dirP[0]);
+  const turned = await fly(world, f, probe(q));
+  const at = turned.rows.find((row) => row.spd >= 5);
+  const start = [atP[0] - dirP[0] * o.back - at.p[0], atP[1] - dirP[1] * o.back - at.p[1], zHold];
+  const sc = { ms: o.ms ?? 3500, p: start, q, sticks: approach(0.8, zHold) };
+  const res = await fly(world, f, sc);
+  const res2 = await fly(world, f, sc);
+  return { res, res2 };
+}
+
+/* An item's own axes in the world: where its heading and its right hand point
+ * in (x, z), as place.js turns them, and a point's distance along and across. */
+function axesOf(it) {
+  const sc = sincos(it.yaw, { s: 0, c: 0 });
+  const ahead = [sc.c, -sc.s];
+  const right = [sc.s, sc.c];
+  return {
+    ahead,
+    right,
+    along: (w, from = [0, 0]) => (w[0] - it.x - from[0]) * ahead[0] + (w[2] - it.z - from[1]) * ahead[1],
+    across: (w, from = [0, 0]) => (w[0] - it.x - from[0]) * right[0] + (w[2] - it.z - from[1]) * right[1],
+    /* the world's (x, z) of a point `x` ahead and `z` to the right */
+    at: (x, z) => [it.x + x * ahead[0] + z * right[0], it.z + x * ahead[1] + z * right[1]],
+  };
+}
+
+/*
+ * (h) THE HOLLOW CHIMNEY, flown in the module. Dropped from over the rim it
+ * must fall the whole bore touching nothing and land on its floor; flown in
+ * through the doorway at 5 m/s it must reach the axis touching nothing, in
+ * the middle of the opening; and, the control that says the flights can see
+ * the wall at all, flown at the wall opposite the door it is stopped by it.
+ */
+async function chimneyFlights(world, f, ranges) {
+  const range = ranges.find((r) => r.item.el.type === 'hollowChimney');
+  if (!check('(h) hollow chimney: the map has one', Boolean(range), range ? '' : 'none found')) {
+    return;
+  }
+  const it = range.item;
+  const el = it.el;
+  const H = el.dims.height;
+  const shape = hollowShape(el);
+  const ax = axesOf(it);
+
+  const drop = { ms: 4200, p: toPlant(f, it.x, H + 1.5 + REST, it.z), sticks: () => [0, 0, 0, 0] };
+  const a = await fly(world, f, drop);
+  const b = await fly(world, f, drop);
+  check('(h1) dive: two drops down the bore agree to the bit', a.hash === b.hash);
+  const landed = a.rows.find((r) => r.ground > 0);
+  const fall = landed ? a.rows.slice(0, landed.ms) : a.rows;
+  const end = toThree(f, a.rows[a.rows.length - 1].p);
+  check('(h1) dive: it falls the whole height of the bore touching nothing, and lands on the floor of it',
+    Boolean(landed) && fall.every((r) => !r.touching) && Math.hypot(end[0] - it.x, end[2] - it.z) < 1,
+    `${landed ? `lands at ${landed.ms} ms` : 'never lands'}, ${fall.filter((r) => r.touching).length} steps in contact, ends ${r3(Math.hypot(end[0] - it.x, end[2] - it.z))} m from the axis`);
+
+  const into = await straightFlight(world, f, { at: [it.x, it.z], dir: [-ax.ahead[0], -ax.ahead[1]], y: 1.6, back: el.dims.radius + 3 });
+  if (check('(h2) door: the approach reaches 5 m/s', Boolean(into), into ? '' : 'never')) {
+    const pts = into.res.rows.map((r) => toThree(f, r.p));
+    const k = pts.findIndex((w) => ax.along(w) <= 0);
+    check('(h2) door: two flights in through the doorway agree to the bit', into.res.hash === into.res2.hash);
+    const before = into.res.rows.slice(0, k < 0 ? undefined : k);
+    const drift = Math.max(0, ...pts.slice(0, k < 0 ? undefined : k).map((w) => Math.abs(ax.across(w))));
+    check('(h2) door: it flies in through the middle of the doorway to the axis of the bore, touching nothing',
+      k > 0 && before.every((r) => !r.touching) && drift < shape.clear / 2 - 0.35,
+      `${k < 0 ? 'never reaches the axis' : `reaches it at ${k} ms`}, ${before.filter((r) => r.touching).length} steps in contact, at most ${r3(drift)} m off the middle of a ${r3(shape.clear)} m opening`);
+  }
+
+  const wall = await straightFlight(world, f, { at: [it.x, it.z], dir: ax.ahead, y: 1.6, back: el.dims.radius + 3 });
+  if (check('(h3) back wall: the approach reaches 5 m/s', Boolean(wall), wall ? '' : 'never')) {
+    const rows = wall.res.rows;
+    const t0 = wall.res.t0;
+    const pts = rows.map((r) => toThree(f, r.p));
+    const reach = Math.max(...pts.map((w) => ax.along(w)));
+    const hit = new Set(rows.filter((r) => r.shape >= 0).map((r) => r.shape));
+    const foreign = [...hit].filter((i) => i < range.from || i >= range.to);
+    check('(h3) back wall: the wall opposite the door stops it, and it is the chimney that does', t0 >= 0 && reach < 0 && foreign.length === 0,
+      `${t0 < 0 ? 'never touched' : `touched at ${t0} ms`}, reached ${r3(reach)} m along the doorway's axis (0 is the axis), ${foreign.length ? `foreign shapes ${foreign.join(', ')}` : 'only the chimney'}`);
+  }
+}
+
+/*
+ * (t) THE TURBINE, flown in the module, rotor at 0 (one blade straight up).
+ * At 8 m, at the tower from ahead, under the lowest blade: stopped by the
+ * tower. At the middle of the blade standing up, from ahead: stopped by a
+ * blade. And through the rotor plane half way out between that blade and the
+ * next, which is open air: touching nothing, all the way across.
+ */
+async function turbineFlights(world, f, ranges) {
+  const range = ranges.find((r) => r.item.el.type === 'turbine');
+  if (!check('(t) turbine: the map has one', Boolean(range), range ? '' : 'none found')) {
+    return;
+  }
+  const it = range.item;
+  const el = it.el;
+  const s = turbineShape(el);
+  const ax = axesOf(it);
+  const names = (rows) => [...new Set(rows.filter((r) => r.shape >= 0).map((r) => world.placed.solids[r.shape].name))];
+  const ours = (rows) => rows.filter((r) => r.shape >= 0).every((r) => r.shape >= range.from && r.shape < range.to);
+
+  const tower = await straightFlight(world, f, { at: [it.x, it.z], dir: [-ax.ahead[0], -ax.ahead[1]], y: 8, back: 6 });
+  if (check('(t1) tower: the approach reaches 5 m/s', Boolean(tower), tower ? '' : 'never')) {
+    const rows = tower.res.rows;
+    const reach = Math.min(...rows.map((r) => ax.along(toThree(f, r.p))));
+    check('(t1) tower: it is stopped by the tower, and by nothing else', tower.res.t0 >= 0 && reach > 0 && ours(rows) && names(rows).every((n) => n === 'tower'),
+      `${tower.res.t0 < 0 ? 'never touched' : `touched at ${tower.res.t0} ms`}, nearest the axis ${r3(reach)} m (the tower is ${r3(s.rb)} m round at the foot), touched ${names(rows).join(', ')}`);
+  }
+
+  const blade = await straightFlight(world, f, { at: ax.at(s.xb, 0), dir: [-ax.ahead[0], -ax.ahead[1]], y: s.H + s.s0 + s.L / 2, back: 6 });
+  if (check('(t2) blade: the approach reaches 5 m/s', Boolean(blade), blade ? '' : 'never')) {
+    const rows = blade.res.rows;
+    const reach = Math.min(...rows.map((r) => ax.along(toThree(f, r.p))));
+    check('(t2) blade: it is stopped by the blade standing up, and by nothing else',
+      blade.res.t0 >= 0 && reach > s.xb && ours(rows) && names(rows).every((n) => n === 'blade'),
+      `${blade.res.t0 < 0 ? 'never touched' : `touched at ${blade.res.t0} ms`}, nearest ${r3(reach - s.xb)} m ahead of the blade's axis (negative would be through it), touched ${names(rows).join(', ')}`);
+  }
+
+  /* The open air between blade 0 (up) and blade 1 (a third of a turn round): the
+   * point at 60 degrees, 60 per cent of the way out. */
+  const rho = 0.6 * s.L;
+  const gap = await straightFlight(world, f, { at: ax.at(s.xb, rho * 0.8660254), dir: [-ax.ahead[0], -ax.ahead[1]], y: s.H + rho * 0.5, back: 8, ms: 4000 });
+  if (check('(t3) rotor: the approach reaches 5 m/s', Boolean(gap), gap ? '' : 'never')) {
+    const rows = gap.res.rows;
+    const pts = rows.map((r) => toThree(f, r.p));
+    const lo = Math.min(...pts.map((w) => ax.along(w)));
+    const hi = Math.max(...pts.map((w) => ax.along(w)));
+    check('(t3) rotor: two flights through the rotor agree to the bit', gap.res.hash === gap.res2.hash);
+    check('(t3) rotor: it flies through the open air between two blades, from ahead of the rotor to behind it, touching nothing',
+      rows.every((r) => !r.touching) && hi > s.xb + 1 && lo < s.xb - 1,
+      `${rows.filter((r) => r.touching).length} steps in contact, from ${r3(hi - s.xb)} m ahead of the rotor's plane to ${r3(s.xb - lo)} m behind it`);
   }
 }
 
@@ -1855,10 +2734,36 @@ async function physicsBlock(world) {
   } catch (e) {
     fail('(a) roof', e.stack);
   }
+  /* The same drop onto a container stood on its end and onto one half sunk in
+   * the ground: each is a surface where it is drawn, at the height it is,
+   * which for the stood one is twelve metres up on a box the layout never
+   * put there, and for the sunk one is a roof 1.3 m lower than a flat one.
+   * Held by the module, not by the placement's own arithmetic. */
+  try {
+    /* Two 40 foot containers: stood, the roof is the end of the stack, 12.19 m
+     * up and a little over for the offset of the upper one; flat it would be
+     * 5.18 m. Sunk 1.3 m it is 5.18 - 1.3 = 3.88 m. */
+    await roofScenario(w, f, ranges, '(a2) stood',
+      (r) => r.item.el.type === 'containers' && r.item.el.name === 'stood', 'a container stood on end', [12.1, 13.1]);
+    await roofScenario(w, f, ranges, '(a3) sunk',
+      (r) => r.item.el.type === 'containers' && r.item.el.name === 'sunk', 'a container half sunk in the ground', [3.8, 3.95]);
+  } catch (e) {
+    fail('(a2, a3) stood and sunk', e.stack);
+  }
   try {
     await mastScenario(w, f, ranges);
   } catch (e) {
     fail('(b) mast', e.stack);
+  }
+  try {
+    await chimneyFlights(w, f, ranges);
+  } catch (e) {
+    fail('(h) hollow chimney', e.stack);
+  }
+  try {
+    await turbineFlights(w, f, ranges);
+  } catch (e) {
+    fail('(t) turbine', e.stack);
   }
   try {
     await spawnScenario(w, f, '(c) spawn');
@@ -2242,6 +3147,58 @@ function selftestBlock() {
   for (const [name, got, want] of cases) {
     check(`self test: ${name}`, near(got, want), `${got}, want ${want}`);
   }
+
+  /*
+   * The detectors of block 1d, each against the defect it was written for,
+   * planted on a clean asset: a bar across a bore, a doorway shut, a jamb
+   * gone, a solid outside the brick, brick with nothing solid behind it, a
+   * slot and its closing, and a blade by the tower.
+   */
+  const hel = assetEl('hollowChimney', null, PROPS.hollowChimney.dims);
+  const hh = hel.dims.height;
+  const hs = solidsAtOrigin(hel);
+  const hcalls = recordDraw(hel, partsOf(hel));
+  const bores = boreClearance(hs, hh);
+  check('self test: the default hollow chimney has a clear bore and a clear doorway',
+    bores.least >= BORE_MIN && doorwayOf(hs).hits === 0 && doorwayOf(hs).width >= hel.dims.door - DOOR_EXACT,
+    `bore ${r3(bores.least)} m, ${doorwayOf(hs).hits} solid points in a ${r3(doorwayOf(hs).width)} m doorway`);
+  const bar = { kind: 'wall', name: 'planted', cap: [-2, 5, 0, 2, 5, 0, 0.3] };
+  check('self test: a bar across the bore is seen', boreClearance([...hs, bar], hh).least < BORE_MIN,
+    `${r3(boreClearance([...hs, bar], hh).least)} m`);
+  const post = { kind: 'wall', name: 'planted', cap: [2.7, 0, 0, 2.7, 3, 0, 0.3] };
+  check('self test: a post in the doorway is seen', doorwayOf([...hs, post]).hits > 0, `${doorwayOf([...hs, post]).hits} points`);
+  const shut = hs.map((s) => (s.name === 'lintel' ? { ...s, cap: [s.cap[0], 0, s.cap[2], s.cap[3], s.cap[4], s.cap[5], s.cap[6]] } : s));
+  check('self test: staves over the doorway stood in it are seen as a door with no height', doorwayOf(shut).height < 3.2 - DOOR_EXACT, `${r3(doorwayOf(shut).height)} m`);
+  check('self test: a missing jamb is seen', !(doorwayOf(hs.filter((s) => s.name !== 'jamb')).width >= 0), 'no width');
+  const out = { kind: 'wall', name: 'planted', cap: [3.6, 0, 0, 3.6, 20, 0, 0.3] };
+  check('self test: a solid outside the drawn brick is seen', hollowFit(hh, [...hs, out], hcalls).outside > 0,
+    `${hollowFit(hh, [...hs, out], hcalls).outside} points outside`);
+  const bare = hs.filter((s) => !(s.name === 'stave' && s.cap[2] > 0.5));
+  check('self test: brick drawn with no solid behind it is seen', hollowFit(hh, bare, hcalls).far > FIT_THICK,
+    `${r3(hollowFit(hh, bare, hcalls).far)} m`);
+  check('self test: a clean hollow chimney fits its brick', hollowFit(hh, hs, hcalls).outside === 0 && hollowFit(hh, hs, hcalls).far <= FIT_THICK,
+    `${hollowFit(hh, hs, hcalls).outside} outside, ${r3(hollowFit(hh, hs, hcalls).far)} m far`);
+  const poleA = { kind: 'pole', name: 'a', cap: [0, 0, 0, 0, 5, 0, 0.1] };
+  const poleB = { kind: 'pole', name: 'b', cap: [0.6, 0, 0, 0.6, 5, 0, 0.1] };
+  const poleC = { kind: 'pole', name: 'c', cap: [0.3, 0, 0, 0.3, 5, 0, 0.25] };
+  check('self test: two poles 0.4 m apart are a slot', Math.abs(narrowestSlot([poleA, poleB]).least - 0.4) < 1e-9,
+    `${r3(narrowestSlot([poleA, poleB]).least)} m`);
+  check('self test: a third between them closes it', narrowestSlot([poleA, poleB, poleC]).least === Infinity,
+    `${r3(narrowestSlot([poleA, poleB, poleC]).least)} m`);
+  const tel = assetEl('turbine', null, { ...PROPS.turbine.dims, spin: 0.5 });
+  const ts = solidsAtOrigin(tel);
+  const tower = ts.filter((s) => s.name === 'tower');
+  const beside = { kind: 'wall', name: 'blade', cap: [2.6, 5, 0, 2.6, 30, 0, 0.5] };
+  check('self test: a blade hung beside the tower is seen under the gap rule', Math.min(...tower.map((t) => clearance(beside, t))) < GAP_MIN,
+    `${r3(Math.min(...tower.map((t) => clearance(beside, t))))} m`);
+  const tcalls = recordDraw(tel, partsOf(tel));
+  const sound = coneFit(ts, partsOf(tel), tcalls);
+  check('self test: a clean turbine fits what is drawn', sound.outside === 0 && sound.far <= FIT_THICK,
+    `${sound.outside} outside, ${r3(sound.far)} m far`);
+  const fat = coneFit(ts.filter((s) => s.name !== 'blade'), partsOf(tel), tcalls);
+  check('self test: blades drawn with no solid in them are seen', fat.far > FIT_THICK, `${r3(fat.far)} m`);
+  const stray = coneFit([...ts, { kind: 'wall', name: 'blade', cap: [9, 20, 9, 9, 40, 9, 0.5] }], partsOf(tel), tcalls);
+  check('self test: a solid where nothing is drawn is seen', stray.outside > 0, `${stray.outside} points`);
 }
 
 /*
@@ -2273,6 +3230,25 @@ async function selftestFlights() {
     const mast = line('(b) mast: the craft reaches the mast');
     check('self test: with no world in the module, the roof drop fails', Boolean(roof) && !roof.ok, roof ? roof.detail : 'the line never ran');
     check('self test: with no world in the module, the mast run fails', Boolean(mast) && !mast.ok, mast ? mast.detail : 'the line never ran');
+  }
+
+  /*
+   * The two control flights of the chimney and the turbine, with the module
+   * handed no world: the wall opposite the doorway, the tower and a blade
+   * stop nothing, so the lines that say they do must fail.
+   */
+  captured = [];
+  try {
+    await chimneyFlights(w, f, ranges);
+    await turbineFlights(w, f, ranges);
+  } finally {
+    const got = captured;
+    captured = null;
+    for (const [what, start] of [['the wall opposite the doorway', '(h3) back wall: the wall opposite the door stops it'],
+      ['the tower', '(t1) tower: it is stopped by the tower'], ['a blade', '(t2) blade: it is stopped by the blade']]) {
+      const line = got.find((c) => c.name.startsWith(start));
+      check(`self test: with no world in the module, ${what} stops nothing`, Boolean(line) && !line.ok, line ? line.detail : 'the line never ran');
+    }
   }
 
   /*
@@ -3810,7 +4786,9 @@ console.log('props-check: the freestyle assets, their placement, and the physics
 const world = {};
 const blocks = args.includes('--selftest') ? [['selftest', selftestBlock], ['selftest', selftestFlights], ['selftest', selftestEgg]] : [
   ['assets', assetsBlock],
+  ['tilt', tiltBlock],
   ['envelope', envelopeBlock],
+  ['flythrough', flyThroughBlock],
   ['furniture', furnitureBlock],
   ['determinism', determinismBlock],
   ['physics', physicsBlock],

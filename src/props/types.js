@@ -25,6 +25,12 @@
  *   styles    optional list of looks; the first is the default
  *   note      one line for the palette's tooltip and the inspector
  *   zone      true for a scoring zone: never solid, never drawn in the air
+ *   tilt      'quarter' for an asset that may stand on its end: the element's
+ *             `pitch` is then 0 (upright) or +-90 degrees (on end), and
+ *             tiltOf below says which. A box turned a quarter about a
+ *             horizontal axis is still an axis aligned box, which is the
+ *             whole of why this needs no change to the physics. An asset
+ *             without it ignores `pitch`, as every asset always has.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -177,6 +183,16 @@ export const PROP_TYPES = {
     limits: { height: [6, 80, M], radius: [0.5, 5, M] },
     labels: { height: 'Height', radius: 'Base radius' },
   },
+  hollowChimney: {
+    label: 'Hollow chimney',
+    key: '',
+    group: 'industrial',
+    turns: 'any',
+    note: 'A brick stack you can fly down: open at the top, with a doorway in its foot on the side you face it. Dive in over the rim and out through the door. The doorway is never wider than a radius and a quarter.',
+    dims: { height: 30, radius: 3, door: 2.8 },
+    limits: { height: [8, 80, M], radius: [2.4, 7, M], door: [1.6, 8, M] },
+    labels: { height: 'Height', radius: 'Base radius', door: 'Doorway' },
+  },
   pylon: {
     label: 'Power pylon',
     key: 'Y',
@@ -187,13 +203,24 @@ export const PROP_TYPES = {
     limits: { height: [12, 60, M] },
     labels: { height: 'Height' },
   },
+  turbine: {
+    label: 'Wind turbine',
+    key: '',
+    group: 'industrial',
+    turns: 'any',
+    note: 'A three blade turbine parked with its rotor facing the way you point it. The tower, nacelle and every blade are solid, and the blades do not turn: Rotor sets where they stand, one third of a turn from 0 to 1. A blade is never longer than the hub is high.',
+    dims: { height: 48, blade: 28, spin: 0 },
+    limits: { height: [15, 100, M], blade: [6, 60, M], spin: [0, 1, FRAC] },
+    labels: { height: 'Hub height', blade: 'Blade length', spin: 'Rotor' },
+  },
   containers: {
     label: 'Containers',
     key: '8',
     group: 'industrial',
     turns: 'quarter',
+    tilt: 'quarter',
     styles: CONTAINER_STYLES,
-    note: 'A stack of shipping containers. The open style leaves the bottom one empty with both ends off: a tunnel.',
+    note: 'A stack of shipping containers. The open style leaves the bottom one empty with both ends off: a tunnel. Stood on end it is a shaft to dive down.',
     dims: { stack: 2, variant: 1 },
     limits: { stack: [1, 5, INT], variant: [1, 99, INT] },
     labels: { stack: 'Stack', variant: 'Variant' },
@@ -290,7 +317,8 @@ export const PROP_TYPES = {
     key: 'M',
     group: 'skate',
     turns: 'quarter',
-    note: 'A concrete ledge with a steel edge on its front.',
+    tilt: 'quarter',
+    note: 'A concrete ledge with a steel edge on its front. Stood on end it is a slab, as tall as it is long.',
     dims: { length: 6, height: 0.5, depth: 0.9 },
     limits: { length: [1, 30, M], height: [0.2, 2, M], depth: [0.3, 4, M] },
     labels: { length: 'Length', height: 'Height', depth: 'Depth' },
@@ -355,6 +383,30 @@ export function styleOf(el) {
   return def.styles.includes(el.style) ? el.style : def.styles[0];
 }
 
+/*
+ * THE QUARTER TURNS AN ELEMENT IS STOOD ON END BY: 0 upright, 1 or -1 on
+ * end, about the asset's own right axis (parts.js's +z), so that +1 raises
+ * the end the asset faces. Only an asset with `tilt` has any, and its pitch
+ * is read to the nearest quarter, so a hand edited 40 degrees is upright
+ * and 50 is on end, the way a building's heading is read to the nearest
+ * compass point (placedYaw in ./solids.js). Plain comparisons against pi,
+ * no trigonometry: this is on the physics' path.
+ */
+export function tiltOf(el) {
+  const def = PROP_TYPES[el?.type];
+  if (!def || !def.tilt) {
+    return 0;
+  }
+  const p = Number(el.pitch);
+  if (!Number.isFinite(p)) {
+    return 0;
+  }
+  if (p > Math.PI / 4) {
+    return 1;
+  }
+  return p < -Math.PI / 4 ? -1 : 0;
+}
+
 /* A dimension, clamped into its limits, a count rounded. Never throws. */
 export function clampDim(type, key, value) {
   const def = PROP_TYPES[type];
@@ -371,6 +423,41 @@ export function clampDim(type, key, value) {
     v = Math.round(v);
   }
   return Math.min(lim[1], Math.max(lim[0], v));
+}
+
+/*
+ * A HOLLOW CHIMNEY'S DOORWAY is what the wall can have cut in it: never wider
+ * than one and a quarter base radii, which the layout can give at every radius
+ * and height the builder offers (scripts/props-check.js, block 1d, sweeps
+ * them). The field says Doorway, and a number typed past what the wall allows
+ * would be shown and not built, so it is held to this where every dimension
+ * is held to its limits, and the layout's own stop at 75 degrees either side
+ * of the heading is only the last word. The door is half as high again as it
+ * is wide, within 3.2 m and half the stack.
+ */
+export const HOLLOW_DOOR_PER_RADIUS = 1.25;
+
+export function hollowDoorMax(radius) {
+  return HOLLOW_DOOR_PER_RADIUS * radius;
+}
+
+export function hollowDoorHeight(width, height) {
+  const h = 1.5 * width;
+  const hi = 0.5 * height;
+  return h < 3.2 ? 3.2 : (h > hi ? hi : h);
+}
+
+/*
+ * Dimensions that hold one another to a limit, applied after each has been
+ * clamped to its own: today a hollow chimney's doorway to its radius. Changes
+ * `dims` and returns it. A dimension that is not a number is left for
+ * clampDim to have repaired.
+ */
+export function fitDims(type, dims) {
+  if (type === 'hollowChimney' && dims && Number.isFinite(dims.door) && Number.isFinite(dims.radius)) {
+    dims.door = Math.min(dims.door, hollowDoorMax(dims.radius));
+  }
+  return dims;
 }
 
 /* A named gap's points, snapped to the nearest tier. */
@@ -425,8 +512,51 @@ const CAR_H = { kei: 1.7, keivan: 1.88, hatch: 1.52, sedan: 1.44, wagon: 1.54, m
  */
 const TREE_H = { sakura: 8.35, street: 8.35, pine: 15.35 };
 
-export function approxHeight(type, dims, style) {
+/* A container's length by its style, m: what it stands tall when it is stood on its end. */
+const CONTAINER_LEN = { '40ft': 12.192, '20ft': 6.058, '40ft open': 12.192 };
+
+/*
+ * A wind turbine's top: the highest blade tip, or the nacelle's roof and its
+ * lamp when no blade reaches as high. The three blades stand a third of a
+ * turn apart, so the one nearest straight up is at most a sixth of a turn off
+ * it, and which one is `spin`'s doing. The blade is held to what the hub's
+ * height leaves it (the layout keeps its lowest tip 2.5 m up), which is
+ * counted here without the hub's own reach, so it can only be generous. A
+ * tip is at most 1.1 m further from the hub than the blade is long (its root
+ * starts inside the hub), and it ends in a flat end at most 0.22 m round
+ * (tipR in ./industrial.js), whose rim on a blade leaning `off` from straight
+ * up stands r * sin(off) over the tip: counted as 0.25, because leaving it
+ * out put this 11 cm under the drawn tip of a 60 m blade at Rotor 0.5. The
+ * nacelle's roof and lamp stand at most 3 m over the hub's height. This is
+ * the builder's readout and never the physics' path, so the cosine and the
+ * sine are the engine's.
+ */
+function turbineTop(d) {
+  const H = d.height ?? 48;
+  const spin = Math.min(1, Math.max(0, d.spin ?? 0));
+  const f = spin - Math.floor(spin);
+  const off = Math.min(f, 1 - f) * ((2 * Math.PI) / 3);
+  const L = Math.min(d.blade ?? 28, H - 2.5);
+  return H + Math.max(3, (L + 1.1) * Math.cos(off) + 0.25 * Math.sin(off)) + 0.05;
+}
+
+export function approxHeight(type, dims, style, tilt = 0) {
   const d = dims || {};
+  /* Stood on end, an asset is as tall as it was long, and the stack that was
+   * up is now beside it. Only the two assets that tilt (tilt in PROP_TYPES).
+   * A container above the first is set down off square by up to 0.35 m along
+   * its length (containerSpec in ./industrial.js), which on end is UP and
+   * down: one that is 0.35 m low and one that is 0.35 m high stand 0.7 m
+   * apart, and it is the lowest that sits on the ground. A single one has no
+   * offset. Measured over every style, stack and seed by suiteTilt. */
+  if (tilt) {
+    if (type === 'containers') {
+      return (CONTAINER_LEN[style] ?? CONTAINER_LEN['40ft']) + ((d.stack ?? 1) > 1 ? 0.75 : 0.05);
+    }
+    if (type === 'ledge') {
+      return (d.length ?? 6) + 0.05;
+    }
+  }
   switch (type) {
     case 'building': {
       const b = BUILDING_H[style] ?? BUILDING_H.flats;
@@ -442,8 +572,12 @@ export function approxHeight(type, dims, style) {
     case 'mast': return (d.height ?? 32) + 3.3;
     /* The corbel and the flue, drawn 0.9 over the brick. */
     case 'chimney': return (d.height ?? 24) + 1;
+    /* The staves end in domes and the rim is rolled over them: nothing
+     * stands over the height. */
+    case 'hollowChimney': return (d.height ?? 30) + 0.05;
     /* The peak's capsule, 0.25 over the lattice. */
     case 'pylon': return (d.height ?? 28) + 0.3;
+    case 'turbine': return turbineTop(d);
     /* Drawn 5 cm over the pole's height. */
     case 'utilityPole': return (d.height ?? 10) + 0.1;
     /* Drawn 2 cm over the top box. */

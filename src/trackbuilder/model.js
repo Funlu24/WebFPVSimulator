@@ -42,11 +42,11 @@ import {
   ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf,
   defaultDims, defaultPitch, defaultZ, elementHeight, normalizeFlagSide, normalizeUnbuiltSides,
   trackClassOf, tuningFor, docModeOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
-  ROAD_NODES_MAX, ROAD_NODE_REACH,
+  ROAD_NODES_MAX, ROAD_NODE_REACH, SINK_MAX,
 } from './elements.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
 import {
-  styleOf as propStyleOf, clampDim, gapPointsOf, styleDims, GAP_POINTS, CAR_STYLES,
+  styleOf as propStyleOf, clampDim, fitDims, gapPointsOf, styleDims, GAP_POINTS, CAR_STYLES, tiltOf,
 } from '../props/types.js';
 import { isRoomType, ROOM_SIZE_MIN, ROOM_SIZE_MAX } from '../props/room.js';
 
@@ -765,7 +765,9 @@ export function elementNormal(el) {
 }
 
 export function topOf(el) {
-  return el.position.z + elementHeight(defOf(el), el.dims);
+  /* Style and tilt, for the assets: a container stood on end is as tall as it
+   * is long, and which length depends on its style. */
+  return el.position.z + elementHeight(defOf(el), el.dims, propStyleOf(el), tiltOf(el));
 }
 
 /* How many sequence entries point at an element. Multi referenced elements
@@ -999,6 +1001,10 @@ export function normalize(raw) {
         dims[key] = fallback;
       }
     }
+    /* Dimensions that hold one another to a limit, now each is in its own. */
+    if (isProp) {
+      fitDims(type, dims);
+    }
 
     /*
      * A HOOP AND A HEX GATE HAVE ONE OPENING. There is no such thing as a stack of hoops, and
@@ -1030,6 +1036,20 @@ export function normalize(raw) {
     };
     if (def.kind === KIND.ANNOTATION) {
       el.text = str(rawEl.text, 'Label');
+    }
+    /* An asset that stands on end holds the pitch it is built at: upright or a
+     * quarter turn either way, so the inspector never shows 50 degrees for a
+     * container that is flat, the way the heading of a building is read to the
+     * compass. (tiltOf reads the pitch to the nearest quarter.) */
+    if (def.kind === KIND.STRUCTURE && ELEMENTS[type]?.tilt) {
+      el.pitch = tiltOf({ type, pitch: el.pitch }) * (Math.PI / 2) + 0;
+    }
+    /* An asset may be sunk, to hide some of it, but not out of reach of its
+     * own inspector: see SINK_MAX in elements.js. Nothing else is held to a
+     * floor here, as it never was. */
+    if (def.kind === KIND.STRUCTURE && el.position.z < -SINK_MAX) {
+      repairs.push(`${id}: its base was ${el.position.z} m, further under the ground than the ${SINK_MAX} m an asset may be sunk, so it is -${SINK_MAX} m.`);
+      el.position.z = -SINK_MAX;
     }
     if (isProp && def.styles) {
       el.style = propStyleOf({ type, style: rawEl.style });
@@ -1340,6 +1360,9 @@ export function toPlain(doc) {
           ? num(clampDim(el.type, key, el.dims[key]))
           : (road || vehicle ? num(clampByLimits(def, key, el.dims[key]))
             : (key === 'levels' ? int(el.dims[key], def.dims[key], 1, 24) : num(el.dims[key], def.dims[key])));
+      }
+      if (isProp) {
+        fitDims(el.type, out.dims);
       }
       if (road) {
         out.nodes = roadNodesRead(el.nodes).nodes;

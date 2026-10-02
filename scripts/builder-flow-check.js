@@ -4714,6 +4714,134 @@ kase('map: every tool', async () => {
 });
 
 /*
+ * WHAT THE BUG INBOX ASKED OF THE MAP, REACHED IN THE ROOM (bug-e605ff6a): a piece sunk into the ground to hide part
+ * of it, a container stood on end, and a copy of what is selected. Each was made when a map was built on the plan and
+ * looked at in a preview, and each has to be where a hand is now: the card's Base takes a sunk base and says so, Page
+ * Down and Page Up step it with what stands on it, a drag keeps a sunk piece sunk over the ground and brings it up on
+ * to a roof, the card offers Stands, and the card's Copy and Control D put a copy beside it.
+ */
+kase('map: sinking, standing on end and copying', async () => {
+  const page = await openMap();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    await trapToasts(page);
+    await page.evaluate(`(async () => {
+      const a = window.trackBuilder;
+      const { createElement } = await import('/src/trackbuilder/model.js');
+      a.edit('probe', (d) => {
+        d.elements.push(createElement(d, 'building', { x: 60, y: 60 }, 0));
+        d.elements.push(createElement(d, 'containers', { x: 110, y: 100 }, 0));
+      });
+      a.view3d.markDirty();
+      return 1;
+    })()`);
+    await page.until('!window.trackBuilder.view3d.dirty', 20000);
+    const one = async (type) => (await placed(page)).find((e) => e.type === type);
+    const topOf = (type) => app(`(() => { const e = a.doc.elements.find((x) => x.type === ${JSON.stringify(type)}); return import('/src/trackbuilder/model.js').then((m) => m.topOf(e)); })()`);
+    /* A press on a button of the card, once the card has stopped following its piece. */
+    const cardButton = async (label) => {
+      const where = () => json(page, `(() => { const b = [...document.querySelectorAll('#tb-card button')].find((x) => x.textContent === ${JSON.stringify(label)}); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      let last = await where();
+      for (let i = 0; i < 20; i += 1) {
+        await page.sleep(150);
+        const now = await where();
+        if (now && last && Math.abs(now.x - last.x) < 0.5 && Math.abs(now.y - last.y) < 0.5) {
+          return now;
+        }
+        last = now;
+      }
+      return last;
+    };
+    const typeBase = async (value) => {
+      await page.evaluate(`(() => { const i = document.querySelector('#tb-card [data-tbkey^="card-h-"]'); i.value = ${JSON.stringify(String(value))}; i.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`);
+      await page.sleep(200);
+    };
+    const pick = async (type) => {
+      await app(`a.setSelection([a.doc.elements.find((e) => e.type === ${JSON.stringify(type)}).id]), 1`);
+      await page.until("!document.getElementById('tb-card').hidden && !window.trackBuilder.view3d.dirty", 10000);
+    };
+
+    /* Standing on end: a choice on the card, one undo step, and as tall as it is long. */
+    await pick('containers');
+    const labels = await json(page, "[...document.querySelectorAll('#tb-card .tb-card-choice-label')].map((x) => x.textContent)");
+    check('a container\'s card offers Stands beside its Style', labels.includes('Stands') && labels.includes('Style'), labels.join());
+    const flat = await topOf('containers');
+    const steps0 = await undoCount(page);
+    const onEnd = await cardButton('On end');
+    await click(page, onEnd.x, onEnd.y);
+    await page.sleep(200);
+    const tall = await topOf('containers');
+    check('On end stands it up, as one undo step, and it is as tall as it was long', tall > flat + 5 && (await one('containers')).pitch !== 0 && (await undoCount(page)) === steps0 + 1, `${flat} then ${tall}`);
+    await page.until('!window.trackBuilder.view3d.dirty', 10000);
+    check('and the room still has its ring at its foot', (await app('!!a.view3d.ring && !!a.view3d.ring.parts')));
+    /* What a piece is put on is the top of what stands there, so a stood container is a roof as tall as it is long. */
+    const roofOn = await app(`(() => {
+      let best = 0;
+      for (let dx = -2; dx <= 2; dx += 0.5) {
+        for (let dy = -2; dy <= 2; dy += 0.5) {
+          const t = a.view3d.landings().under(110 + dx, 100 + dy, 1000, null);
+          best = t && t.top > best ? t.top : best;
+        }
+      }
+      return best;
+    })()`);
+    check('and what is pointed at above it lands on its top, as tall as the readout says and not far under it', roofOn <= tall + 0.01 && roofOn > tall - 1.5, `${roofOn} against ${tall}`);
+    const flatBtn = await cardButton('Flat');
+    await click(page, flatBtn.x, flatBtn.y);
+    await page.sleep(200);
+    check('Flat lays it down again', Math.abs((await topOf('containers')) - flat) < 1e-6);
+
+    /* Sinking: Base takes a negative number, says so, and Page Up brings it back to the paving. */
+    await typeBase(-1.5);
+    check('a typed Base of -1.5 sinks it, and the card says how far', (await one('containers')).z === -1.5
+      && /Sunk 1\.5 m into the ground/.test(await page.evaluate("document.getElementById('tb-card').textContent")), `${(await one('containers')).z}`);
+    await key(page, 'PageUp');
+    await key(page, 'PageUp');
+    check('Page Up brings it up a quarter metre at a time, and Shift a metre', (await one('containers')).z === -1, `${(await one('containers')).z}`);
+    await key(page, 'PageUp', 8);
+    check('and it stops at the paving', (await one('containers')).z === 0);
+    const before = await undoCount(page);
+    await key(page, 'PageDown', 8);
+    check('Page Down sinks it a metre, as one step', (await one('containers')).z === -1 && (await undoCount(page)) === before + 1);
+
+    /* A drag keeps it sunk over the ground, and puts it on a roof when it is let go over one. */
+    const bld = await one('building');
+    const roof = await app('a.view3d.landings().under(60, 60, 1000, null).top');
+    const grab = await app(`(() => { const c = a.doc.elements.find((e) => e.type === 'containers'); return { x: c.position.x, y: c.position.y }; })()`);
+    const from = await screenOf(page, 'view3d', grab.x, grab.y, 0);
+    const over = await screenOf(page, 'view3d', grab.x - 25, grab.y + 10, 0);
+    await drag(page, from, over, { steps: 12 });
+    const slid = await one('containers');
+    check('pulled across the ground it stays sunk', slid.x < grab.x - 10 && slid.z === -1, `${slid.x}, ${slid.y}, ${slid.z}`);
+    const slidAt = await screenOf(page, 'view3d', slid.x, slid.y, 0);
+    const onRoof = await screenOf(page, 'view3d', bld.x, bld.y, roof);
+    await drag(page, slidAt, onRoof, { steps: 14 });
+    const up = await one('containers');
+    check('and carried over a roof it stands on it, with no sink left to put it inside the building', Math.abs(up.z - roof) < 1e-6, `${up.z} against a roof at ${roof}`);
+    check('nothing was set down on the way', !(await toasts(page)).some((t) => /nothing under it|now stands on/.test(t)));
+
+    /* Copy: the card's button and Control D put one beside it, and what is selected is the copy. */
+    await key(page, 'Escape');
+    await pick('building');
+    const n0 = (await placed(page)).length;
+    const copyBtn = await cardButton('Copy');
+    await click(page, copyBtn.x, copyBtn.y);
+    await page.sleep(200);
+    const afterCopy = await placed(page);
+    const made = afterCopy.filter((e) => e.type === 'building');
+    check('the card\'s Copy makes a building beside it, and it is the copy that is selected', afterCopy.length === n0 + 1 && made.length === 2
+      && Math.hypot(made[1].x - made[0].x, made[1].y - made[0].y) > 10 && (await app('a.selection.size === 1 && a.selection.has(a.doc.elements.filter((e) => e.type === "building")[1].id)')),
+      made.map((e) => `${e.x},${e.y}`).join(' | '));
+    await key(page, 'KeyD', 2);
+    check('Control D makes another, and a map\'s copy is not put in a flying order it has none of', (await placed(page)).filter((e) => e.type === 'building').length === 3
+      && (await app('a.doc.sequence.length')) === 0);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+/*
  * LOAD LISTS THIS CANVAS'S OWN (MENUS-PLAN.md 1.21). A whoop track opened from
  * the five inch canvas moved the author to the whoop and reseated the aircraft
  * under them; Delete removed a row on one click; a time was an ISO stamp; a row

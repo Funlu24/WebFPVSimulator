@@ -186,7 +186,7 @@ adds, and is committed on its own.
 1. `node src/trackbuilder/selftest.js`, with a section for the landing rule
    (stands on a roof, on a stack, never on itself, edges are not over, the height
    of the pointer limits what is stood on), what stands on a piece, a map's tool
-   list, and where a copy of a car goes.
+   list.
 2. `scripts/builder-flow-check.js`, which drives the real page: the map opens in
    the room with the right chrome, a building is placed by click and a billboard on
    its roof, a container is dragged on to another and off it, the ring turns a
@@ -208,7 +208,8 @@ Each is the plan's answer, in force until the owner says otherwise.
    false for maps, which brings back the plan as the canvas and the preview note.
 2. **You stand on what you point at**, by the rule in 2.2, and Base is a field.
 3. **No lift handle.** The height drag the preview had is replaced by the surface
-   under the pointer, the field and the Page keys.
+   under the pointer, the field and the Page keys. Since the merge below, Page Down
+   also sinks an asset on the ground, and the field takes a sunk base.
 4. **A move takes what stands on it.** Reverse: do not extend the moved set.
 5. **Compass assets turn in quarters on the ring** and say why once, as the plan
    does. That is the physics' rule (axis aligned boxes), not this plan's.
@@ -216,8 +217,10 @@ Each is the plan's answer, in force until the owner says otherwise.
    to a neighbour's face is a different ask.
 7. **Gates and flags on a map are furniture**, as they are on the plan: no flying
    order, no Fly it, no card rows about passes.
-8. **A car copied by Control D goes further along its own road**, not onto the
-   same spot.
+8. **A copy on a map is `clone.js`'s**, which another session made while this was
+   built (see section 8): beside what it copies, a car on along its own road, a
+   road with its cars. The room asks it for every map. This plan had a smaller rule
+   of its own for a car, which `cloneElements` replaces.
 9. **The ruler is on the map palette**, in metres, with no key (M is the ledge).
 
 ## 7. Not in this plan
@@ -265,6 +268,31 @@ written above:
 - **`buildsIn3D()` is a question that is always yes.** It is kept as the one place a
   canvas that is a preview again would change, and every call site reads as the
   question it asks.
+
+### After main moved (2 October)
+
+Another session pushed six commits to main while this was built, from the board's bug
+inbox (bug-e605ff6a): Duplicate on a map (`clone.js`), an asset sunk into the ground
+(`lowestBase`), an asset stood on end (`tilt`, `placedPartsOf`), a hollow chimney and a
+wind turbine. Three of those lived in the preview this plan removes, so the merge was
+more than text:
+
+- **Duplicate.** `copySelection` picks by the document and not by the view: a track's
+  copy is `copyElements`, a map's is `cloneElements`, because `buildsIn3D()` is yes for
+  both now. The map's own inspector button is gone: it was there because a map "has no
+  card in the room to hold Copy", and the card has Copy on every canvas now.
+- **Sinking.** The preview's height drag was how an asset was pulled under the ground.
+  In the room the card's Base takes a negative number down to `-SINK_MAX` and says how
+  far it is sunk, Page Down sinks an asset on the ground a quarter metre (a metre with
+  Shift) and Page Up brings it back, with what stands on it going the same way. A drag
+  keeps a sunk piece sunk while it is over the ground and sets it on a roof when it is
+  taken over one, because carrying the sink on would leave it inside the building and
+  the seat would then drop it to the ground inside it.
+- **Standing on end.** The card has the inspector's Stands choice (Flat, On end), made
+  by one function for both (`standItems`). The ghost, the ring, the plan's footprint and
+  the placement already read `placedPartsOf`, which the merge brought in; the card's
+  area and F read the height with the tilt.
+- The hollow chimney and the turbine are palette items, so "every tool" walks them.
 
 ### What was measured
 

@@ -32,8 +32,9 @@
 
 import {
   ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, elementHeight, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
+  lowestBase,
 } from './elements.js';
-import { styleOf as propStyleOf } from '../props/types.js';
+import { styleOf as propStyleOf, tiltOf } from '../props/types.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
@@ -57,6 +58,7 @@ import {
   setHurdleAngle, setHurdleLine, setHurdleSize,
   setWallSize, setWallWeave, wallOf,
 } from './parts.js';
+import { cloneElements, anyCloneable } from './clone.js';
 import {
   applyAround, applyInto, applyLeg, applyPowerLoopGate, applyThen, applyTurnaround, clearAround, clearInto, clearThen,
   figureHolding,
@@ -68,7 +70,7 @@ import { buildPath, passYawOf } from './path.js';
 import { collectWarnings, freestyleReport, labeller, sortWarnings } from './warnings.js';
 /* Nothing built stands in the air: see seat.js. A map is seated with what is
  * under it, which needs the map placed, so that half is place.js's. */
-import { hasRaised, needsSeat, seatFloating, seatedNote, standingOn } from './seat.js';
+import { SEAT_SLACK, hasRaised, needsSeat, seatFloating, seatedNote, standingOn } from './seat.js';
 import { seatDocument } from '../maps/built/place.js';
 import { vehicleStart } from '../maps/built/traffic.js';
 import { History } from './history.js';
@@ -78,7 +80,7 @@ import { importFpvEvents, looksLikeFpvEvents, reportLines } from './importfpv.js
 /* The road tool: every rule about nodes and where a car goes is in here,
  * pure, and this file only applies them as edits. */
 import {
-  addDraftNode, closesDraft, copyOffsetAlong, deleteNode, endsDraft, insertNode, moveNode, roadFromDraft, snapToRoad,
+  addDraftNode, closesDraft, deleteNode, endsDraft, insertNode, moveNode, roadFromDraft, snapToRoad,
   vehiclePlace, absNodes, OPEN_MIN, LOOP_MIN,
 } from './roadtool.js';
 import {
@@ -2358,22 +2360,36 @@ export class App {
    * COPY WHAT IS SELECTED, beside it (Control D). One undo step, and the
    * copies are what is selected afterwards, so a second press copies the copy
    * one gate further on.
+   *
+   * A TRACK AND A MAP COPY DIFFERENTLY. A track's copy is a copy in its
+   * flying order, laid by the gate's own width (copyElements). A map has no
+   * flying order and its pieces are not gates, so its copy is laid clear of
+   * the ground the piece covers and goes onto no order (cloneElements, in
+   * ./clone.js). This used to return for a map, and the key was left to the
+   * browser, which bookmarked the page: bug-e605ff6a, "Clone function to
+   * duplicate objects".
    */
   copySelection() {
-    if (!this.selection.size || !this.buildsIn3D()) {
+    if (!this.selection.size) {
       return;
     }
+    const ids = [...this.selection];
     let made = [];
-    this.edit('copy', (d) => {
-      made = copyElements(d, [...this.selection]);
-      /* A car has no place of its own, so a copy of one would sit exactly on it: it goes on along the same road. */
-      for (const id of made) {
-        const car = elementById(d, id);
-        if (car && kindOf(car) === KIND.VEHICLE) {
-          car.dims.offset = copyOffsetAlong(d, car);
-        }
+    /* The room is every canvas's now, so what picks the copy is the document and not the view: a map's is
+     * cloneElements', and it puts a car's copy on along its own road. */
+    if (docModeOf(this.doc) !== 'freestyle') {
+      this.edit('copy', (d) => { made = copyElements(d, ids); });
+    } else {
+      if (!anyCloneable(this.doc, ids)) {
+        this.toast('A map has one set of start pads, so they are not copied.');
+        return;
       }
-    });
+      let left = [];
+      this.edit('duplicate', (d) => { ({ made, left } = cloneElements(d, ids)); });
+      if (left.length) {
+        this.toast('The start pads were left out of the copy: a map has one set.');
+      }
+    }
     if (made.length) {
       this.setSelection(made);
     }
@@ -2428,22 +2444,44 @@ export class App {
   }
 
   /*
-   * PAGE UP AND PAGE DOWN: a step up or down on a map, a quarter metre, or a metre with Shift, for what has a height
-   * of its own, which is a named gap: its window starts where it is put, with nothing under it needed. What is built
-   * stands on what is under it and sets itself down (seat.js), so a step is not a thing it can take, and the first
-   * press on one says where its height comes from.
+   * PAGE UP AND PAGE DOWN: a step up or down on a map, a quarter metre, or a metre with Shift. A named gap has a
+   * height of its own and takes the step as it is. What is built stands on what is under it and sets itself down
+   * (seat.js), so it has a height of its own only below the ground: Page Down sinks an asset into it, to hide some
+   * of it (lowestBase), and Page Up brings it back up to the paving, with what stands on it going the same way.
+   * What stands on a roof, a deck or a container has nothing to step to, and the first press on one says where its
+   * height comes from.
    */
   liftSelection(sign, big = false) {
-    const gaps = [...this.selection].filter((id) => kindOf(elementById(this.doc, id)) === KIND.ZONE);
-    if (!gaps.length) {
-      this.sayOnce('lift built', 'A built thing stands on what is under it, so it has no height to step: put it on the roof or the container it is meant to stand on. A named gap has a height of its own, and this steps it.');
+    const step = (big ? 1 : 0.25) * sign;
+    const round6 = (v) => Math.round(v * 1e6) / 1e6;
+    /* Where a piece on the ground goes: down into it as far as an asset may be sunk, and up to the paving. */
+    const sunkTo = (doc, e) => round6(Math.min(0, Math.max(lowestBase(doc, e), e.position.z + step)));
+    const picked = [...this.selection].map((id) => elementById(this.doc, id)).filter(Boolean);
+    const gaps = picked.filter((e) => kindOf(e) === KIND.ZONE);
+    const assets = picked.filter((e) => kindOf(e) === KIND.STRUCTURE && e.position.z <= SEAT_SLACK && sunkTo(this.doc, e) !== e.position.z);
+    if (!gaps.length && !assets.length) {
+      this.sayOnce('lift built', 'A built thing stands on what is under it, so it has no height to step above the ground: put it on the roof or the container it is meant to stand on. Page Down sinks one that is on the ground into it, and a named gap has a height of its own that both keys step.');
       return;
     }
-    const step = (big ? 1 : 0.25) * sign;
+    /* What stands on a piece that is sunk goes down with it, as it does when the piece is pulled: found before the
+     * edit, while the map is still placed as it was. */
+    const standing = new Map(assets.map((e) => [e.id, this.carriedBy([e.id])]));
     this.edit('height', (d) => {
-      for (const id of gaps) {
-        const e2 = elementById(d, id);
-        e2.position.z = Math.max(0, Math.round((e2.position.z + step) * 1e6) / 1e6);
+      for (const e of gaps) {
+        const e2 = elementById(d, e.id);
+        e2.position.z = Math.max(0, round6(e2.position.z + step));
+      }
+      for (const e of assets) {
+        const e2 = elementById(d, e.id);
+        const wanted = sunkTo(d, e2);
+        const dz = wanted - e2.position.z;
+        e2.position.z = wanted;
+        for (const id of standing.get(e.id)) {
+          if (!this.selection.has(id)) {
+            const e3 = elementById(d, id);
+            e3.position.z = round6(e3.position.z + dz);
+          }
+        }
       }
     });
   }
@@ -2629,7 +2667,7 @@ export class App {
         for (const q of planShapeOf(e, this.doc)) {
           reach = Math.max(reach, Math.hypot(q.x - c.x, q.y - c.y));
         }
-        high = Math.max(high, e.position.z + (def.kind === KIND.STRUCTURE ? elementHeight(def, e.dims, propStyleOf(e)) : 1));
+        high = Math.max(high, e.position.z + (def.kind === KIND.STRUCTURE ? elementHeight(def, e.dims, propStyleOf(e), tiltOf(e)) : 1));
       }
       this.view3d.focusDoc({ x: c.x, y: c.y, z: Math.min(high, 30) * 0.4 }, Math.max(reach * 2.6, high * 1.8) + 10);
     } else {
@@ -5786,9 +5824,10 @@ export class App {
         this.setSelection(this.doc.elements.map((el) => el.id));
         return;
       }
-      /* Control D copies on a track, and would otherwise be the browser's
-       * bookmark. On a map it is left to the browser. */
-      if (mod && e.key.toLowerCase() === 'd' && this.buildsIn3D()) {
+      /* Control D copies, on a track and on a map, and would otherwise be the
+       * browser's bookmark. It was left to the browser on a map, where a
+       * pilot pressing it to duplicate a building got a bookmark dialog. */
+      if (mod && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         this.copySelection();
         return;

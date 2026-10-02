@@ -45,7 +45,7 @@
 
 import { ELEMENTS, KIND } from '../../trackbuilder/elements.js';
 import { SEAT_SLACK, hasRaised, seatFloating } from '../../trackbuilder/seat.js';
-import { assetOf, partsOf } from '../../props/catalog.js';
+import { assetOf, placedPartsOf } from '../../props/catalog.js';
 import { placeSolids, placedYaw } from '../../props/solids.js';
 import { sincos, turnY } from '../../props/trig.js';
 import { CAR_KINDS } from '../../props/street.js';
@@ -706,7 +706,8 @@ export function placeDocument(doc) {
     }
     const turns = asset.turns ?? 'any';
     const yaw = placedYaw(turns, el.yaw || 0);
-    const parts = partsOf(el);
+    /* As it stands: stood on end if it is (placedPartsOf). */
+    const parts = placedPartsOf(el);
     placeSolids(parts, x, y, z, yaw, turns, solids, stats);
     items.push({ el, kind: def.kind, x, y, z, yaw, turns, parts });
   }

@@ -49,6 +49,135 @@ export function placedYaw(turns, yaw) {
   return Number.isFinite(yaw) ? yaw : 0;
 }
 
+/*
+ * STANDING AN ASSET ON END. A map builder asked on 1 October 2026 for "the
+ * possibility to rotate objects vertically, let's say to place container
+ * vertically" (bug-e605ff6a), and the world holds only axis aligned boxes and
+ * capsules. A box turned a quarter about a HORIZONTAL axis is still an axis
+ * aligned box, with two of its extents swapped, so a container on its end is
+ * four boxes, the same four, and no part of the physics has to learn
+ * anything. (Turned about the vertical it was already so: that is placedYaw.)
+ *
+ * The turn is about the asset's own right axis (parts.js's +z), x toward y,
+ * so a positive quarter raises the end the asset faces. Three things have to
+ * come with it or the asset is somewhere nobody put it:
+ *
+ *   it is set back on its base      its lowest point is on y = 0, because
+ *                                   the element's Base is where it stands,
+ *                                   and a container turned about its middle
+ *                                   is half under the ground
+ *   it is centred along x           the origin is the middle of the
+ *                                   footprint (schema.md), and a footprint
+ *                                   that was twelve metres along the heading
+ *                                   is two and a half now, standing on one
+ *                                   side of the origin
+ *   z is untouched                  a quarter about z does not move it, and
+ *                                   an asset that is deliberately off centre
+ *                                   across (the scaffold) stays so
+ *
+ * ONE MEASURE, TWO READERS. tiltMeasure is what the solids use (tiltParts,
+ * which moves the parts) and what the drawing uses (the kit applies the same
+ * turn and the same two offsets as a matrix, so everything an asset's draw()
+ * paints on top of its parts turns with them), so the mesh and the solids
+ * cannot disagree about where a stood container is. Swaps, negations, sums
+ * and halves of the layout's own numbers: exact, and the same bits in every
+ * engine.
+ */
+function quarterXY(q, x, y, out) {
+  /* + 0 turns a negated zero into a zero: nothing downstream has to tell
+   * them apart, and a trace compared bit for bit is not made to. */
+  if (q > 0) {
+    out[0] = -y + 0;
+    out[1] = x;
+  } else {
+    out[0] = y;
+    out[1] = -x + 0;
+  }
+}
+
+/*
+ * What standing `parts` on end by `q` quarters (1 or -1) costs: { q, dx, dy },
+ * the offsets that centre the new footprint along x and put its lowest point
+ * on the base. Only what is drawn or solid counts; a capsule counts to its
+ * radius all round. No parts, or q of 0, is no turn and no offset.
+ */
+export function tiltMeasure(parts, q) {
+  if (!q) {
+    return { q: 0, dx: 0, dy: 0 };
+  }
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  const t = [0, 0];
+  const eat = (x, y, pad) => {
+    quarterXY(q, x, y, t);
+    x0 = Math.min(x0, t[0] - pad);
+    x1 = Math.max(x1, t[0] + pad);
+    y0 = Math.min(y0, t[1] - pad);
+  };
+  for (const p of parts) {
+    if (!p.solid && !p.draw) {
+      continue;
+    }
+    if (p.t === 'box') {
+      eat(p.lo[0], p.lo[1], 0);
+      eat(p.hi[0], p.lo[1], 0);
+      eat(p.lo[0], p.hi[1], 0);
+      eat(p.hi[0], p.hi[1], 0);
+    } else {
+      eat(p.a[0], p.a[1], p.r);
+      eat(p.b[0], p.b[1], p.r);
+    }
+  }
+  if (!Number.isFinite(x0)) {
+    return { q, dx: 0, dy: 0 };
+  }
+  return { q, dx: -(x0 + x1) / 2 + 0, dy: -y0 + 0 };
+}
+
+/*
+ * `parts` stood on end by `q` quarters, as a new list: the same parts, in
+ * the same order, with the same everything but where they are. Boxes come out
+ * as axis aligned boxes (the swap and the signs are exact), and capsules keep
+ * their radius. A part's SIZE may differ from the layout's in its last place,
+ * because the offsets are added; what stays exactly as it was is how parts
+ * lie to one another, since two that shared a plane are the same double and
+ * get the same offset. q of 0 is the list itself.
+ */
+export function tiltParts(parts, q) {
+  if (!q) {
+    return parts;
+  }
+  const m = tiltMeasure(parts, q);
+  const out = [];
+  const t = [0, 0];
+  for (const p of parts) {
+    if (p.t === 'box') {
+      let xa = Infinity;
+      let xb = -Infinity;
+      let ya = Infinity;
+      let yb = -Infinity;
+      for (const x of [p.lo[0], p.hi[0]]) {
+        for (const y of [p.lo[1], p.hi[1]]) {
+          quarterXY(q, x, y, t);
+          xa = Math.min(xa, t[0]);
+          xb = Math.max(xb, t[0]);
+          ya = Math.min(ya, t[1]);
+          yb = Math.max(yb, t[1]);
+        }
+      }
+      out.push({ ...p, lo: [xa + m.dx, ya + m.dy, p.lo[2]], hi: [xb + m.dx, yb + m.dy, p.hi[2]] });
+    } else {
+      quarterXY(q, p.a[0], p.a[1], t);
+      const a = [t[0] + m.dx, t[1] + m.dy, p.a[2]];
+      quarterXY(q, p.b[0], p.b[1], t);
+      const b = [t[0] + m.dx, t[1] + m.dy, p.b[2]];
+      out.push({ ...p, a, b });
+    }
+  }
+  return out;
+}
+
 const SC = { s: 0, c: 1 };
 
 /*
