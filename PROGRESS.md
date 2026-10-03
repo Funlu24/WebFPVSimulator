@@ -64845,6 +64845,15 @@ true with the first commit of 24, and this entry is what is true now.
                                 the session's scratchpad and not committed (the repository drops pictures by rule). All three
                                 signs sit flat on their walls, clear of the plate, the coping, both bands and the tank's lip
 
+    the roster, not a stand in  three throwaway patrons put into `PATRON_MAP_BRANDS` for one run and taken out again (the tree
+                                was clean afterwards and none of it is committed). The town built three patron marks through
+                                `buildPlaces` itself, all `findable: false`, on the three spots (3.2 by 0.96, 0.60 and 0.93
+                                m; the third from a logo, which loaded). Hibari Yard built three through `choosePatronSpots`
+                                and `paintPatronMarks` beside its four findable marks (6.0 by 1.81, 3.2 by 0.60 and 6.0 by
+                                1.74 m, keyed `built:starter#...`), and a lettered name on a plinth and a logo on a
+                                container were looked at in the browser. They are the pictures the first pull request said
+                                could not be taken headless
+
     not run                     `npm run verify`: nothing here is the plant, the physics, the module ABI or the build, and it
                                 was not asked for. A person flying the town: there are no patrons in the roster, so
                                 nothing is painted in the live game until the first one is added.
