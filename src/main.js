@@ -4230,6 +4230,13 @@ export async function boot({ loading, bootStart, mapId }) {
       sendEvent({ kind: 'mark', partner: mark.slug, what: 'seen', map });
     }
   }
+  /* Decides whether a mark should be found: only when findable is not
+   * explicitly false. Exported for testing. */
+  function shouldFindMark(mark) {
+    return mark.findable !== false;
+  }
+  window.__shouldFindMark = shouldFindMark;
+
   function findMarks(glimpse) {
     if (marksSeenView !== view) {
       marksSeenView = view;
@@ -4237,7 +4244,7 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     eggFwd.set(0, 0, -1).applyQuaternion(fpvQuat);
     for (const mark of view.marks) {
-      if (mark.findable === false) {
+      if (!shouldFindMark(mark)) {
         continue;
       }
       if (glimpse && !marksSeen.has(mark.slug) && glimpsesMark(fpvPos, eggFwd, mark, view.colliders)) {

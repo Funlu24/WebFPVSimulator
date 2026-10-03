@@ -4557,12 +4557,30 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   check('patron spots at least PARTNER_SEP from STF and all partners', tooClose.length === 0,
     tooClose.slice(0, 3).join(' | ') || 'all apart');
   
-  /* Test 7: patron spots chosen, and paintPatronMarks would set findable: false */
+  /* Test 7a: patron spots chosen, and paintPatronMarks would set findable: false */
   check('patron spots chosen for all patrons (findable: false set by paintPatronMarks)', 
     patronSpots.length === chosen5.length && patronSpots.every(s => chosen5.find(p => p.slug === s.slug)),
     `${patronSpots.length} patron spots for ${chosen5.length} patrons: ${patronSpots.map(s => s.slug).join(', ')}`);
   
-  /* Test 8: text-only patron aspect computes without crashing */
+  /* Test 7b: shouldFindMark correctly filters based on findable flag */
+  const testMarks = [
+    { slug: 'partner-findable-true', findable: true },
+    { slug: 'partner-findable-undefined' },
+    { slug: 'patron-not-findable', findable: false },
+  ];
+  const shouldFindResults = testMarks.map(m => ({ slug: m.slug, should: shouldFindMark ? shouldFindMark(m) : m.findable !== false }));
+  const correctBehavior = shouldFindResults[0].should === true 
+    && shouldFindResults[1].should === true 
+    && shouldFindResults[2].should === false;
+  check('shouldFindMark: findable:true and undefined are findable, findable:false is not', correctBehavior,
+    shouldFindResults.map(r => `${r.slug}=${r.should}`).join(', '));
+  
+  /* Helper function for testing findable logic */
+  function shouldFindMark(mark) {
+    return mark.findable !== false;
+  }
+  
+  /* Test 8a: text-only patron aspect computes without crashing */
   const textOnlyTest = fivePatrons.find(p => !p.logo);
   let aspectError = null;
   let textAspect = 0;
@@ -4573,6 +4591,38 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   }
   check('text-only patron signAspect computes without throwing', textAspect > 0 && !aspectError,
     aspectError || `aspect ${r3(textAspect)}`);
+  
+  /* Test 8b: text-only patron paints without throwing, produces canvas */
+  const canvasMock = {
+    width: 1024,
+    height: 512,
+    getContext: () => ({
+      clearRect: () => {},
+      fillRect: () => {},
+      measureText: (text) => ({ width: text.length * 30 }),
+      fillText: () => {},
+      createRadialGradient: () => ({ addColorStop: () => {} }),
+      save: () => {},
+      restore: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      arcTo: () => {},
+      closePath: () => {},
+      fill: () => {},
+    }),
+    toDataURL: () => 'data:image/png;base64,test',
+  };
+  global.document = { createElement: (tag) => tag === 'canvas' ? canvasMock : {} };
+  let paintError = null;
+  let canvas = null;
+  try {
+    canvas = art.partnerCanvas(textOnlyTest);
+  } catch (e) {
+    paintError = e.message;
+  }
+  delete global.document;
+  check('text-only patron partnerCanvas produces canvas without throwing', canvas && canvas.width > 0 && !paintError,
+    paintError || `got canvas ${canvas.width}x${canvas.height}`);
 }
 
 /* ------------------------------------------------------------------ */

@@ -365,48 +365,12 @@ function buildPartnerMarks(ctx) {
   return out;
 }
 
-/*
- * THE PATRON MARKS. With 3 or fewer patrons in the roster, all appear in the
- * town; with more, the town's key picks 3. Painted the same way partners
- * are, reusing the same infrastructure. PATRON_SPOTS holds measured positions
- * for up to 3 patrons, chosen by looking at the town the same way the
- * partners' were. Each spot is measured and added here when a patron joins
- * the roster, so paint never lands inside a wall.
- */
-const PATRON_SPOTS = [
-  { x: 8.5, y: 3.2, face: 39.3, n: -1, w: 4.0 },
-  { x: 52.1, y: 5.4, face: 152.325, n: -1, w: 3.0 },
-  { x: 56.0, y: 2.4, face: 152.875, n: 1, w: 5.0 },
-];
-
-function buildPatronMarks(ctx) {
-  const out = [];
-  const chosenPatrons = choosePatrons(PATRON_MAP_BRANDS, 'city');
-  for (let i = 0; i < chosenPatrons.length && i < PATRON_SPOTS.length; i += 1) {
-    const patron = chosenPatrons[i];
-    const spot = PATRON_SPOTS[i];
-    const w = spot.w;
-    const h = w / signAspect(patron);
-    const mark = {
-      slug: patron.slug,
-      key: `city#${patron.slug}`,
-      p: [spot.x, spot.y, spot.face + spot.n * STF_SPOT.off],
-      n: [0, 0, spot.n],
-      up: [0, 1, 0],
-      w,
-      h,
-      findable: false,
-    };
-    const mesh = makePartnerMark(THREE, patron, { width: w, height: h, shade: spot.n < 0 });
-    const n = new THREE.Vector3(...mark.n);
-    const up = new THREE.Vector3(...mark.up);
-    const right = new THREE.Vector3().crossVectors(up, n);
-    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, n));
-    mesh.position.set(...mark.p);
-    ctx.add(mesh);
-    out.push(mark);
-  }
-  return out;
+/* TODO: Patron marks for the town map. Would need hand-measured spots like
+ * PARTNER_SPOTS, verified to be on real surfaces, clear of solids, not
+ * overlapping partner or STF walls, and visible. Deferred until real patrons
+ * arrive. For now, patrons appear only on built and user freestyle maps. */
+function buildPatronMarks() {
+  return [];
 }
 
 export function buildPlaces(world, { petals: livePetals = true } = {}) {
@@ -419,7 +383,7 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
   const egg = buildStfMark(ctx);
   const partnerMarks = buildPartnerMarks(ctx);
-  const patronMarks = buildPatronMarks(ctx);
+  const patronMarks = buildPatronMarks();
   const marks = [...partnerMarks, ...patronMarks];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */
