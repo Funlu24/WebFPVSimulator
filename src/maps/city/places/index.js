@@ -372,9 +372,9 @@ function buildPartnerMarks(ctx) {
  * from flyable space.
  */
 export const PATRON_SPOTS = {
-  patron1: { face: 29.92, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable (29.8+0.12 outer)
-  patron2: { x: 58.0, y: 2.4, face: 86.92, n: -1, w: 4.0 }, // pool changing block south wall (86.8+0.12 outer)
-  patron3: { face: 42.61, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall (42.5+0.11 outer)
+  patron1: { face: 29.92, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable (T=0.24, outer at 29.8+0.12)
+  patron2: { x: 58.0, y: 2.4, face: 86.67, n: -1, w: 4.0 }, // pool changing block south wall (T=0.26, outer at 86.8-0.13)
+  patron3: { face: 42.61, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall (T=0.22, outer at 42.5+0.11)
 };
 
 /*

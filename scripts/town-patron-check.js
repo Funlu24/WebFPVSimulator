@@ -155,8 +155,8 @@ try {
       }
     }
     
-    // Check (a): centre and corners inside solid 0.3m behind face, outside 0.1m in front
-    const behind = 0.3;
+    // Check (a): centre and corners inside solid 0.15m behind face (within wall thickness), outside 0.1m in front
+    const behind = 0.15;  // Less than typical wall thickness (0.18-0.30m)
     const front = 0.1;
     
     const centreCheck = await ev(`
