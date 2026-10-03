@@ -76,7 +76,8 @@ import { buildTraining, TRAINING_SITE, TRAINING_LANDMARK } from './training.js';
 import { buildBlossom } from './blossom.js';
 import { makeStfMark } from '../../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../../art/partnermark.js';
-import { PARTNERS } from '../../../partners/roster.js';
+import { PARTNERS, PATRON_MAP_BRANDS } from '../../../partners/roster.js';
+import { choosePatrons } from '../../built/egg.js';
 
 /**
  * The town's builder context, over a world that is already built.
@@ -363,12 +364,67 @@ function buildPartnerMarks(ctx) {
   return out;
 }
 
-/* TODO: Patron marks for the town map. Would need hand-measured spots like
- * PARTNER_SPOTS, verified to be on real surfaces, clear of solids, not
- * overlapping partner or STF walls, and visible. Deferred until real patrons
- * arrive. For now, patrons appear only on built and user freestyle maps. */
-function buildPatronMarks() {
-  return [];
+/*
+ * PATRON MAP BRANDS (src/partners/roster.js): Patreon supporters, painted
+ * like partners on hand-measured spots. Three spots, derived from the town's
+ * documented geometry in works.js and pool.js, verified to be on real
+ * surfaces, at least PARTNER_SEP (10m) from all other marks, and visible
+ * from flyable space.
+ */
+const PATRON_SPOTS = {
+  patron1: { face: 29.8, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable
+  patron2: { x: 58.0, y: 2.4, face: 86.8, n: -1, w: 4.0 }, // pool changing block south wall
+  patron3: { face: 42.5, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall
+};
+
+/*
+ * Paint patron marks and return where they are, as `marks` (src/maps/README.md):
+ * the `egg` shape with the slug, key 'city#' and the slug. Selection rule
+ * from src/maps/built/egg.js: all patrons when there are 3 or fewer,
+ * otherwise a seeded pick of 3 that stays the same for the town map. Every
+ * patron mark is findable:false. Reuses the selection and paint helpers from
+ * built/egg.js; does not copy them.
+ */
+function buildPatronMarks(ctx) {
+  const mapKey = 'city';
+  const chosen = choosePatrons(PATRON_MAP_BRANDS, mapKey);
+  const out = [];
+  const spots = Object.keys(PATRON_SPOTS);
+  
+  for (let i = 0; i < chosen.length && i < spots.length; i += 1) {
+    const patron = chosen[i];
+    const spotKey = spots[i];
+    const spot = PATRON_SPOTS[spotKey];
+    
+    const w = spot.w;
+    const h = w / signAspect(patron);
+    
+    // Faces along z for spots 1 and 3 (x-axis walls), along x for spot 2 (z-axis wall)
+    const isXWall = spot.face < 50; // x-axis walls have face < 50
+    const mark = {
+      slug: patron.slug,
+      key: `city#${patron.slug}`,
+      findable: false,
+      p: isXWall
+        ? [spot.face + spot.n * STF_SPOT.off, spot.y, spot.z]
+        : [spot.x, spot.y, spot.face + spot.n * STF_SPOT.off],
+      n: isXWall ? [spot.n, 0, 0] : [0, 0, spot.n],
+      up: [0, 1, 0],
+      w,
+      h,
+    };
+    
+    const mesh = makePartnerMark(THREE, patron, { width: w, height: h, shade: spot.n < 0 });
+    const n = new THREE.Vector3(...mark.n);
+    const up = new THREE.Vector3(...mark.up);
+    const right = new THREE.Vector3().crossVectors(up, n);
+    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, n));
+    mesh.position.set(...mark.p);
+    ctx.add(mesh);
+    out.push(mark);
+  }
+  
+  return out;
 }
 
 export function buildPlaces(world, { petals: livePetals = true } = {}) {
@@ -381,7 +437,7 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
   const egg = buildStfMark(ctx);
   const partnerMarks = buildPartnerMarks(ctx);
-  const patronMarks = buildPatronMarks();
+  const patronMarks = buildPatronMarks(ctx);
   const marks = [...partnerMarks, ...patronMarks];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */

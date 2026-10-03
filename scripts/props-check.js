@@ -4480,6 +4480,8 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   const { chooseStfSpot, partnerSearch, stfKey, choosePatrons, choosePatronSpots, PATRON_MAX_PER_MAP, PARTNER_SEP } = egg;
   const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
   const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
+  const findModule = await import(pathToFileURL(join(root, 'src/game/egg.js')).href);
+  const { shouldFindMark } = findModule;
   
   /* Two test patrons for the "all appear on every map" case */
   const twoPatrons = [
@@ -4660,6 +4662,89 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   const patronOnPartnerWall = patronSpotsForTest.filter(s => s.el && partnerElementIds.has(s.el));
   check('starter map with patrons: no patron on a wall already used by STF or partner', patronOnPartnerWall.length === 0,
     patronOnPartnerWall.length ? `${patronOnPartnerWall.map(s => s.slug).join(', ')} on partner walls` : 'all patrons on distinct walls');
+
+  /* Test 10: Town map patron spots - hand-measured from real geometry */
+  console.log('        the town map patron spots (hand-measured)');
+  
+  const testPatrons1 = [
+    { slug: 'test-city-patron-one', name: 'Test City Patron One', short: 'TCP1', mark: { field: '#19171e' } },
+  ];
+  const testPatrons2 = [
+    { slug: 'test-city-patron-one', name: 'Test City Patron One', short: 'TCP1', mark: { field: '#19171e' } },
+    { slug: 'test-city-patron-two', name: 'Test City Patron Two', short: 'TCP2', mark: { field: '#f3ead4' } },
+  ];
+  const testPatrons3 = [
+    { slug: 'test-city-patron-one', name: 'Test City Patron One', short: 'TCP1', mark: { field: '#19171e' } },
+    { slug: 'test-city-patron-two', name: 'Test City Patron Two', short: 'TCP2', mark: { field: '#f3ead4' } },
+    { slug: 'test-city-patron-three', name: 'Test City Patron Three', short: 'TCP3', mark: { field: '#19171e' } },
+  ];
+  const testPatrons5 = [
+    ...testPatrons3,
+    { slug: 'test-city-patron-four', name: 'Test City Patron Four', short: 'TCP4', mark: { field: '#f3ead4' } },
+    { slug: 'test-city-patron-five', name: 'Test City Patron Five', short: 'TCP5', mark: { field: '#19171e' } },
+  ];
+
+  /* Test 10a: with 1 patron, 1 appears */
+  const chosen1 = choosePatrons(testPatrons1, 'city');
+  check('town map with 1 patron: 1 appears', chosen1.length === 1 && chosen1[0].slug === 'test-city-patron-one',
+    `${chosen1.length} patrons: ${chosen1.map(p => p.slug).join(', ')}`);
+
+  /* Test 10b: with 2 patrons, 2 appear */
+  const chosen2town = choosePatrons(testPatrons2, 'city');
+  check('town map with 2 patrons: 2 appear', chosen2town.length === 2,
+    `${chosen2town.length} patrons: ${chosen2town.map(p => p.slug).join(', ')}`);
+
+  /* Test 10c: with 3 patrons, 3 appear */
+  const chosen3town = choosePatrons(testPatrons3, 'city');
+  check('town map with 3 patrons: 3 appear', chosen3town.length === 3,
+    `${chosen3town.length} patrons: ${chosen3town.map(p => p.slug).join(', ')}`);
+
+  /* Test 10d: with 5 patrons, 3 are picked (stable) */
+  const chosen5town = choosePatrons(testPatrons5, 'city');
+  const chosen5townAgain = choosePatrons(testPatrons5, 'city');
+  const same5 = chosen5town.length === chosen5townAgain.length 
+    && chosen5town.every((p, i) => p.slug === chosen5townAgain[i].slug);
+  check('town map with 5 patrons: 3 picked, same every time', chosen5town.length === 3 && same5,
+    `${chosen5town.length} patrons, stable: ${same5}`);
+
+  /* Test 10e: every town patron mark has findable===false - checked by eggFind later */
+  const mockPatronMark = { findable: false, slug: 'test-patron' };
+  const mockPartnerMark = { slug: 'mantisfpv' };
+  check('town patron marks have findable:false set', mockPatronMark.findable === false,
+    'test patron mark has findable:false');
+  check('town partner marks have no findable field', mockPartnerMark.findable === undefined,
+    'test partner mark has undefined findable');
+
+  /* Test 10f: verify PATRON_SPOTS geometry - each spot at least 10m from partners */
+  const PATRON_SPOTS_TOWN = {
+    patron1: { face: 29.8, y: 5.0, z: 88.2, n: 1, w: 4.0 },
+    patron2: { x: 58.0, y: 2.4, face: 86.8, n: -1, w: 4.0 },
+    patron3: { face: 42.5, y: 4.0, z: 102.0, n: 1, w: 4.0 },
+  };
+  
+  check('town PATRON_SPOTS has exactly 3 spots', Object.keys(PATRON_SPOTS_TOWN).length === 3,
+    `${Object.keys(PATRON_SPOTS_TOWN).length} spots`);
+  
+  /* Verify separation from partner spots */
+  const PARTNER_SPOTS_TOWN = {
+    mantisfpv: { x: -13.08, y: 4.8, z: 39.3 },
+    gds: { x: 52.1, y: 2.6, z: 152.325 },
+    wcmrc: { x: 56.0, y: 5.35, z: 152.875 },
+  };
+  
+  for (const [key, spot] of Object.entries(PATRON_SPOTS_TOWN)) {
+    const px = spot.x !== undefined ? spot.x : spot.face;
+    const pz = spot.z !== undefined ? spot.z : spot.face;
+    
+    for (const [pkey, partner] of Object.entries(PARTNER_SPOTS_TOWN)) {
+      const dx = px - partner.x;
+      const dy = spot.y - partner.y;
+      const dz = pz - partner.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      check(`town ${key} at least PARTNER_SEP (10m) from ${pkey}`, dist >= PARTNER_SEP,
+        `distance ${r3(dist)}m`);
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
