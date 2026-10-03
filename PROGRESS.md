@@ -64892,3 +64892,111 @@ true with the first commit of 24, and this entry is what is true now.
    the change up.
 7. **`lint:memory` on `main`** needs someone to decide whether `aperture.js`, `room.js`, `parts.js` and `solids.js` belong
    at boot (add them to `BOOT_PROPS` with the reasoning) or came in by accident with the map room (take them out).
+
+## 2026-10-03 | verify, review | npm run verify on main, the preload lists my merge left stale, and the memory lint (the owner's ask)
+
+The owner: "run npm run verify and fix the lint memory on main if its important?" Run on main at 30456b3, the merge of
+pull request 24, and compared with 787ea59, the main before it.
+
+### npm run verify
+
+    16 of 17 checks pass, check 1 SKIPs, check 17 FAILs; exit 1 (1 m 23 s, which is the SKIP and the FAIL)
+    1  build-clean            SKIP: no emcc on PATH, EMSDK unset, vendor/betaflight not checked out
+    2 to 16, and 18           PASS. 2 and 3: a, b and Chromium all de0401cd4266; 4: one hash at four rates; 9: 671.7 deg/s
+                              against 670 configured; 13: errors 0, warnings 0; 16: 0 city modules with the field
+                              selected, 72 after choosing it; 18: 48 of 48 lines
+    17 world-golden           FAIL, 33 of 35 runs bit identical, 62 flights, 263200 steps
+
+Check 1 did not run, so this machine cannot say the WebAssembly module builds. Rows 2 to 18 ran against the committed
+`dist/sim.wasm` (5408b3e2be286ee8), not a fresh build. `build:wasm` stops at "emcc not found" before it touches
+`dist/`, and `git status` was clean afterwards.
+
+**Check 17 is red on 787ea59 as well, so it is not from the patron merge.** The two runs that differ: (1) "scripts/crash-check.js's
+scenarios changed since the town fixture was exported", and (2) "built: one of everything, along a scaffold board's
+underside", the world it was handed having 1538 capsules where the golden recorded 1420. `tests/goldens/world.json` was last
+recorded on 2026-09-29 (ea7d84d), `scripts/crash-check.js` changed on 2026-10-03 (a91623d), and the map of one of everything is
+built from the element table (`everythingDoc` in `scripts/lib/worldruns.js`), which has grown since, so everything after a new
+entry stands somewhere else. The other 33 runs, which are the walls, the roofs, the movers and the starter, are unchanged to the
+bit, so the module is flying every unchanged world as it did. **Not re-recorded.** `scripts/world-golden.js` says in its header
+that recording is a reviewed act and that rewriting it to turn a red check green "is the same cheat as widening a band in
+tests/thresholds.json". It needs `--export-town` from the real page and `--write`, and your word on which runs are meant to move.
+
+Also red on main and on 787ea59, outside verify, found by a sweep of the cheap checks: `check:world-town` (the same town
+fixture against the real page, "the town moved"), and `check:wall`, 49 passed and 8 failed, all in the wall tap's rebound
+(the craft comes off the face at 3 m/s, is thrown clear at 9 m/s, the saturated rebound below the knee). `lint:catalog` cannot
+run here (it reads `vendor/betaflight`, which is not checked out). Green in the same sweep: lint:presets, lint:fc, lint:frame,
+lint:nouns, lint:devices, lint:arcade, lint:board, lint:attract, check:fresh, check:orbit, check:room, check:roads, check:path,
+check:world, check:world-engines, check:chase, check:counter, check:plant, check:crash, check:crash-pacing.
+
+### What I broke, and fixed
+
+`lint:preload` was up to date at 787ea59 (boot 127, city 75, built 33, 250 served) and stale at 30456b3 (boot 127, city 76, built 34,
+251 served): the new `src/partners/patrons.js` was in neither `MODULES` in `src/fresh.js` nor the city's and built maps'
+preload lists in `src/maps/preload.js`. A module missing from `MODULES` is imported at its bare address, which is the old
+behaviour for that one file (up to the four hours the edge keeps a script, not the deploy's address), and a module missing from a
+preload list is found one round trip late when the town or Your map is chosen. Neither is a crash, which is why it is a lint.
+It has been live since the merge. I did not run `lint:preload` before merging: it was not on your list and I did not think of the
+generated lists when I added a file. Regenerated with `node scripts/gen-preload.js`, which changes three lines
+(`src/partners/patrons.js` once in `src/fresh.js` and `partners/patrons.js` twice in `src/maps/preload.js`). `lint:preload` and
+`check:fresh` (18 of 18) pass on it.
+
+### The memory lint
+
+It fails with "4 src/props module(s) fetched at boot", `aperture.js`, `room.js`, `parts.js` and `solids.js`, on main and on 787ea59.
+I traced it before touching anything, and my first reading of it was wrong.
+
+- **It is not an accident.** The static graph from `boot.js` and `main.js` reaches them through `trackbuilder/elements.js` and
+  `model.js` (room data) and `game/race.js` (a hoop's pass test), which looked like small data imports that could move into
+  `props/types.js`. But the Track map is loaded at boot, and its renderer `render/scene.js` takes `aperture.js`, `room.js` and
+  `solids.js` with a static import to draw a hoop, a hex gate or a table. With the Track map in the graph the boot closure is 117
+  modules and all four are in it by a second road, so moving the data would have changed nothing. Found by listing every importer
+  inside the boot closure, with `src/maps/custom.js` as an entry, before writing the change.
+- **They came in with the whoop builder.** Every edge to them is from one of two commits of 2026-09-30: 8af871a (a hoop and a hex gate)
+  gave `aperture.js` to `render/scene.js`, `game/race.js` and `trackbuilder/elements.js`, and 4cc1e18 (a table, a chair and a banner)
+  gave `room.js` and `solids.js` to `render/scene.js` and `room.js` to `elements.js` and `model.js`. `BOOT_PROPS` in
+  `scripts/memory-check.js` was written for `types.js` and `trig.js` and was not updated, so the check has failed on every run since.
+- **The cost is nothing.** The four are 49,769 bytes of source, 19,268 gzipped, which is 1.2 per cent of the 4.2 MB of source a boot
+  loads, and `fresh.js` preloads them in the first wave with everything else, so they cost no round trip. Nothing leaks: geometries
+  and textures come back to within one or two of the baseline in both maps.
+- **So it was a stale list and not a boot problem, but it was worth fixing**, for the reason this very session showed. Red for three days,
+  the check could not warn about anything else, and the one thing it should have caught, the town fetching a built map's module
+  (the entry above), only showed with `--map=city`. A guard that is always red guards nothing.
+- **The fix is the list, with the argument in the check.** `BOOT_PROPS` now holds the four, and the comment over it says why, as
+  it does for `trig.js` (the same reasoning: pure arithmetic, no asset, imports only its neighbours and `./trig.js`, and boot builds
+  the Track map). The rest of `src/props`, the layouts and the meshes (`catalog.js`, `course.js`, `buildings.js`, `kit.js` and the
+  others), is still held off the wire by name. Making them lazy was the alternative: `buildFieldScene` would become asynchronous for three
+  element types, to save 19 KB.
+- **That is an exception added to a check**, and `CLAUDE.md` says never to change a threshold to make a check pass and to argue instead.
+  I took your "fix it if it is important" as the word to do it, and this is the argument. Taking it back is one line:
+  `const BOOT_PROPS = ['types.js', 'trig.js']`, and the check is red again.
+
+### What was checked
+
+    lint:preload                up to date (boot 127, city 76, built 34, 251 served) after the regeneration
+    lint:memory                 PASS, every world is lazy and every world is freed. Both orders: the default, and
+                                `--map=city` alone, which is the one that shows the town reaching into a built map
+    check:fresh                 18 passed, 0 failed
+    npm run verify              run again on the committed tree, below
+    not run                     check 1 (no emcc), check:builder again (no builder code changed in this entry, and it passed
+                                739 to 0 on the tree before it), a person flying
+
+### What went wrong
+
+- **I merged without `lint:preload`.** See above. The earlier entry's list of what was checked was incomplete in a way I could not see from
+  it: the generated lists are not mentioned anywhere in the brief.
+- **My first plan for the memory lint would have done nothing.** I read the static graph from `main.js` alone and planned to move
+  `ROOM_SIZES` and three small names into `types.js`. The graph tool had the answer in its second run, and nothing was edited.
+- **`time` under `sh -c`, again**, and a run of two background jobs that finished before I looked. Both were run again directly.
+
+### For the owner
+
+1. **Check 17 and `check:world-town` want a re-record, and it is yours to approve.** The module is unchanged for 33 of 35 runs. What
+   would move is one built flight (the one of everything map, 118 more capsules, so the board's world is not the golden's) and the town
+   fixture (re-exported from the real page, because `crash-check.js` changed). Say "re-record" and I will run `--export-town` and
+   `--write`, and put which runs moved and why in this file.
+2. **`check:wall` has 8 failures on main, none from this.** They look like the wall tap's rebound against a contact model that has
+   moved since the check was written (obstacle contact went into the plant on 2026-09-24), but I did not trace them, and they are
+   not in verify. Whether the check or the plant is stale is the question.
+3. **`lint:memory` is not in `npm run verify`**, by its own header ("verify builds the WASM module and this has nothing to say about
+   the flight model"). It was red for three days with nobody told. Adding it as a row is yours to decide.
+4. **`BOOT_PROPS` is widened,** as above, on your word.

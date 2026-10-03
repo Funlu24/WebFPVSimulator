@@ -228,6 +228,7 @@
     'src/maps/field.js',
     'src/maps/preload.js',
     'src/maps/registry.js',
+    'src/partners/patrons.js',
     'src/partners/roster.js',
     'src/props/aperture.js',
     'src/props/buildings.js',

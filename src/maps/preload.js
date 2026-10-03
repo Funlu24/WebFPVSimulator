@@ -103,6 +103,7 @@ export const MAP_PRELOAD = {
     'maps/city/places/blossom.js',
     'art/stf.js',
     'art/partnermark.js',
+    'partners/patrons.js',
     'maps/city/drawn.js',
   ],
   built: [
@@ -135,6 +136,7 @@ export const MAP_PRELOAD = {
     'maps/built/starter.js',
     'maps/built/looks.js',
     'maps/built/egg.js',
+    'partners/patrons.js',
     'maps/built/traffic.js',
     'maps/built/roadmesh.js',
     'maps/built/cars.js',

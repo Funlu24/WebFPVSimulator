@@ -20,8 +20,8 @@
  *   1. Your map. Check 16 covers city against field. Your map is the other
  *      freestyle world, it borrows a named handful of the town's modules
  *      and no more (see BORROWS), and its asset library, src/props, must
- *      stay off the wire until it is chosen, apart from the one data table
- *      the builder's element table reads (see BOOT_PROPS).
+ *      stay off the wire until it is chosen, apart from the few pure
+ *      modules a boot needs (see BOOT_PROPS).
  *   2. Release, not just laziness. After switching away, three.js's own count
  *      of live geometries and textures has to come back down. A lazy load
  *      that never frees is a leak with extra steps.
@@ -91,8 +91,27 @@ const HEAVY = ['built', 'city'];
  * plant's frame with it before its crash reset judges them (bodyUpDotWorld in
  * src/game/collide.js), and that judgement moves the craft, so CLAUDE.md
  * keeps JS Math.sin and Math.cos out of it.
+ *
+ * The third is four modules, since 2026-09-30, and it is the whoop builder's
+ * and not an accident: src/props/aperture.js (the outline of a hoop and of a
+ * hex gate), room.js (the boxes of a table, a chair and a banner) and the two
+ * room.js is built from, parts.js and solids.js. Each is pure arithmetic with
+ * no asset in it and imports nothing but its neighbours and ./trig.js. They
+ * are 50 KB of source and 19 KB gzipped, which is 1.2 per cent of what a boot
+ * loads, and they are in the first wave of its modulepreload. The Track map
+ * is the world a boot builds (src/maps/registry.js), and its renderer,
+ * src/render/scene.js, draws a hoop, a hex gate or a table the moment a track
+ * holds one and takes these with a static import. The race's pass test
+ * (clipToShape and insideShape in src/game/race.js) clips every segment
+ * against a hoop's outline, and the builder's element table and the
+ * document's model read their sizes. Making them lazy would make
+ * buildFieldScene asynchronous for three element types, to save 19 KB. They
+ * reached boot with commits 8af871a and 4cc1e18 and this list was not
+ * updated, so the check has failed on every run since. The rest of src/props,
+ * the layouts and the meshes, stays off the wire, and the list stays exact so
+ * that it does.
  */
-const BOOT_PROPS = ['types.js', 'trig.js'];
+const BOOT_PROPS = ['types.js', 'trig.js', 'aperture.js', 'room.js', 'parts.js', 'solids.js'];
 
 /*
  * Every URL the page has fetched, as a plain list. Resource timing is the
