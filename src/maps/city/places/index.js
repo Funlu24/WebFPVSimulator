@@ -372,9 +372,9 @@ function buildPartnerMarks(ctx) {
  * from flyable space.
  */
 export const PATRON_SPOTS = {
-  patron1: { face: 29.8, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable
-  patron2: { x: 58.0, y: 2.4, face: 86.8, n: -1, w: 4.0 }, // pool changing block south wall
-  patron3: { face: 42.5, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall
+  patron1: { face: 29.92, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable (29.8+0.12 outer)
+  patron2: { x: 58.0, y: 2.4, face: 86.92, n: -1, w: 4.0 }, // pool changing block south wall (86.8+0.12 outer)
+  patron3: { face: 42.61, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall (42.5+0.11 outer)
 };
 
 /*
@@ -384,10 +384,14 @@ export const PATRON_SPOTS = {
  * otherwise a seeded pick of 3 that stays the same for the town map. Every
  * patron mark is findable:false. Reuses the selection and paint helpers from
  * built/egg.js; does not copy them.
+ * 
+ * @param {Object} ctx - builder context
+ * @param {Array} patrons - optional patron list (defaults to PATRON_MAP_BRANDS for testing)
  */
-function buildPatronMarks(ctx) {
+export function buildPatronMarks(ctx, patrons = null) {
   const mapKey = 'city';
-  const chosen = choosePatrons(PATRON_MAP_BRANDS, mapKey);
+  const patronList = patrons !== null ? patrons : PATRON_MAP_BRANDS;
+  const chosen = choosePatrons(patronList, mapKey);
   const out = [];
   const spots = Object.keys(PATRON_SPOTS);
   
@@ -437,7 +441,7 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
   const egg = buildStfMark(ctx);
   const partnerMarks = buildPartnerMarks(ctx);
-  const patronMarks = buildPatronMarks(ctx);
+  const patronMarks = buildPatronMarks(ctx, null);
   const marks = [...partnerMarks, ...patronMarks];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */

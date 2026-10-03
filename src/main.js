@@ -9970,6 +9970,12 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     return view.colliders.gapAt(x, y, z, r);
   };
+  window.__segmentCrossesAny = (ax, ay, az, bx, by, bz) => {
+    if (!view.colliders) {
+      return false;
+    }
+    return view.colliders.segmentCrossesAny(ax, ay, az, bx, by, bz);
+  };
   /* What is solid, and how well the broadphase is doing. */
   /*
    * THE CONTACT COUNTERS, so a probe can tell a wall it touched from a wall
