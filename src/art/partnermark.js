@@ -83,8 +83,16 @@ const TEXT_ASPECT_MIN = 1.5;
 const TEXT_ASPECT_MAX = 6.0;
 
 /* Measure the aspect ratio for a text-only sign. Returns the sign's width
- * over its height, clamped to sensible bounds. */
+ * over its height, clamped to sensible bounds. Falls back to a conservative
+ * default in Node (where document is not available). */
 function measureTextAspect(text) {
+  if (typeof document === 'undefined') {
+    const charCount = String(text).length;
+    const avgCharAspect = 0.6;
+    const logoAspect = charCount * avgCharAspect;
+    const signAspect = LOGO_SHARE * logoAspect + (1 - LOGO_SHARE);
+    return signAspect < TEXT_ASPECT_MIN ? TEXT_ASPECT_MIN : (signAspect > TEXT_ASPECT_MAX ? TEXT_ASPECT_MAX : signAspect);
+  }
   const canvas = document.createElement('canvas');
   const g = canvas.getContext('2d');
   const testH = 100;
