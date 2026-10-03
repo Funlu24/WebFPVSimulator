@@ -1404,12 +1404,17 @@ function hashString(s) {
   return h;
 }
 
-/* Choose up to PATRON_MAX_PER_MAP patrons from a list, seeded from the map
- * key so the same map always picks the same ones. Returns the chosen patrons
- * in the roster's original order. */
+/* Choose up to PATRON_MAX_PER_MAP patrons from a list. With 3 or fewer
+ * patrons, every patron appears on every map. With more than 3, a seeded
+ * per-map pick chooses 3, seeded from the map key so the same map always
+ * picks the same ones. Returns the chosen patrons in the roster's original
+ * order. */
 export function choosePatrons(patrons, mapKey) {
-  if (!patrons || patrons.length <= PATRON_MAX_PER_MAP) {
-    return patrons || [];
+  if (!patrons || patrons.length === 0) {
+    return [];
+  }
+  if (patrons.length <= PATRON_MAX_PER_MAP) {
+    return patrons;
   }
   const rng = seededPick(hashString(mapKey));
   const indices = Array.from({ length: patrons.length }, (_, i) => i);

@@ -4480,8 +4480,25 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
   const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
   
-  /* Five test patrons: 3 text-only, 1 with a fake logo (using GDS's for testing), 1 text-only */
-  const testPatrons = [
+  /* Two test patrons for the "all appear on every map" case */
+  const twoPatrons = [
+    { slug: 'test-patron-one', name: 'Test Patron One', short: 'TP1', mark: { field: '#19171e' } },
+    { slug: 'test-patron-two', name: 'Test Patron Two', short: 'TP2', mark: { field: '#f3ead4' } },
+  ];
+  
+  /* Test 1: with 2 patrons, both appear on every map */
+  const mapKey1 = stfKey(sDoc, 'starter');
+  const mapKey2 = stfKey(eDoc, 'canvas');
+  const chosen2a = choosePatrons(twoPatrons, mapKey1);
+  const chosen2b = choosePatrons(twoPatrons, mapKey2);
+  check('with 2 patrons, both appear on both map keys', 
+    chosen2a.length === 2 && chosen2b.length === 2 
+    && chosen2a[0].slug === 'test-patron-one' && chosen2a[1].slug === 'test-patron-two'
+    && chosen2b[0].slug === 'test-patron-one' && chosen2b[1].slug === 'test-patron-two',
+    `key1: ${chosen2a.map((p) => p.slug).join(', ')}; key2: ${chosen2b.map((p) => p.slug).join(', ')}`);
+  
+  /* Five test patrons for the seeded selection case: 3 text-only, 1 with a fake logo, 1 text-only */
+  const fivePatrons = [
     { slug: 'test-patron-one', name: 'Test Patron One', short: 'TP1', mark: { field: '#19171e' } },
     { slug: 'test-patron-two', name: 'Test Patron Two', short: 'Patron 2', mark: { field: '#f3ead4' } },
     { slug: 'test-patron-three', name: 'Test Patron Three', short: 'Three', mark: { field: '#19171e' } },
@@ -4489,37 +4506,35 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
     { slug: 'test-patron-five', name: 'Test Patron Five', short: 'TP5', mark: { field: '#19171e' } },
   ];
 
-  /* Test 1: cap of 3 when there are 5 */
-  const mapKey1 = stfKey(sDoc, 'starter');
-  const chosen1 = choosePatrons(testPatrons, mapKey1);
-  check('with 5 patrons, choosePatrons returns at most 3', chosen1.length <= PATRON_MAX_PER_MAP && chosen1.length === 3);
+  /* Test 2: with 5 patrons, exactly 3 appear */
+  const chosen5 = choosePatrons(fivePatrons, mapKey1);
+  check('with 5 patrons, exactly 3 are chosen', chosen5.length === 3);
   
-  /* Test 2: same pick across two runs for one map key */
-  const chosen1Again = choosePatrons(testPatrons, mapKey1);
-  const same = chosen1.length === chosen1Again.length && chosen1.every((p, k) => p.slug === chosen1Again[k].slug);
-  check('same map key picks the same patrons every time', same,
-    `first: ${chosen1.map((p) => p.slug).join(', ')}; second: ${chosen1Again.map((p) => p.slug).join(', ')}`);
+  /* Test 3: same pick across two runs for one map key */
+  const chosen5Again = choosePatrons(fivePatrons, mapKey1);
+  const same = chosen5.length === chosen5Again.length && chosen5.every((p, k) => p.slug === chosen5Again[k].slug);
+  check('with 5 patrons, same map key picks the same 3 every time', same,
+    `first: ${chosen5.map((p) => p.slug).join(', ')}; second: ${chosen5Again.map((p) => p.slug).join(', ')}`);
   
-  /* Test 3: different pick for another key */
-  const mapKey2 = stfKey(eDoc, 'canvas');
-  const chosen2 = choosePatrons(testPatrons, mapKey2);
-  const different = chosen2.length === 3 && chosen2.some((p, k) => !chosen1.find((q) => q.slug === p.slug));
-  check('different map key picks different patrons', different || chosen1.length === 0,
-    `key1: ${chosen1.map((p) => p.slug).join(', ')}; key2: ${chosen2.map((p) => p.slug).join(', ')}`);
+  /* Test 4: different pick for another key */
+  const chosen5b = choosePatrons(fivePatrons, mapKey2);
+  const different = chosen5b.length === 3 && chosen5b.some((p) => !chosen5.find((q) => q.slug === p.slug));
+  check('with 5 patrons, different map key picks different patrons', different,
+    `key1: ${chosen5.map((p) => p.slug).join(', ')}; key2: ${chosen5b.map((p) => p.slug).join(', ')}`);
   
-  /* Test 4: text-only sign aspect is deterministic and in range */
-  const textOnlyPatron = testPatrons[0];
+  /* Test 5: text-only sign aspect is deterministic and in range */
+  const textOnlyPatron = fivePatrons[0];
   const aspect1 = art.signAspect(textOnlyPatron);
   const aspect2 = art.signAspect(textOnlyPatron);
   check('text-only patron aspect is deterministic', aspect1 === aspect2, `${r3(aspect1)} vs ${r3(aspect2)}`);
   check('text-only patron aspect is in sensible range', aspect1 >= 1.5 && aspect1 <= 6.0, `aspect ${r3(aspect1)}`);
   
-  /* Test 5: patron spots never on a wall already used by STF or a partner, and at least PARTNER_SEP apart */
+  /* Test 6: patron spots never on a wall already used by STF or a partner, and at least PARTNER_SEP apart */
   const stf = chooseStfSpot(sPlaced, sDoc, 'starter');
   const allPartners = [...roster.PARTNERS, ...roster.MAP_ONLY_PARTNERS];
   const partnerSpots = partnerSearch(sPlaced, sDoc, 'starter', stf,
     allPartners.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }))).spots;
-  const patronList = chosen1.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }));
+  const patronList = chosen5.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }));
   const patronSpots = choosePatronSpots(sPlaced, sDoc, 'starter', stf, partnerSpots, patronList);
   
   const takenElements = new Set([stf.elementId, ...partnerSpots.map((s) => s.elementId)].filter(Boolean));
@@ -4541,7 +4556,7 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   check('patron spots at least PARTNER_SEP from STF and all partners', tooClose.length === 0,
     tooClose.slice(0, 3).join(' | ') || 'all apart');
   
-  /* Test 6: no stamp keys or findable entries for patrons (tested at map build level) */
+  /* Test 7: no stamp keys or findable entries for patrons (tested at map build level) */
   check('patron marks would not generate stamp keys in the real map', true,
     'patron keys are different from partner keys and only used for placement');
 }
