@@ -123,6 +123,7 @@ import { threePosToSim, threeDirToSim } from '../src/render/frame.js';
 import {
   createTrack, createElement, normalize, serialize, deserialize, SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from '../src/trackbuilder/model.js';
+import { shouldFindMark } from '../src/game/egg.js';
 import { ELEMENTS, KIND } from '../src/trackbuilder/elements.js';
 import { placeDocument, groundUnder, indexTops, PLATFORM_REACH } from '../src/maps/built/place.js';
 import { freestyleReport, crowdOf, CANDIDATES_MAX } from '../src/trackbuilder/warnings.js';
@@ -4364,6 +4365,9 @@ async function eggBlock() {
   /* The partners' marks, on the same maps. */
   await partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced);
 
+  /* The patron marks, capped at 3 per map, not findable. */
+  await patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced);
+
   /* Finding it, on the starter, where its map paints it. */
   await eggFind(sPlaced, sSpot);
   /* And that the builder can never draw it. */
@@ -4469,6 +4473,244 @@ async function partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
     const doc = normalize(m.doc).doc;
     judgePartners(m.label, placeDocument(doc), doc, 'canvas');
   }
+}
+
+async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
+  console.log("        the patron marks (capped at 3, not findable)");
+  const { chooseStfSpot, partnerSearch, stfKey, choosePatronSpots, PARTNER_SEP } = egg;
+  const { choosePatrons } = await import(pathToFileURL(join(root, 'src/partners/patrons.js')).href);
+  const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
+  const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
+  const findModule = await import(pathToFileURL(join(root, 'src/game/egg.js')).href);
+  const { shouldFindMark } = findModule;
+  
+  /* Two test patrons for the "all appear on every map" case */
+  const twoPatrons = [
+    { slug: 'test-patron-one', name: 'Test Patron One', short: 'TP1', mark: { field: '#19171e' } },
+    { slug: 'test-patron-two', name: 'Test Patron Two', short: 'TP2', mark: { field: '#f3ead4' } },
+  ];
+  
+  /* Test 1: with 2 patrons, both appear on every map */
+  const mapKey1 = stfKey(sDoc, 'starter');
+  const mapKey2 = stfKey(eDoc, 'canvas');
+  const chosen2a = choosePatrons(twoPatrons, mapKey1);
+  const chosen2b = choosePatrons(twoPatrons, mapKey2);
+  check('with 2 patrons, both appear on both map keys', 
+    chosen2a.length === 2 && chosen2b.length === 2 
+    && chosen2a[0].slug === 'test-patron-one' && chosen2a[1].slug === 'test-patron-two'
+    && chosen2b[0].slug === 'test-patron-one' && chosen2b[1].slug === 'test-patron-two',
+    `key1: ${chosen2a.map((p) => p.slug).join(', ')}; key2: ${chosen2b.map((p) => p.slug).join(', ')}`);
+  
+  /* Five test patrons for the seeded selection case: 3 text-only, 1 with a fake logo, 1 text-only */
+  const fivePatrons = [
+    { slug: 'test-patron-one', name: 'Test Patron One', short: 'TP1', mark: { field: '#19171e' } },
+    { slug: 'test-patron-two', name: 'Test Patron Two', short: 'Patron 2', mark: { field: '#f3ead4' } },
+    { slug: 'test-patron-three', name: 'Test Patron Three', short: 'Three', mark: { field: '#19171e' } },
+    { slug: 'test-patron-four', name: 'Test Patron Four', short: 'Four', logo: { aspect: 208 / 72 }, mark: { field: '#f3ead4' } },
+    { slug: 'test-patron-five', name: 'Test Patron Five', short: 'TP5', mark: { field: '#19171e' } },
+  ];
+
+  /* Test 2: with 5 patrons, exactly 3 appear */
+  const chosen5 = choosePatrons(fivePatrons, mapKey1);
+  check('with 5 patrons, exactly 3 are chosen', chosen5.length === 3);
+  
+  /* Test 3: same pick across two runs for one map key */
+  const chosen5Again = choosePatrons(fivePatrons, mapKey1);
+  const same = chosen5.length === chosen5Again.length && chosen5.every((p, k) => p.slug === chosen5Again[k].slug);
+  check('with 5 patrons, same map key picks the same 3 every time', same,
+    `first: ${chosen5.map((p) => p.slug).join(', ')}; second: ${chosen5Again.map((p) => p.slug).join(', ')}`);
+  
+  /* Test 4: different pick for multiple keys - at least two differ */
+  const testKeys = ['built:test-a', 'built:test-b', 'built:test-c', 'built:test-d', 'built:test-e'];
+  const picks = testKeys.map(k => choosePatrons(fivePatrons, k).map(p => p.slug).join(','));
+  const uniquePicks = new Set(picks);
+  check('with 5 patrons, different map keys pick different patrons (at least 2 unique picks from 5 keys)', uniquePicks.size >= 2,
+    `${uniquePicks.size} unique picks: ${[...uniquePicks].slice(0, 3).join(' | ')}`);
+  
+  /* Test 5: text-only sign aspect is deterministic and in range */
+  const textOnlyPatron = fivePatrons[0];
+  const aspect1 = art.signAspect(textOnlyPatron);
+  const aspect2 = art.signAspect(textOnlyPatron);
+  check('text-only patron aspect is deterministic', aspect1 === aspect2, `${r3(aspect1)} vs ${r3(aspect2)}`);
+  check('text-only patron aspect is in sensible range', aspect1 >= 1.5 && aspect1 <= 6.0, `aspect ${r3(aspect1)}`);
+  
+  /* Test 6: patron spots never on a wall already used by STF or a partner, and at least PARTNER_SEP apart */
+  const stf = chooseStfSpot(sPlaced, sDoc, 'starter');
+  const allPartners = [...roster.PARTNERS, ...roster.MAP_ONLY_PARTNERS];
+  const partnerSpots = partnerSearch(sPlaced, sDoc, 'starter', stf,
+    allPartners.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }))).spots;
+  const patronList = chosen5.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }));
+  const patronSpots = choosePatronSpots(sPlaced, sDoc, 'starter', stf, partnerSpots, patronList);
+  
+  const takenElements = new Set([stf.elementId, ...partnerSpots.map((s) => s.elementId)].filter(Boolean));
+  const patronsOnTakenWall = patronSpots.filter((ps) => ps.elementId && takenElements.has(ps.elementId));
+  check('patron spots never on a wall already used by STF or a partner', patronsOnTakenWall.length === 0,
+    `${patronsOnTakenWall.length} patrons on taken walls: ${patronsOnTakenWall.map((ps) => ps.slug).join(', ')}`);
+  
+  const allMarks = [stf, ...partnerSpots, ...patronSpots];
+  const tooClose = [];
+  for (let i = allMarks.length - patronSpots.length; i < allMarks.length; i += 1) {
+    for (let j = 0; j < i; j += 1) {
+      const d = Math.hypot(allMarks[i].p[0] - allMarks[j].p[0],
+        allMarks[i].p[1] - allMarks[j].p[1], allMarks[i].p[2] - allMarks[j].p[2]);
+      if (d < PARTNER_SEP - 1e-9) {
+        tooClose.push(`${allMarks[i].slug} and ${allMarks[j].slug ?? 'STF'} ${r3(d)} m apart`);
+      }
+    }
+  }
+  check('patron spots at least PARTNER_SEP from STF and all partners', tooClose.length === 0,
+    tooClose.slice(0, 3).join(' | ') || 'all apart');
+  
+  /* Test 7a: patron spots chosen, and paintPatronMarks would set findable: false */
+  check('patron spots chosen for all patrons (findable: false set by paintPatronMarks)', 
+    patronSpots.length === chosen5.length && patronSpots.every(s => chosen5.find(p => p.slug === s.slug)),
+    `${patronSpots.length} patron spots for ${chosen5.length} patrons: ${patronSpots.map(s => s.slug).join(', ')}`);
+  
+  /* Test 7b: shouldFindMark correctly filters based on findable flag */
+  const testMarks = [
+    { slug: 'partner-findable-true', findable: true },
+    { slug: 'partner-findable-undefined' },
+    { slug: 'patron-not-findable', findable: false },
+  ];
+  const shouldFindResults = testMarks.map(m => ({ slug: m.slug, should: shouldFindMark(m) }));
+  const correctBehavior = shouldFindResults[0].should === true 
+    && shouldFindResults[1].should === true 
+    && shouldFindResults[2].should === false;
+  check('shouldFindMark: findable:true and undefined are findable, findable:false is not', correctBehavior,
+    shouldFindResults.map(r => `${r.slug}=${r.should}`).join(', '));
+  
+  /* Test 8a: text-only patron aspect computes without crashing */
+  const textOnlyTest = fivePatrons.find(p => !p.logo);
+  let aspectError = null;
+  let textAspect = 0;
+  try {
+    textAspect = art.signAspect(textOnlyTest);
+  } catch (e) {
+    aspectError = e.message;
+  }
+  check('text-only patron signAspect computes without throwing', textAspect > 0 && !aspectError,
+    aspectError || `aspect ${r3(textAspect)}`);
+  
+  /* Test 8b: text-only patron paints without throwing, produces canvas */
+  const canvasMock = {
+    width: 1024,
+    height: 512,
+    getContext: () => ({
+      clearRect: () => {},
+      fillRect: () => {},
+      measureText: (text) => ({ width: text.length * 30 }),
+      fillText: () => {},
+      createRadialGradient: () => ({ addColorStop: () => {} }),
+      save: () => {},
+      restore: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      arcTo: () => {},
+      closePath: () => {},
+      fill: () => {},
+    }),
+    toDataURL: () => 'data:image/png;base64,test',
+  };
+  global.document = { createElement: (tag) => tag === 'canvas' ? canvasMock : {} };
+  let paintError = null;
+  let canvas = null;
+  try {
+    canvas = art.partnerCanvas(textOnlyTest);
+  } catch (e) {
+    paintError = e.message;
+  }
+  delete global.document;
+  check('text-only patron partnerCanvas produces canvas without throwing', canvas && canvas.width > 0 && !paintError,
+    paintError || `got canvas ${canvas.width}x${canvas.height}`);
+  
+  /* Test 9: build the starter map with test patrons, verify spots are chosen correctly */
+  const testPatronsForBuild = [
+    {
+      slug: 'test-patron-alpha',
+      name: 'Test Patron Alpha',
+      short: 'ALPHA',
+      mark: { field: '#3a4a5c' },
+    },
+    {
+      slug: 'test-patron-beta',
+      name: 'Test Patron Beta',
+      short: 'BETA',
+      mark: { field: '#5c3a4a' },
+    },
+  ];
+  
+  const partnerList = roster.PARTNERS.map((p) => ({ slug: p.slug, aspect: EGG.PARTNER.SHARE * p.logo.aspect + (1 - EGG.PARTNER.SHARE) }));
+  const mapKeyForTest = stfKey(sDoc, 'starter');
+  const chosenPatronsForTest = choosePatrons(testPatronsForBuild, mapKeyForTest);
+  const stfSpot = chooseStfSpot(sPlaced, sDoc, 'starter');
+  const partnerSpotsForTest = partnerSearch(sPlaced, sDoc, 'starter', stfSpot, partnerList).spots;
+  const patronSpotsForTest = choosePatronSpots(sPlaced, sDoc, 'starter', stfSpot, partnerSpotsForTest, chosenPatronsForTest);
+  
+  /* Verify both patrons are in the spots with correct properties */
+  check('starter map with 2 test patrons: both patron spots chosen', 
+    patronSpotsForTest.length === 2 
+    && patronSpotsForTest.every(s => testPatronsForBuild.find(p => p.slug === s.slug)),
+    `${patronSpotsForTest.length} patron spots: ${patronSpotsForTest.map(s => s.slug).join(', ')}`);
+  
+  /* Verify partners are still present (not displaced by patrons) */
+  check('starter map with patrons: all partner spots still present', 
+    partnerSpotsForTest.length === partnerList.length 
+    && partnerSpotsForTest.every((s, k) => s.slug === partnerList[k].slug),
+    `${partnerSpotsForTest.length} partner spots: ${partnerSpotsForTest.map(s => s.slug).join(', ')}`);
+  
+  /* Verify patrons don't overlap STF or partners (same element ID) */
+  const partnerElementIds = new Set(partnerSpotsForTest.map(s => s.el));
+  const patronOnPartnerWall = patronSpotsForTest.filter(s => s.el && partnerElementIds.has(s.el));
+  check('starter map with patrons: no patron on a wall already used by STF or partner', patronOnPartnerWall.length === 0,
+    patronOnPartnerWall.length ? `${patronOnPartnerWall.map(s => s.slug).join(', ')} on partner walls` : 'all patrons on distinct walls');
+
+  /*
+   * Test 10: the town's roster rules. WHERE the town's three spots are is not
+   * asked here, and that is on purpose. This file runs in plain Node and the
+   * town's module needs Three.js, so an earlier version of this block kept a
+   * copy of the spots and of the buildings' constants beside it and checked
+   * the copy against the constants. The copy had drifted from the real spots
+   * on the day it was written (a 4 m sign at x 29.8 against a 3.5 m one at
+   * 29.68), the constants were centrelines and not faces, and sixteen green
+   * lines said nothing about the paint. The spots are asked of the live city,
+   * wall by wall, by `npm run check:town-patrons`.
+   */
+  console.log('        the town map patron roster (the spots: npm run check:town-patrons)');
+
+  const testPatrons3 = [
+    { slug: 'test-city-patron-one', name: 'Test City Patron One', short: 'TCP1', mark: { field: '#19171e' } },
+    { slug: 'test-city-patron-two', name: 'Test City Patron Two', short: 'TCP2', mark: { field: '#f3ead4' } },
+    { slug: 'test-city-patron-three', name: 'Test City Patron Three', short: 'TCP3', mark: { field: '#19171e' } },
+  ];
+
+  /* Test 10a: selection rules */
+  const chosen1town = choosePatrons([testPatrons3[0]], 'city');
+  check('town map with 1 patron: 1 appears', chosen1town.length === 1, `${chosen1town.length} patrons`);
+
+  const chosen2town = choosePatrons(testPatrons3.slice(0, 2), 'city');
+  check('town map with 2 patrons: 2 appear', chosen2town.length === 2, `${chosen2town.length} patrons`);
+
+  const chosen3town = choosePatrons(testPatrons3, 'city');
+  check('town map with 3 patrons: 3 appear', chosen3town.length === 3, `${chosen3town.length} patrons`);
+
+  const testPatrons5town = [...testPatrons3,
+    { slug: 'test-city-patron-four', name: 'Test City Patron Four', short: 'TCP4', mark: { field: '#f3ead4' } },
+    { slug: 'test-city-patron-five', name: 'Test City Patron Five', short: 'TCP5', mark: { field: '#19171e' } }];
+  const chosen5town = choosePatrons(testPatrons5town, 'city');
+  const chosen5townAgain = choosePatrons(testPatrons5town, 'city');
+  const stableTown = chosen5town.length === 3 && chosen5town.every((p, i) => p.slug === chosen5townAgain[i].slug);
+  check('town map with 5 patrons: 3 picked, same every time', stableTown,
+    `${chosen5town.length} picked, stable: ${stableTown}`);
+
+  /* Test 10b: findable checks using mock marks */
+  const mockPatronMark = { findable: false, slug: 'test-patron' };
+  const mockPartnerMark = { slug: 'mantisfpv' };
+  const patronFindable = shouldFindMark(mockPatronMark);
+  const partnerFindable = shouldFindMark(mockPartnerMark);
+  check('shouldFindMark returns false for patron marks (findable:false)', !patronFindable,
+    `shouldFindMark(patron)=${patronFindable}`);
+  check('shouldFindMark returns true for partner marks', partnerFindable,
+    `shouldFindMark(partner)=${partnerFindable}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -4677,7 +4919,7 @@ async function reachableFrom(entries) {
 /* The files that draw the mark, choose where it goes or find it, none of
  * which the builder may reach: the person who built a map has to find the
  * mark too (FREESTYLE-MAPS-PLAN.md section 12, decision 3). */
-const EGG_BUILDER_BLIND = ['src/art/stf.js', 'src/art/partnermark.js', 'src/maps/built/egg.js', 'src/maps/built/index.js', 'src/game/egg.js'];
+const EGG_BUILDER_BLIND = ['src/art/stf.js', 'src/art/partnermark.js', 'src/maps/built/egg.js', 'src/maps/built/index.js', 'src/game/egg.js', 'src/partners/patrons.js'];
 
 async function eggBuilderBlind() {
   const dir = 'src/trackbuilder';

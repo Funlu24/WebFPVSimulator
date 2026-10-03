@@ -77,8 +77,42 @@ import { paintMaterial, paintGlow } from './stf.js';
  * made for the logo rather than a logo on a wall. */
 export const LOGO_SHARE = 0.7;
 
+/* Min and max aspect ratios for text-only patron signs, so the size comes
+ * out deterministic. */
+const TEXT_ASPECT_MIN = 1.5;
+const TEXT_ASPECT_MAX = 6.0;
+
+/* Measure the aspect ratio for a text-only sign. Returns the sign's width
+ * over its height, clamped to sensible bounds. Falls back to a conservative
+ * default in Node (where document is not available). */
+function measureTextAspect(text) {
+  if (typeof document === 'undefined') {
+    const charCount = String(text).length;
+    const avgCharAspect = 0.6;
+    const logoAspect = charCount * avgCharAspect;
+    const signAspect = LOGO_SHARE * logoAspect + (1 - LOGO_SHARE);
+    return signAspect < TEXT_ASPECT_MIN ? TEXT_ASPECT_MIN : (signAspect > TEXT_ASPECT_MAX ? TEXT_ASPECT_MAX : signAspect);
+  }
+  const canvas = document.createElement('canvas');
+  const g = canvas.getContext('2d');
+  const testH = 100;
+  const bh = testH * LOGO_SHARE;
+  const size = Math.round(bh * 0.6);
+  g.font = `italic 900 ${size}px system-ui, sans-serif`;
+  const wide = g.measureText(text).width;
+  const logoAspect = wide / bh;
+  const signAspect = LOGO_SHARE * logoAspect + (1 - LOGO_SHARE);
+  return signAspect < TEXT_ASPECT_MIN ? TEXT_ASPECT_MIN : (signAspect > TEXT_ASPECT_MAX ? TEXT_ASPECT_MAX : signAspect);
+}
+
 export function signAspect(p) {
-  const a = p && p.logo && p.logo.aspect > 0 ? p.logo.aspect : 2;
+  if (!p) {
+    return 2;
+  }
+  if (!p.logo) {
+    return measureTextAspect(p.short);
+  }
+  const a = p.logo.aspect > 0 ? p.logo.aspect : 2;
   return LOGO_SHARE * a + (1 - LOGO_SHARE);
 }
 
@@ -197,6 +231,9 @@ const SIGNS = new Map();
 const TYPES = { svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp' };
 
 function loadArtwork(p, entry) {
+  if (!p.logo) {
+    return;
+  }
   const file = p.logo.colour;
   const url = new URL(`../../${LOGO_DIR}/${file}`, import.meta.url).href;
   const type = TYPES[String(file).split('.').pop().toLowerCase()] || 'application/octet-stream';
@@ -239,10 +276,12 @@ function signFor(p) {
   const canvas = document.createElement('canvas');
   canvas.width = SIGN_W;
   canvas.height = Math.round(SIGN_W / signAspect(p));
-  entry = { canvas, dataUrl: null, live: new Set(), ready: false };
+  entry = { canvas, dataUrl: null, live: new Set(), ready: !p.logo };
   SIGNS.set(p.slug, entry);
   paintSign(canvas, p, null);
-  loadArtwork(p, entry);
+  if (p.logo) {
+    loadArtwork(p, entry);
+  }
   return entry;
 }
 

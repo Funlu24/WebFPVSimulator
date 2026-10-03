@@ -274,3 +274,9 @@ export function clearLineTo(eye, egg, colliders) {
   }
   return true;
 }
+
+/* Decides whether a mark should be found: only when findable is not
+ * explicitly false. Used by src/main.js findMarks and tested in props-check. */
+export function shouldFindMark(mark) {
+  return mark.findable !== false;
+}

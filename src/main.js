@@ -69,7 +69,7 @@ import { PRACTICE_LAPS, Race, runComplete } from './game/race.js';
 import { TrickDetector } from './game/trickdetect.js';
 import { deriveObstacles, OB_BAR, OB_POLE } from './game/obstacles.js';
 import {
-  MARK_FINDS, PARTNER_FINDS, glimpsesMark, seesMark,
+  MARK_FINDS, PARTNER_FINDS, glimpsesMark, seesMark, shouldFindMark,
 } from './game/egg.js';
 import { partnerBySlug } from './partners/roster.js';
 import { Counter, formatScore } from './game/score.js';
@@ -4275,6 +4275,9 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     eggFwd.set(0, 0, -1).applyQuaternion(fpvQuat);
     for (const mark of view.marks) {
+      if (!shouldFindMark(mark)) {
+        continue;
+      }
       if (glimpse && !marksSeen.has(mark.slug) && glimpsesMark(fpvPos, eggFwd, mark, view.colliders)) {
         markSeen(mark);
       }
@@ -9966,6 +9969,12 @@ export async function boot({ loading, bootStart, mapId }) {
       return null;
     }
     return view.colliders.gapAt(x, y, z, r);
+  };
+  window.__segmentCrossesAny = (ax, ay, az, bx, by, bz) => {
+    if (!view.colliders) {
+      return false;
+    }
+    return view.colliders.segmentCrossesAny(ax, ay, az, bx, by, bz);
   };
   /* What is solid, and how well the broadphase is doing. */
   /*
