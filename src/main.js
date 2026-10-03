@@ -4237,6 +4237,9 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     eggFwd.set(0, 0, -1).applyQuaternion(fpvQuat);
     for (const mark of view.marks) {
+      if (mark.findable === false) {
+        continue;
+      }
       if (glimpse && !marksSeen.has(mark.slug) && glimpsesMark(fpvPos, eggFwd, mark, view.colliders)) {
         markSeen(mark);
       }

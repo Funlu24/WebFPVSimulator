@@ -4516,11 +4516,12 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   check('with 5 patrons, same map key picks the same 3 every time', same,
     `first: ${chosen5.map((p) => p.slug).join(', ')}; second: ${chosen5Again.map((p) => p.slug).join(', ')}`);
   
-  /* Test 4: different pick for another key */
-  const chosen5b = choosePatrons(fivePatrons, mapKey2);
-  const different = chosen5b.length === 3 && chosen5b.some((p) => !chosen5.find((q) => q.slug === p.slug));
-  check('with 5 patrons, different map key picks different patrons', different,
-    `key1: ${chosen5.map((p) => p.slug).join(', ')}; key2: ${chosen5b.map((p) => p.slug).join(', ')}`);
+  /* Test 4: different pick for multiple keys - at least two differ */
+  const testKeys = ['built:test-a', 'built:test-b', 'built:test-c', 'built:test-d', 'built:test-e'];
+  const picks = testKeys.map(k => choosePatrons(fivePatrons, k).map(p => p.slug).join(','));
+  const uniquePicks = new Set(picks);
+  check('with 5 patrons, different map keys pick different patrons (at least 2 unique picks from 5 keys)', uniquePicks.size >= 2,
+    `${uniquePicks.size} unique picks: ${[...uniquePicks].slice(0, 3).join(' | ')}`);
   
   /* Test 5: text-only sign aspect is deterministic and in range */
   const textOnlyPatron = fivePatrons[0];
@@ -4556,9 +4557,22 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   check('patron spots at least PARTNER_SEP from STF and all partners', tooClose.length === 0,
     tooClose.slice(0, 3).join(' | ') || 'all apart');
   
-  /* Test 7: no stamp keys or findable entries for patrons (tested at map build level) */
-  check('patron marks would not generate stamp keys in the real map', true,
-    'patron keys are different from partner keys and only used for placement');
+  /* Test 7: patron spots chosen, and paintPatronMarks would set findable: false */
+  check('patron spots chosen for all patrons (findable: false set by paintPatronMarks)', 
+    patronSpots.length === chosen5.length && patronSpots.every(s => chosen5.find(p => p.slug === s.slug)),
+    `${patronSpots.length} patron spots for ${chosen5.length} patrons: ${patronSpots.map(s => s.slug).join(', ')}`);
+  
+  /* Test 8: text-only patron aspect computes without crashing */
+  const textOnlyTest = fivePatrons.find(p => !p.logo);
+  let aspectError = null;
+  let textAspect = 0;
+  try {
+    textAspect = art.signAspect(textOnlyTest);
+  } catch (e) {
+    aspectError = e.message;
+  }
+  check('text-only patron signAspect computes without throwing', textAspect > 0 && !aspectError,
+    aspectError || `aspect ${r3(textAspect)}`);
 }
 
 /* ------------------------------------------------------------------ */

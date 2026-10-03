@@ -231,6 +231,9 @@ const SIGNS = new Map();
 const TYPES = { svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp' };
 
 function loadArtwork(p, entry) {
+  if (!p.logo) {
+    return;
+  }
   const file = p.logo.colour;
   const url = new URL(`../../${LOGO_DIR}/${file}`, import.meta.url).href;
   const type = TYPES[String(file).split('.').pop().toLowerCase()] || 'application/octet-stream';
@@ -273,10 +276,12 @@ function signFor(p) {
   const canvas = document.createElement('canvas');
   canvas.width = SIGN_W;
   canvas.height = Math.round(SIGN_W / signAspect(p));
-  entry = { canvas, dataUrl: null, live: new Set(), ready: false };
+  entry = { canvas, dataUrl: null, live: new Set(), ready: !p.logo };
   SIGNS.set(p.slug, entry);
   paintSign(canvas, p, null);
-  loadArtwork(p, entry);
+  if (p.logo) {
+    loadArtwork(p, entry);
+  }
   return entry;
 }
 
