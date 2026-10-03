@@ -4476,7 +4476,7 @@ async function partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
 
 async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   console.log("        the patron marks (capped at 3, not findable)");
-  const { chooseStfSpot, partnerSearch, stfKey, choosePatrons, PATRON_MAX_PER_MAP, PARTNER_SEP } = egg;
+  const { chooseStfSpot, partnerSearch, stfKey, choosePatrons, choosePatronSpots, PATRON_MAX_PER_MAP, PARTNER_SEP } = egg;
   const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
   const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
   
@@ -4520,7 +4520,7 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   const partnerSpots = partnerSearch(sPlaced, sDoc, 'starter', stf,
     allPartners.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }))).spots;
   const patronList = chosen1.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }));
-  const patronSpots = partnerSearch(sPlaced, sDoc, 'starter', stf, patronList).spots;
+  const patronSpots = choosePatronSpots(sPlaced, sDoc, 'starter', stf, partnerSpots, patronList);
   
   const takenElements = new Set([stf.elementId, ...partnerSpots.map((s) => s.elementId)].filter(Boolean));
   const patronsOnTakenWall = patronSpots.filter((ps) => ps.elementId && takenElements.has(ps.elementId));
