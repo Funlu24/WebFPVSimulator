@@ -64576,3 +64576,80 @@ throttle at zero for good, and this is the only place it would show) and what th
    still in this session's transcript: rotate or unset it.
 6. `main` moved while this was done (13b9a1b to 3628663, the map room's merge) and this branch is built on 3628663. Nothing
    was pushed to `main`.
+
+## 2026-10-03 | board, deploy | The push to main, and every ticket on the board closed (the owner's ask)
+
+The owner: "Push to main and close all tickets on the board so it's starts fresh". Git and the board only: no code
+changed in this entry, and `git diff --stat vendor/betaflight` is empty.
+
+### The push
+
+`git fetch origin main` was the last command before it. Main was still 3628663, an ancestor of this branch's head, so
+`git push origin HEAD:main` was a fast forward: 3628663..a91623d, one commit (the map card, the typed position, the
+crash hold and the craft block). The branch `claude/zealous-einstein-mol664` is the same commit.
+
+What the live site serves: a script asked https://webfpv.org/sim/src/main.js through a cache busting query until it was
+main's, and then compared the four served files the push changed. It matched at the first poll, so the deploy had
+finished before the script started and the time it takes was not measured. This time there was no read of the live
+files before the push, which the 2 October entry did; the comparison still tells new from old, because the live bytes
+equal the new file and the new names (`holdUntilCentred`, `setCraftProbe`, `setElementCoord`, `gesturing`) are in the
+live files and were in none of them before the push. No new served file, so nothing was asked for before it existed.
+
+    live              4 of 4 served files this push changed answer 200 and are identical to main by sha256
+    not run           a browser against the live site; nobody has flown or built with this on the live site
+
+### The board
+
+A ticket is closed by `POST /api/bugs/:id` with a status (open, in_progress, fixed, wontfix or duplicate) and a note
+(`resolution`, up to 4000 characters). `BUGS_TOKEN` opens that like an admin sign in does (`bugsAuthorized` in the
+board's `src/server.js`). There is no delete, and none was used. 52 tickets were open and none in progress; all 52 are
+closed, by the board's own convention (the sweeps of 19, 21 and 24 September and the 30 September close):
+
+    fixed, a note each (4)           bug-52a66f69 (pitch, cd059b2), bug-e605ff6a (the builder's five asks, cd059b2 and
+                                     b7160a2), bug-67ae1762 (two of three points; the note says the lap voice switch is not
+                                     built), bug-d7247563 (a likely cause fixed, not confirmed; the note says so)
+    wontfix, a note each (15)        could not reproduce: bug-ad038907, bug-a18b2ed9, bug-cddc182a, bug-cd48337e
+                                     the browser lists no controller: bug-47e0e9ee, bug-1e3a3a1b, bug-20aa17e3
+                                     what the radio sends: bug-abfeffe6 (constant 2.79), bug-f5ed55e4 (Jumper T20 on
+                                     Android), bug-7358566d and bug-e1d9902a (yaw on Chrome on Android, which fit the
+                                     four channel limit of commit 9687cbe; their notes say they were not assessed one by one)
+                                     a decision not taken: bug-2b2b44aa (the crash rule), bug-5328aa13 (a throttle that
+                                     rests at half), bug-17b6248e (Acro and Angle from a pad)
+                                     praise: bug-424133cc
+    wontfix, no note (33)            the Flight feel reports, closed the way the earlier sweeps closed theirs
+
+`wontfix` here means closed without a change, and each of the 15 notes says which of those it is; a note on a ticket
+that was closed for the clean start ends "Closed on 3 October 2026 with every other open ticket, to start the board
+fresh." The four marked fixed carry a fix that is on main, and where it is a likely cause and not a confirmed one
+(bug-52a66f69, bug-d7247563) the note says so.
+
+    checked           the server's own listing by status, split by kind: open 0, in progress 0, fixed 154 (150 and 4
+                      more), wontfix 223 (175 and 48 more), duplicate 1. 378 tickets, as before
+                      every one of the 52 is in the status the plan gave it, and every older ticket is still there with
+                      its `updatedUtc` unchanged, so nothing outside the plan was touched
+                      the 19 tickets with a note were read back by id: status and note equal what was written
+    not run           anything on the board's page; the notes were read through the API, not as the owner sees them
+
+### What went wrong
+
+- **The first check read 23 tickets short.** Open 0 and wontfix 200 gave 355 against 378. The listing sorts newest first
+  and cuts at 200 (`listBugRows`, the cap the 30 September entry also met), so wontfix, now 223, showed its newest 200. I
+  did not take that for success or for loss: it was read in the source, then the lists were split by kind, where the
+  largest slice is 179, and they add up.
+- **Two tickets are closed without having been looked at one by one.** bug-7358566d and bug-e1d9902a were filed after
+  the assessment of 2 October. Their reports (Chrome on Android, four axes, no mapping, yaw not arriving) fit the class
+  the Stick help now answers, and nothing was replicated for them.
+- **The live files were not read before the push**, as the last push did. Argued above, not skipped silently.
+
+### For the owner
+
+1. **The statuses were my choice**, by the convention above. If you wanted every ticket the same, each is one write
+   back: none of the 52 had a note before, so undoing one is `POST /api/bugs/:id` with status open and an empty
+   resolution. The before record (status, note, `updatedUtc` of each) was kept in the session's scratchpad and not in this
+   repository, because a ticket is a tester's own words, is behind the token on the board, and this repository is public.
+2. **Several tickets described a thing still not built, and no longer show on the open list:** the lap voice switch
+   (bug-67ae1762), a throttle that rests at half (bug-5328aa13), a pad button or a pause menu row for Acro and Angle
+   (bug-17b6248e), the crash rule (bug-2b2b44aa), whether the low latency canvas should be off by default on Android
+   (bug-a18b2ed9, bug-cddc182a), and where a crash inside a tunnel or shaft sets the quad down (bug-d7247563). Their
+   options are in the entries of 2 and 3 October above, and in each ticket's note.
+3. **`BUGS_TOKEN`** is still in this session's transcript: rotate or unset it.
