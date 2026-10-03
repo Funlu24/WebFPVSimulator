@@ -99,7 +99,7 @@ import { PARTNERS, MAP_ONLY_PARTNERS, PATRON_MAP_BRANDS } from '../../partners/r
 import { seatDocument, groundUnder, topUnder, PLATFORM_REACH } from './place.js';
 import { starterMap } from './starter.js';
 import { lookOf, kitLook, paintLights, paintSky, paintPost } from './looks.js';
-import { chooseStfSpot, choosePartnerSpots, choosePatrons, stfKey } from './egg.js';
+import { chooseStfSpot, choosePartnerSpots, choosePatrons, choosePatronSpots, stfKey } from './egg.js';
 import { trafficOf, uploadTraffic, roadKeepOut } from './traffic.js';
 import { buildRoadMesh, roadCover } from './roadmesh.js';
 import { buildCars } from './cars.js';
@@ -1052,8 +1052,7 @@ export async function buildMap(shell, onProgress, options) {
     const mapKey = stfKey(doc, chosen.source);
     const chosenPatrons = choosePatrons(PATRON_MAP_BRANDS, mapKey);
     if (chosenPatrons.length > 0) {
-      const taken = [stfSpot, ...partnerSpots].filter(Boolean);
-      patronSpots = choosePartnerSpots(placed, doc, chosen.source, stfSpot,
+      patronSpots = choosePatronSpots(placed, doc, chosen.source, stfSpot, partnerSpots,
         chosenPatrons.map((p) => ({ slug: p.slug, aspect: signAspect(p) })));
     }
   } catch (e) {

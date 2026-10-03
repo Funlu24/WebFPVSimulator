@@ -1528,3 +1528,63 @@ export function partnerSearch(placed, doc, source, stf, partners) {
 export function choosePartnerSpots(placed, doc, source, stf, partners) {
   return partnerSearch(placed, doc, source, stf, partners).spots;
 }
+
+/*
+ * Where each patron's mark goes, after partners. Same as partnerSearch but
+ * takes existing partner spots to avoid their walls.
+ *
+ *   placed       placeDocument(doc) from ./place.js
+ *   doc          the normalized document
+ *   source       chooseDocument's source, for the keys (stfKey)
+ *   stf          the STF mark's spot, or null
+ *   partnerSpots the partner spots already chosen, to avoid their walls
+ *   patrons      [{ slug, aspect }], the chosen patrons' order
+ */
+export function choosePatronSpots(placed, doc, source, stf, partnerSpots, patrons) {
+  const S = readSolids(placed);
+  const G = buildGrid(S, placed.W, placed.D);
+  const pads = padsOf(placed);
+  const stats = { faces: 0, tried: 0, lines: 0 };
+  const used = new Set();
+  const taken = [];
+  if (stf) {
+    taken.push(stf);
+    if (stf.elementId) {
+      const k = placed.items.findIndex((it) => it.el && it.el.id === stf.elementId);
+      if (k >= 0) {
+        used.add(k);
+      }
+    }
+  }
+  for (const ps of partnerSpots || []) {
+    taken.push(ps);
+    if (ps.elementId) {
+      const k = placed.items.findIndex((it) => it.el && it.el.id === ps.elementId);
+      if (k >= 0) {
+        used.add(k);
+      }
+    }
+  }
+  const spots = [];
+  for (const patron of patrons || []) {
+    const size = partnerSize(patron.aspect);
+    const key = partnerKey(doc, source, patron.slug);
+    let spot = null;
+    for (const loose of [false, true]) {
+      const hit = partnerWall(S, G, placed, pads, size, loose, used, taken, stats);
+      if (hit) {
+        spot = faceSpot(key, hit.face, hit.p, placed);
+        spot.step = loose ? PARTNER_STEP.WALL : PARTNER_STEP.SEEN;
+        used.add(hit.face.item);
+        break;
+      }
+    }
+    if (!spot) {
+      spot = groundSpot(key, S, G, placed, pads, size, PARTNER_AROUND, taken);
+    }
+    spot.slug = patron.slug;
+    taken.push(spot);
+    spots.push(spot);
+  }
+  return spots;
+}
