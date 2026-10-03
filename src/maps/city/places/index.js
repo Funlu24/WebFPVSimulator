@@ -76,8 +76,7 @@ import { buildTraining, TRAINING_SITE, TRAINING_LANDMARK } from './training.js';
 import { buildBlossom } from './blossom.js';
 import { makeStfMark } from '../../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../../art/partnermark.js';
-import { PARTNERS, PATRON_MAP_BRANDS } from '../../../partners/roster.js';
-import { choosePatrons } from '../../built/egg.js';
+import { PARTNERS } from '../../../partners/roster.js';
 
 /**
  * The town's builder context, over a world that is already built.
@@ -351,7 +350,6 @@ function buildPartnerMarks(ctx) {
       up: [0, 1, 0],
       w,
       h,
-      findable: true,
     };
     const mesh = makePartnerMark(THREE, partner, { width: w, height: h, shade: spot.n < 0 });
     const n = new THREE.Vector3(...mark.n);

@@ -123,6 +123,7 @@ import { threePosToSim, threeDirToSim } from '../src/render/frame.js';
 import {
   createTrack, createElement, normalize, serialize, deserialize, SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from '../src/trackbuilder/model.js';
+import { shouldFindMark } from '../src/game/egg.js';
 import { ELEMENTS, KIND } from '../src/trackbuilder/elements.js';
 import { placeDocument, groundUnder, indexTops, PLATFORM_REACH } from '../src/maps/built/place.js';
 import { freestyleReport, crowdOf, CANDIDATES_MAX } from '../src/trackbuilder/warnings.js';
@@ -4568,17 +4569,12 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
     { slug: 'partner-findable-undefined' },
     { slug: 'patron-not-findable', findable: false },
   ];
-  const shouldFindResults = testMarks.map(m => ({ slug: m.slug, should: shouldFindMark ? shouldFindMark(m) : m.findable !== false }));
+  const shouldFindResults = testMarks.map(m => ({ slug: m.slug, should: shouldFindMark(m) }));
   const correctBehavior = shouldFindResults[0].should === true 
     && shouldFindResults[1].should === true 
     && shouldFindResults[2].should === false;
   check('shouldFindMark: findable:true and undefined are findable, findable:false is not', correctBehavior,
     shouldFindResults.map(r => `${r.slug}=${r.should}`).join(', '));
-  
-  /* Helper function for testing findable logic */
-  function shouldFindMark(mark) {
-    return mark.findable !== false;
-  }
   
   /* Test 8a: text-only patron aspect computes without crashing */
   const textOnlyTest = fivePatrons.find(p => !p.logo);
@@ -4623,6 +4619,47 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   delete global.document;
   check('text-only patron partnerCanvas produces canvas without throwing', canvas && canvas.width > 0 && !paintError,
     paintError || `got canvas ${canvas.width}x${canvas.height}`);
+  
+  /* Test 9: build the starter map with test patrons, verify spots are chosen correctly */
+  const testPatronsForBuild = [
+    {
+      slug: 'test-patron-alpha',
+      name: 'Test Patron Alpha',
+      short: 'ALPHA',
+      mark: { field: '#3a4a5c' },
+    },
+    {
+      slug: 'test-patron-beta',
+      name: 'Test Patron Beta',
+      short: 'BETA',
+      mark: { field: '#5c3a4a' },
+    },
+  ];
+  
+  const partnerList = roster.PARTNERS.map((p) => ({ slug: p.slug, aspect: EGG.PARTNER.SHARE * p.logo.aspect + (1 - EGG.PARTNER.SHARE) }));
+  const mapKeyForTest = stfKey(sDoc, 'starter');
+  const chosenPatronsForTest = choosePatrons(testPatronsForBuild, mapKeyForTest);
+  const stfSpot = chooseStfSpot(sPlaced, sDoc, 'starter');
+  const partnerSpotsForTest = partnerSearch(sPlaced, sDoc, 'starter', stfSpot, partnerList).spots;
+  const patronSpotsForTest = choosePatronSpots(sPlaced, sDoc, 'starter', stfSpot, partnerSpotsForTest, chosenPatronsForTest);
+  
+  /* Verify both patrons are in the spots with correct properties */
+  check('starter map with 2 test patrons: both patron spots chosen', 
+    patronSpotsForTest.length === 2 
+    && patronSpotsForTest.every(s => testPatronsForBuild.find(p => p.slug === s.slug)),
+    `${patronSpotsForTest.length} patron spots: ${patronSpotsForTest.map(s => s.slug).join(', ')}`);
+  
+  /* Verify partners are still present (not displaced by patrons) */
+  check('starter map with patrons: all partner spots still present', 
+    partnerSpotsForTest.length === partnerList.length 
+    && partnerSpotsForTest.every((s, k) => s.slug === partnerList[k].slug),
+    `${partnerSpotsForTest.length} partner spots: ${partnerSpotsForTest.map(s => s.slug).join(', ')}`);
+  
+  /* Verify patrons don't overlap STF or partners (same element ID) */
+  const partnerElementIds = new Set(partnerSpotsForTest.map(s => s.el));
+  const patronOnPartnerWall = patronSpotsForTest.filter(s => s.el && partnerElementIds.has(s.el));
+  check('starter map with patrons: no patron on a wall already used by STF or partner', patronOnPartnerWall.length === 0,
+    patronOnPartnerWall.length ? `${patronOnPartnerWall.map(s => s.slug).join(', ')} on partner walls` : 'all patrons on distinct walls');
 }
 
 /* ------------------------------------------------------------------ */

@@ -136,17 +136,19 @@ a bigger one, in front of the paint and at least 15 degrees off it, looking
 at it, a clear line), and keeps the stamp in `src/share/stamps.js`
 under `key`.
 
-### `marks` is where the partners' marks are painted
+### `marks` is where the partners' and patrons' marks are painted
 
 Every freestyle map also carries one mark for each partner in
-`src/partners/roster.js`, painted by `src/art/partnermark.js` as a sign in
-the partner's own artwork. `marks` is a list of them, in the roster's
-order, each the `egg` shape with the partner's slug:
+`src/partners/roster.js` and up to 3 patrons from `PATRON_MAP_BRANDS`,
+painted by `src/art/partnermark.js` as signs. `marks` is a list of them,
+partners first in roster order then patrons, each the `egg` shape with the
+partner's or patron's slug:
 
-    marks = [{ slug, key, p, n, up, w, h }, ...]
+    marks = [{ slug, key, p, n, up, w, h, findable }, ...]
 
-    slug  the partner, as the roster names them
-    key   the found stamp's key: the map's `egg` key, '#' and the slug
+    slug      the partner or patron, as the roster names them
+    key       the found stamp's key: the map's `egg` key, '#' and the slug
+    findable  false for patrons (no stamps, achievements or found panel), omitted or true for partners
 
 They are paint like the STF mark, found by the same `seesMark`, and
 finding one is an achievement: a callout with the partner's name, a stamp,

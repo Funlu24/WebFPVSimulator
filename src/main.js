@@ -69,7 +69,7 @@ import { PRACTICE_LAPS, Race, runComplete } from './game/race.js';
 import { TrickDetector } from './game/trickdetect.js';
 import { deriveObstacles, OB_BAR, OB_POLE } from './game/obstacles.js';
 import {
-  MARK_FINDS, PARTNER_FINDS, glimpsesMark, seesMark,
+  MARK_FINDS, PARTNER_FINDS, glimpsesMark, seesMark, shouldFindMark,
 } from './game/egg.js';
 import { partnerBySlug } from './partners/roster.js';
 import { Counter, formatScore } from './game/score.js';
@@ -4230,13 +4230,6 @@ export async function boot({ loading, bootStart, mapId }) {
       sendEvent({ kind: 'mark', partner: mark.slug, what: 'seen', map });
     }
   }
-  /* Decides whether a mark should be found: only when findable is not
-   * explicitly false. Exported for testing. */
-  function shouldFindMark(mark) {
-    return mark.findable !== false;
-  }
-  window.__shouldFindMark = shouldFindMark;
-
   function findMarks(glimpse) {
     if (marksSeenView !== view) {
       marksSeenView = view;
