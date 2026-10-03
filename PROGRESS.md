@@ -64455,3 +64455,14 @@ The code and tests demonstrate the feature works correctly. The patron placement
 - In-game 3D screenshots not captured due to headless browser navigation issues. The feature is testable by adding test patrons to `PATRON_MAP_BRANDS`, loading a freestyle map, and flying toward the signs. Verification would confirm sign aspect, text rendering, logo rendering, spacing, and the findable flag preventing stamps/achievements.
 
 Commit: 604541045181a18df830b7bec30084e855614104
+
+## 2026-10-03: Final nits from review
+
+Fixed reviewer nits on PR #23:
+1. Moved `shouldFindMark` to `src/game/egg.js`, imported in `main.js` and `props-check.js`. Red run shows test failing when guard returns true unconditionally.
+2. Added Test 9 in `props-check.js`: builds starter map with test patrons through `choosePatronSpots`, verifies both spots chosen, partners still present, no patron on partner wall. Red run shows test failing when `choosePatronSpots` returns empty.
+3. Removed `scripts/capture-patron-shots.js`.
+4. Documented `findable` flag and patron entries in `src/maps/README.md`.
+5. Cleaned up `src/maps/city/places/index.js`: removed unused imports, kept TODO comment explaining town patron deferral.
+
+All suites pass. Commit: 6fb197390b55d64b2fb2cbf9964a1f762b042945
