@@ -64976,7 +64976,11 @@ I traced it before touching anything, and my first reading of it was wrong.
     lint:memory                 PASS, every world is lazy and every world is freed. Both orders: the default, and
                                 `--map=city` alone, which is the one that shows the town reaching into a built map
     check:fresh                 18 passed, 0 failed
-    npm run verify              run again on the committed tree, below
+    npm run verify              run again on the committed tree, dca3360: the same, 16 of 17 pass, 1 SKIP, and check 17 red on
+                                the same two runs (1 m 35 s). Nothing in this entry could move a row
+    the live site               about a hundred seconds after the push `src/fresh.js`, `src/maps/preload.js` and
+                                `src/partners/patrons.js` on webfpv.org are identical to the repository's by sha256, and the live
+                                `fresh.js` lists `patrons.js` (before the deploy it did not)
     not run                     check 1 (no emcc), check:builder again (no builder code changed in this entry, and it passed
                                 739 to 0 on the tree before it), a person flying
 
