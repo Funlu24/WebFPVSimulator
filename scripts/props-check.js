@@ -4477,7 +4477,8 @@ async function partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
 
 async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   console.log("        the patron marks (capped at 3, not findable)");
-  const { chooseStfSpot, partnerSearch, stfKey, choosePatrons, choosePatronSpots, PATRON_MAX_PER_MAP, PARTNER_SEP } = egg;
+  const { chooseStfSpot, partnerSearch, stfKey, choosePatronSpots, PARTNER_SEP } = egg;
+  const { choosePatrons } = await import(pathToFileURL(join(root, 'src/partners/patrons.js')).href);
   const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
   const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
   const findModule = await import(pathToFileURL(join(root, 'src/game/egg.js')).href);
@@ -4663,29 +4664,19 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   check('starter map with patrons: no patron on a wall already used by STF or partner', patronOnPartnerWall.length === 0,
     patronOnPartnerWall.length ? `${patronOnPartnerWall.map(s => s.slug).join(', ')} on partner walls` : 'all patrons on distinct walls');
 
-  /* Test 10: Town map patron spots - documented geometry checks */
-  console.log('        the town map patron spots (documented geometry checks)');
-  
-  /* Patron spots from places/index.js (defined here to avoid Three.js import) */
-  const PATRON_SPOTS_TOWN = {
-    patron1: { face: 29.8, y: 5.0, z: 88.2, n: 1, w: 4.0 },
-    patron2: { x: 58.0, y: 2.4, face: 86.8, n: -1, w: 4.0 },
-    patron3: { face: 42.5, y: 4.0, z: 102.0, n: 1, w: 4.0 },
-  };
-  
-  /* Documented collider data from works.js and pool.js */
-  const OFFICE = { x0: 21.0, x1: 29.8, z0: 85.4, z1: 91.0, floor: 3.75, roof: 7.05 };
-  const BLOCK = { x0: 54.6, x1: 61.4, z0: 86.8, z1: 96.0, roof: 3.80 };
-  const SHED = { x0: 22.5, x1: 42.5, z0: 93.0, z1: 111.0, eave: 6.40 };
-  
-  /* STF and partner spots from places/index.js */
-  const STF_SPOT = { x: 4.65, y: 4.85, z: 49.15 };
-  const PARTNER_SPOTS_REAL = {
-    mantisfpv: { x: -13.08, y: 4.8, z: 39.3 },
-    gds: { x: 52.1, y: 2.6, z: 152.325 },
-    wcmrc: { x: 56.0, y: 5.35, z: 152.875 },
-  };
-  
+  /*
+   * Test 10: the town's roster rules. WHERE the town's three spots are is not
+   * asked here, and that is on purpose. This file runs in plain Node and the
+   * town's module needs Three.js, so an earlier version of this block kept a
+   * copy of the spots and of the buildings' constants beside it and checked
+   * the copy against the constants. The copy had drifted from the real spots
+   * on the day it was written (a 4 m sign at x 29.8 against a 3.5 m one at
+   * 29.68), the constants were centrelines and not faces, and sixteen green
+   * lines said nothing about the paint. The spots are asked of the live city,
+   * wall by wall, by `npm run check:town-patrons`.
+   */
+  console.log('        the town map patron roster (the spots: npm run check:town-patrons)');
+
   const testPatrons3 = [
     { slug: 'test-city-patron-one', name: 'Test City Patron One', short: 'TCP1', mark: { field: '#19171e' } },
     { slug: 'test-city-patron-two', name: 'Test City Patron Two', short: 'TCP2', mark: { field: '#f3ead4' } },
@@ -4702,19 +4693,16 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
   const chosen3town = choosePatrons(testPatrons3, 'city');
   check('town map with 3 patrons: 3 appear', chosen3town.length === 3, `${chosen3town.length} patrons`);
 
-  const testPatrons5town = [...testPatrons3, 
+  const testPatrons5town = [...testPatrons3,
     { slug: 'test-city-patron-four', name: 'Test City Patron Four', short: 'TCP4', mark: { field: '#f3ead4' } },
     { slug: 'test-city-patron-five', name: 'Test City Patron Five', short: 'TCP5', mark: { field: '#19171e' } }];
   const chosen5town = choosePatrons(testPatrons5town, 'city');
   const chosen5townAgain = choosePatrons(testPatrons5town, 'city');
   const stableTown = chosen5town.length === 3 && chosen5town.every((p, i) => p.slug === chosen5townAgain[i].slug);
-  check('town map with 5 patrons: 3 picked, same every time', stableTown, 
+  check('town map with 5 patrons: 3 picked, same every time', stableTown,
     `${chosen5town.length} picked, stable: ${stableTown}`);
 
   /* Test 10b: findable checks using mock marks */
-  check('town PATRON_SPOTS has 3 spots', Object.keys(PATRON_SPOTS_TOWN).length === 3,
-    `${Object.keys(PATRON_SPOTS_TOWN).length} spots`);
-  
   const mockPatronMark = { findable: false, slug: 'test-patron' };
   const mockPartnerMark = { slug: 'mantisfpv' };
   const patronFindable = shouldFindMark(mockPatronMark);
@@ -4723,54 +4711,6 @@ async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
     `shouldFindMark(patron)=${patronFindable}`);
   check('shouldFindMark returns true for partner marks', partnerFindable,
     `shouldFindMark(partner)=${partnerFindable}`);
-
-  /* Test 10c: documented geometry checks for each patron spot */
-  for (const [key, spot] of Object.entries(PATRON_SPOTS_TOWN)) {
-    const isXWall = spot.x === undefined; // x-wall has face in x, z-wall has face in z
-    const px = isXWall ? spot.face : spot.x;
-    const pz = isXWall ? spot.z : spot.face;
-    const h = spot.w / 2; // aspect ratio ~2:1
-    
-    /* Check (a): sign plane matches documented face and fits within bounds */
-    let building, faceMatches, fits;
-    if (key === 'patron1') { // works office east gable
-      building = 'OFFICE';
-      faceMatches = Math.abs(spot.face - OFFICE.x1) < 0.01;
-      const signHalfW = spot.w / 2;
-      const signHalfH = h / 2;
-      fits = pz - signHalfW >= OFFICE.z0 && pz + signHalfW <= OFFICE.z1 
-        && spot.y - signHalfH >= OFFICE.floor && spot.y + signHalfH <= OFFICE.roof;
-    } else if (key === 'patron2') { // pool changing block south wall
-      building = 'BLOCK';
-      faceMatches = Math.abs(spot.face - BLOCK.z0) < 0.01;
-      const signHalfW = spot.w / 2;
-      const signHalfH = h / 2;
-      fits = px - signHalfW >= BLOCK.x0 && px + signHalfW <= BLOCK.x1 
-        && spot.y - signHalfH >= 0 && spot.y + signHalfH <= BLOCK.roof;
-    } else if (key === 'patron3') { // works shed east wall
-      building = 'SHED';
-      faceMatches = Math.abs(spot.face - SHED.x1) < 0.01;
-      const signHalfW = spot.w / 2;
-      const signHalfH = h / 2;
-      fits = pz - signHalfW >= SHED.z0 && pz + signHalfW <= SHED.z1 
-        && spot.y - signHalfH >= 0 && spot.y + signHalfH <= SHED.eave;
-    }
-    check(`town ${key}: on documented ${building} face`, faceMatches && fits,
-      `face matches: ${faceMatches}, fits in bounds: ${fits}`);
-
-    /* Check (d): at least PARTNER_SEP from STF and partners */
-    const cx = isXWall ? spot.face : spot.x;
-    const cy = spot.y;
-    const cz = isXWall ? spot.z : spot.face;
-    
-    const stfDist = Math.sqrt((cx - STF_SPOT.x) ** 2 + (cy - STF_SPOT.y) ** 2 + (cz - STF_SPOT.z) ** 2);
-    check(`town ${key}: at least PARTNER_SEP (10m) from STF`, stfDist >= PARTNER_SEP, `${r3(stfDist)}m`);
-    
-    for (const [pkey, partner] of Object.entries(PARTNER_SPOTS_REAL)) {
-      const pdist = Math.sqrt((cx - partner.x) ** 2 + (cy - partner.y) ** 2 + (cz - partner.z) ** 2);
-      check(`town ${key}: at least PARTNER_SEP (10m) from ${pkey}`, pdist >= PARTNER_SEP, `${r3(pdist)}m`);
-    }
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -4979,7 +4919,7 @@ async function reachableFrom(entries) {
 /* The files that draw the mark, choose where it goes or find it, none of
  * which the builder may reach: the person who built a map has to find the
  * mark too (FREESTYLE-MAPS-PLAN.md section 12, decision 3). */
-const EGG_BUILDER_BLIND = ['src/art/stf.js', 'src/art/partnermark.js', 'src/maps/built/egg.js', 'src/maps/built/index.js', 'src/game/egg.js'];
+const EGG_BUILDER_BLIND = ['src/art/stf.js', 'src/art/partnermark.js', 'src/maps/built/egg.js', 'src/maps/built/index.js', 'src/game/egg.js', 'src/partners/patrons.js'];
 
 async function eggBuilderBlind() {
   const dir = 'src/trackbuilder';

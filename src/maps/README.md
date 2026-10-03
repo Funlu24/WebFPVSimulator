@@ -161,6 +161,14 @@ by `built/egg.js` after the STF mark's, one wall each and never the STF
 mark's, by the same rules with three more (rules 8 to 10 there). A map
 that paints none leaves `marks` out or empty.
 
+Which patrons a map shows is `src/partners/patrons.js`: all of them up to
+three, otherwise a pick seeded by the map's key. The town's patron marks
+are three panels on three solid walls, `PATRON_SPOTS` in `city/places/index.js`,
+read off the live town and not off the buildings' constants (the walls they
+were first written for are thinner than the paint needs behind it), and
+`npm run check:town-patrons` asks the live town about every one of them,
+point by point, on every run.
+
 ### Renderer state belongs to the map
 
 The two maps want different shadow filtering and different clear colours, and

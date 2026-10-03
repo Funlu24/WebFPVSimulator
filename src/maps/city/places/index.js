@@ -11,7 +11,8 @@
  *
  * And two things that are not places: the STF mark, painted on the side of a
  * corner shop at the end of the street the pilot starts in (buildStfMark,
- * below), and the partners' marks, one each (buildPartnerMarks).
+ * below), and the partners' marks, one each (buildPartnerMarks), and the
+ * patrons' (buildPatronMarks).
  *
  * All three stand on land the town has never built on: a survey of the built
  * world's own collider list puts nothing at all east of x = 30 past z = 78,
@@ -77,7 +78,7 @@ import { buildBlossom } from './blossom.js';
 import { makeStfMark } from '../../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../../art/partnermark.js';
 import { PARTNERS, PATRON_MAP_BRANDS } from '../../../partners/roster.js';
-import { choosePatrons } from '../../built/egg.js';
+import { choosePatrons } from '../../../partners/patrons.js';
 
 /**
  * The town's builder context, over a world that is already built.
@@ -365,60 +366,117 @@ function buildPartnerMarks(ctx) {
 }
 
 /*
- * PATRON MAP BRANDS (src/partners/roster.js): Patreon supporters, painted
- * like partners on hand-measured spots. Three spots, derived from the town's
- * documented geometry in works.js and pool.js, verified to be on real
- * surfaces, at least PARTNER_SEP (10m) from all other marks, and visible
- * from flyable space.
+ * THE PATRONS' MARKS (PATRON_MAP_BRANDS in src/partners/roster.js): the
+ * supporters' tier, painted the way a partner's is and never found
+ * (`findable: false`, shouldFindMark in src/game/egg.js), so a patron's sign
+ * is paint and nothing more: no stamp, no find, no event to the board. The
+ * roster is empty until a supporter has said yes, and an empty roster paints
+ * nothing here.
+ *
+ * THREE SPOTS, each a PANEL on a solid wall and not a sign of one size. A
+ * patron's artwork is not known when a spot is measured, and a name set in
+ * type has no shape until it is lettered, so a spot that fixed a width and
+ * let the height follow would put the paint over an edge for the first tall
+ * artwork. patronMark fits the sign inside PATRON_PANEL by the rule
+ * partnerSize uses (src/maps/built/egg.js): as wide as the panel, unless that
+ * makes it taller than the panel, and then as tall as the panel. Every
+ * patron's panel is the same size, so how big a supporter's sign comes out
+ * does not depend on which spot the roster's order hands them.
+ *
+ * `face` is the wall's COLLIDER face, the one the plant flies against and the
+ * find's sight line is tested against, and the paint stands `off` in front of
+ * it for STF_SPOT's reason. `x` and `y` are the panel's centre, and `n` is
+ * the way the wall looks along z, as PARTNER_SPOTS has it.
+ *
+ * WHY THESE WALLS AND NOT THE ONES THE SPOTS WERE FIRST WRITTEN FOR. They
+ * were written for the works office's east gable, the pool block's south
+ * wall and the shed's east wall, from the constants in works.js and pool.js,
+ * and those constants are centrelines and not faces: the office gable is
+ * 0.24 m thick about x 29.8, so its outer face is at 29.92 and the paint was
+ * inside the wall. Worse, all three of those walls are 0.22 to 0.26 m thick,
+ * and the paint wants 0.3 m of solid behind it (scripts/town-patron-check.js),
+ * so no point on their outer faces can pass. The three below are walls on the
+ * same site that are 0.30 m or thicker, and flat for the whole panel:
+ *
+ *   The works' frontage wall (WALL in works.js, 0.30 m, solid to its drawn
+ *   face), on its road face: collider boxes z 82.45 to 82.75, x 25.6 to 33.0,
+ *   y 0.45 to 2.45. The breach is on its left and the keep out plate and a
+ *   cherry trunk are on its right, so the panel stands in the 5.5 m between
+ *   them (x 25.6 to 31.1) with 1.1 m to spare each side and 0.2 m of wall
+ *   above and below it.
+ *
+ *   The pool hall's north wall (HALL in pool.js, 0.30 m, z 99.45 to 99.75),
+ *   over the deck and the drained lido, ahead of a pilot who has come out of
+ *   the changing block's corridor. Its plinth band tops out at y 1.15 and its
+ *   string course starts at 3.75, and both stand 2 cm proud of the render
+ *   (civicBands in pool.js), which is more than the paint's own `off`, so the
+ *   panel has to stay between them and does, with 0.5 m above and below.
+ *
+ *   The water tower's tank (TOWER in works.js), a plain box x 44.4 to 48.0,
+ *   y 7.05 to 9.65, z 94.4 to 98.0, flat on every face. Its south face looks
+ *   back along the line the works road comes in on, so it is the one a pilot
+ *   sees over the frontage. A tree stands beside it with its canopy up to
+ *   y 7.53, so the panel starts at 7.7.
+ *
+ * Every number was read off the live town on 2026-10-03 and not off the
+ * code: the boxes with window.__colliderBoxes, the depth behind and the air in
+ * front of each point of each panel with window.__nearSolid, and the drawn
+ * surface with rays through the scene. `npm run check:town-patrons` repeats
+ * all three on every run and fails the day one of these numbers stops
+ * agreeing with the world.
  */
-export const PATRON_SPOTS = {
-  patron1: { face: 29.68, y: 3.0, z: 88.2, n: 1, w: 3.5 }, // works office east gable inner (29.8-0.12, T=0.24)
-  patron2: { x: 58.0, y: 1.8, face: 86.93, n: -1, w: 3.5 }, // pool block south inner (86.8+0.13, T=0.26)
-  patron3: { face: 42.39, y: 3.0, z: 100.0, n: 1, w: 3.5 }, // works shed east inner (42.5-0.11, T=0.22)
-};
+export const PATRON_PANEL = Object.freeze({ w: 3.2, h: 1.6 });
+export const PATRON_SPOTS = Object.freeze([
+  Object.freeze({ x: 28.35, y: 1.45, face: 82.45, n: -1 }),
+  Object.freeze({ x: 63.0, y: 2.45, face: 99.45, n: -1 }),
+  Object.freeze({ x: 46.2, y: 8.5, face: 94.4, n: -1 }),
+]);
 
 /*
- * Paint patron marks and return where they are, as `marks` (src/maps/README.md):
- * the `egg` shape with the slug, key 'city#' and the slug. Selection rule
- * from src/maps/built/egg.js: all patrons when there are 3 or fewer,
- * otherwise a seeded pick of 3 that stays the same for the town map. Every
- * patron mark is findable:false. Reuses the selection and paint helpers from
- * built/egg.js; does not copy them.
- * 
- * @param {Object} ctx - builder context
- * @param {Array} patrons - optional patron list (defaults to PATRON_MAP_BRANDS for testing)
+ * One patron's mark on one spot, as the `egg` src/maps/README.md describes
+ * with the slug, the key 'city#' and the slug, and `findable: false`. It is
+ * its own function, and does not paint, so the check can ask what the town
+ * would do for a patron of any shape without building a mesh for it.
  */
-export function buildPatronMarks(ctx, patrons = null) {
-  const mapKey = 'city';
-  const patronList = patrons !== null ? patrons : PATRON_MAP_BRANDS;
-  const chosen = choosePatrons(patronList, mapKey);
+export function patronMark(spot, patron) {
+  const aspect = signAspect(patron);
+  let w = PATRON_PANEL.w;
+  let h = w / aspect;
+  if (h > PATRON_PANEL.h) {
+    h = PATRON_PANEL.h;
+    w = h * aspect;
+  }
+  return {
+    slug: patron.slug,
+    key: `city#${patron.slug}`,
+    findable: false,
+    p: [spot.x, spot.y, spot.face + spot.n * STF_SPOT.off],
+    n: [0, 0, spot.n],
+    up: [0, 1, 0],
+    w,
+    h,
+  };
+}
+
+/*
+ * Paint the patrons' marks and return where they are, as `marks`
+ * (src/maps/README.md). choosePatrons (src/partners/patrons.js) says which: all
+ * of them while there are three or fewer, otherwise a pick that is the same
+ * every time the town is built. Patron i goes on spot i, and a roster of more
+ * than PATRON_SPOTS holds is not painted past the last. In shade on a face
+ * turned to -z and lit on one turned to +z, as buildPartnerMarks has it.
+ *
+ * `patrons` is a parameter so the check and a picture can hand it a roster of
+ * their own while the real one is empty.
+ */
+export function buildPatronMarks(ctx, patrons = PATRON_MAP_BRANDS) {
+  const chosen = choosePatrons(patrons, 'city');
   const out = [];
-  const spots = Object.keys(PATRON_SPOTS);
-  
-  for (let i = 0; i < chosen.length && i < spots.length; i += 1) {
-    const patron = chosen[i];
-    const spotKey = spots[i];
-    const spot = PATRON_SPOTS[spotKey];
-    
-    const w = spot.w;
-    const h = w / signAspect(patron);
-    
-    // Faces along z for spots 1 and 3 (x-axis walls), along x for spot 2 (z-axis wall)
-    const isXWall = spot.face < 50; // x-axis walls have face < 50
-    const mark = {
-      slug: patron.slug,
-      key: `city#${patron.slug}`,
-      findable: false,
-      p: isXWall
-        ? [spot.face + spot.n * STF_SPOT.off, spot.y, spot.z]
-        : [spot.x, spot.y, spot.face + spot.n * STF_SPOT.off],
-      n: isXWall ? [spot.n, 0, 0] : [0, 0, spot.n],
-      up: [0, 1, 0],
-      w,
-      h,
-    };
-    
-    const mesh = makePartnerMark(THREE, patron, { width: w, height: h, shade: spot.n < 0 });
+  for (let i = 0; i < chosen.length && i < PATRON_SPOTS.length; i += 1) {
+    const mark = patronMark(PATRON_SPOTS[i], chosen[i]);
+    const mesh = makePartnerMark(THREE, chosen[i], {
+      width: mark.w, height: mark.h, shade: PATRON_SPOTS[i].n < 0,
+    });
     const n = new THREE.Vector3(...mark.n);
     const up = new THREE.Vector3(...mark.up);
     const right = new THREE.Vector3().crossVectors(up, n);
@@ -427,7 +485,6 @@ export function buildPatronMarks(ctx, patrons = null) {
     ctx.add(mesh);
     out.push(mark);
   }
-  
   return out;
 }
 
@@ -440,9 +497,7 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
 
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
   const egg = buildStfMark(ctx);
-  const partnerMarks = buildPartnerMarks(ctx);
-  const patronMarks = buildPatronMarks(ctx, null);
-  const marks = [...partnerMarks, ...patronMarks];
+  const marks = [...buildPartnerMarks(ctx), ...buildPatronMarks(ctx)];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */
   const holes = parts.flatMap((p) => p.holes ?? []);
@@ -504,7 +559,8 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
     /* Where the STF mark is painted, for the town's MapInstance to hand the
      * shell. See STF_SPOT. */
     egg,
-    /* And the partners', one each. See PARTNER_SPOTS. */
+    /* And the partners', one each, then the patrons'. See PARTNER_SPOTS and
+     * PATRON_SPOTS. */
     marks,
     updaters: ctx.updaters,
     sites: { works: WORKS_SITE, pool: POOL_SITE, training: TRAINING_SITE },

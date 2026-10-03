@@ -1367,68 +1367,6 @@ export function partnerKey(doc, source, slug) {
   return `${stfKey(doc, source)}#${slug}`;
 }
 
-/* ------------------------------------------------------------------ */
-/* Patron brands                                                       */
-/* ------------------------------------------------------------------ */
-
-/*
- * PATRON MAP BRANDS: Patreon supporter tier. At most PATRON_MAX_PER_MAP per
- * map, chosen deterministically by a seeded random pick when there are more
- * than that. The seed is the map's key, so the same map shows the same
- * patrons on every load, and different maps show different ones. Patron
- * spots are chosen AFTER the STF mark and all partners, so they never take a
- * partner's wall. Patrons are not findable: their signs do not stamp, count
- * toward achievements, or show the found panel.
- */
-export const PATRON_MAX_PER_MAP = 3;
-
-/* Seeded random pick: mulberry32, the same PRNG the sign weathering uses. */
-function seededPick(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/* Hash a string to a 32-bit seed, the same hash seedOf uses for the
- * weathering. */
-function hashString(s) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i += 1) {
-    h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
-  }
-  return h;
-}
-
-/* Choose up to PATRON_MAX_PER_MAP patrons from a list. With 3 or fewer
- * patrons, every patron appears on every map. With more than 3, a seeded
- * per-map pick chooses 3, seeded from the map key so the same map always
- * picks the same ones. Returns the chosen patrons in the roster's original
- * order. */
-export function choosePatrons(patrons, mapKey) {
-  if (!patrons || patrons.length === 0) {
-    return [];
-  }
-  if (patrons.length <= PATRON_MAX_PER_MAP) {
-    return patrons;
-  }
-  const rng = seededPick(hashString(mapKey));
-  const indices = Array.from({ length: patrons.length }, (_, i) => i);
-  for (let i = indices.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rng() * (i + 1));
-    const t = indices[i];
-    indices[i] = indices[j];
-    indices[j] = t;
-  }
-  return indices.slice(0, PATRON_MAX_PER_MAP)
-    .sort((a, b) => a - b)
-    .map((i) => patrons[i]);
-}
-
 /* One pass of rule 10 for one partner: the first place on the first wall
  * the pass lets through, or null. */
 function partnerWall(S, G, placed, pads, size, loose, used, taken, stats) {
@@ -1536,7 +1474,9 @@ export function choosePartnerSpots(placed, doc, source, stf, partners) {
 
 /*
  * Where each patron's mark goes, after partners. Same as partnerSearch but
- * takes existing partner spots to avoid their walls.
+ * takes existing partner spots to avoid their walls, so a patron never takes
+ * the STF mark's wall or a partner's. WHICH patrons a map shows, and how many,
+ * is src/partners/patrons.js, and a patron's mark is never found.
  *
  *   placed       placeDocument(doc) from ./place.js
  *   doc          the normalized document

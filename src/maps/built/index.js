@@ -99,7 +99,8 @@ import { PARTNERS, MAP_ONLY_PARTNERS, PATRON_MAP_BRANDS } from '../../partners/r
 import { seatDocument, groundUnder, topUnder, PLATFORM_REACH } from './place.js';
 import { starterMap } from './starter.js';
 import { lookOf, kitLook, paintLights, paintSky, paintPost } from './looks.js';
-import { chooseStfSpot, choosePartnerSpots, choosePatrons, choosePatronSpots, stfKey } from './egg.js';
+import { chooseStfSpot, choosePartnerSpots, choosePatronSpots, stfKey } from './egg.js';
+import { choosePatrons } from '../../partners/patrons.js';
 import { trafficOf, uploadTraffic, roadKeepOut } from './traffic.js';
 import { buildRoadMesh, roadCover } from './roadmesh.js';
 import { buildCars } from './cars.js';
