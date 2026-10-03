@@ -294,6 +294,33 @@ more than text:
   area and F read the height with the tilt.
 - The hollow chimney and the turbine are palette items, so "every tool" walks them.
 
+### After a map builder's report (3 October)
+
+bug-67ae1762 came from somebody building maps in the room: the card duplicates the
+side panel and covers the view, vertical objects are awkward, and the lap voice has
+no switch. What changed, and what did not:
+
+- **The card steps aside on a map for the open drawer**, which holds every field the
+  card has (`renderCard` hides it, and `toggleDrawer` renders it again either way), and
+  **for a pull** (`placeCard` hides it while `gesturing()`, an edit between `beginEdit`
+  and `endEdit`, and shows it the frame the piece is put down). A track's card is as it
+  was: the whoop's and the five inch's drawer is closed by default and the card is
+  their editor. The card is still how a map piece is edited with the drawer shut.
+- **A typed position carries what stands on the piece** (`setElementCoord`), as a pull
+  and an arrow key do. It was the one way of moving a piece that did not, so a container
+  stood on end on another was left in the air when the one under it was typed to
+  somewhere else, and the seat set it on the ground: the report's "snap to ground if
+  move object underneath".
+- **Not changed: what a piece stands on is read at its origin.** A tall piece whose middle
+  is off the roof it leans on is set on the ground, by the seat's own rule for every
+  asset (`seatFor`). The report's other half, "snap to the center", is not something I
+  could find in the code, and it calls the whole of it "not a big deal", so it is left.
+- **Not done: a switch for the lap voice**, the report's third point ("would be cool").
+  It is a menu decision and not a fix: Sound is the shell check's own example of a plain
+  switch (Enter flips, Left is off, Right is on), so the voice cannot be a state of that
+  row, and a row of its own makes Settings one row longer than `tests/shell-baseline.json`
+  allows, which only re-recording the baseline accepts. See PROGRESS.md for the options.
+
 ### What was measured
 
 See PROGRESS.md for the run log: the self test, the flow check, the device check and

@@ -121,6 +121,16 @@ const SCENARIOS = [
     name: 'wall hit, then full throttle', kind: 'punch', from: [-2, 2.5, 29.3], to: [7.5, 2.5, 29.3],
     secs: 1.8, vEnd: 10, heading: EAST, pushMs: 300, after: 1, afterMs: 2000,
   },
+  /* A CRASH IS A RESET, AND A RESET IS NOT A TAKEOFF (bug-d7247563, "crashed inside and cannot fly out"). The shell
+   * puts the keys and the thumb sticks at idle when it sets a craft down, and cannot do that to a radio's gimbals: the
+   * hand is still on them. A craft set down with the throttle up lifted off on the next frame with the roll, pitch and
+   * yaw it had crashed with, and in a tunnel that is a crash, a set down and a relaunch into the wall again until the
+   * hand lets go: five crashes in 1.8 s, measured. `held` is the sticks kept for `heldMs` after the pilot's path
+   * ends, a hand that has not let go; then the sticks are centred with the throttle still up (`after`). */
+  {
+    name: 'head-on 10 m/s, hand still on the sticks', kind: 'held', from: [-2, 2.5, 29.3], to: [7.5, 2.5, 29.3],
+    secs: 1.8, vEnd: 10, heading: EAST, pushMs: 100, held: [0.5, -0.5, 0.3, 0.7], heldMs: 2200, after: 0.7, afterMs: 2500,
+  },
   /* The owner's report from the first flight of the solid world: head
    * first into a building and stuck on the wall. Left alone long enough for
    * stuckTick to act, once with the throttle cut and once at hover. */
@@ -201,6 +211,18 @@ function flyScenario(S) {
     };
     const path = window.__ramp(V(...S.from), V(...S.to), S.secs, S.vEnd);
     await window.__fly(path, { heading: S.heading, extraMs: S.pushMs, watch: () => snap('fly') });
+    if (S.held) {
+      await new Promise((res) => {
+        const t0 = performance.now();
+        const tick = () => {
+          snap('held');
+          window.__stick(...S.held);
+          if (performance.now() - t0 >= S.heldMs) { res(); return; }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
     await new Promise((res) => {
       const t0 = performance.now();
       const tick = () => {
@@ -291,6 +313,14 @@ function measure(S, rows) {
     m.turtleMs = Math.max(m.turtleMs, runTurtle);
   }
   m.endUpY = r3(rows.length ? rows[rows.length - 1].upY : 1);
+  if (S.kind === 'held') {
+    const held = rows.filter((r) => r.phase === 'held');
+    const free = rows.filter((r) => r.phase === 'after');
+    m.heldFrames = held.length;
+    m.heldAirborne = held.filter((r) => !r.landed).length;
+    const lift = free.findIndex((r) => !r.landed);
+    m.freeLiftMs = lift >= 0 ? free[lift].ms - free[0].ms : null;
+  }
   const touch = rows.findIndex((r) => atTarget(S, r));
   m.touched = touch >= 0;
   if (!m.touched) {
@@ -370,6 +400,10 @@ async function main() {
     await ev(`${PILOT}\nreturn 1;`);
     await ev('window.__drawOff(true); return 1;');
     console.log(`crash-check: city loaded, ${enforceTargets ? 'guards and targets enforced' : 'guards enforced, targets measured'}\n`);
+    /* THE FIRST FLIGHT AFTER BOOT IS A COLD ONE and is thrown away: the first scenario of every run, whichever it was,
+     * never came within 0.25 m of its wall, and one run alone with `--only` failed the same way. A flight the same as
+     * the second scenario is flown and not measured, so what is measured is flown on a plant that has been stepped. */
+    await ev(flyScenario(SCENARIOS[1]));
 
     for (const S of SCENARIOS) {
       if (only && !S.name.toLowerCase().includes(only.toLowerCase())) {
@@ -399,6 +433,14 @@ async function main() {
         `longest ${m.stuckMs} ms stuck, ${m.turtleMs} ms in turtle, ${m.setDowns} set down${m.setDowns === 1 ? '' : 's'}`);
       if (S.kind === 'stuck') {
         guard(m.endUpY > 0.5, 'left alone after the hit, it ends the right way up', `up.y ${m.endUpY}`);
+      }
+      if (S.kind === 'held') {
+        guard(m.heldFrames > 20 && m.heldAirborne === 0,
+          'a crash is not a takeoff: set down with the hand still on the sticks, it stays parked until they let go',
+          `${m.heldAirborne} of ${m.heldFrames} frames in the air`);
+        guard(m.freeLiftMs != null && m.freeLiftMs <= 1200,
+          'and with the sticks centred and the throttle still up it takes off',
+          m.freeLiftMs == null ? 'never left the ground' : `${m.freeLiftMs} ms`);
       }
       const list = [...(TARGETS[S.name] || []), ...TARGETS['*']];
       if (m.touched) {

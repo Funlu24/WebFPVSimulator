@@ -938,10 +938,10 @@ export class Panels {
     const grid = el('div', flat ? 'tb-grid2' : 'tb-grid3');
     grid.append(
       this.placeField(`x-${element.id}`, 'x', element, (val) => {
-        this.host.edit('move', (d) => { elementById(d, element.id).position.x = val; });
+        this.host.setElementCoord(element.id, 'x', val);
       }),
       this.placeField(`y-${element.id}`, 'y', element, (val) => {
-        this.host.edit('move', (d) => { elementById(d, element.id).position.y = val; });
+        this.host.setElementCoord(element.id, 'y', val);
       }),
     );
     if (!flat) {
@@ -1132,10 +1132,10 @@ export class Panels {
     const grid = el('div', 'tb-grid3');
     grid.append(
       this.field(`x-${element.id}`, 'X', element.position.x, (val) => {
-        this.host.edit('move', (d) => { elementById(d, element.id).position.x = val; });
+        this.host.setElementCoord(element.id, 'x', val);
       }, { suffix: 'm' }),
       this.field(`y-${element.id}`, 'Y', element.position.y, (val) => {
-        this.host.edit('move', (d) => { elementById(d, element.id).position.y = val; });
+        this.host.setElementCoord(element.id, 'y', val);
       }, { suffix: 'm' }),
       this.field(`z-${element.id}`, 'Base', element.position.z, (val) => {
         /* An asset on a map may be sunk, to hide some of it: lowestBase. */
@@ -2433,8 +2433,11 @@ export class Panels {
     const doc = this.host.doc;
     const ids = [...this.host.selection].filter((id) => elementById(doc, id));
     /* Not while a tool is armed: the pointer is for placing then, and a card
-     * beside the piece just placed sits exactly where the next one goes. */
-    if (!this.host.buildsIn3D() || !ids.length || this.host.armed) {
+     * beside the piece just placed sits exactly where the next one goes. And not on a map while the drawer is open:
+     * it holds every field the card has, and a card over the view saying the same again is what a map builder
+     * asked to be rid of (bug-67ae1762). It is back when the drawer is shut. */
+    if (!this.host.buildsIn3D() || !ids.length || this.host.armed
+      || (docModeOf(doc) === 'freestyle' && this.host.drawerOpen)) {
       card.hidden = true;
       card.textContent = '';
       return;
@@ -2692,10 +2695,10 @@ export class Panels {
         const grid = el('div', 'tb-card-grid');
         grid.append(
           this.field(`card-x-${id}`, 'X (m)', element.position.x, (val) => {
-            this.host.edit('move', (d) => { elementById(d, id).position.x = round6(val); });
+            this.host.setElementCoord(id, 'x', round6(val));
           }, { step: 1, places: 2 }),
           this.field(`card-y-${id}`, 'Y (m)', element.position.y, (val) => {
-            this.host.edit('move', (d) => { elementById(d, id).position.y = round6(val); });
+            this.host.setElementCoord(id, 'y', round6(val));
           }, { step: 1, places: 2 }),
         );
         /* The height a built piece stands at, which is what it was put down on: the paving, a roof, a deck. */
@@ -3116,6 +3119,13 @@ export class Panels {
     if (!card || card.hidden) {
       return;
     }
+    /* Out of the way of a pull on a map: it follows the piece, and the piece is what the pointer is on. Hidden and
+     * not taken out, so it is back where it was the frame the piece is put down (bug-67ae1762). */
+    if (docModeOf(this.host.doc) === 'freestyle' && this.host.gesturing && this.host.gesturing()) {
+      card.style.visibility = 'hidden';
+      return;
+    }
+    card.style.visibility = '';
     const c = this.host.selectionCentroid();
     const at = c ? project({ x: c.x, y: c.y, z: c.z + 0.9 }) : null;
     /* A map's pieces are anything from a lamp to a warehouse: the card keeps off the whole of what is selected,

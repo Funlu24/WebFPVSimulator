@@ -64383,6 +64383,277 @@ Five read only readers digested the slices of this file, the commits and the boa
 - #22: the two vendor re-runs, whether the empty role line and the results row should read as they do, whether the board should count a maps only partner's marks, and whether the tagline is meant to be on every map.
 - The notes carry one sentence you may want to reword before they ship: the board's list of bug reports was readable by anyone until the fix of 1 October, and the 1 October section says so. It is true, and it is also a disclosure.
 
+## 2026-10-03 | builder, shell | The builder report and the two stuck reports: three fixed, one added, and one decision for the owner (the owner's ask)
+
+The owner: "Fix the stuck bugs and the builder bug". The board had 52 open tickets, 13 more than the 39 read on 2 October,
+and three of them are these: bug-d7247563 "stuck in a container hole" (a radio, a built map, 540 s flown),
+bug-ad038907 "ITS GETTING STUCK THE DRONE" (a Chromebook keyboard, the city, 32 frames a second, "the drone got stuck on
+the ground and couldn't move") and bug-67ae1762 "Trackbuilder bugs" (three points, from somebody using the map room).
+Nothing here changes the physics, the plant, the module ABI or the build, and `git diff --stat vendor/betaflight` is
+empty. The board was read and not written: closing a ticket is the owner's call.
+
+### The builder report (bug-67ae1762), point by point
+
+1. **"The specs card ... duplicates the right side panel and covers the view, obstructs placing and moving": real, fixed.**
+   The map room (2 October) gave a map the card the whoop and the five inch have. With the drawer open it holds every
+   field the card has, and the card floated over the view saying the same again; and it followed a piece while the
+   piece was pulled. On a map the card now steps aside for the open drawer (`renderCard`, and `toggleDrawer` renders it
+   again either way) and for a pull (`placeCard` hides it while `gesturing()`, an edit between `beginEdit` and
+   `endEdit`, and shows it the frame the piece is put down). It is still how a map piece is edited with the drawer shut,
+   which is the room's design. A track's card is unchanged.
+2. **"Vertical objects ... snap to ground if move object underneath": real, fixed for typed positions.** Dragging a piece
+   and an arrow key carry what stands on it (`carriedBy`), and a typed X or Y did not: with a container stood on end on
+   another, typing X into the one underneath moved it and left the other in the air, and the seat set it on the
+   ground (z 5.232 to 0 in the check). `setElementCoord` carries riders, and the card's and the inspector's X and Y use it.
+   **"They would snap to the centre": not found.** Standing a piece on end keeps its plan centre, which the checks of
+   2 October measure, and nothing in the room snaps a piece to the middle of another. The report calls the whole point
+   "not a big deal", so nothing is changed on a guess. One thing that is true and left alone: what a piece stands on is
+   read at its ORIGIN (`seatFor`), for every asset, so a tall piece whose middle is off the roof it leans on is set on
+   the ground.
+3. **"Turn on and off the spotter voice in racing": not done, and the owner's to decide.** It is a wish ("would be cool")
+   and a menu decision, not a fix. The voice is the lap call (`src/render/voice.js`, "Lap 3, 1 minute 3.20"), which
+   follows Sound and Volume and has no switch of its own. Two designs were built and backed out, because the shell check
+   refuses both and the rule is never to change a threshold to make a check pass:
+   - **A separate Lap voice row in Settings, Sound**: `lint:shell` fails with "pilot: overflow grew from 634 to 678 px".
+     That check holds each screen to the length it has (`tests/shell-baseline.json`), and only `node scripts/shell-check.js
+     --record` accepts a longer one. The menus plan is about shorter lists.
+   - **A third state of the Sound row (On, No voice, Off)**: `lint:shell` fails with five lines about the "switch row",
+     because the check uses Sound as its own example of a plain switch (Enter flips, Left is off, Right is on, no popup).
+   The options: (a) the separate row, and you re-record the baseline (+44 px on Settings), a one line change to approve;
+   (b) a flight key for it, as M is for Angle and Acro, which costs a line on the keys screen and is the least findable;
+   (c) leave it. My choice would be (a). Nothing of it is in this commit.
+
+### The stuck reports: what was tried, what was found
+
+Both tickets say "stuck" and nothing else: no steps, no map, and a report carried the pilot's settings and devices and
+nothing about the craft. The code already had four ways out (a crash is set down on the nearest flat surface with room,
+a craft still and not upright is set down after 1.5 s, X, R), and a ticket from 30 September (bug-d1d3f4fb) was a
+Chromebook whose keys did nothing, fixed in 71e06c8. Everything below was run in headless Chromium against the real
+shell, through Betaflight and the plant, on a copy of the starter yard (its one open container, a tunnel 12.2 m long
+and 2.32 m wide, at world (12, 40)) and on a map with an open container stood on end (a shaft 12.2 m deep).
+
+**Found, and fixed: a craft set down by a crash lifted off again by itself.** With the sticks where a pilot leaves them
+when they crash (throttle up, roll and pitch over), the set down was followed by lift off within one frame, a crash into
+the wall within a third of a second, a set down, and again: five set downs in 1.8 s, and the craft in the air for 132 of
+133 frames. The shell puts the keys and the thumb sticks at idle at a set down because "a recovery that kept them high
+would relaunch the wreck by itself" (`resetKeyboardSticks`), and a radio's gimbals cannot be put anywhere, so a radio
+was the one device left out. bug-d7247563 was a radio ("Unknown Gamepad", ten axes, calibrated), but the ticket does not
+say this is what happened to them: it is the cause that replicates, in a tunnel 2.3 m wide, where a relaunch is a wall.
+
+`holdUntilCentred(why)` in `main.js`: a set down made by a crash or a stuck call, with the right stick (an arrow key, or
+the right thumb pad) off centre at that moment, parks the craft as a craft just turtled over is parked, which is the
+same state and the same words, "Centre the right stick, then fly" (`turtleRecover`). Only that stick is waited for: the
+throttle is free, so full throttle with the sticks centred takes it off at once. X is the pilot's own and is not held.
+Checked by a new scenario in `crash-check.js`, "head-on 10 m/s, hand still on the sticks": before, 132 of 133 frames
+in the air and five set downs; after, 0 of 133 and two (the two real crashes), and 16 ms to take off once the sticks are
+centred with the throttle still up.
+
+**The cost, and the owner's number.** `crash-check`'s target "full throttle frees it from the wall within 0.5 s" read
+370, 369 and 388 ms with the hold off and reads 549, 551, 549 ms with it on (and 550 and 551 in two more full runs): 49
+ms over its line. The old figure was met because the craft had already relaunched while the scripted pilot was still
+pushing; now it frees itself from rest when they let go. Both free it. The target is not changed ("never change a
+threshold to make a check pass"): it prints "not met", and the decision is below. No other target moved with the hold
+(three runs each of the 10 m/s and 5 m/s hits, hold off and on).
+
+**Not found, and written down so nobody repeats it:**
+- **Set down after a crash in the tunnel: 100 of 100 points** across the bore were set down inside it, upright, landed,
+  on the floor, by the X key's own search. Never on the roof of the stack, never outside, never on the start line.
+- **A careful exit works.** After a crash into the side wall at 6 m/s, a pilot flying out at 2 m/s left the east mouth
+  with no second crash, and at 4 m/s.
+- **A fuzz of crashes inside the tunnel** (random entry, angle, speed and face, a careful exit after each): 17 of 18 and
+  36 of 36 got out. The one that did not was not the craft: a guided pilot that holds its sticks never centres them, and
+  after a turtle flip the shell waits for them ("Centre the right stick, then fly"), so an upright craft sat parked. It
+  is the rule, and a person lets go.
+- **The shaft**: a crash anywhere in it (54 points) sets the craft down on the ground at the bottom, 12 m below, and a
+  pilot climbs out at 2.5 m/s without touching a wall.
+- **The keyboard in 'hold' mode, on the city, with and without touch emulation** (a Chromebook is often a touch laptop):
+  W takes off, X sets the quad down with the keys at idle, W takes it off again. **bug-ad038907 was not reproduced** and
+  remains undiagnosed: nothing above is known to be its cause. (The hold above also applies to a keyboard pilot with an
+  arrow key still down at a crash, who gets "Let go of the arrows, then fly"; that was not measured.)
+- **`crash-check`**: every "never left stuck" guard passes in every run.
+
+What a pilot can still feel as stuck without a defect: a crash inside a tunnel or a shaft always sets the craft down
+inside it, so a pilot who cannot yet thread 2.3 m crashes again, and is set down inside again. See "For the owner".
+
+### What was added for the next one
+
+Every report now carries one more key, `craft` (21 top level keys of the board's 32, and about 300 of its 8000
+characters): landed, which turtle state it is in (wait, flip, or recover: waiting for a stick to centre), attitude,
+speed, where, how long it had been still, how many set downs in the last two minutes and why (crash, stuck, X, or the
+start line when no flat surface was found), the stick keys the page believes are down (a lost key release holds a
+throttle at zero for good, and this is the only place it would show) and what the sticks were feeding the sim. A
+"stuck" ticket can now say which of these it was.
+
+### Two things the checks showed about the checks
+
+- **The first flight after boot is a cold one.** The first scenario of every `crash-check` run never came within 0.25 m of
+  its wall (the one failed guard of an earlier run), and one run alone with `--only` failed the same way. A warm-up flight
+  the same as the second scenario is now flown and not measured. With it the targets read as the owner's own runs of 24
+  September did: the same handful not met, which move from run to run (this turn's full runs read 7, 4, 7 and 4 not
+  met); the cold run's 19 met was the unusual one.
+- **`lint:input` is green, 223 passed.** The one stale line recorded on 2 October (a key pressed at the question) was
+  fixed on main by the map room work, and the three new checks for the craft block are among the 223.
+
+### What each ticket is now
+
+    bug-67ae1762   points 1 and 2 fixed (the card, the typed position); point 3, the voice switch, is the owner's to decide
+    bug-d7247563   a mechanism that replicates was found and fixed (a radio's relaunch loop in a tunnel); not confirmed
+                   with the reporter, and the tunnel's set down policy is the owner's to decide
+    bug-ad038907   not reproduced, not diagnosed; the next one will say what the craft was doing
+
+### Checks run, on the tree that is committed
+
+    selftest         node src/trackbuilder/selftest.js: 2268 passed, 0 failed
+    seat-selftest    node scripts/seat-selftest.js: 25 of 25 clean
+    input-selftest   node scripts/input-selftest.js: all 380 passed
+    check:builder    PASS, 738 checks, 0 failed, 576 s. The new case, "map: the card steps aside, and a typed position
+                     carries what stands on the piece", failed three ways before the fix (the card over the open
+                     drawer, the card over a pull, the container left in the air and set on the ground, z 5.232 to 0)
+                     and passes now, with a real mouse pull among its checks
+    check:crash      crash-check: 0 guards failed (0 in each of the five full runs after the hold, and in the
+                     A/B runs). The new scenario, "head-on 10 m/s, hand still on the sticks": 132 of 133 frames in
+                     the air and five set downs before the hold, 0 of 132 and two after, 16 ms to take off with the
+                     sticks centred. Targets 20 met, 4 not met in this run (7 and 4 in earlier full runs), among
+                     them "full throttle frees it from the wall within 0.5 s" at 549 ms, which was 370, 369 and 388
+                     ms with the hold off over three runs and 549, 551 and 549 with it on
+    lint:input       all 223 passed here, and 223 passed in this turn's first run. It also failed in two runs between
+                     them on "a key pressed at the question does nothing behind it", the line recorded as stale on 2
+                     October: it reads the builder's view two key taps after the question appears, and that is '2d'
+                     only when Three.js has not yet opened the room, so it is a race and not a fault of this work. The
+                     three new checks for the craft block pass in every run (21 keys, 1716 characters)
+    lint:shell       PASS (with the Lap voice row it failed, "pilot: overflow grew from 634 to 678 px"; with Sound as
+                     three states it failed on the switch row; both are backed out)
+    lint:devices     PASS, 137 s
+    the rest         lint:nouns PASS; lint:preload up to date, boot 127 modules, city 75, built 33; 250 served;
+                     check:fresh 18 passed; git diff --stat vendor/betaflight empty; no dashes in the lines added
+
+    not run          npm run verify (no physics, plant, module ABI or build change; it loads the module and
+                     tests/browser/harness.html and never main.js, so a green run would not be evidence about this);
+                     node scripts/shots.js; check:props and check:roads (no prop or road change); lint:board and
+                     lint:responsive. Flight feel is not something any of this can say: nobody has flown it.
+
+### What went wrong
+
+- **My first crash-check baseline was a cold run and I nearly compared against it.** Its first scenario never touched
+  its wall and its other targets read green (19 met, 1 not), values the owner's own runs of 24 September never had. Run
+  with a warm-up flight, the targets read as they always have. The comparison that mattered, the hold on and off
+  against the same warmed harness, took eighteen runs.
+- **A "stuck" craft in my fuzz was my own pilot.** A guided pilot never centres its sticks, so after a turtle flip it sat
+  in the recover state; the same trial alone got out. Found by replaying it alone with a trace.
+- **A first draft of the hold was a throttle gate and would have moved the owner's target further.** The attitude sticks
+  are what drive the craft into the wall, so only they are waited for, which is also what the turtle already did.
+- **The voice switch cost two full check chains.** A separate row failed `lint:shell`, a three state Sound row failed it
+  again on a different line, and I had run the slow checks on code that then changed. I stopped them and ran the chain
+  once more on the final tree.
+- **A `pkill -f` with the script's name in it killed my own shell**, and the next call's leftovers had to be found and
+  stopped by process id.
+- **A claim written into a draft before it was measured:** that a keyboard pilot cannot be relaunched by a held key. It was
+  not measured, and the hold covers an arrow key held at a crash, so it is out of the entry.
+- **Smaller:** my `held` metric sat after an early return and read `undefined` for a scenario that never touched; a
+  variable named `off` collided in the seat self test; a check label said "one undo step more" and tested only that the
+  piece moved.
+
+### For the owner
+
+1. **The hold after a crash (`holdUntilCentred`, `main.js`).** A craft set down by a crash or a stuck call with the right
+   stick off centre waits for it to centre, with the turtle's banner, instead of lifting off again with the sticks it
+   crashed with. It costs the target above 49 ms over its line, because the old figure was met by a relaunch during the
+   push. If you would rather have the relaunch, `holdUntilCentred` returns at its first line: one line. I made the call
+   because it is the only mechanism that replicates for "crashed inside and cannot fly out", and the keys and thumb
+   sticks already had the same promise.
+2. **A switch for the lap voice** (bug-67ae1762, point 3): (a) a separate row in Settings, Sound, and you re-record
+   the shell baseline (`node scripts/shell-check.js --record`, Settings 634 to 678 px); (b) a flight key, as M is for
+   Angle and Acro; (c) leave it. My choice is (a).
+3. **A crash inside a tunnel or a shaft is set down inside it, by your 24 September rule** ("as near as possible to where
+   the accident happened"). A pilot who cannot yet thread 2.3 m is set down inside again each time, and the shaft's
+   floor is 12 m below. Options: (a) leave it, and let the next report's `craft` block say whether it matters; (b) after
+   three set downs within 20 seconds and 4 metres, set down on the nearest open ground instead, which is an escalation
+   and leaves the first crash as it is; (c) always prefer the nearest mouth, which reverses your rule for enclosed
+   places and would move a pilot practising inside the bando halls. My choice is (a) now and (b) if it comes again.
+4. **The stale `lint:input` line** is a race, as above: either compare the view before and after the keys once the room
+   has settled, or say the builder should open in 2D.
+5. **The board** was read, not written. Whether bug-d7247563 and bug-67ae1762 are closed is yours. `BUGS_TOKEN` is
+   still in this session's transcript: rotate or unset it.
+6. `main` moved while this was done (13b9a1b to 3628663, the map room's merge) and this branch is built on 3628663. Nothing
+   was pushed to `main`.
+
+## 2026-10-03 | board, deploy | The push to main, and every ticket on the board closed (the owner's ask)
+
+The owner: "Push to main and close all tickets on the board so it's starts fresh". Git and the board only: no code
+changed in this entry, and `git diff --stat vendor/betaflight` is empty.
+
+### The push
+
+`git fetch origin main` was the last command before it. Main was still 3628663, an ancestor of this branch's head, so
+`git push origin HEAD:main` was a fast forward: 3628663..a91623d, one commit (the map card, the typed position, the
+crash hold and the craft block). The branch `claude/zealous-einstein-mol664` is the same commit.
+
+What the live site serves: a script asked https://webfpv.org/sim/src/main.js through a cache busting query until it was
+main's, and then compared the four served files the push changed. It matched at the first poll, so the deploy had
+finished before the script started and the time it takes was not measured. This time there was no read of the live
+files before the push, which the 2 October entry did; the comparison still tells new from old, because the live bytes
+equal the new file and the new names (`holdUntilCentred`, `setCraftProbe`, `setElementCoord`, `gesturing`) are in the
+live files and were in none of them before the push. No new served file, so nothing was asked for before it existed.
+
+    live              4 of 4 served files this push changed answer 200 and are identical to main by sha256
+    not run           a browser against the live site; nobody has flown or built with this on the live site
+
+### The board
+
+A ticket is closed by `POST /api/bugs/:id` with a status (open, in_progress, fixed, wontfix or duplicate) and a note
+(`resolution`, up to 4000 characters). `BUGS_TOKEN` opens that like an admin sign in does (`bugsAuthorized` in the
+board's `src/server.js`). There is no delete, and none was used. 52 tickets were open and none in progress; all 52 are
+closed, by the board's own convention (the sweeps of 19, 21 and 24 September and the 30 September close):
+
+    fixed, a note each (4)           bug-52a66f69 (pitch, cd059b2), bug-e605ff6a (the builder's five asks, cd059b2 and
+                                     b7160a2), bug-67ae1762 (two of three points; the note says the lap voice switch is not
+                                     built), bug-d7247563 (a likely cause fixed, not confirmed; the note says so)
+    wontfix, a note each (15)        could not reproduce: bug-ad038907, bug-a18b2ed9, bug-cddc182a, bug-cd48337e
+                                     the browser lists no controller: bug-47e0e9ee, bug-1e3a3a1b, bug-20aa17e3
+                                     what the radio sends: bug-abfeffe6 (constant 2.79), bug-f5ed55e4 (Jumper T20 on
+                                     Android), bug-7358566d and bug-e1d9902a (yaw on Chrome on Android, which fit the
+                                     four channel limit of commit 9687cbe; their notes say they were not assessed one by one)
+                                     a decision not taken: bug-2b2b44aa (the crash rule), bug-5328aa13 (a throttle that
+                                     rests at half), bug-17b6248e (Acro and Angle from a pad)
+                                     praise: bug-424133cc
+    wontfix, no note (33)            the Flight feel reports, closed the way the earlier sweeps closed theirs
+
+`wontfix` here means closed without a change, and each of the 15 notes says which of those it is; a note on a ticket
+that was closed for the clean start ends "Closed on 3 October 2026 with every other open ticket, to start the board
+fresh." The four marked fixed carry a fix that is on main, and where it is a likely cause and not a confirmed one
+(bug-52a66f69, bug-d7247563) the note says so.
+
+    checked           the server's own listing by status, split by kind: open 0, in progress 0, fixed 154 (150 and 4
+                      more), wontfix 223 (175 and 48 more), duplicate 1. 378 tickets, as before
+                      every one of the 52 is in the status the plan gave it, and every older ticket is still there with
+                      its `updatedUtc` unchanged, so nothing outside the plan was touched
+                      the 19 tickets with a note were read back by id: status and note equal what was written
+    not run           anything on the board's page; the notes were read through the API, not as the owner sees them
+
+### What went wrong
+
+- **The first check read 23 tickets short.** Open 0 and wontfix 200 gave 355 against 378. The listing sorts newest first
+  and cuts at 200 (`listBugRows`, the cap the 30 September entry also met), so wontfix, now 223, showed its newest 200. I
+  did not take that for success or for loss: it was read in the source, then the lists were split by kind, where the
+  largest slice is 179, and they add up.
+- **Two tickets are closed without having been looked at one by one.** bug-7358566d and bug-e1d9902a were filed after
+  the assessment of 2 October. Their reports (Chrome on Android, four axes, no mapping, yaw not arriving) fit the class
+  the Stick help now answers, and nothing was replicated for them.
+- **The live files were not read before the push**, as the last push did. Argued above, not skipped silently.
+
+### For the owner
+
+1. **The statuses were my choice**, by the convention above. If you wanted every ticket the same, each is one write
+   back: none of the 52 had a note before, so undoing one is `POST /api/bugs/:id` with status open and an empty
+   resolution. The before record (status, note, `updatedUtc` of each) was kept in the session's scratchpad and not in this
+   repository, because a ticket is a tester's own words, is behind the token on the board, and this repository is public.
+2. **Several tickets described a thing still not built, and no longer show on the open list:** the lap voice switch
+   (bug-67ae1762), a throttle that rests at half (bug-5328aa13), a pad button or a pause menu row for Acro and Angle
+   (bug-17b6248e), the crash rule (bug-2b2b44aa), whether the low latency canvas should be off by default on Android
+   (bug-a18b2ed9, bug-cddc182a), and where a crash inside a tunnel or shaft sets the quad down (bug-d7247563). Their
+   options are in the entries of 2 and 3 October above, and in each ticket's note.
+3. **`BUGS_TOKEN`** is still in this session's transcript: rotate or unset it.
+
 ## 2026-10-03: Review round 1 fixes: acceptance tests, defer town map
 
 ### What was asked

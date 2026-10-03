@@ -4674,6 +4674,104 @@ kase('map: by touch', async () => {
  * nothing, which is how `pole` once went undrawn and unsolid. So each tool is walked: armed
  * by its button, hovered, clicked, selected, and taken away again.
  */
+/*
+ * bug-67ae1762, a map builder's report: "the specs card that pops up when you select an object isn't
+ * particularly practical ... you have all the specs on the right side panel, so the card is just
+ * duplication of the same info. And what is more this card covers the view and obstructs placing and
+ * moving the object", and "they ... snap to ground if move object underneath". On a map the card steps
+ * aside for the open drawer, which holds every field it has, and for a pull; and a position typed into
+ * a field carries what stands on the piece, as pulling it and the arrow keys do.
+ */
+kase('map: the card steps aside, and a typed position carries what stands on the piece', async () => {
+  const page = await openMap();
+  try {
+    const app = (expr) => page.evaluate(`(() => { const a = window.trackBuilder; return ${expr}; })()`);
+    await trapToasts(page);
+    await page.evaluate(`(async () => {
+      const a = window.trackBuilder;
+      const { createElement } = await import('/src/trackbuilder/model.js');
+      a.edit('probe', (d) => {
+        d.elements.push(createElement(d, 'containers', { x: 60, y: 60 }, 0));
+      });
+      a.view3d.markDirty();
+      return 1;
+    })()`);
+    await page.until('!window.trackBuilder.view3d.dirty', 20000);
+    const cardShown = () => page.evaluate(`(() => { const c = document.getElementById('tb-card'); const s = getComputedStyle(c); return !c.hidden && s.display !== 'none' && s.visibility !== 'hidden'; })()`);
+    const floor = (type) => app(`a.doc.elements.find((e) => e.type === ${JSON.stringify(type)})`);
+    await app(`a.setSelection([a.doc.elements.find((e) => e.type === 'containers').id]), 1`);
+    await page.until("!document.getElementById('tb-card').hidden && !window.trackBuilder.view3d.dirty", 10000);
+    await page.sleep(300);
+    check('selecting a piece on a map puts its card beside it', await cardShown());
+    await app('a.toggleDrawer(true), 1');
+    await page.sleep(500);
+    check('with the drawer open the card steps aside: the drawer holds the same fields', !(await cardShown()));
+    await app('a.toggleDrawer(false), 1');
+    await page.sleep(500);
+    check('and with the drawer shut again the card is back', await cardShown());
+    /* A pull, as the room's drag makes it: an edit begun, and frames drawn while it is open. */
+    await app("a.beginEdit('move'), 1");
+    await app('a.view3d.markDirty(), a.requestDraw(), 1');
+    await page.sleep(500);
+    check('while a piece is being pulled the card is not over it', !(await cardShown()));
+    await app('a.endEdit(), 1');
+    await app('a.view3d.markDirty(), a.requestDraw(), 1');
+    await page.sleep(500);
+    check('and it is back when the piece is put down', await cardShown());
+    /* The same under a real mouse: a press on the piece and a pull. */
+    const piece = await app(`(() => { const e = a.doc.elements.find((x) => x.type === 'containers'); return { x: e.position.x, y: e.position.y }; })()`);
+    const grab = await screenOf(page, 'view3d', piece.x, piece.y, 1.2);
+    const drop = await screenOf(page, 'view3d', piece.x + 12, piece.y - 8, 1.2);
+    await mouse(page, 'mouseMoved', grab.x, grab.y, 0);
+    await mouse(page, 'mousePressed', grab.x, grab.y, 1);
+    for (let k = 1; k <= 8; k += 1) {
+      await mouse(page, 'mouseMoved', grab.x + ((drop.x - grab.x) * k) / 8, grab.y + ((drop.y - grab.y) * k) / 8, 1);
+      await page.sleep(40);
+    }
+    await page.sleep(300);
+    check('and under a real pull of the mouse the card stays out of the way while the piece is held',
+      (await app('a.gesturing()')) && !(await cardShown()));
+    await mouse(page, 'mouseReleased', drop.x, drop.y, 0);
+    await page.sleep(500);
+    check('and is back when the mouse is let go, and the piece has moved',
+      !(await app('a.gesturing()')) && (await cardShown()) && (await app(`a.doc.elements.find((x) => x.type === 'containers').position.x`)) > piece.x + 5, `${await app("a.doc.elements.find((x) => x.type === 'containers').position.x")}`);
+
+    /* A typed position carries what stands on the piece. */
+    const ids = await page.evaluate(`(async () => {
+      const a = window.trackBuilder;
+      const m = await import('/src/trackbuilder/model.js');
+      const base = a.doc.elements.find((e) => e.type === 'containers');
+      const top = m.topOf(base);
+      let rider = null;
+      a.edit('probe', (d) => {
+        rider = m.createElement(d, 'containers', { x: base.position.x, y: base.position.y, z: top }, 0);
+        rider.pitch = Math.PI / 2;
+        d.elements.push(rider);
+      });
+      a.view3d.markDirty();
+      return { base: base.id, rider: rider.id, top };
+    })()`);
+    await page.until('!window.trackBuilder.view3d.dirty', 20000);
+    const at = (id) => app(`(() => { const e = a.doc.elements.find((x) => x.id === ${JSON.stringify(id)}); return { x: e.position.x, y: e.position.y, z: e.position.z }; })()`);
+    const before = await at(ids.rider);
+    check('a container stood on end is on the roof of the one under it', Math.abs(before.z - ids.top) < 0.01 && before.z > 2, JSON.stringify(before));
+    await app(`a.setSelection([${JSON.stringify(ids.base)}]), 1`);
+    await page.until("!document.getElementById('tb-card').hidden && !window.trackBuilder.view3d.dirty", 10000);
+    await page.sleep(300);
+    /* The X field of the card of the piece underneath, typed into as a hand does. */
+    await page.evaluate(`(() => { const i = document.querySelector('#tb-card [data-tbkey^="card-x-"]'); i.value = '75'; i.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`);
+    await page.sleep(400);
+    const base1 = await at(ids.base);
+    const rider1 = await at(ids.rider);
+    check('typing X into the piece underneath moves it', Math.abs(base1.x - 75) < 1e-6, JSON.stringify(base1));
+    check('and what stands on it goes with it, still standing on it, and does not drop to the ground',
+      Math.abs(rider1.x - 75) < 1e-6 && Math.abs(rider1.z - ids.top) < 0.01, JSON.stringify(rider1));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
 kase('map: every tool', async () => {
   const page = await openMap();
   try {

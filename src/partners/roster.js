@@ -197,6 +197,7 @@ export const PATRON_MAP_BRANDS = Object.freeze([]);
 export const PARTNER_SLUGS = Object.freeze(PARTNERS.map((p) => p.slug));
 export const MAP_ONLY_PARTNER_SLUGS = Object.freeze(MAP_ONLY_PARTNERS.map((p) => p.slug));
 export const PATRON_MAP_BRAND_SLUGS = Object.freeze(PATRON_MAP_BRANDS.map((p) => p.slug));
+// Includes patron slugs: any partner count built from ALL_PARTNER_SLUGS must filter patrons out.
 export const ALL_PARTNER_SLUGS = Object.freeze([...PARTNER_SLUGS, ...MAP_ONLY_PARTNER_SLUGS, ...PATRON_MAP_BRAND_SLUGS]);
 
 const BY_SLUG = new Map([...PARTNERS, ...MAP_ONLY_PARTNERS, ...PATRON_MAP_BRANDS].map((p) => [p.slug, p]));
