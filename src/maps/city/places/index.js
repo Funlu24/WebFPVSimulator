@@ -371,7 +371,7 @@ function buildPartnerMarks(ctx) {
  * surfaces, at least PARTNER_SEP (10m) from all other marks, and visible
  * from flyable space.
  */
-const PATRON_SPOTS = {
+export const PATRON_SPOTS = {
   patron1: { face: 29.8, y: 5.0, z: 88.2, n: 1, w: 4.0 }, // works office east gable
   patron2: { x: 58.0, y: 2.4, face: 86.8, n: -1, w: 4.0 }, // pool changing block south wall
   patron3: { face: 42.5, y: 4.0, z: 102.0, n: 1, w: 4.0 }, // works shed east wall
