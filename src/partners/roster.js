@@ -101,8 +101,8 @@ export const LOGO_DIR = 'assets/partners';
 
 const partner = (p) => Object.freeze({
   ...p,
-  links: Object.freeze(p.links.map((l) => Object.freeze({ ...l }))),
-  logo: Object.freeze({ ...p.logo }),
+  links: p.links ? Object.freeze(p.links.map((l) => Object.freeze({ ...l }))) : undefined,
+  logo: p.logo ? Object.freeze({ ...p.logo }) : undefined,
   mark: Object.freeze({ ...p.mark }),
 });
 
@@ -183,11 +183,23 @@ export const MAP_ONLY_PARTNERS = Object.freeze([
   }),
 ]);
 
+/*
+ * Patron map brands: Patreon supporter tier. Each patron's logo, or a name
+ * they choose, is painted as a sign into freestyle maps the same way the
+ * map-only partners already are. Every name or logo needs a human OK before
+ * it is added. Patrons do not appear on the front page, leaderboard, or
+ * partners page. They appear only on freestyle maps. Patrons are not
+ * findable: their signs do not stamp, count toward achievements, or show the
+ * found panel when discovered.
+ */
+export const PATRON_MAP_BRANDS = Object.freeze([]);
+
 export const PARTNER_SLUGS = Object.freeze(PARTNERS.map((p) => p.slug));
 export const MAP_ONLY_PARTNER_SLUGS = Object.freeze(MAP_ONLY_PARTNERS.map((p) => p.slug));
-export const ALL_PARTNER_SLUGS = Object.freeze([...PARTNER_SLUGS, ...MAP_ONLY_PARTNER_SLUGS]);
+export const PATRON_MAP_BRAND_SLUGS = Object.freeze(PATRON_MAP_BRANDS.map((p) => p.slug));
+export const ALL_PARTNER_SLUGS = Object.freeze([...PARTNER_SLUGS, ...MAP_ONLY_PARTNER_SLUGS, ...PATRON_MAP_BRAND_SLUGS]);
 
-const BY_SLUG = new Map([...PARTNERS, ...MAP_ONLY_PARTNERS].map((p) => [p.slug, p]));
+const BY_SLUG = new Map([...PARTNERS, ...MAP_ONLY_PARTNERS, ...PATRON_MAP_BRANDS].map((p) => [p.slug, p]));
 
 /* A partner by slug, or null for anything that is not one. */
 export function partnerBySlug(slug) {

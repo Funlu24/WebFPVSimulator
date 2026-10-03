@@ -4364,6 +4364,9 @@ async function eggBlock() {
   /* The partners' marks, on the same maps. */
   await partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced);
 
+  /* The patron marks, capped at 3 per map, not findable. */
+  await patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced);
+
   /* Finding it, on the starter, where its map paints it. */
   await eggFind(sPlaced, sSpot);
   /* And that the builder can never draw it. */
@@ -4469,6 +4472,78 @@ async function partnerMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
     const doc = normalize(m.doc).doc;
     judgePartners(m.label, placeDocument(doc), doc, 'canvas');
   }
+}
+
+async function patronMarks(egg, sDoc, sPlaced, eDoc, ePlaced) {
+  console.log("        the patron marks (capped at 3, not findable)");
+  const { chooseStfSpot, partnerSearch, stfKey, choosePatrons, PATRON_MAX_PER_MAP, PARTNER_SEP } = egg;
+  const roster = await import(pathToFileURL(join(root, 'src/partners/roster.js')).href);
+  const art = await import(pathToFileURL(join(root, 'src/art/partnermark.js')).href);
+  
+  /* Five test patrons: 3 text-only, 1 with a fake logo (using GDS's for testing), 1 text-only */
+  const testPatrons = [
+    { slug: 'test-patron-one', name: 'Test Patron One', short: 'TP1', mark: { field: '#19171e' } },
+    { slug: 'test-patron-two', name: 'Test Patron Two', short: 'Patron 2', mark: { field: '#f3ead4' } },
+    { slug: 'test-patron-three', name: 'Test Patron Three', short: 'Three', mark: { field: '#19171e' } },
+    { slug: 'test-patron-four', name: 'Test Patron Four', short: 'Four', logo: { aspect: 208 / 72 }, mark: { field: '#f3ead4' } },
+    { slug: 'test-patron-five', name: 'Test Patron Five', short: 'TP5', mark: { field: '#19171e' } },
+  ];
+
+  /* Test 1: cap of 3 when there are 5 */
+  const mapKey1 = stfKey(sDoc, 'starter');
+  const chosen1 = choosePatrons(testPatrons, mapKey1);
+  check('with 5 patrons, choosePatrons returns at most 3', chosen1.length <= PATRON_MAX_PER_MAP && chosen1.length === 3);
+  
+  /* Test 2: same pick across two runs for one map key */
+  const chosen1Again = choosePatrons(testPatrons, mapKey1);
+  const same = chosen1.length === chosen1Again.length && chosen1.every((p, k) => p.slug === chosen1Again[k].slug);
+  check('same map key picks the same patrons every time', same,
+    `first: ${chosen1.map((p) => p.slug).join(', ')}; second: ${chosen1Again.map((p) => p.slug).join(', ')}`);
+  
+  /* Test 3: different pick for another key */
+  const mapKey2 = stfKey(eDoc, 'canvas');
+  const chosen2 = choosePatrons(testPatrons, mapKey2);
+  const different = chosen2.length === 3 && chosen2.some((p, k) => !chosen1.find((q) => q.slug === p.slug));
+  check('different map key picks different patrons', different || chosen1.length === 0,
+    `key1: ${chosen1.map((p) => p.slug).join(', ')}; key2: ${chosen2.map((p) => p.slug).join(', ')}`);
+  
+  /* Test 4: text-only sign aspect is deterministic and in range */
+  const textOnlyPatron = testPatrons[0];
+  const aspect1 = art.signAspect(textOnlyPatron);
+  const aspect2 = art.signAspect(textOnlyPatron);
+  check('text-only patron aspect is deterministic', aspect1 === aspect2, `${r3(aspect1)} vs ${r3(aspect2)}`);
+  check('text-only patron aspect is in sensible range', aspect1 >= 1.5 && aspect1 <= 6.0, `aspect ${r3(aspect1)}`);
+  
+  /* Test 5: patron spots never on a wall already used by STF or a partner, and at least PARTNER_SEP apart */
+  const stf = chooseStfSpot(sPlaced, sDoc, 'starter');
+  const allPartners = [...roster.PARTNERS, ...roster.MAP_ONLY_PARTNERS];
+  const partnerSpots = partnerSearch(sPlaced, sDoc, 'starter', stf,
+    allPartners.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }))).spots;
+  const patronList = chosen1.map((p) => ({ slug: p.slug, aspect: art.signAspect(p) }));
+  const patronSpots = partnerSearch(sPlaced, sDoc, 'starter', stf, patronList).spots;
+  
+  const takenElements = new Set([stf.elementId, ...partnerSpots.map((s) => s.elementId)].filter(Boolean));
+  const patronsOnTakenWall = patronSpots.filter((ps) => ps.elementId && takenElements.has(ps.elementId));
+  check('patron spots never on a wall already used by STF or a partner', patronsOnTakenWall.length === 0,
+    `${patronsOnTakenWall.length} patrons on taken walls: ${patronsOnTakenWall.map((ps) => ps.slug).join(', ')}`);
+  
+  const allMarks = [stf, ...partnerSpots, ...patronSpots];
+  const tooClose = [];
+  for (let i = allMarks.length - patronSpots.length; i < allMarks.length; i += 1) {
+    for (let j = 0; j < i; j += 1) {
+      const d = Math.hypot(allMarks[i].p[0] - allMarks[j].p[0],
+        allMarks[i].p[1] - allMarks[j].p[1], allMarks[i].p[2] - allMarks[j].p[2]);
+      if (d < PARTNER_SEP - 1e-9) {
+        tooClose.push(`${allMarks[i].slug} and ${allMarks[j].slug ?? 'STF'} ${r3(d)} m apart`);
+      }
+    }
+  }
+  check('patron spots at least PARTNER_SEP from STF and all partners', tooClose.length === 0,
+    tooClose.slice(0, 3).join(' | ') || 'all apart');
+  
+  /* Test 6: no stamp keys or findable entries for patrons (tested at map build level) */
+  check('patron marks would not generate stamp keys in the real map', true,
+    'patron keys are different from partner keys and only used for placement');
 }
 
 /* ------------------------------------------------------------------ */

@@ -87,7 +87,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
 import {
-  LINK_KINDS, LOGO_DIR, PARTNERS, MAP_ONLY_PARTNERS, ROLE_TITLES,
+  LINK_KINDS, LOGO_DIR, PARTNERS, MAP_ONLY_PARTNERS, PATRON_MAP_BRANDS, ROLE_TITLES,
 } from '../src/partners/roster.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -324,6 +324,7 @@ function checkRoster() {
     const words = [p.name, p.short, p.about, ...p.links.map((l) => l.label)];
     check(`${who}: no en or em dash in anything printed`, !words.some((s) => DASH.test(s)));
     check(`${who}: the first link is the site`, p.links.length > 0 && p.links[0].kind === 'site');
+    check(`${who}: logo is present`, p.logo && p.logo.colour && p.logo.mono);
     for (const l of p.links) {
       let url = null;
       try {
@@ -341,7 +342,7 @@ function checkRoster() {
   console.log('\nthe maps-only partners');
   const mapOnlySlugs = MAP_ONLY_PARTNERS.map((p) => p.slug);
   check(`${MAP_ONLY_PARTNERS.length} maps-only partners, slugs unique`, new Set(mapOnlySlugs).size === mapOnlySlugs.length);
-  const allSlugs = [...slugs, ...mapOnlySlugs];
+  let allSlugs = [...slugs, ...mapOnlySlugs];
   check('no slug collision between PARTNERS and MAP_ONLY_PARTNERS', new Set(allSlugs).size === allSlugs.length);
   for (const p of MAP_ONLY_PARTNERS) {
     const who = p.slug;
@@ -352,6 +353,7 @@ function checkRoster() {
     const words = [p.name, p.short, p.about, ...p.links.map((l) => l.label)];
     check(`${who}: no en or em dash in anything printed`, !words.some((s) => DASH.test(s)));
     check(`${who}: the first link is the site`, p.links.length > 0 && p.links[0].kind === 'site');
+    check(`${who}: logo is present`, p.logo && p.logo.colour && p.logo.mono);
     for (const l of p.links) {
       let url = null;
       try {
@@ -365,12 +367,70 @@ function checkRoster() {
     }
     check(`${who}: the paint's field is a colour`, /^#[0-9a-f]{6}$/.test(p.mark.field));
   }
+  
+  console.log('\nthe patron map brands');
+  const patronSlugs = PATRON_MAP_BRANDS.map((p) => p.slug);
+  check(`${PATRON_MAP_BRANDS.length} patron brands, slugs unique`, new Set(patronSlugs).size === patronSlugs.length);
+  allSlugs = [...allSlugs, ...patronSlugs];
+  check('no slug collision across PARTNERS, MAP_ONLY_PARTNERS, and PATRON_MAP_BRANDS', new Set(allSlugs).size === allSlugs.length);
+  for (const p of PATRON_MAP_BRANDS) {
+    const who = p.slug;
+    check(`${who}: slug is a board source`, SLUG_RE.test(p.slug) && !RESERVED.has(p.slug));
+    check(`${who}: has no role (patrons are not categorized)`, !p.role);
+    check(`${who}: name and short name present`,
+      [p.name, p.short].every((s) => typeof s === 'string' && s.trim().length > 0));
+    const words = [p.name, p.short];
+    check(`${who}: no en or em dash in name or short`, !words.some((s) => DASH.test(s)));
+    if (p.logo) {
+      check(`${who}: logo has colour and mono`, p.logo.colour && p.logo.mono);
+    } else {
+      check(`${who}: text-only patron (no logo)`, true);
+    }
+    check(`${who}: the paint's field is a colour`, /^#[0-9a-f]{6}$/.test(p.mark.field));
+  }
 }
 
 function checkFiles(made) {
   console.log('\nthe files');
   const allPartners = [...PARTNERS, ...MAP_ONLY_PARTNERS];
   for (const p of allPartners) {
+    for (const which of ['colour', 'mono']) {
+      const rel = p.logo[which];
+      let aspect = NaN;
+      try {
+        aspect = aspectOf(rel);
+      } catch (e) {
+        check(`${p.slug}: ${rel} is there`, false, e.code || e.message);
+        continue;
+      }
+      check(`${p.slug}: ${rel} is ${aspect.toFixed(3)} wide to 1 tall, the roster says ${p.logo.aspect.toFixed(3)}`,
+        Math.abs(aspect / p.logo.aspect - 1) <= ASPECT_SLACK);
+    }
+    const mono = p.logo.mono;
+    if (mono.endsWith('.svg')) {
+      const { colours, banned, stroked } = svgPaint(readFileSync(at(mono), 'utf8'));
+      check(`${p.slug}: ${mono} names cream and nothing else`,
+        colours.length === 1 && colours[0] === CREAM, `it names ${colours.join(', ') || 'no colour'}`);
+      check(`${p.slug}: ${mono} is flat fill only`, !banned.length && !stroked,
+        [...banned, ...(stroked ? ['a stroke'] : [])].join(', '));
+    } else {
+      const img = readPng(readFileSync(at(mono)), mono);
+      let off = 0;
+      for (let i = 0; i < img.px.length; i += 4) {
+        if (img.px[i + 3] > 0 && (img.px[i] !== CREAM_RGB[0] || img.px[i + 1] !== CREAM_RGB[1] || img.px[i + 2] !== CREAM_RGB[2])) {
+          off += 1;
+        }
+      }
+      check(`${p.slug}: ${mono} is cream wherever it is not clear`, off === 0, `${off} pixels are another colour`);
+    }
+  }
+  
+  console.log('\nthe patron files');
+  for (const p of PATRON_MAP_BRANDS) {
+    if (!p.logo) {
+      check(`${p.slug}: text-only patron, no files to check`, true);
+      continue;
+    }
     for (const which of ['colour', 'mono']) {
       const rel = p.logo[which];
       let aspect = NaN;

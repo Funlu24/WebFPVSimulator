@@ -77,8 +77,34 @@ import { paintMaterial, paintGlow } from './stf.js';
  * made for the logo rather than a logo on a wall. */
 export const LOGO_SHARE = 0.7;
 
+/* Min and max aspect ratios for text-only patron signs, so the size comes
+ * out deterministic. */
+const TEXT_ASPECT_MIN = 1.5;
+const TEXT_ASPECT_MAX = 6.0;
+
+/* Measure the aspect ratio for a text-only sign. Returns the sign's width
+ * over its height, clamped to sensible bounds. */
+function measureTextAspect(text) {
+  const canvas = document.createElement('canvas');
+  const g = canvas.getContext('2d');
+  const testH = 100;
+  const bh = testH * LOGO_SHARE;
+  const size = Math.round(bh * 0.6);
+  g.font = `italic 900 ${size}px system-ui, sans-serif`;
+  const wide = g.measureText(text).width;
+  const logoAspect = wide / bh;
+  const signAspect = LOGO_SHARE * logoAspect + (1 - LOGO_SHARE);
+  return signAspect < TEXT_ASPECT_MIN ? TEXT_ASPECT_MIN : (signAspect > TEXT_ASPECT_MAX ? TEXT_ASPECT_MAX : signAspect);
+}
+
 export function signAspect(p) {
-  const a = p && p.logo && p.logo.aspect > 0 ? p.logo.aspect : 2;
+  if (!p) {
+    return 2;
+  }
+  if (!p.logo) {
+    return measureTextAspect(p.short);
+  }
+  const a = p.logo.aspect > 0 ? p.logo.aspect : 2;
   return LOGO_SHARE * a + (1 - LOGO_SHARE);
 }
 

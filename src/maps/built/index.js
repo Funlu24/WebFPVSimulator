@@ -95,11 +95,11 @@ import { poleWireAnchors } from '../../props/street.js';
 import { sincos } from '../../props/trig.js';
 import { makeStfMark } from '../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../art/partnermark.js';
-import { PARTNERS, MAP_ONLY_PARTNERS } from '../../partners/roster.js';
+import { PARTNERS, MAP_ONLY_PARTNERS, PATRON_MAP_BRANDS } from '../../partners/roster.js';
 import { seatDocument, groundUnder, topUnder, PLATFORM_REACH } from './place.js';
 import { starterMap } from './starter.js';
 import { lookOf, kitLook, paintLights, paintSky, paintPost } from './looks.js';
-import { chooseStfSpot, choosePartnerSpots } from './egg.js';
+import { chooseStfSpot, choosePartnerSpots, choosePatrons, stfKey } from './egg.js';
 import { trafficOf, uploadTraffic, roadKeepOut } from './traffic.js';
 import { buildRoadMesh, roadCover } from './roadmesh.js';
 import { buildCars } from './cars.js';
@@ -890,9 +890,33 @@ function paintPartnerMarks(props, placed, spots, look) {
     }
     try {
       const mark = paintMark(props, placed, spot, look, (opts) => makePartnerMark(THREE, partner, opts), 1);
-      out.push({ ...mark, slug: partner.slug });
+      out.push({ ...mark, slug: partner.slug, findable: true });
     } catch (e) {
       console.error(`partners: ${partner.slug}'s mark could not be painted on this map`, e);
+    }
+  }
+  return out;
+}
+
+/*
+ * THE PATRON MARKS, up to PATRON_MAX_PER_MAP where ./egg.js chose, painted
+ * after partners so they never take a partner's wall. Patrons are NOT
+ * findable: their signs do not stamp, count toward achievements, or show the
+ * found panel. Returns the same `egg` shape with the patron's slug and
+ * findable: false.
+ */
+function paintPatronMarks(props, placed, spots, look) {
+  const out = [];
+  for (const spot of spots) {
+    const patron = PATRON_MAP_BRANDS.find((p) => p.slug === spot.slug);
+    if (!patron) {
+      continue;
+    }
+    try {
+      const mark = paintMark(props, placed, spot, look, (opts) => makePartnerMark(THREE, patron, opts), 1);
+      out.push({ ...mark, slug: patron.slug, findable: false });
+    } catch (e) {
+      console.error(`patrons: ${patron.slug}'s mark could not be painted on this map`, e);
     }
   }
   return out;
@@ -1020,6 +1044,21 @@ export async function buildMap(shell, onProgress, options) {
   } catch (e) {
     console.error('partners: no spots for the marks on this map', e);
   }
+  /* And the patrons', after partners and never on a partner's or STF's wall
+   * (./egg.js, rule 8). At most PATRON_MAX_PER_MAP per map, chosen
+   * deterministically by the map's key. */
+  let patronSpots = [];
+  try {
+    const mapKey = stfKey(doc, chosen.source);
+    const chosenPatrons = choosePatrons(PATRON_MAP_BRANDS, mapKey);
+    if (chosenPatrons.length > 0) {
+      const taken = [stfSpot, ...partnerSpots].filter(Boolean);
+      patronSpots = choosePartnerSpots(placed, doc, chosen.source, stfSpot,
+        chosenPatrons.map((p) => ({ slug: p.slug, aspect: signAspect(p) })));
+    }
+  } catch (e) {
+    console.error('patrons: no spots for the marks on this map', e);
+  }
   /* Its time of day and its ground (./looks.js): golden over concrete for
    * a map that never chose, which is this map as it always was. */
   const look = lookOf(doc);
@@ -1136,6 +1175,8 @@ export async function buildMap(shell, onProgress, options) {
     }
   }
   const marks = paintPartnerMarks(props, placed, partnerSpots, look);
+  const patronMarks = paintPatronMarks(props, placed, patronSpots, look);
+  const allMarks = [...marks, ...patronMarks];
   scene.add(props);
   progress(0.8);
 
@@ -1371,9 +1412,10 @@ export async function buildMap(shell, onProgress, options) {
      * found it: see paintStfMark and `egg` in src/maps/README.md. Paint
      * only; nothing about it is solid. */
     egg,
-    /* Where each partner's mark is painted, the same shape with the slug:
-     * see paintPartnerMarks and `marks` in src/maps/README.md. */
-    marks,
+    /* Where each partner's and patron's mark is painted, the same shape with
+     * the slug and findable flag: see paintPartnerMarks, paintPatronMarks and
+     * `marks` in src/maps/README.md. */
+    marks: allMarks,
     /* The author's named gaps as world rectangles, for the counter
      * (src/game/gaps.js): placeDocument's zones, placed by the one
      * conversion everything on this map goes through. Nothing solid and
