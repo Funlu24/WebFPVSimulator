@@ -4584,6 +4584,8 @@ export class Ui {
     this.gpuInfo = null;
     /* Set by main.js; see setStickProbe. */
     this.stickProbe = null;
+    /* Set by main.js; see setCraftProbe. */
+    this.craftProbe = null;
     /* The machine and the browser, as far as Stick help's advice and the
      * stick rows care. Read once: neither changes under a running page.
      * See src/ui/stickhelp.js. */
@@ -6611,6 +6613,12 @@ export class Ui {
        * cap is 32.
        */
       perf: this.perfProbe ? this.perfProbe() : null,
+      /*
+       * THE CRAFT, for a ticket that says it is stuck: parked or flying, on its back or waiting for a stick to
+       * centre, how long still, where, how often set down and why, the stick keys down. bug-d7247563 and
+       * bug-ad038907 each said "stuck" and nothing else, and neither could be made to happen from the words. One key.
+       */
+      craft: this.craftProbe ? this.craftProbe() : null,
       graphics: s.graphics || '',
       cameraAngle: s.cameraAngle,
       cameraFov: s.cameraFov,
@@ -15141,6 +15149,11 @@ export class Ui {
    * see setPerfProbe's caller in main.js. */
   setPerfProbe(fn) {
     this.perfProbe = typeof fn === 'function' ? fn : null;
+  }
+
+  /* The craft's state for a report: see bugSnapshot, and main.js where it is read. */
+  setCraftProbe(fn) {
+    this.craftProbe = typeof fn === 'function' ? fn : null;
   }
 
   /* Input to screen and the facts beside it, for the Settings row: see

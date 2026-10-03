@@ -3898,7 +3898,42 @@ export async function boot({ loading, bootStart, mapId }) {
   let haveRecoverFrom = false;
   const restSpot = { x: 0, y: 0, z: 0, surface: 0 };
 
-  function setDownNearby() {
+  /*
+   * THE LAST SET DOWNS, FOR A BUG REPORT: when, and why. A "stuck" ticket arrives with nothing about the craft, and a
+   * craft set down five times in a row inside a tunnel reads the same from outside as one parked waiting for a stick
+   * to centre (bug-d7247563, bug-ad038907, neither of which could be made to happen here). Wall clock, the last
+   * eight; `line` is a set down that found no flat surface and gave the start line instead.
+   */
+  const setDowns = [];
+
+  /*
+   * A CRASH IS A RESET, AND A RESET IS NOT A TAKEOFF. The keys and the thumb sticks are put at idle when a craft is
+   * set down (resetKeyboardSticks: a recovery that left them high would relaunch the wreck by itself), and a radio's
+   * gimbals cannot be put anywhere, because the hand is on them. So a craft set down with the right stick off centre
+   * lifted off on the next frame with the roll and pitch it had crashed with, and in a tunnel 2.3 m wide that is a
+   * crash, a set down and a relaunch into the wall again until the hand lets go: five in 1.8 s, measured
+   * (scripts/crash-check.js, "hand still on the sticks"; bug-d7247563, "crashed inside and cannot fly out").
+   *
+   * It is parked as a craft just turtled over is, which is the same state and says the same words, "Centre the right
+   * stick, then fly" (turtleRecover). Only that stick is waited for: the throttle is free, so full throttle with the
+   * sticks centred takes it off at once, as a crash at a wall has always been got away from (crash-check's "wall hit,
+   * then full throttle"). A set down the pilot asked for with X is not held: they asked for it with the sticks where
+   * they want them.
+   */
+  function holdUntilCentred(why) {
+    if (why === 'x') {
+      return;
+    }
+    const ch = input.channels;
+    turtleRecover = turtleStickHeld(ch.roll, ch.pitch);
+  }
+
+  function setDownNearby(why = 'x') {
+    const noted = { atMs: performance.now(), why, line: false };
+    setDowns.push(noted);
+    if (setDowns.length > 8) {
+      setDowns.shift();
+    }
     /* A craft set down is the end of trouble: a crash, a craft left stuck,
      * or the pilot's own X. The counter loses its open combo and whatever
      * was waiting to pay, and a skim is never paid for the wall it ended
@@ -3923,7 +3958,9 @@ export async function boot({ loading, bootStart, mapId }) {
        * reachable. That is not a glitch any more, it is a craft somewhere
        * it cannot be put back, so fall through to the old behaviour and
        * give them the line. */
+      noted.line = true;
       reset();
+      holdUntilCentred(why);
       return;
     }
     /* Heading is kept: being spun to face north because a wall grabbed an
@@ -3934,6 +3971,7 @@ export async function boot({ loading, bootStart, mapId }) {
      * does for R. The surface is handed over rather than asked for again,
      * so the craft sits on the one the search judged flat and clear. */
     resetCraft({ x: restSpot.x, z: restSpot.z, surface: restSpot.surface, yaw });
+    holdUntilCentred(why);
     stateCurr = readState();
     statePrev = stateCurr;
     poseFromState(stateCurr, pCurr);
@@ -4007,7 +4045,7 @@ export async function boot({ loading, bootStart, mapId }) {
     setManualFlip(false);
     setCrashflip(false);
     turtleRecover = false;
-    setDownNearby();
+    setDownNearby('stuck');
     notice = { text: 'Stuck, so you were set down nearby.\nX does this any time.', untilMs: performance.now() + 2800 };
   }
 
@@ -4102,7 +4140,7 @@ export async function boot({ loading, bootStart, mapId }) {
     /* The impact frame holds the last picture before the hit, which is the
      * camera's pose now, before the craft is set down. */
     mangaCrash();
-    setDownNearby();
+    setDownNearby('crash');
     notice = { text: 'Crashed, set down nearby.\nR restarts the run.', untilMs: performance.now() + 2400 };
   }
 
@@ -6727,7 +6765,7 @@ export async function boot({ loading, bootStart, mapId }) {
       setManualFlip(false);
       setCrashflip(false);
       turtleRecover = false;
-      setDownNearby();
+      setDownNearby('x');
       return;
     }
     /* Angle or Acro, from the keyboard. See flipFlightMode. */
@@ -10905,6 +10943,37 @@ export async function boot({ loading, bootStart, mapId }) {
      * running, suspended or never made, or whether the pilot had it off. */
     audio: { ...audio.report(), sound: ui.settings.sound, volume: ui.settings.volume },
   }));
+  /*
+   * THE CRAFT AT THE MOMENT OF A REPORT, the one thing a "stuck" ticket could not say: whether it was parked or in the
+   * air, on its back or waiting for a stick to centre (turtle: 'recover'), how long it had been still, where it was,
+   * how many times it had been set down in the last two minutes and why, which stick keys the page believed were down
+   * (a key whose release was lost holds a throttle at zero for good), and what the sticks were feeding the sim. One
+   * key, `craft`, because the board caps a report at 32 of them, and a few hundred characters of the 8000.
+   */
+  ui.setCraftProbe(() => {
+    const st = stateCurr;
+    const now = performance.now();
+    const r1 = (v) => Math.round(v * 10) / 10;
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const recent = setDowns.filter((d) => now - d.atMs <= 120000);
+    const last = setDowns.length ? setDowns[setDowns.length - 1] : null;
+    const ch = input.channels || {};
+    return {
+      landed,
+      turtle: turtleFlip.active ? 'flip' : (turtleWait ? 'wait' : (turtleRecover ? 'recover' : null)),
+      upZ: st ? r2(plantUpZ(st)) : null,
+      speed: st ? r1(plantSpeed(st)) : null,
+      at: [r1(shell.quad.position.x), r1(shell.quad.position.y), r1(shell.quad.position.z)],
+      stillS: stuckSinceMs >= 0 ? r1((simTimeMs - stuckSinceMs) / 1000) : 0,
+      setDowns: {
+        n: recent.length,
+        lastAgoS: last ? Math.round((now - last.atMs) / 1000) : null,
+        lastWhy: last ? `${last.why}${last.line ? '+line' : ''}` : null,
+      },
+      keys: [...input.keys].filter((k) => input.isStickKey(k)).sort(),
+      sticks: [r2(ch.roll || 0), r2(ch.pitch || 0), r2(ch.yaw || 0), r2(ch.throttle || 0)],
+    };
+  });
   ui.setLatencyProbe(() => ({
     supported: latency.supported,
     key: latency.report(),

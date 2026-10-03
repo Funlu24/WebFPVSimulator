@@ -935,6 +935,39 @@ export class App {
     this.history.begin(this.doc, label);
   }
 
+  /* Whether a gesture is in flight, a pull, a turn or a node dragged: between beginEdit and endEdit. The card keeps
+   * out of its way (placeCard in ./ui.js). */
+  gesturing() {
+    return Boolean(this.history.pending);
+  }
+
+  /*
+   * A POSITION TYPED INTO A FIELD, one axis at a time. On a map what stands on the piece goes with it, as it does when
+   * the piece is pulled and when an arrow key nudges it (carriedBy), and a field is the one way of moving it that did
+   * not: the pieces on a roof were left where they were with nothing under them, and the seat set them down on the
+   * ground. bug-67ae1762, a builder's "snap to ground if move object underneath", with a container stood on end on
+   * another. What stands on it is found before the edit, while the map is still placed as it was. A track has nothing
+   * standing on anything, and carriedBy answers none for it.
+   */
+  setElementCoord(id, axis, value) {
+    const element = elementById(this.doc, id);
+    if (!element || (axis !== 'x' && axis !== 'y') || !Number.isFinite(value)) {
+      return;
+    }
+    const delta = value - element.position[axis];
+    const riders = delta === 0 ? [] : this.carriedBy([id]);
+    const round6 = (v) => Math.round(v * 1e6) / 1e6;
+    this.edit('move', (d) => {
+      elementById(d, id).position[axis] = value;
+      for (const rider of riders) {
+        const e2 = elementById(d, rider);
+        if (e2) {
+          e2.position[axis] = round6(e2.position[axis] + delta);
+        }
+      }
+    });
+  }
+
   endEdit() {
     this.settle();
     this.stampIfChanged(this.history.commit(this.doc));
@@ -2521,6 +2554,11 @@ export class App {
      * state on it: the keyboard has to go to the new one, not to the one this
      * render is about to take out of the page. */
     this.panels.renderLapBar();
+    /* A map's card steps aside for the open drawer, which holds every field it has (renderCard in ./ui.js), and is
+     * back when the drawer is shut. */
+    if (docModeOf(this.doc) === 'freestyle') {
+      this.panels.renderCard();
+    }
     if (next) {
       this.closeTools();
       this.drawerFrom = opener;

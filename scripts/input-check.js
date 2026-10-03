@@ -833,6 +833,40 @@ async function mousePage(page) {
     faulted.keys.length + 5 <= 32 && faulted.chars < 8000, `${faulted.keys.length} keys, ${faulted.chars} chars`);
 
   /* --------------------------------------------------------------------
+   * 5e. A stuck craft has to be able to say how. bug-d7247563, "stuck in a
+   *     container hole", and bug-ad038907, "ITS GETTING STUCK THE DRONE":
+   *     each said stuck and nothing else, and neither could be made to
+   *     happen from the words, because a report carried the pilot's settings
+   *     and devices and nothing about the craft. It carries one key now,
+   *     `craft`: parked or flying, on its back or waiting for a stick to
+   *     centre, how long still, where, set downs and why, the stick keys the
+   *     page believes are down and what the sticks feed the sim. A key
+   *     whose release was lost holds a throttle at zero for good, and this
+   *     is the only place it would show.
+   * ------------------------------------------------------------------ */
+  section('a stuck craft reports itself');
+  const crafty = await ev(`
+    const snap = ui.bugSnapshot();
+    window.__input.keys.add('KeyS');
+    window.__input.keys.add('ArrowLeft');
+    window.__input.keys.add('KeyP');
+    const held = ui.bugSnapshot().craft;
+    window.__input.keys.delete('KeyS');
+    window.__input.keys.delete('ArrowLeft');
+    window.__input.keys.delete('KeyP');
+    return JSON.stringify({ craft: snap.craft, held: held && held.keys, keys: Object.keys(snap).length, chars: JSON.stringify(snap).length });
+  `).then(JSON.parse);
+  const cr = crafty.craft || {};
+  check('a report carries the craft: parked or not, turtle, attitude, speed, where, how still, set downs and sticks',
+    typeof cr.landed === 'boolean' && 'turtle' in cr && 'upZ' in cr && 'speed' in cr && Array.isArray(cr.at) && cr.at.length === 3
+    && typeof cr.stillS === 'number' && cr.setDowns && typeof cr.setDowns.n === 'number' && Array.isArray(cr.keys)
+    && Array.isArray(cr.sticks) && cr.sticks.length === 4, JSON.stringify(cr));
+  check('and the stick keys the page believes are down, which is how a lost key release would show, and only stick keys',
+    JSON.stringify(crafty.held) === JSON.stringify(['ArrowLeft', 'KeyS']), JSON.stringify(crafty.held));
+  check(`a report with it is ${crafty.keys} keys and ${crafty.chars} chars, inside the board's 32 and 8000 with the feel form's five`,
+    crafty.keys + 5 <= 32 && crafty.chars < 8000, `${crafty.keys} keys, ${crafty.chars} chars`);
+
+  /* --------------------------------------------------------------------
    * 6. The camera angle that changed the track. bug-4d5b2c51: on a whoop,
    *    in the town, nudging the camera angle threw the pilot onto the
    *    custom track, because syncMode ran on every settings write and
