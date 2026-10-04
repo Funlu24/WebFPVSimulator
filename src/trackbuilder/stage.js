@@ -62,14 +62,20 @@
  * existed draws every side, which is what every gate in that module was.
  */
 import * as elementLib from './elements.js';
-import { ELEMENTS, KIND, FRAME_TUBE_OD, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
+import {
+  ELEMENTS, KIND, FRAME_TUBE_OD, isUnbuilt, trackClassOf, virtualApertureDims, isPlain, flagSideOf, flagSideSigns,
+  flagLeanSign, gateFlagHeight, GATE_FLAG_POLE_R,
+} from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD } from './racegow.js';
 import * as modelLib from './model.js';
-import { aperturesOf, elementById, apertureCenter, logoForDecal } from './model.js';
+import { aperturesOf, elementById, apertureCenter, logoForDecal, dressOrder } from './model.js';
 import { apertureFrame, apertureCorners, clamp } from './geometry.js';
 import { isRoomType, roomWorldBoxes } from '../props/room.js';
 /* The game's own turf and the game's own way of painting a sponsor on it, for the race field. */
-import { GROUND_TURF, paintGroundLogo } from '../art/banners.js';
+import {
+  GROUND_TURF, paintGroundLogo, paintGateHeader, paintGateSleeve, paintFlagSailPair, flagMast, flagSailProfile,
+  bannerCanvas, BANNER_SIZE, GATE_BANNER_H,
+} from '../art/banners.js';
 /* A hoop and a hex gate: the run of tubes round the hole, and a pane in its shape. */
 import { frameOutline, paneFan } from '../props/aperture.js';
 /* A letter: its pipe and its holes, by the namespace for the reason above (a letter is newer than the oldest copy a
@@ -884,6 +890,155 @@ function fieldGroup(THREE, doc, logos, sizes, keep) {
   return group;
 }
 
+/*
+ * THE FLAG'S TWO PARTS, lofted the way the builder's 3D view lofts them
+ * (sailPlaneGeometry and mastPlaneGeometry in view3d.js), which cannot be
+ * imported: it is the editor's whole preview and needs a page. What IS shared
+ * is everything that decides what a flag looks like, the mast's bend and
+ * taper (flagMast), the sail's outline (flagSailProfile) and its print
+ * (paintFlagSailPair), all in src/art/banners.js. What is copied is the loop
+ * that turns those numbers into triangles, which is the part that cannot drift
+ * into a different flag.
+ *
+ * Both are authored in XY, x out from the mast and y up, and are stood up and
+ * turned to a heading by the caller, as the preview does it.
+ */
+function sailGeometry(THREE, poleR, h) {
+  const { rows: profile } = flagSailProfile(h);
+  const rows = profile.length;
+  const cols = 5;
+  const pos = [];
+  const uvMinusZ = [];
+  const uvPlusZ = [];
+  const idx = [];
+  for (let r = 0; r < rows; r += 1) {
+    const row = profile[r];
+    for (let c = 0; c < cols; c += 1) {
+      const u = c / (cols - 1);
+      pos.push(poleR + row.lx + (row.tx - row.lx) * u, row.ly + (row.ty - row.ly) * u, 0);
+      /* Two sheets so the print reads the right way round from both sides. */
+      uvMinusZ.push(1 - u * 0.5, row.t);
+      uvPlusZ.push(u * 0.5, row.t);
+    }
+  }
+  const n = rows * cols;
+  const back = [];
+  for (let r = 0; r < rows - 1; r += 1) {
+    for (let c = 0; c < cols - 1; c += 1) {
+      const a = r * cols + c;
+      idx.push(a, a + cols, a + 1, a + 1, a + cols, a + cols + 1);
+      back.push(n + a + 1, n + a + cols, n + a, n + a + cols + 1, n + a + cols, n + a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos.concat(pos), 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvMinusZ.concat(uvPlusZ), 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const nrm = geo.getAttribute('normal');
+  for (let i = 0; i < n; i += 1) {
+    nrm.setXYZ(n + i, nrm.getX(i), nrm.getY(i), nrm.getZ(i));
+  }
+  geo.setIndex(idx.concat(back));
+  return geo;
+}
+
+function mastGeometry(THREE, poleR, h) {
+  const { points } = flagMast(h);
+  const radial = 6;
+  const pos = [];
+  const idx = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i];
+    const prev = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    let tx = next.x - prev.x;
+    let ty = next.y - prev.y;
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl;
+    ty /= tl;
+    const r = poleR * p.r;
+    for (let a = 0; a < radial; a += 1) {
+      const th = (a / radial) * Math.PI * 2;
+      pos.push(p.x + -ty * Math.cos(th) * r, p.y + tx * Math.cos(th) * r, Math.sin(th) * r);
+    }
+  }
+  for (let i = 0; i < points.length - 1; i += 1) {
+    for (let a = 0; a < radial; a += 1) {
+      const a0 = i * radial + a;
+      const a1 = i * radial + ((a + 1) % radial);
+      idx.push(a0, a0 + radial, a1, a1, a0 + radial, a1 + radial);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/*
+ * THE DRESS: the printed boards and sails a race field's gates and flags wear,
+ * with the course's sponsors on them. The game dresses them and the builder's
+ * 3D view dresses them (view3d.js, bannerKit), by one rule that lives on the
+ * document (dressOrder in model.js: the flying order, one slot a structure,
+ * dealt round the logos), and this reads the same rule, so gate 7 wears the
+ * mark here that it wears there.
+ *
+ * ONE KIT PER LOGO: a header board, a sleeve and its mirror for the far leg
+ * (a second print and not a negative scale, which would turn the plane inside
+ * out), and a sail in navy and in red. A course with no logos still has the
+ * one kit, painted without a mark, which is what the game does: a bare gate
+ * on that field wears its plain banner, not a different one.
+ *
+ * Painted with the same painters the game and the preview use, so a header
+ * and a sleeve are the sponsor's mark where they have always put it.
+ * `logos` is the Map from a logo's id to its decoded image (loadLogos in
+ * animate.js); a logo that did not decode is a kit with no mark.
+ */
+function dressKit(THREE, doc, logos, keep) {
+  const list = (doc.branding && doc.branding.logos) || [];
+  const n = Math.max(1, list.length);
+  const imageOf = (i) => (list[i] && logos ? logos.get(list[i].id) : null) || null;
+  const paint = (i, size, painter, opts) => {
+    const canvas = bannerCanvas(size[0], size[1]);
+    painter(canvas.getContext('2d'), size[0], size[1], { ...opts, logo: imageOf(i) });
+    const tex = keep(new THREE.CanvasTexture(canvas));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 16;
+    return keep(new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.9, metalness: 0, side: THREE.FrontSide,
+    }));
+  };
+  const sails = new Map();
+  const sailOf = (i, accent) => {
+    const key = `${i}:${accent}`;
+    if (!sails.has(key)) {
+      sails.set(key, paint(i, BANNER_SIZE.sailSheet, paintFlagSailPair, { accent }));
+    }
+    return sails.get(key);
+  };
+  const dress = [];
+  for (let i = 0; i < n; i += 1) {
+    dress.push({
+      header: paint(i, BANNER_SIZE.header, paintGateHeader, {}),
+      sleeve: paint(i, BANNER_SIZE.sleeve, paintGateSleeve, {}),
+      sleeveFlipped: paint(i, BANNER_SIZE.sleeve, paintGateSleeve, { flip: true }),
+      sails: [sailOf(i, 'navy'), sailOf(i, 'red')],
+    });
+  }
+  /* The run of turn flags alternates navy and red down the lap, round the logos. */
+  const runLength = n % 2 === 0 ? n : n * 2;
+  const run = [];
+  for (let i = 0; i < runLength; i += 1) {
+    run.push(sailOf(i % n, i % 2 === 1 ? 'red' : 'navy'));
+  }
+  return {
+    forGate: (slot) => dress[((Math.round(slot) % n) + n) % n],
+    forFlag: (k) => run[k % run.length],
+  };
+}
+
 export function buildStage(THREE, doc, path, {
   size = 512, width = size, height = size, camera: fixed = null,
   /*
@@ -985,6 +1140,44 @@ export function buildStage(THREE, doc, path, {
 
   const pipes = [];
   const pads = [];
+
+  /*
+   * The dress of a race field's gates and flags, when it is set on one. It goes
+   * in its own group beside the track and not in `statics`, because the camera
+   * is fitted to the pipe and a board standing off the pipe must not move the
+   * frame.
+   */
+  const dress = field && !micro ? dressKit(THREE, doc, logos, keep) : null;
+  const dressGroup = new THREE.Group();
+  track.add(dressGroup);
+  const slots = dress ? dressOrder(doc) : null;
+  const flagNumber = new Map();
+  if (dress) {
+    let k = 0;
+    for (const el of doc.elements) {
+      if (el.type === 'flag') {
+        flagNumber.set(el.id, k);
+        k += 1;
+      }
+    }
+  }
+  /* A mast and its sail, stood up at a point and turned to a heading: the mast joins the pipe, the sail is its own mesh. */
+  const flagAt = (x, y, z, turn, radius, h, sailMat) => {
+    const place = (mesh) => {
+      mesh.rotation.x = Math.PI / 2;
+      mesh.rotation.y = turn;
+      mesh.position.set(x, y, z);
+      mesh.updateMatrix();
+      return mesh;
+    };
+    const mast = mastGeometry(THREE, radius, h);
+    mast.applyMatrix4(place(new THREE.Object3D()).matrix);
+    pipes.push(mast);
+    const sail = new THREE.Mesh(keep(sailGeometry(THREE, radius, h)), sailMat);
+    place(sail);
+    sail.castShadow = true;
+    dressGroup.add(sail);
+  };
 
   /* A pipe standing on the floor gets a fitting and four stubs, which is
    * what the reference's splayed foot is and what a real build uses to stop
@@ -1142,12 +1335,97 @@ export function buildStage(THREE, doc, path, {
       }
       lowerTop = [c[3], c[2]];
     }
+    dressGate(el, sides);
+  };
+
+  /*
+   * A GATE'S PRINTED DRESS, the way the builder's 3D view hangs it (the block
+   * after "NO PRINTED DRESS ON A RACEGOW GATE" in view3d.js): a header board over
+   * the top rail and a sleeve down each upright, each as two planes back to back
+   * so the print reads the right way round from either side, and flags on the
+   * header's ends for a flagged gate. A tilted gate is carried on a mast and a
+   * letter has no uprights, so neither is dressed. Every measure that goes
+   * round the pipe is taken from the pipe as it is DRAWN (pipeOut), because on
+   * a big field the pipe is drawn thicker than it is and a board that clears the
+   * real pipe would sit inside the drawn one.
+   */
+  const dressGate = (el, sides) => {
+    if (!dress || isLetter(el) || Math.abs(el.pitch) >= Math.PI / 6) {
+      return;
+    }
+    const levels = aperturesOf(el);
+    if (!levels.length) {
+      return;
+    }
+    const top = levels[levels.length - 1];
+    const bottom = levels[0];
+    const f = apertureFrame(el.yaw, el.pitch);
+    const kit = dress.forGate(slots.get(el.id) ?? 0);
+    const pipeOut = Math.max(tubeOD / 2, tubeR);
+    const edge = top.clearW / 2 + tubeOD / 2 + pipeOut;
+    const lift = (tubeOD / 2 + pipeOut) * 2;
+    const sleeveW = isPlain(el) ? 0 : 0.42;
+    const sleeveBottom = bottom.sillH;
+    const sleeveH = top.sillH + top.clearH + lift - sleeveBottom;
+    const basis = new THREE.Matrix4().makeBasis(v3(THREE, f.widthAxis), v3(THREE, f.heightAxis), v3(THREE, f.normal));
+    const quat = new THREE.Quaternion().setFromRotationMatrix(basis);
+    const across = v3(THREE, f.widthAxis);
+    const facing = v3(THREE, f.normal);
+    const base = el.position;
+    const board = (w, h, mat, off, z) => {
+      for (const sn of [-1, 1]) {
+        const face = new THREE.Mesh(keep(new THREE.PlaneGeometry(w, h)), mat);
+        face.quaternion.copy(quat);
+        if (sn < 0) {
+          face.rotateY(Math.PI);
+        }
+        face.position.set(
+          base.x + across.x * off + facing.x * sn * (0.012 + (pipeOut - tubeOD / 2)),
+          base.y + across.y * off + facing.y * sn * (0.012 + (pipeOut - tubeOD / 2)),
+          base.z + z + across.z * off + facing.z * sn * (0.012 + (pipeOut - tubeOD / 2)),
+        );
+        face.castShadow = true;
+        dressGroup.add(face);
+      }
+    };
+    if (sleeveW > 0) {
+      for (const sx of [-1, 1]) {
+        if (sides[sx < 0 ? 'left' : 'right']) {
+          board(sleeveW, sleeveH, sx < 0 ? kit.sleeveFlipped : kit.sleeve, sx * (edge + sleeveW / 2), sleeveBottom + sleeveH / 2);
+        }
+      }
+    }
+    const headerW = 2 * (edge + sleeveW);
+    if (sides.top) {
+      board(headerW, GATE_BANNER_H, kit.header, 0, top.sillH + top.clearH + lift + GATE_BANNER_H / 2 + 0.03);
+    }
+    /* The pennants on a flagged gate's header, standing on the board's top edge and leaning outboard. */
+    const signs = flagSideSigns(flagSideOf(el));
+    const headerTop = top.sillH + top.clearH + lift + GATE_BANNER_H + 0.03;
+    const h = gateFlagHeight(el.dims);
+    const radius = Math.max(GATE_FLAG_POLE_R, tubeR * 0.75);
+    let i = 0;
+    for (const sx of signs) {
+      const lean = flagLeanSign(sx);
+      const turn = -Math.atan2(f.widthAxis.y * lean, f.widthAxis.x * lean);
+      flagAt(
+        base.x + f.widthAxis.x * sx * (headerW / 2), base.y + f.widthAxis.y * sx * (headerW / 2),
+        base.z + headerTop, turn, radius, h, kit.sails[i % kit.sails.length],
+      );
+      i += 1;
+    }
   };
 
   const buildMarker = (el) => {
     const h = el.dims.height ?? 1.5;
     const r = Math.max(el.dims.poleRadius ?? el.dims.baseRadius ?? tubeR, minDrawR);
     const p = el.position;
+    /* A turn flag on a race field is the bent mast and its printed sail, in place of the plain post. */
+    if (dress && el.type === 'flag') {
+      flagAt(p.x, p.y, p.z, -el.yaw, r, h, dress.forFlag(flagNumber.get(el.id) ?? 0));
+      addFoot({ x: p.x, y: p.y, z: p.z });
+      return;
+    }
     pipes.push(pipeGeometry(
       THREE, { x: p.x, y: p.y, z: p.z }, { x: p.x, y: p.y, z: p.z + h }, r,
     ));

@@ -65543,3 +65543,24 @@ only for the race field: on the black stage the name stays, because the name was
 frames the track alone, so it is larger in the picture. Checked by rendering the field at 1024 and looking at it, and by
 `gif:selftest` (81) and the "animation setting" browser case, which do not see the plate; nothing automated asserts it is absent.
 If "file name" meant the downloaded file's name, that is a different thing and was not touched.
+
+## 2026-10-04 | builder | Sponsors on the gates and flags of the race field (the owner's ask)
+
+The owner: "the gates and flags need the sponsor logos too." On the race field only; the black stage is untouched.
+
+Gates wear a header board over the top rail and a sleeve on each upright, and flags the bent mast and a printed sail, which are
+what the game and the builder's 3D view dress them in, painted with the same painters (`paintGateHeader`, `paintGateSleeve`,
+`paintFlagSailPair` in `src/art/banners.js`). Which logo goes where is `dressOrder` in `model.js`, the one rule both renderers
+already share, so gate 7 wears here what it wears there. A flagged gate has masts and sails on its header ends. A tilted gate and a
+letter are not dressed, as in the preview, and a plain-style gate has a header and no sleeves. A course with no logos is still
+dressed, with the plain banner, as in the game.
+
+What is copied and not shared: the loop that lofts the mast and the sail into triangles, from `view3d.js`, which cannot be
+imported without its page. The shapes and the paint are shared and the loop is the part that cannot drift into another flag.
+Every measure that goes round the pipe is taken from the pipe as drawn, because on a big field the stage draws it thicker than it is
+and a board that cleared the real pipe sat inside the drawn one.
+
+Checked by rendering the 2025 WA States layout with three logos at 2048 and looking at crops of the gates and the flags, and a course
+with no logos at 1024. `gif:selftest` (81), `check:clip` (2428), both lints and the setting case pass; stage mode at 512 and 2048 is
+byte identical to before. Nothing automated asserts that a board is on a gate: it is looked at. At the whole field view the boards
+are small, as the real ones are, and their print is legible only in a close crop.
