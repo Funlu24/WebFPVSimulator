@@ -3005,6 +3005,20 @@ async function officeRoofPads(mod, ranges) {
  * the lattice, it meets the pylon, which is the trap, seen. From where the
  * map now starts the craft, it clears the peak and touches nothing, and so
  * do the lift off and the hover.
+ *
+ * WHAT THE FIRST ONE ASSERTS, made exact on 2026-10-04 with the owner's
+ * word ("fix the tests"). It is the control for the second: the open climb
+ * passes only if it touches nothing, so from the point the same climb has to
+ * touch the pylon, and that is what is asserted. It also asserted that the
+ * climb from the point never got over the peak in nine seconds, which held
+ * on main's module (stuck under the apex at 27.6 m to the end) and stopped
+ * holding when the five inch's drag changed that day: the craft bumps under
+ * the apex for about two seconds, works sideways and rises out through one
+ * of the peak's faces, which are open, four rods 6 cm thick from the tops of
+ * the legs to the apex. Whether a craft pushing up under an open pyramid
+ * finds a face in nine seconds is not something this control is for, so it
+ * is printed, not asserted: how high the climb got, and when it first
+ * passed the open climb's mark if it did.
  */
 const OPEN_CLIMB = 34;
 
@@ -3037,9 +3051,12 @@ async function openStartScenario() {
     const open2 = await fly(world, builtFrame(placed), climb);
     const top = (run) => Math.max(...run.rows.map((row) => row.p[2]));
     const touched = (run) => run.rows.filter((row) => row.touching).length;
+    const past = (run) => run.rows.find((row) => row.p[2] > OPEN_CLIMB - 1);
+    const pastNote = (run) => (past(run) ? `past ${OPEN_CLIMB - 1} m at ${r3(past(run).ms / 1000)} s` : `never past ${OPEN_CLIMB - 1} m`);
     check('from the point, inside the lattice, a climb straight up meets the pylon: the trap, seen',
-      touched(inside) > 0 && top(inside) < OPEN_CLIMB - 1,
-      `${touched(inside)} steps in contact, up to ${r3(top(inside))} m`);
+      touched(inside) > 0,
+      `${touched(inside)} steps in contact, up to ${r3(top(inside))} m, ${pastNote(inside)} `
+      + `(the open climb ${pastNote(open)})`);
     check(`from the start, a climb straight up to ${OPEN_CLIMB} m, over the peak, touches nothing, the same to the bit twice`,
       touched(open) === 0 && top(open) > OPEN_CLIMB - 1 && open.hash === open2.hash,
       `${touched(open)} steps in contact, up to ${r3(top(open))} m`);

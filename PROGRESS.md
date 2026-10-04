@@ -66091,3 +66091,122 @@ this were flown on the old feel, and nothing marks them.
   through with a note.
 - The promise in the thread was to push to main only if everything came back green. Two checks outside verify came back
   newly red, so the push stopped there and went back to the owner.
+
+## 2026-10-04 | tests | The red checks fixed where the check was wrong (the owner's word: "fix the tests")
+
+Follows the two entries above. Nothing in src/, dist/ or tests/ changed: this is scripts/wall-check.js,
+scripts/props-check.js and scripts/crash-check.js. dist/sim.wasm is 0a1f60b4, as verified 18 of 18 above. The push to main
+still waits, on one question below.
+
+### The owner's word, as given
+
+- 11:46 UTC, in answer to the 11:35 question ("Push the grip change to main with two side tests newly red?"), in the
+  owner's words: "fix the tests , if the tests are correct fix the code don't push broken codee". Taken to cover every red
+  line that question named: the two this change turned red (check:props, check:wall's check 6) and the ones red on main
+  before it (check:wall's other lines, check:crash's jump guard). For each, decide whether the check or the code is wrong,
+  fix that one, and push nothing to main while anything is red. The reply in the thread: "I'll check each red test, fix
+  whichever is wrong, the test or the code, and push only when everything's green."
+
+### Check by check
+
+**check:props, "from the point, inside the lattice, a climb straight up meets the pylon: the trap, seen". The check was
+wrong.** It is the control for the line after it: the open climb passes only if it touches nothing, so from the point the
+same climb has to touch the pylon. It also asserted that the climb from the point never got over the peak in nine seconds,
+which held on main's module and stopped holding with the drag change: the craft works sideways under the apex and rises
+out through one of the peak's faces, which are open (traced in the entry above). Whether a craft pushing up under an open
+pyramid finds a face in nine seconds is not what a control is for, so it is now printed, not asserted. New module: 1929
+steps in contact, up to 35.075 m, past 33 m at 8.403 s. Main's: 3390 steps, up to 27.631 m, never past 33 m. Both pass.
+Negative control, in a scratch copy: the same climb flown with the pylon taken away fails the line, 0 steps in contact.
+
+**check:wall check 6, "three seconds of nothing and the craft is off the face". The measure did not match its own
+gate.** The gate is a drop of two metres "from where the wind-up carried it"; the measure was the highest point of the
+whole three seconds less the height at the end, which is the gate only while a craft that reaches the ground stays there.
+At the held 0.345 throttle it lifts off again, and yaw 180 at 6 m/s came down the face, was on the ground by 1.95 s and
+climbed away beside the face, not touching it after 2.25 s. hangReading now measures from the highest point at which the
+craft was touching the wall to the lowest point after it, and a touch above that mark, or more than the drop above the
+lowest point so far (a craft that went down and came back up to the face), starts the reading again. Five made flights
+of three seconds hold it to that: the hang the report measured (4.95 m, 7 cm off, a contact every 20 ms) and two
+re-hangs, above and below where the slide started, read as on the face; a slide down the face touching all the way from
+3.98 m, and the drag change's flight, read as off it. Flown: 12 of 12 on both modules.
+
+**check:crash, "no frame moves further than its speed allows". The check was wrong.** Its skip after a set down was the
+restart's row and the row after it, on the stated grounds that the picture moves a frame after the clock does (because
+crashResetTick and stuckTick run after the render, not, as the comment said, because of the interpolation). A row is the
+pilot's read on its own requestAnimationFrame, and on Low the shell paces itself on a timer, so a row is not a frame.
+Counted with the shell's own frame count (window.__boot().frames) over two full runs: up to three frames read twice in a
+scenario and up to twelve reads more than a frame apart. When the restart's frame was read twice, the re-read spent the
+skip and the set down itself was scored as a jump. Caught in the act: frame 1198 read twice, then frame 1199 drawn where
+the craft was put, 0.845 m away at 0 m/s, excess 0.795 m. On the old measure "wall head-on, 10 m/s" failed this way in
+four full runs of six (0.765 on main's module; 0.731, 0.795 and 0.796 on the new one) and passed in two. Each row now
+carries its frame, a re-read is not scored, and nothing is scored against the restart's own frame. jumpControls() runs
+seven made sequences before the browser opens: a set down read once a frame, read twice at the restart, with the restart
+never read and with the next frame never read must pass; a 0.9 m frame at 9.1 m/s, a 0.78 m move straight after a
+re-read and a 0.78 m move two frames after a set down must fail. The old measure fails the re-read one (0.701 m) and gets
+the other six right; the new one gets all seven. Three full runs of the fixed check: 0 guards failed, worst excess 0 m in
+all 36 scenario flights.
+
+**check:wall check 3, the exit. Found on the way: the levelling stick was backwards.** On the rig a positive pitch stick
+raises the nose: half a stick for 150 ms from level takes fwd.y to +0.42, and to -0.41 the other way, at spawn yaws 0, 90
+and 180. The stick was fwd.y times 2.6, so the step pushed a nose that was down further down and never levelled anything.
+Traced: from the end of a 9 m/s coast, 6 to 21 degrees off level, it turned the craft 155 to 162 degrees the wrong way in
+its 900 ms and handed the exit a craft on its back; on a 3 m/s tap it took the nose from 41 degrees down to straight down
+and pressed the thrust into the face. That is what the comment over check 3 had measured and called the tumble of a real
+quad ("on to vertical"), and it is what failed main's three 9 m/s exits (0.05 to 2.70 m) and left every 3 m/s exit 4 to
+9 cm off the face. Now minus fwd.y. Every arrival at every speed and yaw is levelled and flown out, 9.1 to 9.4 m at 3 and
+6 m/s and 5.9 to 9.8 m at 9 m/s, on both modules, so the exit is asserted at every speed (12 lines, was 4) and the
+comment and the printed table say so. It was green on the branch only because the 9 m/s hit had thrown the craft clear
+before the flip.
+
+**check:wall check 2 at 3 m/s, "the craft comes off the face", yaws 0, 180 and 270. Not fixed: the owner's call.**
+Traced at yaw 0 every 10 ms from the first contact: the props touch with the centre 0.1399 m off the face at 2.49 m/s,
+compress to 0.1226 m in 10 ms, the craft comes back off at 0.243 m/s, is out of contact from 69 to 137 ms, and gets no
+further than 0.1363 m, 14 of the 17 mm back, while the hit pitches it nose down, 35 degrees by then. The held throttle,
+now tilted toward the face, brings it back at 138 ms, and it rubs down the face at about 41 degrees. The line asks for the
+centre to get further than the square-on reach, 0.1413 m, which is further than where the props first touched, and gets
+0.140 (0.142 at yaw 90, which passes). The check is right about what it sees. What it sees is the soft props doing what
+the owner chose on 2026-09-24: no restitution on a prop strike, so a tap the props take alone does not bounce the craft
+back past where it first touched. The line has been red on main since then (four yaws on main's module, three on this
+one). The same question is crash-check's target "wall tap, 3 m/s: leaves the wall rather than sticking", measured and not
+enforced, missed since the same day: gap after 1 s 0.073 to 0.079 m in this turn's runs, 0.069 on main's module. With the
+exit fixed, a pilot who levels out flies 9.3 m clear of the same tap at every yaw, so the craft is not trapped; a gentle
+tap left alone does not bounce far. Turning these lines green is a code change (a prop strike gives a gentle tap some
+bounce, which reverses the soft-prop choice and changes every wall hit) or a test change (the line becomes a printed
+target, as crash-check's is), and both are the owner's.
+
+### For the owner
+
+The three 3 m/s lines above are put to the owner as a decision, with making them a target recommended, because the
+craft is not stuck and how far a gentle tap bounces is a feel call. Nothing goes to main until the answer.
+
+### Left for later, found on the way
+
+- scripts/park-fly.js's Wall Tap levels out after its quarter forward with the same pattern, fwd.y times 2.4, the sign
+  this entry found backwards in wall-check. Not touched: park-fly is not one of the red checks and was not run in this
+  turn. Its Wall Tap has passed, which may only mean the quarter leaves the craft inside the done test.
+
+### RUN LOG
+
+    node scripts/wall-check.js         67 passed, 3 failed (0a1f60b4): the three 3 m/s
+                                       check 2 lines above. Main's module (5408b3e2), same
+                                       script: 65 passed, 5 failed, the four 3 m/s lines
+                                       and "below the knee"
+    node scripts/props-check.js        all passed (0a1f60b4), and all passed on main's
+                                       module (5408b3e2) with the same script
+    node scripts/crash-check.js        three full runs: 0 guards failed, 7 of 7 controls,
+                                       worst excess 0 m in every scenario
+    npm run check:world                all passed
+    npm run check:world-golden         all passed (it reads crash-check's scenarios out of
+                                       its source, which did not change)
+    npm run verify                     not run: nothing it reads changed. The three files
+                                       are scripts it does not import, and dist/sim.wasm is
+                                       the 0a1f60b4 verified 18 of 18 above
+
+### What went wrong
+
+- The first hangReading passed the three made flights written for it and still read a craft that comes down, climbs
+  back and re-hangs lower than it started as off the face. Found on reading the diff before committing; the reading was
+  changed and two more made flights hold it.
+- The wall check's exit had been flying the wrong way since before this branch, and its own comment read the result as
+  physics. Found only because a trace of the 3 m/s exit printed the nose going down under a stick meant to raise it.
+- The entry above reported check:crash's jump as failing "the same line on main's module", which was true, and left it
+  there. The line was the check's.

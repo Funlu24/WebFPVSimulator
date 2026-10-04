@@ -198,6 +198,9 @@ function flyScenario(S) {
       rows.push({
         phase,
         ms: window.__stickPath().moduleMs,
+        /* Which shell frame this read saw: the pilot's reads are not the
+         * shell's frames. See FRAMES, NOT READS in measure(). */
+        fr: window.__boot().frames,
         p, v: c.vel ? [c.vel.x, c.vel.y, c.vel.z] : [0, 0, 0],
         spd: c.speed,
         upY: c.up ? c.up.y : 1,
@@ -257,15 +260,20 @@ function atTarget(S, r) {
 function measure(S, rows) {
   const m = {
     frames: rows.length, crashes: 0, crashKinds: [], maxInside: 0,
-    worstJump: 0, finite: true, fault: false, setDowns: 0,
+    worstJump: 0, finite: true, fault: false, setDowns: 0, unframed: 0,
   };
   let wasCrashed = false;
+  /* The shell frame of the last set down's restart; see FRAMES, NOT READS. */
+  let setDownFr = -Infinity;
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
     for (const v of [...r.p, ...r.v, r.rate]) {
       if (!Number.isFinite(v)) {
         m.finite = false;
       }
+    }
+    if (!Number.isFinite(r.fr)) {
+      m.unframed += 1;
     }
     m.fault = m.fault || r.fault;
     m.maxInside = Math.max(m.maxInside, r.inside);
@@ -274,15 +282,40 @@ function measure(S, rows) {
       m.crashKinds.push(r.kind);
     }
     wasCrashed = r.crashed;
-    /* A step backwards in the sim clock is a set down, which restarts it:
+    /*
+     * A step backwards in the sim clock is a set down, which restarts it:
      * announced, and bounded by the stuck guard, so it is counted rather
      * than read as a teleport. See stuckTick in main.js. The picture moves
-     * on the frame AFTER the clock does, because the render interpolates
-     * between the last two physics states, so that frame is skipped too. */
+     * on the frame AFTER the clock does, so that frame is skipped too:
+     * crashResetTick and stuckTick set the craft down after the frame's
+     * render, so the frame that restarts the clock still draws the craft
+     * where it stopped, and the next one draws it where it was put.
+     *
+     * FRAMES, NOT READS, made exact on 2026-10-04 with the owner's word
+     * ("fix the tests"). The skip was the restart's row and the row after
+     * it, which is the same thing only while every row is a new frame, and
+     * it is not: the pilot reads the craft on its own requestAnimationFrame
+     * and on Low, which this check flies, the shell paces itself on a timer,
+     * so the two drift past each other. Counted over two full runs that
+     * day with the shell's own frame count: up to three frames read twice in
+     * a scenario, and up to twelve reads more than a frame apart. When the
+     * frame read twice was the restart's, the re-read spent the skip and the
+     * set down itself, 0.78 to 0.85 m at 0 m/s, was scored as a jump: "wall
+     * head-on, 10 m/s" failed this guard that way on main's module and on the
+     * grip change's alike, in four full runs of six, and passed with --only.
+     * Caught in the act with frame counts: frame 1198 read twice, then frame
+     * 1199 drawn where the craft was put, 0.845 m away. So each row carries
+     * the frame it saw, a re-read is not scored (the frame it saw has not
+     * moved), and nothing is scored against the restart's own frame, which
+     * is the one frame drawn where the craft was before it was put down.
+     * jumpControls() holds the guard to catching a jump one frame after
+     * that, and to the re-read that used to fail it.
+     */
     const restart = (j) => j > 0 && rows[j].ms < rows[j - 1].ms;
     if (restart(i)) {
       m.setDowns += 1;
-    } else if (i > 0 && !restart(i - 1)) {
+      setDownFr = r.fr;
+    } else if (i > 0 && r.fr > rows[i - 1].fr && rows[i - 1].fr > setDownFr) {
       const q = rows[i - 1];
       const dt = Math.max(0, r.ms - q.ms) / 1000;
       const d = Math.hypot(r.p[0] - q.p[0], r.p[1] - q.p[1], r.p[2] - q.p[2]);
@@ -357,11 +390,63 @@ function measure(S, rows) {
   return m;
 }
 
+/*
+ * THE JUMP GUARD'S OWN CONTROLS, run before the browser opens, so a change to
+ * measure() that stops it seeing a teleport fails here instead of passing
+ * quietly in a flight that happened not to have one. Rows in the shape
+ * flyScenario records, a frame each 16 ms, around the set down measured on
+ * 2026-10-04 in "wall head-on, 10 m/s": the restart's frame drew the craft at
+ * the face, and the next frame drew it 0.78 m away, where it was put, at
+ * 0 m/s. Each control is [what, rows, whether the guard must pass].
+ */
+function jumpControls() {
+  const row = (fr, ms, p, spd) => ({
+    phase: 'fly', fr, ms, p, v: [spd, 0, 0], spd, upY: 1, rate: 0, crashed: false, kind: '',
+    landed: spd === 0, turtle: false, inside: 0, gap: 9, fault: false,
+  });
+  const AT = [5.479, 2.273, 29.312];
+  const PUT = [5.304, 1.564, 29.487];
+  const away = (p, d) => [p[0] - d, p[1], p[2]];
+  /* Five frames of the run in at 9.1 m/s, ending a frame short of the face. */
+  const runIn = [0, 1, 2, 3, 4].map((k) => row(100 + k, 5000 + 16 * k, away(AT, 0.146 * (5 - k)), 9.1));
+  const restart = row(105, 0, AT, 0);
+  const put = (fr, ms, p = PUT) => row(fr, ms, p, 0);
+  const controls = [
+    ['a set down read once a frame is not a jump',
+      [...runIn, restart, put(106, 16), put(107, 32), put(108, 48)], true],
+    ['a set down whose restart frame is read twice is not a jump (the failure of 2026-10-04)',
+      [...runIn, restart, { ...restart }, put(106, 16), put(107, 32)], true],
+    ['a set down whose restart frame is never read is not a jump',
+      [...runIn, put(106, 16), put(107, 32), put(108, 48)], true],
+    ['a set down whose next frame is never read is not a jump',
+      [...runIn, restart, put(107, 32), put(108, 48)], true],
+    ['a frame that moves 0.9 m at 9.1 m/s is a jump',
+      [...runIn.slice(0, 3), row(103, 5048, away(AT, 0.146 * 3 - 0.9), 9.1)], false],
+    ['a frame read twice and then moved 0.78 m is a jump',
+      [...runIn, { ...runIn[4] }, row(105, 5080, away(AT, 0.146 - 0.78), 9.1)], false],
+    ['a move of 0.78 m two frames after a set down is a jump',
+      [...runIn, restart, put(106, 16), put(107, 32, away(PUT, 0.78)), put(108, 48, away(PUT, 0.78))], false],
+  ];
+  return controls.map(([what, rows, shouldPass]) => {
+    const m = measure({ name: 'control', kind: 'wall' }, rows);
+    const passes = m.unframed === 0 && m.worstJump <= 0.10;
+    return [what, passes === shouldPass, `worst excess ${r3(m.worstJump)} m, guard ${passes ? 'passes' : 'fails'}`];
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const enforceTargets = args.includes('--targets');
   const only = (args.find((a) => a.startsWith('--only=')) || '').split('=')[1] || '';
   const jsonOut = (args.find((a) => a.startsWith('--json=')) || '').split('=')[1] || '';
+
+  console.log("crash-check: the jump guard's own controls, flown on no browser\n");
+  let controlFails = 0;
+  for (const [what, ok, got] of jumpControls()) {
+    controlFails += ok ? 0 : 1;
+    console.log(`     ${ok ? 'pass' : 'FAIL'}  control ${what}: ${got}`);
+  }
+  console.log('');
 
   const page = await openPage({ root: ROOT, width: 400, height: 260, url: '/index.html' });
   const { cdp, sessionId } = page;
@@ -375,7 +460,7 @@ async function main() {
     return r.result.value;
   };
 
-  let guardFails = 0;
+  let guardFails = controlFails;
   let targetFails = 0;
   const report = { at: new Date().toISOString(), scenarios: {} };
   try {
@@ -425,8 +510,8 @@ async function main() {
         m.touched ? `at ${m.approach} m/s` : 'it never came within 0.25 m of a solid');
       guard(m.finite && !m.fault, 'state stays finite and the frame loop never faults');
       guard(m.maxInside <= 0.01, 'the centre never goes inside a solid', `deepest ${r3(m.maxInside)} m`);
-      guard(m.worstJump <= 0.10, 'no frame moves further than its speed allows',
-        `worst excess ${r3(m.worstJump)} m`);
+      guard(m.unframed === 0 && m.worstJump <= 0.10, 'no frame moves further than its speed allows',
+        `worst excess ${r3(m.worstJump)} m${m.unframed ? `, but ${m.unframed} rows carry no frame count and were not scored` : ''}`);
       /* stuckTick sets a craft down after 1.5 s still and not upright, 5 s
        * in turtle; half a second on each is frame granularity. */
       guard(m.stuckMs <= 2000 && m.turtleMs <= 5500, 'never left stuck: set down after 1.5 s still and not upright',

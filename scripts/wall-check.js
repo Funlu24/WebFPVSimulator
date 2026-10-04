@@ -195,9 +195,23 @@ async function tap(yaw, speed) {
    * with its lower edge, and the answer to it on a real quad is the same:
    * level out, then leave. The workbook writes the trick that way round for
    * the same reason, "a 90 pitch forward to level out and fly away".
+   *
+   * THE LEVELLING STICK HAD ITS SIGN THE WRONG WAY ROUND until 2026-10-04,
+   * found while the owner's word ("fix the tests") had the checks open. On
+   * this rig a positive pitch stick raises the nose: half a stick for 150 ms
+   * from level takes fwd.y to +0.42, and to -0.41 the other way, at spawn
+   * yaws 0, 90 and 180. The stick was fwd.y times 2.6, so a nose that was
+   * down was pushed further down, and the step never levelled anything: from
+   * the end of a 9 m/s coast, 6 to 21 degrees off level, it turned the craft
+   * 155 to 162 degrees the wrong way in its 900 ms and handed the exit a
+   * craft on its back, which only got away because the hit had thrown it
+   * clear first. On a 3 m/s tap it took the nose from 41 degrees down to
+   * straight down, which is the "on to vertical" above, and pressed the
+   * thrust into the face. It is now minus fwd.y, so a nose that is down is
+   * raised.
    */
   rig.stickUntil(
-    (c) => [0, cl(c.fwd.y * 2.6, -0.5, 0.5), 0, 0.55], 900,
+    (c) => [0, cl(-c.fwd.y * 2.6, -0.5, 0.5), 0, 0.55], 900,
     (c) => Math.abs(c.fwd.y) < 0.10 && c.up.y > 0.9,
   );
   const exitFrom = rig.craft().p;
@@ -307,25 +321,26 @@ for (const r of results) {
 }
 
 /*
- * AND THE PILOT FLIES OUT OF THE ONES THE CONTACT THROWS CLEAR.
+ * AND THE PILOT FLIES OUT OF IT, at every speed.
  *
- * Asserted at the hard arrival only, and the reason is a measurement rather
- * than a convenience. A quad that meets a wall NOSE FIRST meets it with the
- * leading prop discs, and those sit below the centre of mass once the craft
- * has pitched into its own approach, so the impulse pitches it further nose
- * down. Measured on a 3 m/s arrival: the nose went from 2 degrees down to 28
- * in seven tenths of a second and on to vertical, at which point the thrust
- * axis is pointing AT the wall and the craft holds itself against the face
- * under its own power, taking a contact on every pass. It sits about 7 cm
- * off the face, which is exactly the reach a craft in that attitude presents:
- * with the thrust axis normal to the wall the four prop discs are edge on and
- * the query radius collapses from 0.141 m to the blade alone.
- *
- * None of that is the contact model failing. It is the tumble a real quad
- * does when it clips a wall with its lower edge, and it is the state
- * clipWatchTick's thrash detector was written for. What the shell does with
- * it is call a crash and put the pilot back on the line, which is a
- * different question from this one.
+ * Until 2026-10-04 this was asserted at the hard arrival only, on a
+ * measurement that turned out to be the levelling stick's sign (see THE
+ * LEVELLING STICK above): "measured on a 3 m/s arrival, the nose went from 2
+ * degrees down to 28 in seven tenths of a second and on to vertical, at
+ * which point the thrust axis is pointing AT the wall and the craft holds
+ * itself against the face under its own power". The first half of that is
+ * the tap. A quad that meets a wall NOSE FIRST meets it with the leading prop
+ * discs, which sit below the centre of mass once the craft has pitched into
+ * its own approach, so the impulse pitches it further nose down: about 41
+ * degrees by the end of a 3 m/s coast on this tree. "On to vertical" was the
+ * levelling stick pushing the nose the rest of the way and the thrust into
+ * the face. With the stick the right way round every arrival here is
+ * levelled and flown out, to 9.1 to 9.4 m at 3 and 6 m/s and 5.9 to 9.8 m at
+ * 9 m/s, at every spawn yaw, on main's module and on the grip change's
+ * alike. With it the wrong way round, main's module failed this line at
+ * 9 m/s at three yaws (the exit ended 0.05 to 2.70 m off the face) and every
+ * 3 m/s exit ended 4 to 9 cm off it. So it is asserted at every speed, which
+ * is the report as written: "a wall tap is a small bounce you fly out of".
  *
  * The trick itself is flown base first for exactly this reason: "execute a
  * 90 pitch back while simultaneously cutting the throttle. Gently tap the
@@ -334,10 +349,10 @@ for (const r of results) {
  * the wall. scripts/park-fly.js flies that shape in the real shell and its
  * Wall Tap case passes.
  */
-for (const r of results.filter((x) => x.speed >= 9)) {
+for (const r of results) {
   const g0 = r.hit ? FACE_X - r.hit.x : 0;
   check(
-    `yaw ${r.yawName} deg at ${r.speed} m/s: the contact throws it clear and the pilot flies out`,
+    `yaw ${r.yawName} deg at ${r.speed} m/s: the pilot levels out and flies away from the wall`,
     r.sawContact && r.exitGap > 3,
     `at the contact the centre was ${g0.toFixed(3)} m off the face; `
     + `after the exit, ${r.exitGap.toFixed(2)} m`,
@@ -485,7 +500,54 @@ for (const speed of SPEEDS) {
  * inside three seconds, so the margin is five metres wide. At 9 m/s the
  * contact throws it clear of the face entirely and the drop never happens,
  * which check 2 already asserts, so the clearance is the other way out.
+ *
+ * WHAT THE DROP IS MEASURED BETWEEN, made exact on 2026-10-04 with the
+ * owner's word ("fix the tests"). Until then it was the highest point of the
+ * whole three seconds less the height at the end, which is the gate above
+ * only while a craft that reaches the ground stays there. It does not stay:
+ * the sticks hold 0.345 throttle, over a hover, so a craft that slides down
+ * the face lifts off the ground again and climbs. On main's module that
+ * climb was slow enough to end the three seconds still under two metres
+ * (1.4 to 1.7 m up). When the five inch's drag changed that day, one
+ * arrival, yaw 180 at 6 m/s, slid down sooner, was on the ground by 1.95 s,
+ * and climbed away beside the face past its own wind-up, not touching it
+ * after 2.25 s, and the old reading called that hanging.
+ *
+ * So "where the wind-up carried it" is now the highest point at which the
+ * craft was touching the wall, and the drop is from there to the lowest
+ * point it came down to after it, which is the gate as written. A craft that
+ * hangs never comes down from where it touches. One that comes down and then
+ * climbs back onto the face and hangs there starts the reading again from
+ * where it touches, and has to come down from there: a touch above the last
+ * mark does that, and so does a touch more than the drop above the lowest
+ * point so far, which is a craft that went down and came back up to the
+ * face rather than one still sliding down it. hangReading is apart from the
+ * flight so it can be handed all of those, and it is, below.
  */
+const HANG_DROP = 2.0;
+function hangReading(samples) {
+  let top = -Infinity;
+  let low = Infinity;
+  for (const s of samples) {
+    if (s.touch && (s.y >= top || s.y > low + HANG_DROP)) {
+      top = s.y;
+      low = s.y;
+    } else if (s.y < low) {
+      low = s.y;
+    }
+  }
+  const end = samples[samples.length - 1];
+  const dropped = top > -Infinity ? top - low : 0;
+  return {
+    top,
+    low,
+    dropped,
+    endY: end.y,
+    endGap: end.gap,
+    off: dropped > HANG_DROP || end.gap > SQUARE_REACH * 4,
+  };
+}
+
 async function pin(yaw, speed) {
   const start = V(FACE_X - 13, 3.2, 0);
   const release = V(FACE_X - 1.4, 3.2, 0);
@@ -504,55 +566,99 @@ async function pin(yaw, speed) {
   rig.fly(rampPath(start, release, (runway / speed) * 1.25, speed), {
     heading: Math.atan2(1, 0),
   });
-  let peakY = -Infinity;
-  let peakGap = 0;
+  const samples = [];
+  let seen = rig.stats.contacts;
   rig.stickUntil([0, 0, 0, 0.345], 3000, (c) => {
-    if (c.p.y > peakY) {
-      peakY = c.p.y;
-    }
-    const gap = FACE_X - c.p.x;
-    if (gap > peakGap) {
-      peakGap = gap;
-    }
+    samples.push({ y: c.p.y, gap: FACE_X - c.p.x, touch: rig.stats.contacts > seen });
+    seen = rig.stats.contacts;
     return false;
   });
-  const end = rig.craft();
-  return {
-    peakY,
-    peakGap,
-    endY: end.p.y,
-    endGap: FACE_X - end.p.x,
-    contacts: rig.stats.contacts,
-  };
+  return { ...hangReading(samples), contacts: rig.stats.contacts };
 }
 
-const HANG_DROP = 2.0;
+const hangNote = (r) => `highest touching the wall ${r.top.toFixed(2)} m, lowest after it `
+  + `${r.low.toFixed(2)} m (a drop of ${r.dropped.toFixed(2)} m against ${HANG_DROP.toFixed(2)} needed), `
+  + `ended at ${r.endY.toFixed(2)} m, gap ${r.endGap.toFixed(3)} m`;
 for (const [yawName, yaw] of YAWS) {
   for (const speed of SPEEDS) {
     /* eslint-disable-next-line no-await-in-loop */
     const r = await pin(yaw, speed);
-    const dropped = r.peakY - r.endY;
     check(
       `yaw ${yawName} deg at ${speed} m/s: three seconds of nothing and the craft is off the face`,
-      dropped > HANG_DROP || r.endGap > SQUARE_REACH * 4,
-      `climbed to ${r.peakY.toFixed(2)} m, ended at ${r.endY.toFixed(2)} m `
-      + `(a drop of ${dropped.toFixed(2)} m against ${HANG_DROP.toFixed(2)} needed), `
-      + `gap ${r.endGap.toFixed(3)} m, ${r.contacts} contacts`,
+      r.off,
+      `${hangNote(r)}, ${r.contacts} contacts`,
     );
   }
 }
 
+/*
+ * A READING THAT CANNOT SAY "HANGING" IS NOT EVIDENCE, and since the rotor
+ * bleed no flight here hangs, so it is handed made flights of three seconds
+ * a step at a time. The hang the report measured: 4.95 m, 7 cm off the
+ * masonry, a contact every twenty milliseconds. One that slides down, lies
+ * on the ground, climbs back up the face and hangs at 4.5 m, above where it
+ * started, and one that does the same and hangs at 3 m, below it. A slide
+ * down the face from under four metres, touching all the way, which must
+ * not read as a fresh hang every two metres. And the flight the drag change
+ * produced: down the face, onto the ground, and up again beside the face
+ * without touching it. The hangs must read as on the face, and the slide
+ * and the flight away as off it.
+ */
+{
+  const made = (fn) => Array.from({ length: 3000 }, (_, i) => fn(i));
+  const ramp = (i, a, b, y0, y1) => y0 + ((y1 - y0) * (i - a)) / (b - a);
+  const hang = hangReading(made((i) => ({ y: 4.95, gap: 0.07, touch: i % 20 === 0 })));
+  check('check 6 reads the hang the report measured as on the face', !hang.off, hangNote(hang));
+  const back = hangReading(made((i) => {
+    if (i < 1500) {
+      return { y: ramp(i, 0, 1500, 4.0, 0.1), gap: 0.14, touch: true };
+    }
+    if (i < 2000) {
+      return { y: 0.1, gap: 0.2, touch: false };
+    }
+    if (i < 2500) {
+      return { y: ramp(i, 2000, 2500, 0.1, 4.5), gap: 0.2, touch: false };
+    }
+    return { y: 4.5, gap: 0.14, touch: i % 20 === 0 };
+  }));
+  check('check 6 reads a craft that climbs back onto the face and hangs as on the face',
+    !back.off, hangNote(back));
+  const lower = hangReading(made((i) => {
+    if (i < 1500) {
+      return { y: ramp(i, 0, 1500, 4.0, 0.1), gap: 0.14, touch: true };
+    }
+    if (i < 2000) {
+      return { y: 0.1, gap: 0.2, touch: false };
+    }
+    if (i < 2500) {
+      return { y: ramp(i, 2000, 2500, 0.1, 3.0), gap: 0.2, touch: false };
+    }
+    return { y: 3.0, gap: 0.14, touch: i % 20 === 0 };
+  }));
+  check('check 6 reads a craft that climbs back onto the face lower down and hangs as on the face',
+    !lower.off, hangNote(lower));
+  const slide = hangReading(made((i) => ({
+    y: i < 2400 ? ramp(i, 0, 2400, 3.98, 0.07) : 0.07, gap: 0.14, touch: i < 2400 || i % 40 === 0,
+  })));
+  check('check 6 reads a slide down the face, touching all the way, as off the face',
+    slide.off, hangNote(slide));
+  const away = hangReading(made((i) => {
+    if (i < 1650) {
+      return { y: ramp(i, 0, 1650, 4.0, 0.08), gap: 0.14, touch: true };
+    }
+    return { y: ramp(i, 1650, 3000, 0.08, 4.5), gap: ramp(i, 1650, 3000, 0.16, 0.31), touch: false };
+  }));
+  check('check 6 reads a craft that comes down the face and flies off beside it as off the face',
+    away.off, hangNote(away));
+}
+
 /* The numbers, for the record. A threshold argued in PROGRESS.md needs the
  * measurement beside it. */
-console.log('\n  approach and rebound, per spawn yaw. The exit column is ASSERTED');
-console.log('  only at 9 m/s, where the contact throws the craft clear and the exit is');
-console.log('  a flight. Below that the craft still winds nose down onto the face; what');
-console.log('  check 6 asserts there is that it comes OFF the face on its own, which it');
-console.log('  does by falling down it:');
+console.log('\n  approach, rebound and exit, per spawn yaw. The exit is asserted at every');
+console.log('  speed, the rebound and the furthest gap by check 2:');
 for (const r of results) {
   console.log(
-    `    ${r.speed >= 9 ? 'exit asserted ' : 'exit recorded '}`
-    + `yaw ${r.yawName.padStart(3)} deg  in ${r.approach.toFixed(2)} m/s  `
+    `    yaw ${r.yawName.padStart(3)} deg  in ${r.approach.toFixed(2)} m/s  `
     + `peak out ${r.peakOut.toFixed(3)} m/s  furthest ${r.maxGap.toFixed(3)} m  `
     + `flew out to ${r.exitGap.toFixed(2)} m  `
     + `contacts ${r.stats.contacts} (${r.stats.frame} frame, ${r.stats.props} prop, `
