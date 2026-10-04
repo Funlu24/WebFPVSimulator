@@ -36,7 +36,7 @@
  */
 
 import { buildPalette, GifEncoder, PaletteHistogram } from '../src/trackbuilder/gif.js';
-import { detailOf } from '../src/trackbuilder/stage.js';
+import { detailOf, fitName } from '../src/trackbuilder/stage.js';
 import { exportTrackGif, MAX_EDGE, MIN_EDGE } from '../src/trackbuilder/animate.js';
 import { ANIMATION_EDGE, animationFilename } from '../src/trackbuilder/storage.js';
 
@@ -644,6 +644,50 @@ console.log('gif encoder selftest');
 }
 
 /*
+ * ---- How a name is set on the plate ----
+ *
+ * A long name used to be shrunk to a floor of 28 pixels on one line and then
+ * cut off at both ends. fitName breaks it at its spaces onto up to three
+ * lines at the largest size that fits. The measuring function here is a
+ * fixed 0.6 em a letter, which is not any real typeface and does not need to
+ * be: what is held is the rule, that nothing is ever wider or taller than the
+ * plate, that one line is kept while it stays large, and that the names that
+ * were never a problem come out as they always did.
+ */
+{
+  const measure = (t, px) => t.length * px * 0.6;
+  const W = 1024 * 0.92;
+  const H = 256 * 0.92;
+  const inside = (r) => r.lines.every((l) => measure(l, r.px) <= W) && r.lines.length * r.px * 1.15 <= H;
+  const short = fitName(measure, 'Hibari Yard', W, H);
+  check('name: a short one is one line at the biggest size', short.lines.length === 1 && short.px === 132 && inside(short), JSON.stringify(short));
+  const usual = fitName(measure, 'WA State Champs 2025', W, H);
+  check('name: one that fits at a good size stays on one line', usual.lines.length === 1 && usual.px >= 48 && inside(usual), JSON.stringify(usual));
+  const names = [
+    'WA State Champs 2025 Round 1',
+    'WA State Championships 2025 Round 3 Qualifying Heat',
+    'WA State Championships 2025 Round 3 Qualifying Heat Final Series Day Two',
+    'A'.repeat(80),
+    'WWWW '.repeat(16).trim(),
+    'x'.repeat(200),
+    '   ',
+    '',
+  ];
+  for (const n of names) {
+    const r = fitName(measure, n, W, H);
+    check(`name: ${JSON.stringify(n.slice(0, 24))} (${n.length} letters) never runs off the plate`,
+      r.lines.length >= 1 && r.lines.length <= 3 && inside(r), JSON.stringify(r));
+  }
+  const long = fitName(measure, 'WA State Championships 2025 Round 3 Qualifying Heat Final Series Day Two', W, H);
+  check('name: a long one is broken at its spaces, whole words, in order',
+    long.lines.length >= 2 && long.lines.join(' ') === 'WA State Championships 2025 Round 3 Qualifying Heat Final Series Day Two', JSON.stringify(long.lines));
+  check('name: and is not set at the old 28 pixel floor', long.px > 40, String(long.px));
+  const huge = fitName(measure, 'x'.repeat(200), W, H);
+  check('name: one that cannot fit at all ends in an ellipsis rather than being cut', huge.lines[huge.lines.length - 1].endsWith('\u2026'), JSON.stringify(huge.lines));
+  check('name: an empty one is named for what it is', fitName(measure, '', W, H).lines.join('') === 'Untitled track');
+}
+
+/*
  * ---- The exporter's limits ----
  *
  * These fire before anything that needs a browser, so they can be checked
@@ -707,6 +751,11 @@ console.log('gif encoder selftest');
     animationFilename(doc, 1024) === 'wa-state-champs-2025-1024px.gif'
       && animationFilename(doc, 2048) === 'wa-state-champs-2025-2048px.gif',
     `${animationFilename(doc, 1024)} ${animationFilename(doc, 2048)}`);
+  check('file name: one set on the race field says so, at any size',
+    animationFilename(doc, ANIMATION_EDGE, true) === 'wa-state-champs-2025-field.gif'
+      && animationFilename(doc, 2048, true) === 'wa-state-champs-2025-2048px-field.gif'
+      && animationFilename(doc, 1024, false) === 'wa-state-champs-2025-1024px.gif',
+    `${animationFilename(doc, ANIMATION_EDGE, true)} ${animationFilename(doc, 2048, true)}`);
   check('file name: an unnamed track still gets a name at any size',
     animationFilename({}, 2048) === 'track-2048px.gif' && animationFilename({}) === 'track.gif');
 }

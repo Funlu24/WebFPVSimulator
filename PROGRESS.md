@@ -65192,3 +65192,76 @@ For whoever reads this next: the builder is `https://webfpv.org/sim/src/trackbui
 More, Export animation, then High and Very high, and open the files. Wrong would be a black or blank file, scan lines through the
 name, hairline gates, a sentence about the graphics card, or a Close that does not stop a render. The owner's verdict is not in
 yet and goes below this line when it is.
+
+## 2026-10-04 | builder | The name that was cut off, and the animation set on a race field with the sponsors on the grass (the owner's ask)
+
+The owner, after testing the sizes on the live site: "that is better, now the name of the track has been truncated we need to fix
+this, also can we set it in a race field with the sponsors logos on the grass when generating the high res gif?"
+
+### The name
+
+It was real, and worse than a single case. The name went on the plate as one line, shrunk until it fitted or until it hit a
+floor of 28 pixels, which is where a long name was cut off at both ends: "WA State Championships 2025 Round 3 Qualifying Heat
+Final Series Day Two" came out as "ate Championships ... Series Da", and a name of 51 letters was set as small as a footnote.
+The board allows a track name of 80 letters, so this was reachable by anybody.
+
+`fitName` in `stage.js` now breaks a name at its spaces onto up to three lines at the largest size that fits, prefers one line
+while it stays at 48 pixels or more, breaks a word wider than the plate between letters, and as a last resort ends in an
+ellipsis. Nothing is ever wider or taller than the plate. It is pure, so `gif-selftest.js` pins it with a fake measuring function.
+
+### The race field
+
+Export animation has a Setting for a five inch track: the black stage it has always been shot on, or a race field. The field is
+the game's own: the two turf greens and the five metre mower stripes down the long axis, a white line on the boundary the author
+drew with eight metres of run off outside it, and each of the course's ground logos (`groundLogo` elements) painted where it was
+put, at its heading and in its footprint, with `paintGroundLogo`. One plane per decal and not one canvas over the field, so a
+sponsor is as sharp as the picture. A decal with no logo, or one that will not decode, is left out and never outlined, which is
+the game's rule. Whoop tracks do not get the choice: they are flown in a room, which this does not draw.
+
+On the field the name has a dark edge (cream on mid green is pale), the hemisphere light is brighter (the stage is lit to leave
+shadows black on a black floor, and grass lit that way is a dark green), and the ribbon's tail fades to transparent. On the
+stage the tail fades to black, which is nothing, and on grass it was a black streak: the first render showed it.
+
+Choosing High or Very high puts the field on, as asked, until the pilot has chosen a Setting themselves, and then their choice
+stands at any size. Standard keeps the stage. The file name says `-field`.
+
+### What was checked
+
+    gif:selftest                81 passed (66 before), including fitName and the field file name
+    check:clip                  2268 passed
+    lint:nouns, lint:preload    PASS, up to date
+    check:builder --only        "animation size" 15 checks and "animation setting" 9, both pass; the setting case fails against
+                                a mutant where the size always overrides the pilot, and the earlier case fails against the old source
+    mutations of fitName        one line at any size, and no ellipsis fallback: both turn a check red
+    Standard, short name        512 and 2048 renders byte identical to the ones before this change (after the first version of the
+                                name rule failed this, below)
+    looked at                   the field at 1024 and 2048 with a 51 letter name, three sponsors and five decals; the dialog with the Setting
+
+### What went wrong
+
+- **My first threshold for breaking a name was 72 pixels and it changed ordinary names.** "WA State Champs 2025" fits one line at
+  about 68 pixels in the real typeface, so it became two lines and a 512 render of it was no longer the file it had been. The
+  byte comparison caught it. The thresholds are 48 and 44 now, which only touch names that would have been set smaller than that.
+- **The ribbon's tail was a black streak on grass.** Invisible on the stage, which is why nobody had seen it.
+- **My cleanup of the leftover renders matched its own shell** (`pkill -f chrome` in a command that contained the word) and killed it.
+  Nothing was lost; I ran the comparison again on its own.
+
+### What it costs, and what was not measured
+
+The full 600 frame lap of the 2025 WA States layout at 512: 1,072,291 bytes on the field, against 928,457 on the stage, about 15 per
+cent more. At 1024 and 2048 the field was rendered but its full lap was not measured, so the dialog says the file is bigger and
+gives no figure.
+
+### What was not run
+
+`npm run verify` (no physics, plant, ABI or build change), `shots`, the rest of `check:builder`, `lint:memory`, `lint:boot`; a real
+graphics card; and a course with real sponsor logos on a real published track. The test course's three logos and five decals are
+ones I drew for it.
+
+### For the owner
+
+1. **Pushed to the working branch, not main.** Say so and it goes to main.
+2. **The field is not the game's whole look.** No sky, trees or terrain, and the grass ends in a dark green surround. It is the
+   pitch the game puts a designed course on, which is the part a track and its sponsors live on.
+3. **Gates and flags are not dressed in sponsor logos in the export**, only the grass. The document dresses them (`dressOrder`);
+   the stage's pipe gates have no panels to dress. Say if you want the flags in it.

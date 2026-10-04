@@ -581,6 +581,27 @@ const ANIMATION_SIZES = [
   },
 ];
 
+/*
+ * THE SETTINGS OF AN ANIMATION, for a five inch track. The stage is the black
+ * floor and pool of light every animation has had. The field is the same
+ * picture on striped grass with the sponsors' logos painted on it where the
+ * author put them, which is stage.js's race field. A track with no logos gets
+ * the field and no sponsors, which is what its field is.
+ */
+const ANIMATION_SETTINGS = [
+  {
+    id: 'stage',
+    label: 'Black stage',
+    note: 'The track on a black floor, as it has always been shot.',
+  },
+  {
+    id: 'field',
+    label: 'Race field, sponsors on the grass',
+    note: 'The track on striped grass, the way the game shows it, with the sponsors\' logos '
+      + 'painted where you put them. The file is bigger, because the grass is not black.',
+  },
+];
+
 export class App {
   constructor(nodes) {
     /* The builder is the simulator's tab, not a tab of its own: the shell
@@ -3789,6 +3810,58 @@ export class App {
     saySize();
     body.append(sizeField, sizeNote);
 
+    /*
+     * THE SETTING: the black stage the animation has always been shot on, or
+     * the track on a race field, striped grass with the course's sponsors
+     * painted on it as they are in the game. For a five inch track only: a
+     * whoop track is flown in a room, which this does not draw, so there is
+     * nothing to choose and the control is not there.
+     *
+     * The field is what the bigger sizes are for, so choosing High or Very high
+     * puts it on, until the pilot has chosen for themselves; after that their
+     * choice stands whatever size they pick. Standard keeps the stage unless
+     * asked, because that is the file it has always been.
+     */
+    const setHere = trackClassOf(this.doc) !== 'micro';
+    let settingTouched = false;
+    const settingPick = document.createElement('select');
+    settingPick.id = 'tb-animation-setting';
+    const settingNote = document.createElement('p');
+    settingNote.className = 'tb-help';
+    settingNote.id = 'tb-animation-setting-note';
+    if (setHere) {
+      const settingField = document.createElement('div');
+      settingField.className = 'tb-field';
+      const settingLabel = document.createElement('label');
+      settingLabel.className = 'tb-field-label';
+      settingLabel.textContent = 'Setting';
+      settingLabel.htmlFor = settingPick.id;
+      for (const s of ANIMATION_SETTINGS) {
+        const o = document.createElement('option');
+        o.value = s.id;
+        o.textContent = s.label;
+        settingPick.append(o);
+      }
+      settingPick.setAttribute('aria-describedby', settingNote.id);
+      settingField.append(settingLabel, settingPick);
+      const saySetting = () => {
+        const s = ANIMATION_SETTINGS.find((x) => x.id === settingPick.value) || ANIMATION_SETTINGS[0];
+        settingNote.textContent = s.note;
+      };
+      settingPick.addEventListener('change', () => {
+        settingTouched = true;
+        saySetting();
+      });
+      sizePick.addEventListener('change', () => {
+        if (!settingTouched) {
+          settingPick.value = Number(sizePick.value) > ANIMATION_EDGE ? 'field' : 'stage';
+          saySetting();
+        }
+      });
+      saySetting();
+      body.append(settingField, settingNote);
+    }
+
     /* No live region on this one, as before: it changes on every frame, and a
      * screen reader reading out each of six hundred is not help. */
     const status = document.createElement('p');
@@ -3804,20 +3877,23 @@ export class App {
     go.textContent = 'Render the animation';
     go.addEventListener('click', async () => {
       const edge = Number(sizePick.value);
+      const field = setHere && settingPick.value === 'field';
       go.disabled = true;
       /* Not changeable mid render: the file is the size it was asked for. */
       sizePick.disabled = true;
+      settingPick.disabled = true;
       status.textContent = 'Loading the renderer.';
       try {
         const { exportTrackGif } = await import('./animate.js');
         const bytes = await exportTrackGif(this.doc, {
           size: edge,
+          field,
           signal: stop.signal,
           onProgress: (done, total) => {
             status.textContent = `Frame ${done} of ${total}.`;
           },
         });
-        const file = animationFilename(this.doc, edge);
+        const file = animationFilename(this.doc, edge, field);
         downloadBlob(bytes, file, 'image/gif');
         const mb = (bytes.length / 1e6).toFixed(2);
         status.textContent = `Done. ${mb} MB, saved as ${file}.`;
@@ -3832,6 +3908,7 @@ export class App {
       } finally {
         go.disabled = false;
         sizePick.disabled = false;
+        settingPick.disabled = false;
       }
     });
     body.append(go);
