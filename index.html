@@ -274,6 +274,12 @@
          draw: Wings the two long arms and the dot, Cross the four short
          arms round an open centre, Dot the dot. See syncCrosshair in
          src/ui/ui.js. */
+      /* The FPS readout, top left, in the OSD's cream with its ink edge. */
+      .osd-fps {
+        position: absolute; left: 12px; top: 8px; pointer-events: none;
+        color: var(--cream); font: 600 13px/1 ui-monospace, Menlo, Consolas, monospace;
+        text-shadow: 0 0 2px var(--osd-ink), 0 1px 3px rgba(0, 0, 0, 0.6);
+      }
       .osd-cross {
         position: absolute; left: 50%; top: 50%; width: 0; height: 0;
         pointer-events: none;

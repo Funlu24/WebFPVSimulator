@@ -65628,3 +65628,19 @@ touches physics.
 
 What went wrong. I could not reproduce the delay locally, so the cause is a reading of the code and the fix is a safe early start,
 not a proven cure. If the empty frame is still there on a cold load, the next step is a builder preload list in gen-preload.js.
+
+## 2026-10-04: Show FPS toggle in Settings
+
+Request: an option under Settings to show the frame rate on screen, on or off. Added `showFps` (boolean, default false, saved with the
+other settings), a "Show FPS" row beside Crosshairs, and an `.osd-fps` readout at the top left of the flight OSD. The count is taken
+in `setOsd` from `performance.now()` over half second windows and is display only: nothing the flight reads sees it, so physics and
+determinism are untouched. `syncFps` runs from `show()` like `syncCrosshair` and restarts the count so a pause is not read as a slow
+frame.
+
+Checked: `node --check src/ui/ui.js`, `lint:boot` passes (9 of 9). `lint:shell` FAILS on the Settings screen: overflow grew from 634
+to 678 px, which is exactly one more row (44 px) in a list that already scrolls. It passes on main without this change. I did not
+re-record the baseline, because the rule is not to move a threshold to make a check pass. Whether one more row on a scrolling list is
+a deliberate re-record is the owner's call. Not run: `npm run verify` (no physics, ABI or build change), `shots.js`, and I have not
+seen the readout on screen.
+
+What went wrong. Nothing broke, but the readout is unseen: placement at the top left may collide with the clock on a phone viewport.
