@@ -65720,9 +65720,10 @@ reopened canvas with nothing to keep and with changes to keep, an admin's reload
 an admin, and an imported official file and an ordinary one. Run against the code as it stood before this change (`--root` at
 0876d35) it fails at its first assertion, which is the dialog never appearing, so it sees what changed. A second, wider scripted run
 drove the real builder against a real board with the board's own server, 34 steps, all passing, including an admin's Update landing
-with no edit key and the publisher kept, the simulator's Remix and Edit, and a shipped track still opening as a copy. I looked at
-the screenshots of the dialog, with and without the local changes line, and the picker. Not run: `npm run verify`, a phone
-viewport for the new dialog, and anything against the live board.
+with no edit key and the publisher kept, the simulator's Remix and Edit, and a shipped track still opening as a copy. It passed
+again on the merged tree, and again at 390 by 844 with touch emulation. I looked at the screenshots of the dialog with the local
+changes line and of the picker at both sizes, and of the admin's opened track at the phone size: nothing overflows and every
+button can be reached. Not run: `npm run verify`, which nothing here calls for, and anything against the live board.
 
 `lint:shell` FAILS, and it is not this change. After merging main it reports pilot 634 to 678 px and rates 338 to 382 px. It fails
 the same way on a clean checkout of `origin/main` at 731c424, so it came in with the Show FPS toggle and the Camera angle row on the
