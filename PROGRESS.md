@@ -65792,3 +65792,19 @@ was built, and it went to main as 9bc6992 (builder starts the Three.js download 
 the change is harmless, but it was not what the owner was seeing, and the PROGRESS entry above it says "the cause" for something I
 had only read and not seen. The owner's screenshots, the colour of the stage and a tag pile in the corner, were what pointed at
 a NaN, and the board's own track list was reachable from the container, which is what made it a reproduction and not a guess.
+
+## 2026-10-04: the invisible gate on the whoop builder
+
+Request, the owner's: "in the whoop track builder, add an invisible gate that I can add like in the 5 inch builder".
+
+Change: the piece is the five inch canvas's, unchanged, so the document holds nothing new (a gate with `unbuilt`) and tracks written
+on either canvas read on the other, in the game, on the board and on the card. `WHOOP_PIECES` in elements.js carries it, after the
+gate on the palette, on the same key (I, free on the whoop palette). The palette, `toolByKey` and the key uniqueness check read it
+for a whoop canvas, and the three `isWhoopRace()` guards that kept the Frame choice, the "Make it invisible" button and the Square
+ghost off a whoop are gone or corrected (Square stays off on a whoop, as for every other whoop piece). It lays at the whoop gate's
+size by `placeOnTrack`, and its height comes from `elementHeight` like any gate's, so it is not the NaN of the ground logo bug above.
+The renderer already skipped the pipe for `unbuilt` on a whoop gate.
+
+Checked. `src/trackbuilder/selftest.js` 2478 passed, 0 failed (four new checks in `suiteInvisibleGate`: palette and key, laying at
+the whoop size, finite height, round trip). `lint:shell`, `lint:boot` and `gen-preload --check` pass. Not run: `npm run verify` (no
+physics, plant, ABI or build change) and `node scripts/shots.js`. Not looked at: the whoop palette and the room in a browser.

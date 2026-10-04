@@ -1731,6 +1731,27 @@ export const FIVE_INCH_PIECES = [
   },
 ];
 
+/*
+ * THE WHOOP CANVAS'S PIECES THAT ARE MADE OF PIECES: the invisible gate, which is the same piece as the five inch
+ * canvas's (an ordinary gate with `unbuilt` set, so the document holds nothing new and a track written on either
+ * canvas reads on the other). It stands on the palette after the gate, as it does on the five inch one, and takes
+ * the whoop room's gate: a RaceGOW 28 inch opening, 19 in the Whoop preset, whichever the canvas defaults to.
+ */
+export const WHOOP_PIECES = [
+  {
+    id: 'invisibleGate',
+    label: 'Invisible gate',
+    key: 'I',
+    after: 'gate',
+    note: 'A target with nothing built round it: an opening you fly through and score like a gate, lit when it is the next one, with no pipe and nothing to hit. It is an ordinary gate with its frame taken away, so it is sized, turned, copied and flown in order like one, and any gate can be made invisible the same way, or have its frame put back. Use it to put a target where the room has a gap that no gate of its own frames.',
+  },
+];
+
+/* The pieces made of pieces a class's palette carries, which is where the invisible gate is on both. */
+export function partPiecesFor(cls) {
+  return cls === 'micro' ? WHOOP_PIECES : FIVE_INCH_PIECES;
+}
+
 export const FIVE_INCH_TOOLS = [
   {
     id: 'route',
@@ -1769,13 +1790,13 @@ export function toolByKey(letter, cls = 'micro', mode = 'race') {
   if (!up || mode === 'freestyle') {
     return undefined;
   }
-  const list = cls === 'micro' ? WHOOP_TOOLS : [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS];
+  const list = cls === 'micro' ? [...WHOOP_PIECES, ...WHOOP_TOOLS] : [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS];
   return list.find((t) => t.key === up);
 }
 
-/* Whether an id is one of the 5 inch pieces made of pieces. */
+/* Whether an id is one of the pieces made of pieces, on either canvas. */
 export function isFiveInchPiece(id) {
-  return FIVE_INCH_PIECES.some((p) => p.id === id);
+  return FIVE_INCH_PIECES.some((p) => p.id === id) || WHOOP_PIECES.some((p) => p.id === id);
 }
 
 /* Convenience: every element definition in palette order, extras last. */

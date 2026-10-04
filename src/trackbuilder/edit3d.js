@@ -909,7 +909,7 @@ export class RoomEditor {
     }
     const at = h.snap(p, e.altKey, { type: h.armed === 'run' ? 'gate' : h.armed });
     v.setGuides(h.guides);
-    const { items } = partGhosts(h.doc, h.armed, at, at, { square: h.square, run: h.runSpec });
+    const { items } = partGhosts(h.doc, h.armed, at, at, { square: h.square && !h.isWhoopRace(), run: h.runSpec });
     v.setGhosts(items);
     v.setMeasures(measuresFor(h.doc, { x: at.x, y: at.y, z: scaleOf(h.doc).measureH }));
   }

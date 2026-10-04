@@ -2496,7 +2496,7 @@ export class App {
     } else if (type === 'upGate') {
       this.edit('place an up gate', (d) => { made = placeUpGate(d, world, { square: this.square }); });
     } else if (type === 'invisibleGate') {
-      this.edit('place an invisible gate', (d) => { made = placeInvisibleGate(d, world, { square: this.square }); });
+      this.edit('place an invisible gate', (d) => { made = placeInvisibleGate(d, world, { square: this.square && !this.isWhoopRace() }); });
     }
     if (made) {
       this.setSelection([made.id]);

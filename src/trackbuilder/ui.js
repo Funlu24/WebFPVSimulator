@@ -43,7 +43,7 @@ import {
   SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from './model.js';
 import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElements } from './sequence.js';
-import { labelOf, MAP_TOOLS, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
+import { labelOf, MAP_TOOLS, WHOOP_TOOLS, FIVE_INCH_TOOLS, partPiecesFor } from './elements.js';
 import { replacementsFor } from './snap.js';
 import {
   canBecomeLetter, canBeInvisible, canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
@@ -481,9 +481,9 @@ export class Panels {
         this.letterBox.hidden = true;
         track.append(this.letterBox);
       }
-      /* A five inch track's wall, up gate and hurdle stand among the pieces, each after the one it is made from. */
-      if (cls !== 'micro' && def.group === 'track') {
-        for (const part of FIVE_INCH_PIECES.filter((p) => p.after === def.id)) {
+      /* A five inch track's wall, up gate and hurdle, and either canvas's invisible gate, stand among the pieces, each after the one it is made from. */
+      if (def.group === 'track') {
+        for (const part of partPiecesFor(cls).filter((p) => p.after === def.id)) {
           track.append(this.toolButton(part.id, part.key, part.label, part.note));
           /* The run of gates has choices to make before it is laid, so they stand under its button while it is in hand. */
           if (part.id === 'run') {
@@ -2180,7 +2180,7 @@ export class Panels {
     }
     /* All four at once, as an invisible gate: an opening with nothing built round it, which is the way to put a target
      * where no frame of its own is wanted. A cube's faces and a wall's bays share their pipe and are not offered it. */
-    if (!hidden && canBeInvisible(element) && !this.host.isWhoopRace()) {
+    if (!hidden && canBeInvisible(element)) {
       host.append(button('Make it invisible', 'tb-btn', () => this.host.setPieceInvisible(element.id, true),
         'Take every side away, and the flag if it has one: the opening still scores and lights, with nothing to hit.'));
     }
@@ -3124,11 +3124,11 @@ export class Panels {
   /*
    * THE FRAME, AS ONE CHOICE: built, or invisible. An invisible gate has nothing built round its opening: it scores
    * and it lights when it is the next one, and there is no pipe to hit. Any gate or letter can be made one and put
-   * back, and the four sides one at a time are in the details. Only a five inch piece, and not one that shares its
+   * back, and the four sides one at a time are in the details. Not one that shares its
    * pipe with others in a wall or a cube.
    */
   cardFrame(card, element) {
-    if (this.host.isWhoopRace() || !canBeInvisible(element)) {
+    if (!canBeInvisible(element)) {
       return;
     }
     const hidden = isUnbuilt(element);
