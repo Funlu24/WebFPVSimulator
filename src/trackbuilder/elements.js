@@ -406,7 +406,7 @@ export function isUnbuilt(el) {
  * builds one (src/render/scene.js obstacle): two uprights from the ground to
  * the top rail, a member over the top opening, and a member under the
  * lowest opening when it is off the ground. 'left' and 'right' are those
- * two uprights, the whole height of a stack; 'top' is the member over the
+ * two uprights, the whole height of a stack unless a stretch is taken alone (unbuiltPolesOf below); 'top' is the member over the
  * top opening and 'bottom' the one under the lowest. A member BETWEEN two
  * openings of a stack holds both of them up and is not one of the four.
  *
@@ -462,10 +462,67 @@ export function frameSidesOf(el) {
   };
 }
 
-/* True when some side has been taken away one at a time. A gap in the
- * lattice answers false: it has its own flag and its own code path. */
+/* True when some side has been taken away one at a time, or one opening's stretch of an upright
+ * has. A gap in the lattice answers false: it has its own flag and its own code path. */
 export function hasMissingSides(el) {
-  return !isUnbuilt(el) && unbuiltSidesOf(el).length > 0;
+  return !isUnbuilt(el) && (unbuiltSidesOf(el).length > 0 || unbuiltPolesOf(el).length > 0);
+}
+
+/*
+ * ONE OPENING'S STRETCH OF AN UPRIGHT, in a stack.
+ *
+ * The owner's words, 2026-10-04: with a double or triple stacked gate, deleting a vertical side "should only
+ * remove that gates pole not the entire vertical pole for the entire 2 or 3 gates". So on a stack the
+ * uprights are not one pipe each but one stretch per opening, and a stretch can go on its own.
+ *
+ * `unbuiltPoles` is a list of "side:index" strings, side being left or right as everywhere here and index
+ * the opening from the bottom, 0 first. It is the finer spelling of `unbuiltSides`, which still takes the
+ * whole upright away and wins over it: a stretch whose whole upright is already gone is not written. When
+ * every stretch of one upright has gone the upright is gone, and that is written the old way, so a document
+ * says one thing one way. Only a stack of square openings has it; the key is written only when it is not
+ * empty, so every gate that exists is the JSON it was.
+ */
+export const POLE_SIDES = ['left', 'right'];
+
+export function poleKey(side, index) {
+  return `${side}:${index}`;
+}
+
+/* The stretches taken away, cleaned against this piece: a stack, a known side, an opening it has, each once, and
+ * nothing the whole upright already covers. Ordered by side then opening. */
+export function unbuiltPolesOf(el) {
+  if (!el || ELEMENTS[el.type]?.kind !== KIND.APERTURE || isUnbuilt(el) || isLetterPiece(el)
+    || apertureShapeOf(el) !== 'square' || !Array.isArray(el.unbuiltPoles)) {
+    return [];
+  }
+  const count = apertureLevels(el.dims).length;
+  if (count < 2) {
+    return [];
+  }
+  const whole = normalizeUnbuiltSides(el.unbuiltSides);
+  const out = [];
+  for (const side of POLE_SIDES) {
+    if (whole.includes(side)) {
+      continue;
+    }
+    for (let i = 0; i < count; i += 1) {
+      if (el.unbuiltPoles.includes(poleKey(side, i))) {
+        out.push(poleKey(side, i));
+      }
+    }
+  }
+  return out;
+}
+
+/* Whether a whole upright is there, every stretch of it. The printed sleeve hangs on this and not on a stretch: it is
+ * one board the height of the stack, so an upright with a stretch gone has no sleeve. */
+export function uprightIntact(el, side) {
+  return frameSidesOf(el)[side] && !unbuiltPolesOf(el).some((k) => k.startsWith(`${side}:`));
+}
+
+/* Whether one opening's stretch of one upright is built. A whole upright that is gone takes every stretch with it. */
+export function poleBuilt(el, side, index) {
+  return frameSidesOf(el)[side] && !unbuiltPolesOf(el).includes(poleKey(side, index));
 }
 
 /*

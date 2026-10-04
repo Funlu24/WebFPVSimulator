@@ -31,7 +31,7 @@
  */
 
 import {
-  ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, countElementsByType,
+  ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, unbuiltPolesOf, poleBuilt, countElementsByType,
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
   applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
   elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits, lowestBase,
@@ -2151,7 +2151,7 @@ export class Panels {
     const levels = aperturesOf(element).length;
     host.append(el('h3', null, 'Frame'));
     host.append(el('p', 'tb-help', levels > 1
-      ? 'Each side is its own pipe: the uprights run the full height of the stack, the top bar is over the top opening and the bottom bar under the lowest. Take one away and the openings still score. In the 3D view, click a pipe of the selected gate and press Delete. Left and right are as seen facing the gate, like the header flag.'
+      ? 'Each side is its own pipe: the top bar is over the top opening and the bottom bar under the lowest, and an upright is one stretch per opening. The Left and Right buttons take the whole upright; the buttons under them take one opening\'s stretch. Take one away and the openings still score. In the 3D view, click a pipe of the selected gate and press Delete: that takes just the stretch you clicked. Left and right are as seen facing the gate, like the header flag.'
       : 'Each side is its own pipe. Take one away and the opening still scores and lights, with no pipe there to hit. In the 3D view, click a pipe of the selected gate and press Delete. Left and right are as seen facing the gate, like the header flag.'));
     const grid = el('div', 'tb-frame-grid');
     for (const side of FRAME_SIDES) {
@@ -2166,13 +2166,34 @@ export class Panels {
       grid.append(b);
     }
     host.append(grid);
+    /* A stack's uprights, one stretch per opening, bottom to top: the finer toggle under the whole-upright one. */
+    if (levels > 1 && apertureShapeOf(element) === 'square' && !isUnbuilt(element)) {
+      const stretches = el('div', 'tb-frame-grid');
+      for (const side of ['left', 'right']) {
+        for (let i = 0; i < levels; i += 1) {
+          const on = poleBuilt(element, side, i);
+          const label = `${FRAME_SIDE_LABEL[side]} ${i + 1}`;
+          const b = el('button', on ? 'tb-frame-side on' : 'tb-frame-side');
+          b.type = 'button';
+          b.dataset.side = side;
+          b.dataset.level = String(i);
+          b.textContent = label;
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          b.title = on ? `Take the ${label.toLowerCase()} stretch away` : `Put the ${label.toLowerCase()} stretch back`;
+          b.addEventListener('click', () => this.host.setFramePole(element.id, side, i, !on));
+          stretches.append(b);
+        }
+      }
+      host.append(stretches);
+    }
     const hidden = isUnbuilt(element);
-    if (FRAME_SIDES.some((side) => !sides[side])) {
+    if (FRAME_SIDES.some((side) => !sides[side]) || unbuiltPolesOf(element).length) {
       host.append(button(hidden ? 'Put the frame back' : 'Put every side back', 'tb-btn', () => {
         this.host.edit('put the frame back', (d) => {
           const e2 = elementById(d, element.id);
           if (e2) {
             delete e2.unbuiltSides;
+            delete e2.unbuiltPoles;
             delete e2.unbuilt;
           }
         });

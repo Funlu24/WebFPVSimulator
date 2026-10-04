@@ -2773,13 +2773,14 @@ function openingBadge(n, scale = 1) {
  * measures.
  */
 function cornerFittings(group, sills, clearW, clearH, tubeR, postBuilt = null) {
+  /* postBuilt(sx, k): the upright on this side, at opening k from the bottom. */
   const mats = sharedObstacleMats();
   const s = tubeR * 2.9;
-  for (const sillY of sills) {
+  for (const [k, sillY] of sills.entries()) {
     for (const sy of [sillY - tubeR, sillY + clearH + tubeR]) {
       for (const sx of [-1, 1]) {
         /* A side taken away takes its fittings: see obstacle(). */
-        if (postBuilt && !postBuilt(sx)) {
+        if (postBuilt && !postBuilt(sx, k)) {
           continue;
         }
         const f = new THREE.Mesh(new THREE.BoxGeometry(s, s, s * 0.92), mats.fitting);
@@ -3887,6 +3888,13 @@ function obstacle(spec, index, isStart, opts = {}) {
    */
   const sides = unbuilt ? null : (spec.sides || null);
   const postBuilt = (sx) => !sides || Boolean(sides[sx < 0 ? 'xNeg' : 'xPos']);
+  /* One opening's stretch of an upright, on a stack: `sides.stretches` is there only when some stretch has gone, one
+   * entry per opening from the bottom (meshSidesFor in src/game/trackdoc.js). A whole upright that is gone takes
+   * every stretch with it. */
+  const stretchBuilt = (sx, k) => postBuilt(sx)
+    && (!sides?.stretches || Boolean(sides.stretches[k]?.[sx < 0 ? 'xNeg' : 'xPos'] ?? true));
+  /* The printed sleeve is one board the height of the stack, so it hangs only on a whole upright. */
+  const postWhole = (sx) => postBuilt(sx) && (sides?.stretches ?? []).every((st) => st[sx < 0 ? 'xNeg' : 'xPos']);
 
   /* Uprights. Their INNER surfaces are the opening's width, so their
    * centres sit half a tube outboard of the clear span. They run from the
@@ -3894,19 +3902,46 @@ function obstacle(spec, index, isStart, opts = {}) {
    * tower or a dive gate a tower rather than a floating hoop. */
   const upX = clearW * 0.5 + tubeR;
   const upTop = topSurface + 2 * tubeR;
+  /* An upright is built in runs of the openings that have their stretch: a whole one is the single run from the
+   * ground to just above the top member, exactly as it always was, and a stack that has lost a stretch is the
+   * runs either side of the gap. A stretch spans from the member between it and the opening below to the one
+   * above it, so two built stretches meet at a member and a run ends at the member that holds its last opening. */
+  const sillsAt = (k) => sills[k] + clearH + tubeR;
+  const stretchLo = (k) => (k === 0 ? 0 : sillsAt(k - 1));
+  const stretchHi = (k) => (k === stack - 1 ? upTop : sillsAt(k));
   for (const sx of (unbuilt ? [] : [-1, 1])) {
     if (!postBuilt(sx)) {
       continue;
     }
-    const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(tubeR, tubeR, upTop, 8),
-      mats.frame,
-    );
-    post.position.set(sx * upX, upTop * 0.5, 0);
-    post.castShadow = true;
-    outlineHull(post, 1.06);
-    g.add(post);
-    caps.push({ kind: 'gate', ax: sx * upX, ay: 0, az: 0, bx: sx * upX, by: upTop, bz: 0, r: tubeR });
+    const runs = [];
+    for (let k = 0; k < stack; k += 1) {
+      if (!stretchBuilt(sx, k)) {
+        continue;
+      }
+      const run = runs[runs.length - 1];
+      if (run && run.to === k - 1) {
+        run.to = k;
+      } else {
+        runs.push({ from: k, to: k });
+      }
+    }
+    for (const run of runs) {
+      const lo = stretchLo(run.from);
+      const hi = stretchHi(run.to);
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(tubeR, tubeR, hi - lo, 8),
+        mats.frame,
+      );
+      post.position.set(sx * upX, (lo + hi) * 0.5, 0);
+      post.castShadow = true;
+      outlineHull(post, 1.06);
+      g.add(post);
+      caps.push({ kind: 'gate', ax: sx * upX, ay: lo, az: 0, bx: sx * upX, by: hi, bz: 0, r: tubeR });
+    }
+    /* The foot stands under the lowest opening's stretch, so it goes with it. */
+    if (!stretchBuilt(sx, 0)) {
+      continue;
+    }
 
     /*
      * A foot, so it looks like it is standing on the grass rather than
@@ -3972,7 +4007,7 @@ function obstacle(spec, index, isStart, opts = {}) {
    * fitting stays with its upright: with the upright gone there is no
    * junction, and with only the member gone it caps the upright's end. */
   if (!unbuilt) {
-    cornerFittings(g, sills, clearW, clearH, tubeR, sides ? postBuilt : null);
+    cornerFittings(g, sills, clearW, clearH, tubeR, sides ? stretchBuilt : null);
   }
 
   /*
@@ -4004,7 +4039,7 @@ function obstacle(spec, index, isStart, opts = {}) {
   const panelBottom = sills[0];
   const panelH = topSurface - panelBottom;
   for (const sx of (micro || unbuilt || plain ? [] : [-1, 1])) {
-    if (!postBuilt(sx)) {
+    if (!postWhole(sx)) {
       continue;
     }
     const cx = sx * (upX + tubeR + panelW * 0.5);

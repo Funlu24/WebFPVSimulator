@@ -56,7 +56,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, hasMissingSides, isLetterPiece, isPlain, isUnbuilt, letterOfPiece, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
+import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, unbuiltPolesOf, gateFlagHeight, hasMissingSides, isLetterPiece, isPlain, isUnbuilt, letterOfPiece, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
 import {
   normalize, elementById, aperturesOf, startPadsOf, logosOf, logoForDecal, dressOrder,
 } from '../trackbuilder/model.js';
@@ -160,7 +160,7 @@ function stationPolygon(poly, scale, along) {
   return along ? flat : mirrorPolygon(flat);
 }
 
-function meshSidesFor(el, t, sides) {
+function meshSidesFor(el, t, sides, poles = []) {
   const n = apertureFrame(el.yaw, el.pitch).normal;
   let flipX;
   let flipY;
@@ -171,12 +171,28 @@ function meshSidesFor(el, t, sides) {
     flipX = false;
     flipY = (t.x * n.x + t.y * n.y + t.z * n.z) > 0;
   }
-  return {
+  const out = {
     xNeg: flipX ? sides.right : sides.left,
     xPos: flipX ? sides.left : sides.right,
     top: flipY ? sides.bottom : sides.top,
     bottom: flipY ? sides.top : sides.bottom,
   };
+  /* One opening's stretch of an upright, on a stack (unbuiltPolesOf in elements.js): the openings that have lost
+   * one, each with the mesh's own two uprights, from the bottom. Written only when some stretch is gone, so every
+   * gate with whole uprights hands the mesh what it always did. A flat dive gate's openings run the other way up
+   * the mesh, which is why the index is turned with the same flip the top and bottom are. */
+  if (poles.length) {
+    const count = Math.max(1, Math.round(el.dims.levels));
+    const gone = new Set(poles);
+    out.stretches = [];
+    for (let i = 0; i < count; i += 1) {
+      const at = flipY ? count - 1 - i : i;
+      const left = !gone.has(`left:${i}`);
+      const right = !gone.has(`right:${i}`);
+      out.stretches[at] = { xNeg: flipX ? right : left, xPos: flipX ? left : right };
+    }
+  }
+  return out;
 }
 
 /*
@@ -445,6 +461,7 @@ function buildCourse(raw) {
      * structure is known, because that pass is what the mesh faces. */
     if (kind === KIND.APERTURE && hasMissingSides(el)) {
       s.frameSides = frameSidesOf(el);
+      s.framePoles = unbuiltPolesOf(el);
     }
     /* The plain dress: no sleeves, a header board as wide as the frame. Nothing is written for a
      * gate in the MultiGP dress, so a course that has none is the bytes it always was. */
@@ -621,7 +638,7 @@ function buildCourse(raw) {
     /* The mesh is built facing the FIRST pass through it, so that pass is
      * the one that says which of its sides is which. */
     if (structure.frameSides && !structure.meshSides) {
-      structure.meshSides = meshSidesFor(el, knot.tangent, structure.frameSides);
+      structure.meshSides = meshSidesFor(el, knot.tangent, structure.frameSides, structure.framePoles);
     }
     /*
      * THE PENNANTS ARE IN THE MESH'S FRAME TOO, which is the mirror of the document's for a gate flown
@@ -722,7 +739,7 @@ function buildCourse(raw) {
     const normal = apertureFrame(el.yaw, el.pitch).normal;
     const { yaw, tilt } = meshFrameFor(normal, structure);
     if (structure.frameSides && !structure.meshSides) {
-      structure.meshSides = meshSidesFor(el, normal, structure.frameSides);
+      structure.meshSides = meshSidesFor(el, normal, structure.frameSides, structure.framePoles);
     }
     const ap = aperturesOf(el)[0];
     const pos = toScene(field, { x: el.position.x, y: el.position.y });
