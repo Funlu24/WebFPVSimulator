@@ -65792,3 +65792,14 @@ was built, and it went to main as 9bc6992 (builder starts the Three.js download 
 the change is harmless, but it was not what the owner was seeing, and the PROGRESS entry above it says "the cause" for something I
 had only read and not seen. The owner's screenshots, the colour of the stage and a tag pile in the corner, were what pointed at
 a NaN, and the board's own track list was reachable from the container, which is what made it a reproduction and not a guess.
+
+## 2026-10-04: the builder's options card can be dragged
+
+Change: the card that opens over the stage when a piece is selected (`#tb-card`, built by `renderCard` and `renderMapCard`
+in `src/trackbuilder/ui.js`, shared by every builder) is now dragged by its heading, with mouse or touch. One delegated
+listener (`armCardDrag`) so every card variant gets it; presses on buttons and fields are left alone. The card is kept inside
+the stage, keeps its size, and so moves no layout baseline. The dragged position is held only while the same pieces stay
+selected: a different selection, or none, puts it back to following the piece. Nothing is persisted between sessions.
+
+Checked. `node --check`, `lint:shell` and `lint:nouns` pass. Not run: `shots`, `verify`, and nobody has dragged it in a real
+browser, so touch and the clamp at the stage edges are unseen.

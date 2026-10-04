@@ -2560,6 +2560,69 @@ export class Panels {
    * taller than half the room, covering the very track it was for. What is left is
    * the small bar the plan asked for: Turn, Reverse, Copy, Remove, and Replace with.
    */
+  /*
+   * The card is dragged by its heading, with a mouse or a finger. One listener on the card, installed once, so
+   * every variant of the card gets it and none has to remember to. A press on a button or a field is theirs.
+   * The card is kept inside the stage, and its size is untouched, so no layout baseline moves.
+   */
+  armCardDrag(card) {
+    if (card.dataset.dragArmed) {
+      return;
+    }
+    card.dataset.dragArmed = '1';
+    card.addEventListener('pointerdown', (e) => {
+      const head = e.target.closest ? e.target.closest('.tb-card-head') : null;
+      if (!head || e.target.closest('button, input, select, textarea, a, label') || (e.pointerType === 'mouse' && e.button !== 0)) {
+        return;
+      }
+      const parent = card.offsetParent;
+      if (!parent) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      const sx = e.clientX - card.offsetLeft;
+      const sy = e.clientY - card.offsetTop;
+      const id = e.pointerId;
+      try { head.setPointerCapture(id); } catch (err) { /* a synthetic pointer has none to capture */ }
+      card.classList.add('dragging');
+      const move = (m) => {
+        if (m.pointerId !== id) {
+          return;
+        }
+        m.preventDefault();
+        this.cardPin = { x: m.clientX - sx, y: m.clientY - sy };
+        this.applyCardPin(card);
+      };
+      const done = (u) => {
+        if (u.pointerId !== id) {
+          return;
+        }
+        head.removeEventListener('pointermove', move);
+        head.removeEventListener('pointerup', done);
+        head.removeEventListener('pointercancel', done);
+        card.classList.remove('dragging');
+      };
+      head.addEventListener('pointermove', move);
+      head.addEventListener('pointerup', done);
+      head.addEventListener('pointercancel', done);
+    });
+  }
+
+  /* Puts the card where it was dragged to, kept 6 px inside the stage. False when it has not been dragged. */
+  applyCardPin(card) {
+    const parent = card.offsetParent;
+    if (!this.cardPin || !parent) {
+      return false;
+    }
+    const x = Math.max(6, Math.min(this.cardPin.x, parent.clientWidth - card.offsetWidth - 6));
+    const y = Math.max(6, Math.min(this.cardPin.y, parent.clientHeight - card.offsetHeight - 6));
+    card.classList.remove('docked');
+    card.style.left = `${x.toFixed(0)}px`;
+    card.style.top = `${y.toFixed(0)}px`;
+    return true;
+  }
+
   renderCard() {
     const card = this.nodes.card;
     if (!card) {
@@ -2575,8 +2638,17 @@ export class Panels {
       || (docModeOf(doc) === 'freestyle' && this.host.drawerOpen)) {
       card.hidden = true;
       card.textContent = '';
+      this.cardPin = null;
       return;
     }
+    /* A card the pilot has dragged stays where it was put while the same pieces are selected, and goes back to
+     * following the piece the moment the selection is of something else. */
+    const pinKey = ids.join(',');
+    if (pinKey !== this.cardPinKey) {
+      this.cardPin = null;
+      this.cardPinKey = pinKey;
+    }
+    this.armCardDrag(card);
     if (docModeOf(doc) === 'freestyle') {
       this.renderMapCard(card, doc, ids);
       return;
@@ -3360,6 +3432,9 @@ export class Panels {
       return;
     }
     card.style.visibility = '';
+    if (this.applyCardPin(card)) {
+      return;
+    }
     const c = this.host.selectionCentroid();
     const at = c ? project({ x: c.x, y: c.y, z: c.z + 0.9 }) : null;
     /* A map's pieces are anything from a lamp to a warehouse: the card keeps off the whole of what is selected,

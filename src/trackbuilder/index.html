@@ -2044,6 +2044,9 @@
          always on a narrow window. */
       #tb-card.docked { left: var(--s4); right: auto; top: auto; bottom: calc(44px + var(--tb-bar-h, 90px)); }
       .tb-card-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s3); }
+      /* The heading is the handle the card is dragged by (armCardDrag). */
+      #tb-card .tb-card-head { cursor: grab; touch-action: none; user-select: none; }
+      #tb-card.dragging .tb-card-head { cursor: grabbing; }
       .tb-card-head strong { flex: 1; color: var(--amber); font-size: var(--t-body); }
       /* The touched card of a piece flown more than once: the piece, and under it which
          pass the card is about. */
