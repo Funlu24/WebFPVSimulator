@@ -65644,3 +65644,19 @@ a deliberate re-record is the owner's call. Not run: `npm run verify` (no physic
 seen the readout on screen.
 
 What went wrong. Nothing broke, but the readout is unseen: placement at the top left may collide with the clock on a phone viewport.
+## 2026-10-04 | menus | Camera angle on the Rates screen again
+
+Report: "in a recent pr to the menu system i seem to have removed the camera angle adjustment option, please put it back under
+rates - camera angle". Finding, from `git log -S"Camera angle"`: nothing was removed. 353c68a (Menus: one name per room) deleted
+only the Settings signpost row that said where Camera angle had gone, and the row itself has lived in the Quad room under
+"Camera" since before it. It was never on the Rates screen in the history I can read (117 commits). So the pilot did not lose it
+to a bug, but they are right that it is not where they look for it, and it is the setting the yaw rate has to be tuned against.
+
+Change: `cameraAngleRow(s)` in `src/ui/ui.js` is the one definition of the stepper (same clamp, same yaw tip offered once on the
+way up past YAW_TIP_TILT, same stored `s.cameraAngle`). The Quad room still shows it, via the method, and the Rates screen now has
+it between Yaw and Throttle. Persistence is unchanged because both rows write the same field. No section heading on Rates: a
+heading of its own is decoration and decoration gives way.
+
+Checked: `node --check`, `lint:fc` 33 of 33, `lint:presets` 4 of 4. `lint:catalog` cannot run in this container (vendor/betaflight is
+not checked out). `lint:shell` FAILS: rates overflow grew from 338 to 382 px, which is one 44 px row. I did not touch the
+baseline: it is a recorded number and moving it is the owner's call. Not run: `npm run verify`, nothing here touches physics.
