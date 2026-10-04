@@ -65473,3 +65473,65 @@ All of it run in this turn, after the last edit to the code it is about, except 
    as a cube's loose faces are. That is a small change in `src/game/trackdoc.js` and a decision about what the order means, so I left it.
 7. **Not built, because not asked:** digits and punctuation, a letter on the whoop canvas (a room has no pipe that size), a build sheet
    cut list for a letter (the sheet is RaceGOW's), and a letter in a group with others as one piece.
+
+## 2026-10-04 | builder, board, deploy | The push of letters and invisible gates to main, the board first (the owner's ask)
+
+The owner, answering which verification to run on the entry above: "push to main , i'll test in the browser." That is the fly it
+scale, done by their own hand. Before the push I ran the checks listed below on the merged tree. After it I ran only git checks
+and a comparison of the live files with the commits.
+
+The order is DEPLOY.md's, the board first. The board's main had not moved, `git merge-base` was `570ea3d`, and `570ea3d..de55ea5`
+went as a fast forward. Then the simulator, `a671b73..90f44b5`, also a fast forward but only after a merge, because main had moved
+by two commits while the branch waited: the animation export's race field and wrapped names (`a671b73`) and the push entry before
+it (`7441d7d`). `git merge-base` was `c3f62b3` and never empty. No force, no rewrite, no reset. No pull request was opened.
+
+The merge had three conflicts and none was in logic. `PROGRESS.md`: both sides appended at the end, so theirs first and then the
+letters entry, which lost the rule line it had come with because no recent entry carries one. `scripts/builder-flow-check.js`: both
+sides appended a whole case at the same place and git interleaved the two round their common first and last lines, so I rebuilt
+the region from the two cases and kept both, theirs first. `src/trackbuilder/stage.js`: both sides edited the `model.js` import,
+so it keeps the namespace import (`modelLib`, for a browser that still holds an older `model.js`, as the file's header explains)
+and their `logoForDecal` in the named one. A resolver script asserted what it saw at every marker before it wrote anything. I
+then read their `stage.js`, `app.js`, `animate.js` and `storage.js` changes for anything that enumerates gate shapes or extents,
+since a clean textual merge cannot see that, and found nothing: the race field, the name wrapping, the ribbon fade and the
+Setting select do not.
+
+Checks run on the merged tree in this turn: the builder self test 2428 of 2428, the preload lint up to date (252 served), the boot
+lint 9 of 9, the memory lint, their GIF self test 81 of 81, and the two flow cases that sit on the hand resolved file, "animation
+setting" 9 of 9 and "letters and invisible gates" 28 of 28. A scan of everything added against main found no em or en dash. The
+board's `npm test` passed before its push. Not run: `npm run verify`, because nothing in the physics, the plant, the module ABI or
+the build changed and it was not asked for; `lint:catalog`, which needs `vendor/betaflight` and this checkout has none; and the
+rest of the flow check, whose known flaky and failing checks are in the entry above.
+
+What the live site serves. The board's `public/plan.js` was identical by sha256 to the commit's (`5bb67787`) a few minutes after its
+push, and it comes from the same build as `src/validate.js`. Render published the simulator's deploy at 04:42:02 UTC, about a minute
+after the push, which is the builder page's Last-Modified. I fetched the 27 files under `src/` that the push changed, each at its
+unstamped address with a cache busting query, and compared sha256 with the commit's. The first pass, 19 seconds after the deploy
+published, found 25 identical and two, `src/render/scene.js` and `src/trackbuilder/app.js`, still the previous commit's versions
+byte for byte. A second look 90 seconds later and a full pass at 04:43:44 found all 27 identical. I did not establish why those
+two lagged; a stale copy at the edge for a few seconds is what it looks like. So a browser that loaded the builder inside that
+first minute may hold the old pair, and a tab that was already open runs the old modules until it is reloaded.
+
+What went wrong, twice. First, I ran two shell commands side by side that each began with `cd`, and one ran its git commands in
+the wrong repository and printed an unknown revision error. It changed nothing; I used `git -C` and absolute paths after it.
+Second, `gen-preload --check` said `src/fresh.js` was stale in the middle of the merge, and I said the merge had changed the
+import graph. That was wrong. The generator reads the git index, and a path still in conflict is listed there once for each stage,
+so `stage.js` came out three times and the regeneration I ran wrote it three times. I put the file back, staged the resolutions,
+and it said up to date with `src/fresh.js` untouched. Run it after staging, never during a conflict, and do not commit a
+regeneration made in the middle of one.
+
+I did not open the live builder in a browser. The owner said they would, and that is the one check that sees what a pilot sees.
+
+### For the owner
+
+1. **Reload the builder before you test**, hard if you can, so you are not on the old modules. The address is
+   `https://webfpv.org/sim/src/trackbuilder/index.html`.
+2. **What to try.** Place a W from the palette's Letter button, fly the lap in the game and take the gap between the two Vs: that
+   is the target, and a pass through it should count. Touch the pipe and it should crash. Put an Invisible gate (key I) in the
+   flying order: it should show nothing built, and light only while it is the next target. Open a gate's card and choose Make it a
+   letter: it should keep its place and number, and Undo should give the gate back. Open an older track of yours and add a letter
+   to it.
+3. **What would be wrong.** A letter that cannot be placed, a W whose gap does not light or does not count when flown, a crash
+   that does not happen on the pipe, an invisible gate that draws a frame or is lit out of turn, a track that will not open
+   after a letter was added, or a letter the board's plan card draws as something else.
+4. **The three decisions in the entry above are still open:** the W's default size, a letter outside the flying order not being
+   built in the game, and an invisible gate being lit only while it is the next target. The push changed none of them.
