@@ -701,12 +701,16 @@ function collectRaceGowWarnings(doc, out, legs) {
 
   /* Rule 1 and the season doc's minimum: 24 to 28 inches of clear opening. */
   for (const el of gates) {
-    const w = el.dims.clearW;
-    /* A hoop and a hex gate are measured by their width, the one number that is the size of the gate: a
-     * hex gate that is 28 in across the points is 24 in across the flats, and is still a 28 in gate. */
-    const h = apertureShapeOf(el) === 'square' ? el.dims.clearH : w;
-    const big = Math.max(w, h);
-    const small = Math.min(w, h);
+    /* Every opening of a stack is measured, each at its own size. A hoop and a hex gate are measured by their width,
+     * the one number that is the size of the gate: a hex gate that is 28 in across the points is 24 in across the
+     * flats, and is still a 28 in gate. */
+    let big = 0;
+    let small = Infinity;
+    for (const ap of aperturesOf(el)) {
+      const h = apertureShapeOf(el) === 'square' ? ap.clearH : ap.clearW;
+      big = Math.max(big, ap.clearW, h);
+      small = Math.min(small, ap.clearW, h);
+    }
     if (big > GATE_OPENING_MAX + 1e-6) {
       out.push(warn('rg-opening-max',
         `${label(el)} opens ${inches(big)}. A RaceGOW gate fits inside a 28 in square.`,
@@ -728,9 +732,10 @@ function collectRaceGowWarnings(doc, out, legs) {
     const ref = gates[0];
     /* The height is compared only between two square gates: a hoop and a hex gate are a width and their
      * own shape's proportion of it, so the width is what says whether they are the gate's size. */
-    const odd = gates.filter((el) => Math.abs(el.dims.clearW - ref.dims.clearW) > 0.002
+    const refOpening = aperturesOf(ref)[0];
+    const odd = gates.filter((el) => aperturesOf(el).some((ap) => Math.abs(ap.clearW - refOpening.clearW) > 0.002
       || (apertureShapeOf(el) === 'square' && apertureShapeOf(ref) === 'square'
-        && Math.abs(el.dims.clearH - ref.dims.clearH) > 0.002));
+        && Math.abs(ap.clearH - refOpening.clearH) > 0.002)));
     if (odd.length) {
       out.push(warn('rg-opening-mixed',
         `${odd.length === 1 ? label(odd[0]) : `${odd.length} gates`} ${odd.length === 1 ? 'is' : 'are'} a different size from ${label(ref)}. Every gate on a RaceGOW track is the same size.`,
@@ -744,10 +749,11 @@ function collectRaceGowWarnings(doc, out, legs) {
    * pitch rather than by the sill, so the message names the pitch.
    */
   for (const el of gates) {
-    const levels = Math.max(1, Math.round(el.dims.levels ?? 1));
+    const holes = aperturesOf(el);
+    const levels = holes.length;
     for (let i = 0; i < levels; i += 1) {
-      const sill = el.position.z + el.dims.sillH + i * (el.dims.levelPitch ?? 0);
-      const centre = sill + el.dims.clearH / 2;
+      const sill = el.position.z + holes[i].sillH;
+      const centre = sill + holes[i].clearH / 2;
       if (i === 0 && el.dims.sillH < 0.001 && el.position.z < 0.001) {
         if (centre > GROUND_GATE_CENTRE_MAX + 1e-6) {
           out.push(warn('rg-ground-centre',
@@ -768,14 +774,21 @@ function collectRaceGowWarnings(doc, out, legs) {
       /* Not a RaceGOW rule: a ceiling. These are flown indoors and a
        * domestic one is 2.4 m, so an opening whose top is through it is a
        * track nobody can build in the room this class assumes. */
-      if (sill + el.dims.clearH > ROOM_HEIGHT) {
+      if (sill + holes[i].clearH > ROOM_HEIGHT) {
         out.push(warn('rg-ceiling',
-          `${label(el)} reaches ${inches(sill + el.dims.clearH)}, through the ${ROOM_HEIGHT.toFixed(1)} m ceiling. RaceGOW tracks are flown indoors.`,
+          `${label(el)} reaches ${inches(sill + holes[i].clearH)}, through the ${ROOM_HEIGHT.toFixed(1)} m ceiling. RaceGOW tracks are flown indoors.`,
           { elementId: el.id }));
       }
     }
     /* Rule 3 applies to a stack's own levels as well as to neighbours. */
-    const pitch = el.dims.levelPitch ?? 0;
+    let pitch = el.dims.levelPitch ?? 0;
+    for (let i = 1; i < levels; i += 1) {
+      const between = holes[i].centerH - holes[i - 1].centerH;
+      if (between < GATE_SPACING_MIN - 1e-6 || between > GATE_SPACING_MAX + 1e-6) {
+        pitch = between;
+        break;
+      }
+    }
     if (levels > 1 && (pitch < GATE_SPACING_MIN - 1e-6 || pitch > GATE_SPACING_MAX + 1e-6)) {
       out.push(warn('rg-stack-pitch',
         `${label(el)} stacks its openings ${inches(pitch)} apart. Adjacent gates are 27 to 33 in centre to centre, stacked or side by side.`,
@@ -900,7 +913,7 @@ function collectRaceGowWarnings(doc, out, legs) {
    * against, and because the room is deliberately bigger than it.
    */
   if (gates.length) {
-    const opening = Math.max(...gates.map((g) => Math.max(g.dims.clearW, g.dims.clearH)));
+    const opening = Math.max(...gates.flatMap((g) => aperturesOf(g).map((ap) => Math.max(ap.clearW, ap.clearH))));
     const env = envelopeFor(opening);
     let minX = Infinity;
     let maxX = -Infinity;
@@ -926,7 +939,8 @@ function collectRaceGowWarnings(doc, out, legs) {
 /* The height of an aperture element's LOWEST opening's centre, which is what
  * rule 3 measures between. A stack's own levels are checked separately. */
 function centreOf(el) {
-  return el.position.z + (el.dims.sillH ?? 0) + (el.dims.clearH ?? 0) / 2;
+  const low = aperturesOf(el)[0];
+  return el.position.z + (low ? low.centerH : (el.dims.sillH ?? 0) + (el.dims.clearH ?? 0) / 2);
 }
 
 /* An element's own name if it has one, its type's label if not. The rule

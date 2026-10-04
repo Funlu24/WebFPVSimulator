@@ -1426,6 +1426,8 @@ export function applyGatePreset(dims, preset, shape = 'square') {
   }
   dims.clearW = preset.clearW;
   dims.clearH = presetHeight(preset, shape);
+  /* A standard size is every opening of the stack at that size, so an opening that was set apart goes back with it. */
+  delete dims.openings;
   /*
    * A RACEGOW STACK'S PITCH IS A RULE, NOT A CONSEQUENCE.
    *
@@ -2009,18 +2011,71 @@ export function letterDimsForSize(el, width, height) {
   return dimsForLetterSize(letterOfPiece(el), width, height, LETTER_TUBE_OD);
 }
 
+/*
+ * EACH OPENING OF A STACK CAN BE ITS OWN SIZE. `dims.openings` is an optional list, one entry per opening from the
+ * bottom, each `{ clearW?, clearH? }`: the key that is there is that opening's own size, the key that is not is the
+ * stack's (`dims.clearW`, `dims.clearH`), so a piece with no list, which is every piece that has ever been saved,
+ * is read exactly as it always was. Only a stack of square openings has one: a hoop, a hex gate and a letter have
+ * one size each.
+ *
+ * What a size that is not a length is, is no size: it is dropped and the opening takes the stack's, so no reader is
+ * ever handed a NaN for a height (a piece whose height was not a number once left the 3D camera framing nothing).
+ * Returns null when no opening differs from the stack, so one state has one spelling.
+ */
+export function openingSizesOf(dims, count = null) {
+  const raw = dims?.openings;
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  const n = count ?? Math.max(1, Math.round(dims.levels));
+  /* One opening is the stack's own size: there is nothing to set apart. */
+  if (n < 2) {
+    return null;
+  }
+  const out = [];
+  let any = false;
+  for (let i = 0; i < n; i += 1) {
+    const o = raw[i] && typeof raw[i] === 'object' ? raw[i] : {};
+    const one = {};
+    for (const key of ['clearW', 'clearH']) {
+      const v = typeof o[key] === 'number' ? o[key] : Number.NaN;
+      if (Number.isFinite(v) && v > 0 && Math.abs(v - dims[key]) > 1e-9) {
+        one[key] = v;
+        any = true;
+      }
+    }
+    out.push(one);
+  }
+  return any ? out : null;
+}
+
 export function apertureLevels(dims) {
   const out = [];
   const n = Math.max(1, Math.round(dims.levels));
+  const sizes = openingSizesOf(dims, n);
+  /* The old arithmetic, untouched, for every piece whose openings are all the stack's size. */
+  if (!sizes) {
+    for (let i = 0; i < n; i += 1) {
+      const sill = dims.sillH + i * dims.levelPitch;
+      out.push({
+        index: i,
+        sillH: sill,
+        centerH: sill + dims.clearH / 2,
+        clearW: dims.clearW,
+        clearH: dims.clearH,
+      });
+    }
+    return out;
+  }
+  /* The openings are different heights, so the pitch can no longer be one number: each sill sits one member above
+   * the opening below it, which is the gap the stack was authored with (its pitch less its clear height). */
+  const gap = Number.isFinite(dims.levelPitch - dims.clearH) ? dims.levelPitch - dims.clearH : FRAME_TUBE_OD;
+  let sill = dims.sillH;
   for (let i = 0; i < n; i += 1) {
-    const sill = dims.sillH + i * dims.levelPitch;
-    out.push({
-      index: i,
-      sillH: sill,
-      centerH: sill + dims.clearH / 2,
-      clearW: dims.clearW,
-      clearH: dims.clearH,
-    });
+    const clearW = sizes[i].clearW ?? dims.clearW;
+    const clearH = sizes[i].clearH ?? dims.clearH;
+    out.push({ index: i, sillH: sill, centerH: sill + clearH / 2, clearW, clearH });
+    sill += clearH + gap;
   }
   return out;
 }

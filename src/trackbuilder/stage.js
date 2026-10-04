@@ -1325,7 +1325,11 @@ export function buildStage(THREE, doc, path, {
       /* Corners nought and one are the lower edge of the opening, two and
        * three the upper. A stack shares its verticals, so each level is
        * joined to the one below rather than given legs of its own. */
-      if (lowerTop) {
+      /* Two openings of different widths meet along the shared bar, which the wider one's own bar already is: there
+       * is no upright between them to join. */
+      if (lowerTop && Math.abs(ap.clearW - levels[ap.index - 1].clearW) > 1e-9) {
+        /* nothing to join */
+      } else if (lowerTop) {
         /* The join between two openings belongs to both stretches either side of it, and stands only when both do. */
         if (leftHere && poleBuilt(el, 'left', ap.index - 1)) {
           pipes.push(pipeGeometry(THREE, lowerTop[0], c[0], tubeR));
@@ -1409,7 +1413,8 @@ export function buildStage(THREE, doc, path, {
         dressGroup.add(face);
       }
     };
-    if (sleeveW > 0) {
+    /* A sleeve is one board down an upright, so it hangs only on a stack whose openings are all one width. */
+    if (sleeveW > 0 && levels.every((ap) => Math.abs(ap.clearW - top.clearW) < 1e-9)) {
       for (const sx of [-1, 1]) {
         if (uprightIntact(el, sx < 0 ? 'left' : 'right') && sides[sx < 0 ? 'left' : 'right']) {
           board(sleeveW, sleeveH, sx < 0 ? kit.sleeveFlipped : kit.sleeve, sx * (edge + sleeveW / 2), sleeveBottom + sleeveH / 2);

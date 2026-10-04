@@ -39,7 +39,7 @@
  */
 
 import {
-  ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf,
+  ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf, openingSizesOf,
   defaultDims, defaultPitch, defaultZ, elementHeight, normalizeFlagSide, normalizeUnbuiltSides,
   trackClassOf, tuningFor, docModeOf, POLE_SIDES, poleKey, unbuiltPolesOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
   ROAD_NODES_MAX, ROAD_NODE_REACH, SINK_MAX, LETTER_TUBE_OD, isLetterPiece, letterDimsFor, letterOfPiece,
@@ -733,6 +733,48 @@ export function setPoleBuilt(doc, elementId, side, index, built) {
   return true;
 }
 
+/*
+ * Set one opening of a stack to a size of its own, or give it back the stack's. `patch` is `{ clearW?, clearH? }`: a
+ * length sets that side of the opening, `null` takes the override away. A size that is no length (not a number, or
+ * not above zero) is refused and the document is not touched, so nothing downstream is ever handed a NaN. Returns
+ * true when the document changed. The list is kept only while some opening differs (openingSizesOf in elements.js).
+ */
+export function setOpeningSize(doc, elementId, index, patch) {
+  const el = elementById(doc, elementId);
+  if (!el || kindOf(el) !== KIND.APERTURE || isLetterPiece(el) || apertureShapeOf(el) !== 'square') {
+    return false;
+  }
+  const count = Math.max(1, Math.round(el.dims.levels));
+  if (count < 2 || !Number.isInteger(index) || index < 0 || index >= count) {
+    return false;
+  }
+  for (const key of ['clearW', 'clearH']) {
+    if (patch[key] !== undefined && patch[key] !== null
+      && !(typeof patch[key] === 'number' && Number.isFinite(patch[key]) && patch[key] > 0)) {
+      return false;
+    }
+  }
+  const before = JSON.stringify(el.dims.openings ?? null);
+  const list = [];
+  for (let i = 0; i < count; i += 1) {
+    list.push({ ...(Array.isArray(el.dims.openings) && el.dims.openings[i] ? el.dims.openings[i] : {}) });
+  }
+  for (const key of ['clearW', 'clearH']) {
+    if (patch[key] === null) {
+      delete list[index][key];
+    } else if (patch[key] !== undefined) {
+      list[index][key] = patch[key];
+    }
+  }
+  const kept = openingSizesOf({ ...el.dims, openings: list });
+  if (kept) {
+    el.dims.openings = kept;
+  } else {
+    delete el.dims.openings;
+  }
+  return JSON.stringify(el.dims.openings ?? null) !== before;
+}
+
 /* ------------------------------------------------------------------ */
 /* Accessors                                                           */
 /* ------------------------------------------------------------------ */
@@ -928,6 +970,16 @@ export function entryAnchor(doc, seq) {
     return openingPoint(el, ap);
   }
   return { x: el.position.x, y: el.position.y, z: el.position.z };
+}
+
+/* How wide a piece stands across, for the readers that want one width of a stack whose openings may differ: the
+ * widest opening, or, with `top`, the top one, which is what the header board and the pennants sit on. */
+export function gateWidthOf(el, top = false) {
+  const aps = aperturesOf(el);
+  if (!aps.length) {
+    return el.dims?.clearW ?? 0;
+  }
+  return top ? aps[aps.length - 1].clearW : Math.max(...aps.map((ap) => ap.clearW));
 }
 
 /* The world centre of one opening, by index. Used by both views. */
@@ -1236,6 +1288,16 @@ export function normalize(raw) {
     if (def.kind === KIND.APERTURE && apertureShapeOf(type) !== 'square' && !letter && dims.levels !== 1) {
       repairs.push(`${id}: a ${def.label.toLowerCase()} has one opening, so its levels was ${dims.levels} and is 1.`);
       dims.levels = 1;
+    }
+    /* Each opening of a stack its own size: see openingSizesOf in elements.js. Only a stack of square openings has the
+     * list, and it is kept only when some opening differs, so every gate that has ever been saved reads as it was. */
+    if (def.kind === KIND.APERTURE && rawEl.dims?.openings !== undefined) {
+      const kept = apertureShapeOf(type) === 'square' && !letter && dims.levels > 1 ? openingSizesOf({ ...dims, openings: rawEl.dims.openings }) : null;
+      if (kept) {
+        dims.openings = kept;
+      } else if (rawEl.dims.openings !== null && (!Array.isArray(rawEl.dims.openings) || rawEl.dims.openings.some((o) => o && typeof o === 'object' && Object.keys(o).length))) {
+        repairs.push(`${id}: its openings list named no size that differs from the stack's, so every opening is the stack's size.`);
+      }
     }
     /*
      * A LETTER HAS AS MANY HOLES AS ITS LETTER DOES, and stands on the ground. Its `levels` is that count and is
@@ -1617,6 +1679,12 @@ export function toPlain(doc) {
       }
       if (isProp) {
         fitDims(el.type, out.dims);
+      }
+      if (def.kind === KIND.APERTURE && Array.isArray(el.dims.openings)) {
+        const kept = apertureShapeOf(el.type) === 'square' && !isLetterPiece(el) ? openingSizesOf({ ...el.dims, ...out.dims, openings: el.dims.openings }) : null;
+        if (kept) {
+          out.dims.openings = kept;
+        }
       }
       /* A letter says which one it is, has the holes that letter has, stands on the ground and upright. */
       const letter = isLetterPiece(el) ? letterOfPiece(el) : null;

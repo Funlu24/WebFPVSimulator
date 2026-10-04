@@ -56,7 +56,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, unbuiltPolesOf, gateFlagHeight, hasMissingSides, isLetterPiece, isPlain, isUnbuilt, letterOfPiece, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
+import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, unbuiltPolesOf, gateFlagHeight, hasMissingSides, isLetterPiece, openingSizesOf, isPlain, isUnbuilt, letterOfPiece, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
 import {
   normalize, elementById, aperturesOf, startPadsOf, logosOf, logoForDecal, dressOrder,
 } from '../trackbuilder/model.js';
@@ -301,13 +301,23 @@ function scaledDims(dims, scale) {
  * not grow makes the room smaller and the builder's own warnings wrong.
  */
 function builtDims(dims, scale) {
-  return {
+  const out = {
     clearW: dims.clearW * scale,
     clearH: dims.clearH * scale,
     sillH: dims.sillH * scale,
     levelPitch: dims.levelPitch * scale,
     stack: Math.max(1, Math.round(dims.levels)),
   };
+  /* A stack whose openings are not all one size carries every opening's own built size, bottom to top, and only then:
+   * a gate and every stack that ever shipped has no key and is built exactly as it was. */
+  const sizes = openingSizesOf(dims, out.stack);
+  if (sizes) {
+    out.openings = sizes.map((o) => ({
+      clearW: (o.clearW ?? dims.clearW) * scale,
+      clearH: (o.clearH ?? dims.clearH) * scale,
+    }));
+  }
+  return out;
 }
 
 const FLOATING_DIVE_Z = 0.3;

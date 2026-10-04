@@ -40,7 +40,7 @@ import {
 import { PIPE_OD as RACEGOW_PIPE_OD } from './racegow.js';
 import { knotForSeq, markerSquare } from './path.js';
 import {
-  aperturesOf, elementById, kindOf, apertureCenter, letterLayoutOf, logoForDecal,
+  aperturesOf, gateWidthOf, elementById, kindOf, apertureCenter, letterLayoutOf, logoForDecal,
 } from './model.js';
 import { sequenceNumbers } from './sequence.js';
 import { arrowLanes, stretchOf } from './passes.js';
@@ -2106,7 +2106,7 @@ export class View2D {
       for (const lane of arrowLanes(numbers, levels.length)) {
         const n = numbers.find((x) => x.seq.id === lane.seqIds[0]);
         const inFocus = this.focusSeq != null && lane.seqIds.includes(this.focusSeq);
-        const across = lane.lanes === 1 ? 0 : (lane.lane === 0 ? -1 : 1) * el.dims.clearW * this.cam.scale * 0.22;
+        const across = lane.lanes === 1 ? 0 : (lane.lane === 0 ? -1 : 1) * gateWidthOf(el) * this.cam.scale * 0.22;
         this.drawArrowFor(ctx, el, n, dive, {
           across,
           alpha: this.focusSeq != null && !inFocus ? 0.3 : 1,
@@ -2201,7 +2201,7 @@ export class View2D {
      * board, which runs the way it is turned. */
     const board = ELEMENTS[el.type]?.kind === KIND.OBSTACLE;
     const u = board ? { x: Math.cos(el.yaw), y: Math.sin(el.yaw) } : { x: -Math.sin(el.yaw), y: Math.cos(el.yaw) };
-    const half = (board ? el.dims.width : el.dims.clearW) * 0.5;
+    const half = (board ? el.dims.width : gateWidthOf(el, true)) * 0.5;
     ctx.fillStyle = selected ? C.selected : C.marker;
     for (const sx of signs) {
       const lean = flagLeanSign(sx);
@@ -2304,7 +2304,7 @@ export class View2D {
       return;
     }
     const u = { x: flat.x / flatLen, y: flat.y / flatLen };
-    const half = Math.max(18, el.dims.clearW * this.cam.scale * 0.85);
+    const half = Math.max(18, gateWidthOf(el) * this.cam.scale * 0.85);
     /* Across, sideways of the way it points, is how two lanes sit side by side. */
     const cx = c.x + u.y * across;
     const cy = c.y + u.x * across;
