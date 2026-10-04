@@ -65764,3 +65764,31 @@ What changed. In `latencyItem` (src/ui/ui.js) the Input to screen note gains one
 Also noted. While the timer loop paces the frames (Low graphics, or Pacing set to Timer) the refresh learner holds its old value, so `hz` in a report can be stale and a report taken there cannot confirm a display change. Not changed.
 
 Checks. Only a syntax check of ui.js. `npm run verify` and `node scripts/shots.js` were not run. The note is text in an existing row and the hint shows only on a 2560 wide screen reading 60 Hz.
+
+## 2026-10-04: the empty 3D view was a NaN camera, from ground logos
+
+Report, in the owner's words across the thread: 5 inch tracks and whoop tracks load from the board and the 3D view is empty, Fit
+does nothing, the console is clean, and it is only two tracks, WA State Champs 2026 and RaceGOW6 Track1.
+
+Cause, reproduced with the real documents fetched from the board and opened through `openShared`: `elementHeight` in elements.js
+had no branch for `KIND.DECAL`, so a `groundLogo` fell to the last line and returned `dims.textHeight`, which a decal does not
+have. `topOf` was NaN, `frameTrack` took the maximum over every top, the camera target's height was NaN and the camera position
+with it. A NaN camera draws the sky and nothing else, every tag's anchor is NaN so `translate(NaNpx, NaNpx)` is dropped and the
+tags and the warning card pile in the stage's corner (the "tiny thing in the top corner"), Fit recomputes the same NaN, and
+nothing is thrown, which is why the console was clean. Only the two board tracks that carry sponsor logos on the grass have such
+a piece, which is why it looked like a problem with two tracks.
+
+Change: a decal is paint, height 0, beside the road. One new suite, `suiteEveryTopIsFinite`, checks that every kind in the
+ELEMENTS table has a finite top on a full and a micro canvas, and that a ground logo's top is the floor it lies on; with the
+change taken out the four checks fail (NaN), with it they pass.
+
+Checked. `src/trackbuilder/selftest.js` 2474 passed, 0 failed. `lint:shell`, `lint:boot` and `gen-preload --check` pass. In headless
+Chromium both real documents (38 gate WA State Champs 2026 with its logos, RaceGOW6 Track1) now open in 3D with a finite camera
+and draw with the logos on the grass; before the change the same run gave a camera position of `[-95, NaN, 275]`. Not run: `npm
+run verify`, nothing here touches physics, the plant, the module ABI or the build. Not looked at: a real browser on the live site.
+
+What went wrong. My first answer to this report was a guess that I could not test: that Three.js was only fetched after the app
+was built, and it went to main as 9bc6992 (builder starts the Three.js download when view3d.js loads). The code read that way and
+the change is harmless, but it was not what the owner was seeing, and the PROGRESS entry above it says "the cause" for something I
+had only read and not seen. The owner's screenshots, the colour of the stage and a tag pile in the corner, were what pointed at
+a NaN, and the board's own track list was reachable from the container, which is what made it a reproduction and not a guess.

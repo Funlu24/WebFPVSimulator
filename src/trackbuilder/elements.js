@@ -1976,8 +1976,12 @@ export function elementHeight(def, dims, style = null, tilt = 0) {
     /* `tilt` is tiltOf(el): stood on end, an asset is as tall as it was long. */
     return approxHeight(def.id, dims, style ?? propStyleOf({ type: def.id }), tilt);
   }
-  if (def.kind === KIND.ROAD) {
-    /* Paint. */
+  if (def.kind === KIND.ROAD || def.kind === KIND.DECAL) {
+    /* Paint. A ground logo has a footprint and no height: it used to fall to
+     * the last line, which reads `textHeight`, a label's size and not a
+     * decal's, so topOf was NaN and a track carrying one framed its 3D camera
+     * on NaN: an empty sky and every tag piled in the corner, with nothing in
+     * the console because NaN is not an error. */
     return 0;
   }
   if (def.kind === KIND.VEHICLE) {

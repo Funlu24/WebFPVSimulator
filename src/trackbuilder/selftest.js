@@ -13799,6 +13799,24 @@ async function suiteOfficial() {
   }
 }
 
+/* A piece with no height is a number, never NaN: topOf feeds the 3D camera's
+ * target and every tag's anchor, and NaN there draws nothing and says nothing.
+ * The two board tracks that carry sponsor logos on the grass came up as an
+ * empty sky for exactly that reason. */
+function suiteEveryTopIsFinite() {
+  console.log('\nheights: every kind of piece stands some finite height');
+  for (const cls of ['full', 'micro']) {
+    const doc = createTrack('heights', cls);
+    const bad = Object.keys(ELEMENTS).filter((type) => !Number.isFinite(topOf(createElement(doc, type, { x: 5, y: 5 }, 0))));
+    check(`on a ${cls} canvas every piece in the table has a finite top`, bad.length === 0, bad.join(', '));
+  }
+  const doc = createTrack('painted');
+  const logo = createElement(doc, 'groundLogo', { x: 10, y: 10 }, 0);
+  check('a ground logo is paint: its top is the ground it lies on', topOf(logo) === 0, String(topOf(logo)));
+  logo.position.z = 0.25;
+  check('and rises with it when it is laid on a raised floor', topOf(logo) === 0.25, String(topOf(logo)));
+}
+
 async function main() {
   if (process.argv.includes('--emit')) {
     process.stdout.write(serialize(demoTrack()));
@@ -13874,6 +13892,7 @@ async function main() {
   suiteRuns();
   suiteHurdles();
   suiteLaunchGate();
+  suiteEveryTopIsFinite();
   suiteFiveInchRoom();
   await suiteMenus();
   await suiteOfficial();
