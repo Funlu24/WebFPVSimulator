@@ -65376,5 +65376,8 @@ All of it run in this turn, after the last edit to the code it is about, except 
    who has not got the course in their head cannot see where the next one is until it is next. If you want a faint marker always on, it
    is a small change in the scene's gate builders, and a decision about what a pilot can see, so it is yours.
 5. **No hotkey for Letter.** The free letters are a map's, and a test pins the race palettes' keys. It is a click, and I is the Invisible gate.
-6. **Not built, because not asked:** digits and punctuation, a letter on the whoop canvas (a room has no pipe that size), a build sheet
+6. **A letter that is not in the flying order is not built in the game**, as a gate that is not in it is not, and the builder warns
+   (`unsequenced`) in the same words. Letters used as scenery, spelling a word beside the course, would need to be built without a pass,
+   as a cube's loose faces are. That is a small change in `src/game/trackdoc.js` and a decision about what the order means, so I left it.
+7. **Not built, because not asked:** digits and punctuation, a letter on the whoop canvas (a room has no pipe that size), a build sheet
    cut list for a letter (the sheet is RaceGOW's), and a letter in a group with others as one piece.
