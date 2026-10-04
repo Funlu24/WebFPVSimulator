@@ -65660,3 +65660,11 @@ heading of its own is decoration and decoration gives way.
 Checked: `node --check`, `lint:fc` 33 of 33, `lint:presets` 4 of 4. `lint:catalog` cannot run in this container (vendor/betaflight is
 not checked out). `lint:shell` FAILS: rates overflow grew from 338 to 382 px, which is one 44 px row. I did not touch the
 baseline: it is a recorded number and moving it is the owner's call. Not run: `npm run verify`, nothing here touches physics.
+
+## 2026-10-04 | shell | Two overflow baselines re-recorded, on the owner's word
+
+Owner (Mat, 2026-10-04, "fix it", answering whether to re-record the baseline after the Camera angle row went onto Rates): re-record.
+`tests/shell-baseline.json`: rates 338 to 382 px, which is the one 44 px Camera angle row. Pilot 634 to 678 px, also one 44 px row, and
+not mine: it is the Show FPS toggle from #27 landing on main, which `lint:shell` flagged once main moved under this branch. Both
+edited by hand to the measured numbers, so no other screen's entry moved. Checked: `lint:shell` passes after both. Not run:
+`npm run verify`, nothing here touches physics. The owner also reported Camera angle on Rates working and tested.
