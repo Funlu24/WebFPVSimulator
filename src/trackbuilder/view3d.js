@@ -2338,7 +2338,9 @@ export class View3D {
         }
       };
       const at = new THREE.Vector3();
-      for (const sx of plain ? [] : [-1, 1]) {
+      /* A sleeve is one board down an upright, so it hangs only on a stack whose openings are all one width. */
+      const evenWidth = levels.every((ap) => Math.abs(ap.clearW - top.clearW) < 1e-9);
+      for (const sx of plain || !evenWidth ? [] : [-1, 1]) {
         /* A sleeve is sleeved over its upright and goes with it. */
         if (!uprightIntact(el, sx < 0 ? 'left' : 'right')) {
           continue;

@@ -65851,6 +65851,52 @@ expected per level mask. Not run: `npm run verify` (no physics, plant, ABI or bu
 geometry in `scene.js` and the picking in `view3d.js` have not been looked at in a browser.
 
 The owner approved the push of the stacked gate upright change to main on 2026-10-04 ("push to main, i'll fix it"), before looking at it in a browser. It went as a fast forward of main (5e3e70a) after a rebase onto the draggable options card commits, with the builder self test (2496 passed), `lint:preload`, `lint:shell` and `lint:boot` rerun on the rebased head. The 3D pick and the race field geometry are still unlooked at in a browser.
+
+## 2026-10-04: each opening of a double or triple stack is a gate of its own, with its own width and height
+
+Report, in the owner's words: on the whoop and the 5 inch builder, with a double or triple stack, each opening is a gate and its size
+should be adjustable independently of the rest of the openings in the stack. Built on the stacked upright change above (one stretch of
+an upright per opening), which already treated a stack as openings in the builder.
+
+Change, additive and backward compatible: an optional `dims.openings`, one `{ clearW?, clearH? }` per opening from the bottom, where a
+key that is there is that opening's own size and a key that is not is the stack's. `apertureLevels` (`elements.js`) is the one place
+that reads it: with no list it runs the old arithmetic untouched, so every saved and published track loads and builds exactly as it
+did and writes no new key. With a list, each sill sits one member above the opening below it at the gap the stack was authored with
+(its pitch less its clear height), so a taller opening lifts the ones above it. `openingSizesOf` is the reader: a size that is not a
+finite number above zero is dropped to the stack's, so no reader is ever handed a NaN height (the camera framed nothing earlier today
+for exactly that), a list that differs nowhere is not kept, one opening has no list, and an entry past the last opening is dropped. A
+hoop, a hex gate and a letter never have one. `setOpeningSize` (`model.js`) refuses a size that is no length and leaves the document
+untouched; a gate preset puts every opening back.
+
+Readers. The inspector has an "Each opening" section on a stack: width and height per opening, and a button that gives an opening the
+stack's size back; the readout lists each opening's size and sill. The 3D view, the card stage and the build sheet already drew each
+opening from `aperturesOf`, so they follow; the stage skips the short join pipe between two openings of different widths, and both it
+and the 3D view hang the printed sleeves only on a stack whose openings are one width and put the header on the top opening. The
+RaceGOW warnings (`warnings.js`) read every opening at its own size and height, centre to centre. The race field: `trackdoc.js`
+`builtDims` carries each opening's built size (through the one obstacle scale) only when the list exists, stations were already per
+opening so scoring and the pass test read each opening's own `clearW`, `clearH` and centre, and `scene.js` `obstacle()` builds the
+uprights in runs at each opening's own width, the members as long as the wider of the two they hold, the corner fittings and the lit
+outline per opening, measures each opening's width off the uprights at its height for the T1 assertion, and sizes the shared glow
+and pane to the opening that is the target.
+
+Checked. `src/trackbuilder/selftest.js` 2559 passed, 0 failed, with a new suite `suiteOpeningSizes` in both track classes: defaults
+unchanged and no key written, only the middle opening changes, sills follow heights, `elementHeight` and `topOf` stay real numbers
+(including from a hand written list full of `NaN`, `"wide"` and negatives), round trip, a document without the list reads byte for
+byte as it did, garbage is dropped on read, back to the stack's size, preset reset, and the race field's stations and built stack
+carrying each opening's size at the obstacle scale. `lint:preload`, `lint:shell`, `lint:boot`, `lint:frame` and `lint:nouns` pass.
+`obstacle()` was also run once in Node against a real three.js (a throwaway probe, not committed) on a plain triple, a triple of three
+sizes and the same with one upright stretch gone: the plain one measured as before, the sized one measured 1.2, 2.0 and 1.5 m wide and
+1.5, 2.2 and 1.0 m high with the sills where the arithmetic puts them.
+
+Declined or left. The printed sleeve is one board down an upright, so a stack with openings of different widths has none (a sleeve per
+opening is a texture decision). Changing a stack's type in the palette (`replaceWith`) starts from the new type's default dims, so it
+drops the list. A tilted stack is still built as one opening by `tiltedGate`, as before. The 2D plan draws a stack at its widest. Not
+run: `npm run verify` (no physics, plant, ABI or build change) and `node scripts/shots.js`, so the inspector section, the 3D drawing and
+the built geometry have not been looked at in a browser; the owner has not approved pushing this to main, so it is a branch and a draft
+pull request.
+
+The owner approved the push of the per-opening stack sizing change to main on 2026-10-04 ("push to main"), without choosing a verification scale: the builder self test (2559 passed) and the lints named above were the only checks run, and the inspector, the 3D drawing and the built geometry are still unlooked at in a browser. It went as a fast forward of main.
+
 ## 2026-10-04 | plant | Less grip at low throttle, more at mid (a pilot's report, the owner's ask)
 
 Request, the owner's, from a pilot: "the low throttle grip is a little too much (or the mass doesnt carry enough) and the mid

@@ -1858,7 +1858,7 @@ function polygonPaneGeometry(hole, scale) {
  * the obstacle's own local frame and returns them, along with which
  * opening ended up carrying the glow.
  */
-function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWanted, micro = false, shape = 'square', holes = null) {
+function apertureMarkers(group, sills, clearWs, clearHs, stack, isStart, primaryWanted, micro = false, shape = 'square', holes = null) {
   /*
    * The aperture markers. Square now, because the opening is square, and
    * built as one merged geometry per obstacle so a stacked obstacle still
@@ -1898,6 +1898,9 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
   for (let k = 0; k < stack; k += 1) {
     const outlineGeos = [];
     const haloGeos = [];
+    /* One size for every opening, or a list with each opening's own (a stack sized opening by opening). */
+    const clearW = Array.isArray(clearWs) ? clearWs[k] : clearWs;
+    const clearH = Array.isArray(clearHs) ? clearHs[k] : clearHs;
     const cy = sills[k] + clearH * 0.5;
     /*
      * The lit bar's thickness, and it is a LEGIBILITY number.
@@ -2021,8 +2024,10 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
   /* A letter's glow sits round the box of the hole it is on, which is not the box of the letter and is not
    * centred on its racing line point. */
   const lit = holes ? holes[primary] : null;
-  const glowW = lit ? lit.bw : clearW;
-  const glowH = lit ? lit.bh : clearH;
+  const primaryW = Array.isArray(clearWs) ? clearWs[primary] : clearWs;
+  const primaryH = Array.isArray(clearHs) ? clearHs[primary] : clearHs;
+  const glowW = lit ? lit.bw : primaryW;
+  const glowH = lit ? lit.bh : primaryH;
   const glowSize = Math.max(glowW, glowH) * (micro ? 1.5 : 2.6);
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(glowSize, glowSize),
@@ -2113,7 +2118,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
   if (lit) {
     glow.position.set(lit.bx, lit.by, 0);
   } else {
-    glow.position.y = sills[primary] + clearH * 0.5;
+    glow.position.y = sills[primary] + primaryH * 0.5;
   }
   glow.layers.set(1);
   group.add(glow);
@@ -2124,7 +2129,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
   if (lit) {
     cue.position.set(lit.bx, lit.by, 0);
   } else {
-    cue.position.y = sills[primary] + clearH * 0.5;
+    cue.position.y = sills[primary] + primaryH * 0.5;
   }
   group.add(cue);
   return {
@@ -2773,18 +2778,21 @@ function openingBadge(n, scale = 1) {
  * measures.
  */
 function cornerFittings(group, sills, clearW, clearH, tubeR, postBuilt = null) {
-  /* postBuilt(sx, k): the upright on this side, at opening k from the bottom. */
+  /* postBuilt(sx, k): the upright on this side, at opening k from the bottom. clearW and clearH are one size for
+   * every opening, or a list with each opening's own. */
   const mats = sharedObstacleMats();
   const s = tubeR * 2.9;
   for (const [k, sillY] of sills.entries()) {
-    for (const sy of [sillY - tubeR, sillY + clearH + tubeR]) {
+    const w = Array.isArray(clearW) ? clearW[k] : clearW;
+    const h = Array.isArray(clearH) ? clearH[k] : clearH;
+    for (const sy of [sillY - tubeR, sillY + h + tubeR]) {
       for (const sx of [-1, 1]) {
         /* A side taken away takes its fittings: see obstacle(). */
         if (postBuilt && !postBuilt(sx, k)) {
           continue;
         }
         const f = new THREE.Mesh(new THREE.BoxGeometry(s, s, s * 0.92), mats.fitting);
-        f.position.set(sx * (clearW * 0.5 + tubeR), sy, 0);
+        f.position.set(sx * (w * 0.5 + tubeR), sy, 0);
         f.castShadow = true;
         group.add(f);
       }
@@ -3173,6 +3181,11 @@ function coursePlacements(course) {
     sillH: structure.dims.sillH ?? 0,
     stack: structure.dims.stack ?? 1,
     levelPitch: structure.dims.levelPitch,
+    /* A stack whose openings are not all one size: each opening's own built size, and the stack's own for the
+     * rest of the spec (the opening this station flies is one of them, not the stack). Not there for any other. */
+    ...(structure.dims.openings ? {
+      openings: structure.dims.openings, clearW: structure.dims.clearW, clearH: structure.dims.clearH,
+    } : {}),
     /* An opening that is a gap in the lattice: it scores and it
      * lights, and no pipe is built for it. See isUnbuilt in
      * src/trackbuilder/elements.js. */
@@ -3858,11 +3871,22 @@ function obstacle(spec, index, isStart, opts = {}) {
    * spacing it was authored with, and defaulting over the top of it would
    * quietly rebuild somebody's ladder at a spacing they did not choose. */
   const pitch = spec.levelPitch ?? (clearH + BUILT_FRAME_TUBE_OD);
+  /* Each opening's own width and height: the stack's for every opening unless the spec carries a list (a stack whose
+   * openings were sized one by one, built by trackdoc.js builtDims). Then the sills follow the heights, each one
+   * member above the opening below it, at the gap the stack was authored with. */
+  const widths = [];
+  const heights = [];
   const sills = [];
+  const own = Array.isArray(spec.openings) && spec.openings.length === stack ? spec.openings : null;
+  const memberGap = pitch - clearH;
   for (let k = 0; k < stack; k += 1) {
-    sills.push(spec.sillH + k * pitch);
+    widths.push(own ? own[k].clearW : clearW);
+    heights.push(own ? own[k].clearH : clearH);
+    sills.push(own ? (k === 0 ? spec.sillH : sills[k - 1] + heights[k - 1] + memberGap) : spec.sillH + k * pitch);
   }
-  const topSurface = sills[stack - 1] + clearH;
+  /* The widest opening is the one the header, the sleeves' offset and the reported size are measured from. */
+  const evenWidth = widths.every((w) => Math.abs(w - widths[0]) < 1e-9);
+  const topSurface = sills[stack - 1] + heights[stack - 1];
 
   /*
    * NOTHING IS BUILT FOR A GAP IN THE LATTICE.
@@ -3901,12 +3925,14 @@ function obstacle(spec, index, isStart, opts = {}) {
    * ground to just above the topmost cross member, which is what makes a
    * tower or a dive gate a tower rather than a floating hoop. */
   const upX = clearW * 0.5 + tubeR;
+  /* An upright stands at its own opening's width, so on a stack sized opening by opening it steps in and out. */
+  const upXAt = (k) => widths[k] * 0.5 + tubeR;
   const upTop = topSurface + 2 * tubeR;
   /* An upright is built in runs of the openings that have their stretch: a whole one is the single run from the
    * ground to just above the top member, exactly as it always was, and a stack that has lost a stretch is the
    * runs either side of the gap. A stretch spans from the member between it and the opening below to the one
    * above it, so two built stretches meet at a member and a run ends at the member that holds its last opening. */
-  const sillsAt = (k) => sills[k] + clearH + tubeR;
+  const sillsAt = (k) => sills[k] + heights[k] + tubeR;
   const stretchLo = (k) => (k === 0 ? 0 : sillsAt(k - 1));
   const stretchHi = (k) => (k === stack - 1 ? upTop : sillsAt(k));
   for (const sx of (unbuilt ? [] : [-1, 1])) {
@@ -3919,7 +3945,8 @@ function obstacle(spec, index, isStart, opts = {}) {
         continue;
       }
       const run = runs[runs.length - 1];
-      if (run && run.to === k - 1) {
+      /* A run is one pipe at one width: where the width changes a new one begins. */
+      if (run && run.to === k - 1 && Math.abs(widths[k] - widths[run.from]) < 1e-9) {
         run.to = k;
       } else {
         runs.push({ from: k, to: k });
@@ -3932,11 +3959,12 @@ function obstacle(spec, index, isStart, opts = {}) {
         new THREE.CylinderGeometry(tubeR, tubeR, hi - lo, 8),
         mats.frame,
       );
-      post.position.set(sx * upX, (lo + hi) * 0.5, 0);
+      const runX = sx * upXAt(run.from);
+      post.position.set(runX, (lo + hi) * 0.5, 0);
       post.castShadow = true;
       outlineHull(post, 1.06);
       g.add(post);
-      caps.push({ kind: 'gate', ax: sx * upX, ay: lo, az: 0, bx: sx * upX, by: hi, bz: 0, r: tubeR });
+      caps.push({ kind: 'gate', ax: runX, ay: lo, az: 0, bx: runX, by: hi, bz: 0, r: tubeR });
     }
     /* The foot stands under the lowest opening's stretch, so it goes with it. */
     if (!stretchBuilt(sx, 0)) {
@@ -3974,13 +4002,16 @@ function obstacle(spec, index, isStart, opts = {}) {
    * opening only when that opening is off the ground: a gate standing on
    * grass has the ground as its sill, which is how a 5 ft opening is
    * measured on a chapter gate. */
-  const memberLen = clearW + 4 * tubeR;
   const members = [];
+  const memberLens = [];
   for (let k = 0; k < stack; k += 1) {
-    members.push(sills[k] + clearH + tubeR);
+    members.push(sills[k] + heights[k] + tubeR);
+    /* A member between two openings holds both up, so it is as long as the wider of the two. */
+    memberLens.push(Math.max(widths[k], k + 1 < stack ? widths[k + 1] : 0) + 4 * tubeR);
   }
   if (spec.sillH > 0) {
     members.push(spec.sillH - tubeR);
+    memberLens.push(widths[0] + 4 * tubeR);
   }
   /* Which of those is the top side and which the bottom: the member over
    * the top opening, and the one under a raised lowest opening. A member
@@ -3991,6 +4022,7 @@ function obstacle(spec, index, isStart, opts = {}) {
     if (!memberBuilt(i)) {
       continue;
     }
+    const memberLen = memberLens[i];
     const bar = new THREE.Mesh(
       new THREE.CylinderGeometry(tubeR, tubeR, memberLen, 8),
       mats.frame,
@@ -4007,7 +4039,7 @@ function obstacle(spec, index, isStart, opts = {}) {
    * fitting stays with its upright: with the upright gone there is no
    * junction, and with only the member gone it caps the upright's end. */
   if (!unbuilt) {
-    cornerFittings(g, sills, clearW, clearH, tubeR, sides ? stretchBuilt : null);
+    cornerFittings(g, sills, own ? widths : clearW, own ? heights : clearH, tubeR, sides ? stretchBuilt : null);
   }
 
   /*
@@ -4038,7 +4070,7 @@ function obstacle(spec, index, isStart, opts = {}) {
   const substrate = isStart ? mats.panelStart : mats.panelRace;
   const panelBottom = sills[0];
   const panelH = topSurface - panelBottom;
-  for (const sx of (micro || unbuilt || plain ? [] : [-1, 1])) {
+  for (const sx of (micro || unbuilt || plain || !evenWidth ? [] : [-1, 1])) {
     if (!postWhole(sx)) {
       continue;
     }
@@ -4067,7 +4099,8 @@ function obstacle(spec, index, isStart, opts = {}) {
    * they collapse to the top of the uprights and the opening's own half
    * width, which is exactly what the structure is.
    */
-  const outerW = 2 * (upX + tubeR + (micro || plain ? 0 : panelW));
+  /* The header board sits on the top opening's rail, and is as wide as that opening's frame. */
+  const outerW = 2 * (upXAt(stack - 1) + tubeR + (micro || plain ? 0 : panelW));
   let plateY = upTop + tubeR;
   let plateHalfW = outerW * 0.5;
   let plateR = tubeR;
@@ -4082,7 +4115,7 @@ function obstacle(spec, index, isStart, opts = {}) {
   }
 
   /* The lit target, shared with the tilted gate builder. */
-  const marks = apertureMarkers(g, sills, clearW, clearH, stack, isStart, opts.primary, micro);
+  const marks = apertureMarkers(g, sills, own ? widths : clearW, own ? heights : clearH, stack, isStart, opts.primary, micro);
   const { ring, halo, glow, cue, ringColor, primary } = marks;
 
   /*
@@ -4104,14 +4137,31 @@ function obstacle(spec, index, isStart, opts = {}) {
   for (let k = 0; k < stack; k += 1) {
     /* The clear height of opening k is its sill to the underside of the
      * member above it, both of which are positions in this group. */
-    const memberY = sills[k] + clearH + tubeR;
+    const memberY = sills[k] + heights[k] + tubeR;
     const measuredH = (memberY - tubeR) - sills[k];
+    /* On a stack sized opening by opening the uprights are not one pair, so this opening's width is read off the
+     * uprights that stand at its own height: the gap between the inner surfaces of the left one and the right one.
+     * An opening with an upright gone has nothing to measure against, and is as wide as it was built. */
+    let openW = measuredW;
+    if (own) {
+      const mid = sills[k] + measuredH * 0.5;
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const post of postMeshes) {
+        const half = post.geometry.parameters.height * 0.5;
+        if (Math.abs(post.position.y - mid) <= half) {
+          lo = Math.min(lo, post.position.x);
+          hi = Math.max(hi, post.position.x);
+        }
+      }
+      openW = hi > lo ? (hi - lo) - 2 * postMeshes[0].geometry.parameters.radiusTop : widths[k];
+    }
     apertures.push({
       shape: 'square',
       index: k,
       sillH: sills[k],
       centreY: sills[k] + measuredH * 0.5,
-      clearW: measuredW,
+      clearW: openW,
       clearH: measuredH,
     });
   }
@@ -5575,7 +5625,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
           continue;
         }
         const badge = openingBadge(station.flyOrder + 1);
-        badge.position.set(made.badgeX ?? (st.spec.clearW * 0.5 + 0.22), ap.centreY, 0);
+        badge.position.set(made.badgeX ?? ((st.spec.openings ? ap.clearW : st.spec.clearW) * 0.5 + 0.22), ap.centreY, 0);
         g.add(badge);
       }
     }
@@ -5728,6 +5778,10 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
          * truth. */
         wantW: st.spec.clearW,
         wantH: st.spec.clearH,
+        /* A stack sized opening by opening: each opening is held to its own size. */
+        wantOpenings: st.spec.openings ?? null,
+        /* The opening the shared glow and pane were built for, so they can be sized to the one that is the target. */
+        primaryAperture: made.apertures[made.primary] ?? null,
         flyOrder: station.flyOrder,
         virtual: Boolean(st.virtual),
         poleX: st.poleX,
@@ -5775,11 +5829,13 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
       if (ap.shape === 'poly') {
         continue;
       }
-      if (Math.abs(ap.clearW - gt.wantW) > 0.01 || Math.abs(ap.clearH - gt.wantH) > 0.01) {
+      const wantW = gt.wantOpenings?.[ap.index]?.clearW ?? gt.wantW;
+      const wantH = gt.wantOpenings?.[ap.index]?.clearH ?? gt.wantH;
+      if (Math.abs(ap.clearW - wantW) > 0.01 || Math.abs(ap.clearH - wantH) > 0.01) {
         throw new Error(
           `scene: ${gt.kindName} opening measured ${ap.clearW.toFixed(4)} by `
-          + `${ap.clearH.toFixed(4)} m, wanted ${gt.wantW.toFixed(4)} by `
-          + `${gt.wantH.toFixed(4)} m at gate scale ${GATE_SCALE}, `
+          + `${ap.clearH.toFixed(4)} m, wanted ${wantW.toFixed(4)} by `
+          + `${wantH.toFixed(4)} m at gate scale ${GATE_SCALE}, `
           + 'outside the 10 mm tolerance',
         );
       }
@@ -5914,6 +5970,17 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
         }
         if (target.cueGroup) {
           target.cueGroup.position.y = target.aperture.centreY;
+        }
+        /* The shared glow and pane were built for one opening; a stack sized opening by opening is sized to the one
+         * that is the target now. Scale 1 on every stack whose openings are one size, which is every stack that
+         * ever shipped. */
+        const built = target.primaryAperture;
+        const now = target.aperture;
+        if (built && built.clearW > 0 && built.clearH > 0) {
+          const kw = now.clearW / built.clearW;
+          const kh = now.clearH / built.clearH;
+          target.glowMesh?.scale.setScalar(Math.max(now.clearW, now.clearH) / Math.max(built.clearW, built.clearH));
+          target.cueGroup?.scale.set(kw, kh, 1);
         }
       }
     }

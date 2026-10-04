@@ -32,7 +32,7 @@ import {
   POLE_FROM_GATE_MIN, POLE_FROM_POLE_MIN, PIPE_OD,
 } from './racegow.js';
 import {
-  apertureCenter, aperturesOf, createElement, deepClone, elementById, entryAnchor, initLetter, isSequenceable, kindOf,
+  apertureCenter, aperturesOf, gateWidthOf, createElement, deepClone, elementById, entryAnchor, initLetter, isSequenceable, kindOf,
   letterLayoutOf, newElementId, newGroupId, setSideBuilt,
 } from './model.js';
 import { cubeFaces } from './cube.js';
@@ -347,7 +347,7 @@ function copyOffsetFor(doc, sources) {
       x = -x;
       y = -y;
     }
-    const gap = micro ? GATE_SPACING_NOMINAL : Math.max(1, (el.dims.clearW || 1) + 1.5);
+    const gap = micro ? GATE_SPACING_NOMINAL : Math.max(1, (gateWidthOf(el) || 1) + 1.5);
     return { x: x * gap, y: y * gap };
   }
   const box = trackBounds({ elements: sources });

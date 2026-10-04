@@ -33,13 +33,13 @@
 import {
   ELEMENTS, KIND, paletteItems, FLAG_SIDES, FRAME_SIDES, flagSideOf, frameSidesOf, unbuiltPolesOf, poleBuilt, countElementsByType,
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
-  applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
+  applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf, openingSizesOf,
   elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits, lowestBase,
   isLetterPiece, isUnbuilt, letterExtent, pieceLabel,
 } from './elements.js';
 import { LETTERS, openingCount, openingName } from '../props/letters.js';
 import {
-  aperturesOf, elementById, kindOf, isSequenceable, logosOf, logoForDecal,
+  aperturesOf, elementById, kindOf, isSequenceable, logosOf, logoForDecal, setOpeningSize,
   SCENE_TIMES, SCENE_GROUNDS, sceneOf,
 } from './model.js';
 import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElements } from './sequence.js';
@@ -1103,6 +1103,7 @@ export class Panels {
     if (def.kind === KIND.APERTURE) {
       if (!isLetterPiece(element)) {
         this.renderApertureReadout(host, def, element);
+        this.renderOpeningSizes(host, element);
       }
       /* Which sides have pipe. A map's gates are furniture with no opening
        * that scores, so taking a side off one would only be a broken gate. */
@@ -2081,7 +2082,7 @@ export class Panels {
     const u = this.inches() ? ' in' : ' m';
     const n = (m) => (this.inches() ? show(m / IN, 1) : show(m, 2));
     const sills = levels
-      .map((ap, i) => `${i + 1}: sill ${n(base + ap.sillH)}${u}, centre ${n(base + ap.centerH)}${u}`)
+      .map((ap, i) => `${i + 1}: ${openingSizesOf(element.dims, levels.length) ? `${n(ap.clearW)} by ${n(ap.clearH)}${u}, ` : ''}sill ${n(base + ap.sillH)}${u}, centre ${n(base + ap.centerH)}${u}`)
       .join('. ');
     const shape = apertureShapeOf(element);
     const one = shape === 'circle'
@@ -2091,9 +2092,50 @@ export class Panels {
         : `One opening ${n(element.dims.clearW)} by ${n(element.dims.clearH)}${u}`);
     const ground = this.inches() ? 'the floor' : 'the ground';
     const what = levels.length > 1
-      ? `${levels.length} openings of ${n(element.dims.clearW)} by ${n(element.dims.clearH)}${u}. ${sills}.`
+      ? (openingSizesOf(element.dims, levels.length)
+        ? `${levels.length} openings, each its own size. ${sills}.`
+        : `${levels.length} openings of ${n(element.dims.clearW)} by ${n(element.dims.clearH)}${u}. ${sills}.`)
       : `${one}, centre ${n(base + levels[0].centerH)}${u} above ${ground}.`;
     host.append(el('p', 'tb-fig-blurb', `${what} Top of the structure ${n(top)}${u}.`));
+  }
+
+  /*
+   * EACH OPENING OF A STACK IS A GATE OF ITS OWN, and has its own width and height here. A stack's Opening width and
+   * Opening height above are what an opening is when it has not been given its own, so changing them moves every
+   * opening that has not been set apart. An opening set apart is marked, and has a button that gives it the stack's
+   * size back. The sills follow the heights (apertureLevels in elements.js), so a taller opening pushes the ones above
+   * it up. Only a stack of square openings has these.
+   */
+  renderOpeningSizes(host, element) {
+    const count = Math.round(element.dims.levels);
+    if (count < 2 || apertureShapeOf(element) !== 'square' || isUnbuilt(element)) {
+      return;
+    }
+    const id = element.id;
+    const sizes = openingSizesOf(element.dims, count);
+    const holes = apertureLevels(element.dims);
+    host.append(el('h3', null, 'Each opening'));
+    host.append(el('p', 'tb-help', 'Every opening of a stack is a gate of its own: give it its own width and height, and the race scores each pass against that opening\u2019s own size. An opening you do not touch is the stack\u2019s size above.'));
+    holes.forEach((ap, i) => {
+      const own = sizes?.[i] ?? {};
+      const apart = own.clearW !== undefined || own.clearH !== undefined;
+      const row = el('div', 'tb-grid2 tb-opening-row');
+      row.dataset.opening = String(i);
+      row.append(
+        this.lengthField(`open-${id}-${i}-w`, `Opening ${i + 1} width`, ap.clearW, (val) => {
+          this.host.edit('resize an opening', (d) => { setOpeningSize(d, id, i, { clearW: val }); });
+        }, { step: 0.05, min: 0.05 }),
+        this.lengthField(`open-${id}-${i}-h`, `Opening ${i + 1} height`, ap.clearH, (val) => {
+          this.host.edit('resize an opening', (d) => { setOpeningSize(d, id, i, { clearH: val }); });
+        }, { step: 0.05, min: 0.05 }),
+      );
+      host.append(row);
+      if (apart) {
+        host.append(button(`Opening ${i + 1} back to the stack\u2019s size`, 'tb-btn', () => {
+          this.host.edit('reset an opening', (d) => { setOpeningSize(d, id, i, { clearW: null, clearH: null }); });
+        }));
+      }
+    });
   }
 
   /*

@@ -34,7 +34,7 @@ import {
   createTrack, createElement, createSequenceEntry, deserialize, elementById, normalize, isSequenceable, kindOf,
   roundTripsCleanly, serialize, aperturesOf, toPlain, startPadsOf, newElementId,
   logoForDecal, dressOrder, LOGO_SLOTS, SCHEMA_VERSION,
-  SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt, setPoleBuilt,
+  SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt, setPoleBuilt, setOpeningSize, gateWidthOf,
   groupMembers, expandGroups, elementNormal, apertureCenter, letterLayoutOf, openingNearest, setLetter, topOf,
 } from './model.js';
 import { applyAutoFaces, flipFace, setYaw, clearOverride, travelDirection, defaultYawFor } from './faces.js';
@@ -7045,6 +7045,146 @@ function suitePoleStretches() {
 }
 
 /*
+ * EACH OPENING OF A STACK IS A GATE OF ITS OWN: its own width and height, kept in dims.openings, read by the builder's
+ * views, the warnings and the race field alike (the owner, 2026-10-04). A document without the list reads as it always
+ * did, and a size that is no length is never let into a piece.
+ */
+function suiteOpeningSizes() {
+  console.log('\neach opening of a stack its own size');
+  for (const cls of ['micro', 'full']) {
+    const doc = createTrack('sized', cls);
+    place(doc, 'startPads', 3, 2, { yaw: Math.PI / 2 });
+    const three = place(doc, 'ladder', 8, 5);
+    const two = place(doc, 'doubleStack', 12, 5);
+    const single = place(doc, 'gate', 16, 5);
+    const tag = `(${cls})`;
+    const before = JSON.stringify(aperturesOf(three));
+    const pristine = serialize(doc);
+
+    check(`a stack with no list has none ${tag}`, !('openings' in three.dims) && !pristine.includes('openings'));
+    check(`and every opening is the stack's size ${tag}`, aperturesOf(three).every((ap) => ap.clearW === three.dims.clearW && ap.clearH === three.dims.clearH));
+
+    const wide = three.dims.clearW * 1.5;
+    const tall = three.dims.clearH * 1.25;
+    check(`sizing the middle opening reports a change ${tag}`, setOpeningSize(doc, three.id, 1, { clearW: wide, clearH: tall }) === true);
+    const aps = aperturesOf(three);
+    check(`only the middle opening changed size ${tag}`, aps[1].clearW === wide && aps[1].clearH === tall
+      && aps[0].clearW === three.dims.clearW && aps[2].clearW === three.dims.clearW
+      && aps[0].clearH === three.dims.clearH && aps[2].clearH === three.dims.clearH);
+    check(`the bottom opening has not moved ${tag}`, aps[0].sillH === JSON.parse(before)[0].sillH && aps[0].centerH === JSON.parse(before)[0].centerH);
+    const gap = three.dims.levelPitch - three.dims.clearH;
+    check(`the next opening sits one member above it ${tag}`, Math.abs(aps[1].sillH - (aps[0].sillH + aps[0].clearH + gap)) < 1e-9
+      && Math.abs(aps[2].sillH - (aps[1].sillH + tall + gap)) < 1e-9, JSON.stringify(aps.map((a) => a.sillH)));
+    check(`and every centre is half its own height up ${tag}`, aps.every((ap) => Math.abs(ap.centerH - (ap.sillH + ap.clearH / 2)) < 1e-9));
+    check(`a stack's width as a whole is its widest opening, and its top's is the top one's ${tag}`,
+      gateWidthOf(three) === wide && gateWidthOf(three, true) === three.dims.clearW);
+
+    /* The number every reader of a piece's height is handed. A height that was not a number once framed the 3D camera on
+     * nothing, so it is checked as a number and not only as a size. */
+    const def = ELEMENTS[three.type];
+    const topH = elementHeight(def, three.dims);
+    check(`the stack's height is a real number, to the top of its top opening ${tag}`, Number.isFinite(topH)
+      && Math.abs(topH - (aps[2].sillH + aps[2].clearH + 0.0267)) < 0.01, String(topH));
+    check(`and so is topOf ${tag}`, Number.isFinite(topOf(three)) && topOf(three) > aps[2].sillH);
+
+    check(`a doubled size is refused and changes nothing ${tag}`, setOpeningSize(doc, three.id, 0, { clearW: Number.NaN }) === false
+      && setOpeningSize(doc, three.id, 0, { clearH: 0 }) === false && setOpeningSize(doc, three.id, 0, { clearH: -1 }) === false
+      && setOpeningSize(doc, three.id, 0, { clearW: '2' }) === false && setOpeningSize(doc, three.id, 0, { clearH: Infinity }) === false
+      && JSON.stringify(aperturesOf(three)[0]) === JSON.stringify(aps[0]));
+    check(`an opening it does not have is refused ${tag}`, setOpeningSize(doc, three.id, 3, { clearW: 1 }) === false
+      && setOpeningSize(doc, three.id, -1, { clearW: 1 }) === false && setOpeningSize(doc, three.id, 0.5, { clearW: 1 }) === false);
+    check(`a single gate has no openings to size ${tag}`, setOpeningSize(doc, single.id, 0, { clearW: 1 }) === false && !('openings' in single.dims));
+
+    /* The round trip, and the read of a document that has none. */
+    const back = normalize(JSON.parse(serialize(doc))).doc;
+    const tb = elementById(back, three.id);
+    check(`the sizes round trip ${tag}`, aperturesOf(tb).every((ap, i) => Math.abs(ap.clearW - aps[i].clearW) < 1e-6
+      && Math.abs(ap.clearH - aps[i].clearH) < 1e-6 && Math.abs(ap.sillH - aps[i].sillH) < 1e-6), JSON.stringify(tb.dims.openings));
+    check(`and the same document writes the same text twice ${tag}`, serialize(back) === serialize(normalize(JSON.parse(serialize(back))).doc));
+    const plain = JSON.parse(pristine);
+    check(`a saved document with no list reads as it did, byte for byte ${tag}`, serialize(normalize(plain).doc) === pristine);
+
+    /* Hand written garbage never gets in. */
+    const raw = JSON.parse(serialize(doc));
+    const rawThree = raw.elements.find((e) => e.id === three.id);
+    rawThree.dims.openings = [{ clearW: 'wide', clearH: Number.NaN }, { clearH: -2, clearW: null }, { clearH: 2.5 }, { clearW: 9 }];
+    const rawSingle = raw.elements.find((e) => e.id === single.id);
+    rawSingle.dims.openings = [{ clearW: 3 }];
+    const rawTwo = raw.elements.find((e) => e.id === two.id);
+    rawTwo.dims.openings = 'tall';
+    const read = normalize(raw).doc;
+    const rt = elementById(read, three.id);
+    const rtAps = aperturesOf(rt);
+    check(`a size that is no length is the stack's, and a good one is kept ${tag}`,
+      rtAps[0].clearW === rt.dims.clearW && rtAps[0].clearH === rt.dims.clearH
+      && rtAps[1].clearH === rt.dims.clearH && rtAps[2].clearH === 2.5, JSON.stringify(rt.dims.openings));
+    check(`an entry past the last opening is dropped ${tag}`, rt.dims.openings.length === 3, JSON.stringify(rt.dims.openings));
+    check(`no height a stack hands out is anything but a number ${tag}`, rtAps.every((ap) => Number.isFinite(ap.clearH) && Number.isFinite(ap.clearW)
+      && Number.isFinite(ap.sillH) && Number.isFinite(ap.centerH)) && Number.isFinite(topOf(rt)));
+    check(`a gate with a list has none, and a list that is not a list is dropped ${tag}`,
+      !('openings' in elementById(read, single.id).dims) && !('openings' in elementById(read, two.id).dims));
+
+    /* Back to the stack's size. */
+    check(`one opening goes back to the stack's size ${tag}`, setOpeningSize(doc, three.id, 1, { clearW: null, clearH: null }) === true
+      && !('openings' in three.dims) && JSON.stringify(aperturesOf(three)) === before);
+    check(`and a size equal to the stack's is no size of its own ${tag}`, setOpeningSize(doc, three.id, 2, { clearW: three.dims.clearW }) === false
+      && !('openings' in three.dims));
+    setOpeningSize(doc, three.id, 2, { clearH: tall });
+    check(`a stack made one opening has no list for the opening it lost ${tag}`, (() => {
+      const t = deepClone(three);
+      t.dims.levels = 1;
+      return aperturesOf(t).length === 1 && aperturesOf(t)[0].clearH === t.dims.clearH;
+    })());
+    check(`a gate preset puts every opening back ${tag}`, (() => {
+      const t = deepClone(three);
+      applyGatePreset(t.dims, GATE_PRESETS[0], 'square');
+      return !('openings' in t.dims);
+    })());
+
+    /* The race field: every opening scores at its own size, at its own height. */
+    const flown = createTrack('flown', cls);
+    place(flown, 'startPads', 3, 2, { yaw: Math.PI / 2 });
+    const st3 = place(flown, 'ladder', 8, 5);
+    setOpeningSize(flown, st3.id, 0, { clearW: st3.dims.clearW * 0.8 });
+    setOpeningSize(flown, st3.id, 1, { clearW: st3.dims.clearW * 1.4, clearH: st3.dims.clearH * 1.3 });
+    setOpeningSize(flown, st3.id, 2, { clearH: st3.dims.clearH * 0.7 });
+    for (let i = 0; i < 3; i += 1) {
+      addToSequence(flown, st3.id, i);
+    }
+    const apsFlown = aperturesOf(st3);
+    const course = courseFromDocument(flown);
+    const sts = course.stations.filter((q) => q.elementId === st3.id);
+    check(`the race field has a station for each opening ${tag}`, sts.length === 3, String(sts.length));
+    const scale = sts[0].clearW / apsFlown[0].clearW;
+    check(`each station scores at its own opening's size, through one obstacle scale ${tag}`, sts.every((q, i) => Math.abs(q.clearW - apsFlown[i].clearW * scale) < 1e-9
+      && Math.abs(q.clearH - apsFlown[i].clearH * scale) < 1e-9), JSON.stringify(sts.map((q) => [q.clearW, q.clearH])));
+    check(`and at its own height ${tag}`, sts.every((q, i) => Math.abs(q.centreY - apsFlown[i].centerH * scale) < 1e-9));
+    check(`the openings really are three different sizes ${tag}`, new Set(sts.map((q) => `${q.clearW.toFixed(4)}x${q.clearH.toFixed(4)}`)).size === 3);
+    const built = sts[0].structure.dims;
+    check(`the built stack carries each opening's size for the world to build ${tag}`, Array.isArray(built.openings) && built.openings.length === 3
+      && built.openings.every((o, i) => Math.abs(o.clearW - apsFlown[i].clearW * scale) < 1e-9 && Math.abs(o.clearH - apsFlown[i].clearH * scale) < 1e-9),
+    JSON.stringify(built.openings));
+    check(`a stack with none builds as it always did ${tag}`, (() => {
+      const plainDoc = createTrack('plain', cls);
+      place(plainDoc, 'startPads', 3, 2, { yaw: Math.PI / 2 });
+      const p = place(plainDoc, 'ladder', 8, 5);
+      addToSequence(plainDoc, p.id, 0);
+      return !('openings' in courseFromDocument(plainDoc).structures.find((q) => q.type === 'ladder').dims);
+    })());
+  }
+
+  /* RaceGOW's rules read each opening at its own size. */
+  const micro = createTrack('rules', 'micro');
+  const s2 = place(micro, 'doubleStack', 5, 5);
+  const before = collectWarnings(micro, null).map((w) => w.code).join();
+  setOpeningSize(micro, s2.id, 1, { clearW: 0.3 });
+  const warned = collectWarnings(micro, null).map((w) => w.code);
+  check('an opening under the 24 inch minimum is named by the rule', warned.includes('rg-opening-min'), warned.join());
+  check('it was not named before', !before.includes('rg-opening-min'), before);
+  check('and a stack of two sizes is not the size of the rest of the track', warned.includes('rg-opening-mixed') || collectWarnings(micro, null).length >= 1);
+}
+
+/*
  * BENDING THE LINE. A grab on a segment drops a waypoint into the flying
  * order between the two stations that segment joins, the line then runs
  * through it, the game scores exactly what it scored before, and the gates
@@ -13930,6 +14070,7 @@ async function main() {
   suiteWaypoint();
   suiteFrameSides();
   suitePoleStretches();
+  suiteOpeningSizes();
   suiteBendLine();
   suitePoleSquare();
   suiteSchemaDoc();
