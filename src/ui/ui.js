@@ -3851,7 +3851,17 @@ function latencyItem(p) {
   if (p) {
     bits.push(p.lowLatency ? 'Low latency view is in use' : 'frames queue behind the page (Low latency view is not in use)');
   }
-  const facts = bits.length ? ` Here ${bits.join(', ')}.` : '';
+  /* A 60 Hz reading on a big screen is very often a Windows display mode
+   * left at 60 on a faster panel (bug-0054c4c6: a 144 Hz monitor flown at
+   * 60 until the mode was changed, with the GPU idle). Said once, in the
+   * note, as a thing to check and not a fault: a real 60 Hz panel reads
+   * the same. */
+  const wide = typeof window !== 'undefined' && window.screen
+    ? window.screen.width * (window.devicePixelRatio || 1) : 0;
+  const sixty = p && p.hz === 60 && wide >= 2560
+    ? ' If this monitor can run faster than 60 Hz, check that the system is set to its top refresh rate (Windows: Settings, Display, Advanced display), because the page can only draw as often as the display it is given.'
+    : '';
+  const facts = bits.length ? ` Here ${bits.join(', ')}.${sixty}` : '';
   if (!p || !p.supported) {
     return {
       label: 'Input to screen',

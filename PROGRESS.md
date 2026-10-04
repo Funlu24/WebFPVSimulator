@@ -65755,6 +65755,16 @@ an admin. Wrong would be anything that puts an official track on the canvas whil
 reload (for a track that browser published), from an import, or from a `?track=` link. The board is unchanged and already live, so
 there is no deploy order for this change. Not checked: that the host has deployed.
 
+## 2026-10-04 | settings | Input to screen says what to check when a big screen reads 60 Hz
+
+The owner's ask, after bug-0054c4c6 and bug-8988a244: a pilot on a 144 Hz monitor flew at a flat 60 fps with the GPU at 5.4 ms because Windows had the display mode at 60. The report could not tell that from a real 60 Hz panel. The cause was read from the code and the two reports, not reproduced.
+
+What changed. In `latencyItem` (src/ui/ui.js) the Input to screen note gains one sentence when the learned refresh rate is exactly 60 and the screen is at least 2560 device pixels wide: if the monitor can run faster, check the system's refresh rate (Windows: Settings, Display, Advanced display). It is a hint and not a fault, because a true 60 Hz panel reads the same. Nothing else moved: no physics, ABI or build.
+
+Also noted. While the timer loop paces the frames (Low graphics, or Pacing set to Timer) the refresh learner holds its old value, so `hz` in a report can be stale and a report taken there cannot confirm a display change. Not changed.
+
+Checks. Only a syntax check of ui.js. `npm run verify` and `node scripts/shots.js` were not run. The note is text in an existing row and the hint shows only on a 2560 wide screen reading 60 Hz.
+
 ## 2026-10-04: the empty 3D view was a NaN camera, from ground logos
 
 Report, in the owner's words across the thread: 5 inch tracks and whoop tracks load from the board and the 3D view is empty, Fit
