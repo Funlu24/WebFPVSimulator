@@ -65849,3 +65849,5 @@ double takes the side with it, the middle of a triple goes alone, round trip, re
 `scene.js`, `gen-preload --check` passes, and `meshSidesFor` hand run on a double with one stretch gone gives the mesh the
 expected per level mask. Not run: `npm run verify` (no physics, plant, ABI or build change) and `node scripts/shots.js`, so the new
 geometry in `scene.js` and the picking in `view3d.js` have not been looked at in a browser.
+
+The owner approved the push of the stacked gate upright change to main on 2026-10-04 ("push to main, i'll fix it"), before looking at it in a browser. It went as a fast forward of main (5e3e70a) after a rebase onto the draggable options card commits, with the builder self test (2496 passed), `lint:preload`, `lint:shell` and `lint:boot` rerun on the rebased head. The 3D pick and the race field geometry are still unlooked at in a browser.
