@@ -66072,6 +66072,10 @@ with main's module in its dist/ or with dist/sim.wasm swapped and put back (0a1f
   flown twice. Check 18 48 of 48. Checks 5 to 12 as in the entry above.
 - `npm run check:crash-pacing` once more after the comment over the scenarios was made exact: all passed.
 - The 29 other scripts, and the three red ones on main's module, as above.
+- Main gained two stacked gate commits while this ran (b367ba4, 98580b4: each opening of a stack sized on its own, builder
+  and race field only). Merged in, and `npm run verify` run again on the merged tree: 18 of 18, every number the same,
+  dist/sim.wasm 0a1f60b4, vendor diff empty. check:props, check:wall and check:world on the merged tree: the same red lines
+  as above and no others, and check:world all passed.
 
 ### For the owner
 
