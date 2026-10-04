@@ -41,7 +41,7 @@
 import {
   ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf,
   defaultDims, defaultPitch, defaultZ, elementHeight, normalizeFlagSide, normalizeUnbuiltSides,
-  trackClassOf, tuningFor, docModeOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
+  trackClassOf, tuningFor, docModeOf, POLE_SIDES, poleKey, unbuiltPolesOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
   ROAD_NODES_MAX, ROAD_NODE_REACH, SINK_MAX, LETTER_TUBE_OD, isLetterPiece, letterDimsFor, letterOfPiece,
 } from './elements.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
@@ -661,6 +661,74 @@ export function setSideBuilt(doc, elementId, side, built) {
     el.unbuiltSides = next;
   } else {
     delete el.unbuiltSides;
+  }
+  /* Taking a whole side away covers every stretch of it, so none is written beside it. */
+  if (Array.isArray(el.unbuiltPoles) && !built) {
+    const rest = el.unbuiltPoles.filter((k) => !k.startsWith(`${side}:`));
+    if (rest.length) {
+      el.unbuiltPoles = rest;
+    } else {
+      delete el.unbuiltPoles;
+    }
+  }
+  return true;
+}
+
+/*
+ * Build or take away one opening's stretch of one upright of a stack. See unbuiltPolesOf in elements.js.
+ * Returns true when the document changed. A stretch of a whole upright that is already gone is nothing to
+ * take away, so it answers false; putting one back on a whole upright that is gone gives back the other stretches
+ * and leaves just the ones that were not asked for missing, which is the same thing said the finer way. When every
+ * stretch of an upright is gone the upright is, and is written as that.
+ */
+export function setPoleBuilt(doc, elementId, side, index, built) {
+  const el = elementById(doc, elementId);
+  if (!el || kindOf(el) !== KIND.APERTURE || !POLE_SIDES.includes(side) || isLetterPiece(el)
+    || el.unbuilt === true || apertureShapeOf(el) !== 'square') {
+    return false;
+  }
+  const count = apertureLevels(el.dims).length;
+  if (count < 2 || !Number.isInteger(index) || index < 0 || index >= count) {
+    return false;
+  }
+  const whole = normalizeUnbuiltSides(el.unbuiltSides);
+  const wasWhole = whole.includes(side);
+  const wasGone = wasWhole || unbuiltPolesOf(el).includes(poleKey(side, index));
+  if (wasGone === !built) {
+    return false;
+  }
+  /* The stretches of this upright that are gone after the change, by opening. */
+  const gone = new Set();
+  for (let i = 0; i < count; i += 1) {
+    if (wasWhole || unbuiltPolesOf(el).includes(poleKey(side, i))) {
+      gone.add(i);
+    }
+  }
+  if (built) {
+    gone.delete(index);
+  } else {
+    gone.add(index);
+  }
+  const keep = unbuiltPolesOf(el).filter((k) => !k.startsWith(`${side}:`));
+  let sides = whole.filter((s) => s !== side);
+  if (gone.size === count) {
+    sides = normalizeUnbuiltSides([...sides, side]);
+  } else {
+    for (const i of gone) {
+      keep.push(poleKey(side, i));
+    }
+  }
+  if (sides.length) {
+    el.unbuiltSides = sides;
+  } else {
+    delete el.unbuiltSides;
+  }
+  el.unbuiltPoles = keep;
+  const cleaned = unbuiltPolesOf(el);
+  if (cleaned.length) {
+    el.unbuiltPoles = cleaned;
+  } else {
+    delete el.unbuiltPoles;
   }
   return true;
 }
@@ -1305,6 +1373,18 @@ export function normalize(raw) {
         el.unbuiltSides = sides;
       }
     }
+    /* One opening's stretch of an upright, on a stack: see unbuiltPolesOf in elements.js. Cleaned against the piece
+     * as it stands, so a stretch of an opening it does not have, or of an upright that is already gone, is dropped. */
+    if (def.kind === KIND.APERTURE && rawEl.unbuiltPoles !== undefined && !letter) {
+      const poles = unbuiltPolesOf({ ...el, unbuiltPoles: Array.isArray(rawEl.unbuiltPoles) ? rawEl.unbuiltPoles : [] });
+      const named = Array.isArray(rawEl.unbuiltPoles) ? rawEl.unbuiltPoles.length : 1;
+      if (poles.length !== named) {
+        repairs.push(`${id} named an upright stretch it does not have, and it was dropped.`);
+      }
+      if (poles.length) {
+        el.unbuiltPoles = poles;
+      }
+    }
     /* A group: elements that are one piece and are edited together, which is what a cube is (five or six
      * gates, each a face). Kept on apertures, and only when it is a name, so an ordinary gate's JSON is
      * the shape it was and nothing can put a number or an object there. What a group means lives in
@@ -1582,6 +1662,10 @@ export function toPlain(doc) {
         const sides = normalizeUnbuiltSides(el.unbuiltSides);
         if (sides.length && !letter) {
           out.unbuiltSides = sides;
+        }
+        const poles = unbuiltPolesOf(el);
+        if (poles.length && !letter) {
+          out.unbuiltPoles = poles;
         }
         if (typeof el.group === 'string' && el.group.trim() !== '') {
           out.group = el.group.slice(0, GROUP_NAME_MAX);

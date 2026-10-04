@@ -927,6 +927,7 @@ export function setInvisible(doc, id, on) {
     }
     el.unbuilt = true;
     delete el.unbuiltSides;
+    delete el.unbuiltPoles;
     return true;
   }
   if (el.unbuilt !== true) {
@@ -981,6 +982,7 @@ export function turnIntoLetter(doc, id, letter) {
   el.type = 'letter';
   delete el.flagSide;
   delete el.unbuiltSides;
+  delete el.unbuiltPoles;
   delete el.style;
   el.pitch = 0;
   el.position.z = 0;

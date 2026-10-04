@@ -284,6 +284,8 @@ export class RoomEditor {
        * be taken away with Delete (pickSide), as it always did; it happens on
        * release, and only when the press did not turn into a pull. */
       side: was && hit.side && !hit.weak && h.selection.size === 1 && !e.shiftKey ? hit.side : null,
+      /* The opening of a stack the pipe belongs to, so an upright is picked one stretch at a time. */
+      level: hit.level ?? null,
     };
   }
 
@@ -519,7 +521,7 @@ export class RoomEditor {
       if (d.began) {
         h.endEdit();
       } else if (d.side) {
-        h.pickSide(d.id, d.side);
+        h.pickSide(d.id, d.side, d.level);
       }
     } else if (d.kind === 'turn' && d.began) {
       h.endEdit();

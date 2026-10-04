@@ -39,7 +39,7 @@ import { styleOf as propStyleOf, tiltOf } from '../props/types.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
-  aperturesOf, toPlain, logosOf, brandingBytes, newLogoId, dressOrder, setSideBuilt,
+  aperturesOf, toPlain, logosOf, brandingBytes, newLogoId, dressOrder, setSideBuilt, setPoleBuilt,
   LOGO_SLOTS, BRANDING_MAX_CHARS, expandGroups, letterLayoutOf, setLetter,
 } from './model.js';
 import { applyAutoFaces, clearOverride, flipFace, setYaw } from './faces.js';
@@ -1604,7 +1604,8 @@ export class App {
     }
     const el = elementById(this.doc, p.id);
     if (this.selection.size !== 1 || !this.selection.has(p.id) || !el
-      || (el.unbuiltSides ?? []).includes(p.side) || el.unbuilt === true) {
+      || (el.unbuiltSides ?? []).includes(p.side) || el.unbuilt === true
+      || (p.index !== null && p.index !== undefined && (el.unbuiltPoles ?? []).includes(`${p.side}:${p.index}`))) {
       this.pickedSide = null;
       this.view3d.markDirty();
     }
@@ -1650,8 +1651,13 @@ export class App {
    * click on a gate selects the gate, as it always has, so Delete after one
    * click still removes the gate.
    */
-  pickSide(id, side) {
-    this.pickedSide = side ? { id, side } : null;
+  pickSide(id, side, level = null) {
+    /* An upright of a stack is picked one opening's stretch at a time (unbuiltPolesOf in elements.js); a bar, or an
+     * upright of a single gate, has no stretch to name. */
+    const el = elementById(this.doc, id);
+    const stretch = (side === 'left' || side === 'right') && level !== null && el && aperturesOf(el).length > 1
+      && !isLetterPiece(el) && apertureShapeOf(el) === 'square' ? level : null;
+    this.pickedSide = side ? { id, side, index: stretch } : null;
     this.view3d.markDirty();
     this.requestDraw();
     if (side) {
@@ -1677,13 +1683,25 @@ export class App {
     this.keepPickedSide();
   }
 
+  /* One opening's stretch of one upright of a stack: the inspector's finer toggle and Delete on a picked stretch. */
+  setFramePole(id, side, index, built) {
+    this.edit(built ? 'put an upright back' : 'take an upright away', (d) => {
+      setPoleBuilt(d, id, side, index, built);
+    });
+    this.keepPickedSide();
+  }
+
   removePickedSide() {
     const p = this.pickedSide;
     this.pickedSide = null;
     if (!p || !elementById(this.doc, p.id)) {
       return;
     }
-    this.setFrameSide(p.id, p.side, false);
+    if (p.index !== null && p.index !== undefined) {
+      this.setFramePole(p.id, p.side, p.index, false);
+    } else {
+      this.setFrameSide(p.id, p.side, false);
+    }
     this.toast(`${SIDE_WORDS[p.side]} taken away. The opening still scores. Put it back under Frame in the inspector, or undo.`);
   }
 

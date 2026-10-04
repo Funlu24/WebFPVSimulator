@@ -75,7 +75,7 @@
  */
 
 import { scaleOf } from './scale.js';
-import { ELEMENTS, KIND, FRAME_TUBE_OD, LETTER_TUBE_OD, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, isLetterPiece, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
+import { ELEMENTS, KIND, FRAME_TUBE_OD, LETTER_TUBE_OD, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, unbuiltPolesOf, poleBuilt, uprightIntact, gateFlagHeight, isLetterPiece, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD, GATE_OPENING_DEFAULT, envelopeFor } from './racegow.js';
 import {
   aperturesOf, createElement, elementById, kindOf, apertureCenter, letterLayoutOf, logosOf, logoForDecal, dressOrder, topOf,
@@ -1368,6 +1368,8 @@ export class View3D {
     return {
       id: o.userData.elementId,
       side: o.userData.side ?? null,
+      /* Which opening of a stack an upright's stretch belongs to, from the bottom; null on anything else. */
+      level: o.userData.level ?? null,
       weak: o.userData.weak === true,
       ring: o.userData.ring === true,
       /* A selected road's handles: the node a press is on, or the knob between two nodes, by index. */
@@ -2150,8 +2152,13 @@ export class View3D {
      * lowest, and a bar between two openings is none of them.
      */
     const sides = frameSidesOf(el);
+    /* A stack's uprights are one stretch per opening, and a stretch goes on its own: see unbuiltPolesOf in elements.js. */
+    const gonePoles = new Set(unbuiltPolesOf(el));
     const picked = this.host.pickedSide && this.host.pickedSide.id === el.id
       ? this.host.pickedSide.side : null;
+    /* The opening the picked upright's stretch belongs to; null picks the side wherever it is (a bar, or a single gate). */
+    const pickedLevel = this.host.pickedSide && this.host.pickedSide.id === el.id
+      ? (this.host.pickedSide.index ?? null) : null;
     const pickedMat = picked ? new THREE.MeshLambertMaterial({ color: COL.sidePicked }) : null;
     const last = levels.length - 1;
     /* A hoop or a hex gate: one opening, in a run of tubes that is not four sides. */
@@ -2178,10 +2185,15 @@ export class View3D {
         if (side && !sides[side]) {
           continue;
         }
-        const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, tube), side && side === picked ? pickedMat : mat);
+        if ((side === 'left' || side === 'right') && gonePoles.has(`${side}:${ap.index}`)) {
+          continue;
+        }
+        const lit = side && side === picked && (pickedLevel === null || pickedLevel === ap.index);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, tube), lit ? pickedMat : mat);
         bar.position.set(x, y, 0);
         bar.rotation.z = angle ?? 0;
         bar.userData.side = side;
+        bar.userData.level = ap.index;
         this.register(bar, el);
         frame.add(bar);
         drawn += 1;
@@ -2199,6 +2211,7 @@ export class View3D {
           grab.rotation.z = angle ?? 0;
           grab.visible = false;
           grab.userData.side = side;
+          grab.userData.level = ap.index;
           this.register(grab, el);
           frame.add(grab);
         }
@@ -2327,7 +2340,7 @@ export class View3D {
       const at = new THREE.Vector3();
       for (const sx of plain ? [] : [-1, 1]) {
         /* A sleeve is sleeved over its upright and goes with it. */
-        if (!sides[sx < 0 ? 'left' : 'right']) {
+        if (!uprightIntact(el, sx < 0 ? 'left' : 'right')) {
           continue;
         }
         const off = sx * (top.clearW / 2 + tube + sleeveW / 2);
@@ -2385,7 +2398,7 @@ export class View3D {
       /* gateSupportFeet gives the -widthAxis leg first. A leg is the foot of
        * its upright, so it goes when the upright does, as it does in the
        * world. */
-      if (h < 0.02 || unbuilt || (!shaped && !sides[i === 0 ? 'left' : 'right'])) {
+      if (h < 0.02 || unbuilt || (!shaped && !poleBuilt(el, i === 0 ? 'left' : 'right', 0))) {
         continue;
       }
       const leg = new THREE.Mesh(new THREE.BoxGeometry(tube * 1.4, tube * 1.4, h), legMat);

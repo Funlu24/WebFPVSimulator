@@ -65821,6 +65821,36 @@ physics, plant, ABI or build change) and `node scripts/shots.js`. Not looked at:
 
 Approval. On 2026-10-04 the owner said "push to main" in the thread, after the draft PR (#29) was up and the verification choices had been put to them. That covers this change only, pushed to main as a fast forward with no force.
 
+## 2026-10-04: deleting one gate's upright of a stack took the pole of every gate in it
+
+Report, in the owner's words: on the whoop builder, with a double or triple stacked gate, deleting a vertical gate side should only
+remove that gate's pole, not the entire vertical pole for all 2 or 3 gates.
+
+Cause, read from the code and not seen in a browser: a stack is one element with `dims.levels`, and its four sides were stored per
+element. `view3d.js` drew a left and a right bar for every opening, but each carried only the side name, so a click on any of them
+picked `left` for the element and `setSideBuilt` wrote `unbuiltSides: ["left"]`, which every reader (3D view, race field, build
+sheet, animation) took to mean the upright the whole height of the stack. `elements.js` said so on purpose ("the whole height of a
+stack"), which was the owner's reading in the first version of this feature and is the owner's to change.
+
+Change, additive: a new optional `unbuiltPoles` list of `"left:0"` strings, one stretch of one upright, stacks of square openings
+only. `unbuiltSides` still means the whole upright and wins over it; when every stretch of an upright has gone it is written as the
+side, so one state has one spelling. The 3D pick now carries the opening it hit, Delete takes that stretch, and the inspector has a
+Left 1, Left 2 ... row under the whole-upright buttons. The builder's preview, the build sheet, the animation (`stage.js`) and the
+race field (`trackdoc.js` `meshSidesFor`, `scene.js obstacle`) all build an upright in runs of built stretches. A whole upright is
+the same single cylinder, same size and collider, as before. Older documents and older gates are byte for byte as they were, and
+the key is written only when not empty. The 5 inch builder shares all of this: it is the same element, view and inspector.
+
+Declined or left: the printed sleeve is one board the height of the stack, so an upright missing a stretch has none (a sleeve per
+stretch is a texture decision, not a bug fix). The 2D plan draws no mark for a stretch, because a plan cannot tell the openings of
+a stack apart. The tilted gate builder in `scene.js` (the pivot version) builds one opening and was not touched.
+
+Checked. `src/trackbuilder/selftest.js` 2492 passed, 0 failed, with a new suite, `suitePoleStretches` (the second stretch of a
+double takes the side with it, the middle of a triple goes alone, round trip, repair on read, no station moves). `node --check` on
+`scene.js`, `gen-preload --check` passes, and `meshSidesFor` hand run on a double with one stretch gone gives the mesh the
+expected per level mask. Not run: `npm run verify` (no physics, plant, ABI or build change) and `node scripts/shots.js`, so the new
+geometry in `scene.js` and the picking in `view3d.js` have not been looked at in a browser.
+
+The owner approved the push of the stacked gate upright change to main on 2026-10-04 ("push to main, i'll fix it"), before looking at it in a browser. It went as a fast forward of main (5e3e70a) after a rebase onto the draggable options card commits, with the builder self test (2496 passed), `lint:preload`, `lint:shell` and `lint:boot` rerun on the rebased head. The 3D pick and the race field geometry are still unlooked at in a browser.
 ## 2026-10-04 | plant | Less grip at low throttle, more at mid (a pilot's report, the owner's ask)
 
 Request, the owner's, from a pilot: "the low throttle grip is a little too much (or the mass doesnt carry enough) and the mid

@@ -48,7 +48,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND, apertureShapeOf, frameSidesOf, isUnbuilt, labelOf } from './elements.js';
+import { KIND, apertureShapeOf, frameSidesOf, poleBuilt, isUnbuilt, labelOf } from './elements.js';
 import { aperturesOf, apertureCenter, kindOf } from './model.js';
 import { sequenceNumbers } from './sequence.js';
 import { isRoomType, roomFootprint } from '../props/room.js';
@@ -142,10 +142,11 @@ export function membersOf(doc) {
       if (ap.index !== 0 || sides.bottom) {
         out.push({ a: at(-1, -1), b: at(1, -1), from: el.id });
       }
-      if (sides.left) {
+      /* An upright is one stretch per opening on a stack: see unbuiltPolesOf in elements.js. */
+      if (poleBuilt(el, 'left', ap.index)) {
         out.push({ a: at(-1, -1), b: at(-1, 1), from: el.id });
       }
-      if (sides.right) {
+      if (poleBuilt(el, 'right', ap.index)) {
         out.push({ a: at(1, -1), b: at(1, 1), from: el.id });
       }
     }
@@ -156,7 +157,7 @@ export function membersOf(doc) {
     const feet = gateSupportFeet(el.yaw, el.pitch, bottom.clearW, bottom.clearH, bottom.centerH, tube);
     const c0 = apertureCenter(el, 0);
     feet.forEach((foot, i) => {
-      if (foot.z < 0.02 || !sides[i === 0 ? 'left' : 'right']) {
+      if (foot.z < 0.02 || !poleBuilt(el, i === 0 ? 'left' : 'right', 0)) {
         return;
       }
       const sw = i === 0 ? -1 : 1;

@@ -98,6 +98,22 @@ function frameSidesOf(el) {
   return ALL_SIDES;
 }
 
+/* One opening's stretch of an upright of a stack: through the namespace for the reason above, and built when the
+ * copy of elements.js a browser still holds has never heard of it. */
+function uprightIntact(el, side) {
+  if (typeof elementLib.uprightIntact === 'function') {
+    return elementLib.uprightIntact(el, side);
+  }
+  return true;
+}
+
+function poleBuilt(el, side, index) {
+  if (typeof elementLib.poleBuilt === 'function') {
+    return elementLib.poleBuilt(el, side, index);
+  }
+  return true;
+}
+
 /*
  * THE CAMERA, in six numbers.
  *
@@ -1278,9 +1294,13 @@ export function buildStage(THREE, doc, path, {
      */
     const sides = frameSidesOf(el);
     const last = levels.length - 1;
-    const cornerSide = (i) => ((i === 0 || i === 3) ? sides.left : sides.right);
     let lowerTop = null;
     for (const ap of levels) {
+      /* An upright is one stretch per opening on a stack, and a stretch goes on its own (unbuiltPolesOf in
+       * elements.js), so the corner joints, the edges and the legs of THIS opening follow its own stretch. */
+      const leftHere = poleBuilt(el, 'left', ap.index);
+      const rightHere = poleBuilt(el, 'right', ap.index);
+      const cornerSide = (i) => ((i === 0 || i === 3) ? leftHere : rightHere);
       const centre = apertureCenter(el, ap.index);
       /* The bar centrelines, which are the clear opening grown by half a
        * tube on each side. Exactly the rectangle view3d.js lays its boxes
@@ -1290,9 +1310,9 @@ export function buildStage(THREE, doc, path, {
       );
       const edgeBuilt = [
         ap.index === 0 ? sides.bottom : true,
-        sides.right,
+        rightHere,
         ap.index === last ? sides.top : true,
-        sides.left,
+        leftHere,
       ];
       for (let i = 0; i < 4; i += 1) {
         if (edgeBuilt[i]) {
@@ -1306,10 +1326,11 @@ export function buildStage(THREE, doc, path, {
        * three the upper. A stack shares its verticals, so each level is
        * joined to the one below rather than given legs of its own. */
       if (lowerTop) {
-        if (sides.left) {
+        /* The join between two openings belongs to both stretches either side of it, and stands only when both do. */
+        if (leftHere && poleBuilt(el, 'left', ap.index - 1)) {
           pipes.push(pipeGeometry(THREE, lowerTop[0], c[0], tubeR));
         }
-        if (sides.right) {
+        if (rightHere && poleBuilt(el, 'right', ap.index - 1)) {
           pipes.push(pipeGeometry(THREE, lowerTop[1], c[1], tubeR));
         }
       } else {
@@ -1390,7 +1411,7 @@ export function buildStage(THREE, doc, path, {
     };
     if (sleeveW > 0) {
       for (const sx of [-1, 1]) {
-        if (sides[sx < 0 ? 'left' : 'right']) {
+        if (uprightIntact(el, sx < 0 ? 'left' : 'right') && sides[sx < 0 ? 'left' : 'right']) {
           board(sleeveW, sleeveH, sx < 0 ? kit.sleeveFlipped : kit.sleeve, sx * (edge + sleeveW / 2), sleeveBottom + sleeveH / 2);
         }
       }

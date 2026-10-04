@@ -34,7 +34,7 @@ import {
   createTrack, createElement, createSequenceEntry, deserialize, elementById, normalize, isSequenceable, kindOf,
   roundTripsCleanly, serialize, aperturesOf, toPlain, startPadsOf, newElementId,
   logoForDecal, dressOrder, LOGO_SLOTS, SCHEMA_VERSION,
-  SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt,
+  SCENE_TIMES, SCENE_GROUNDS, SCENE_DEFAULT, sceneOf, deepClone, setSideBuilt, setPoleBuilt,
   groupMembers, expandGroups, elementNormal, apertureCenter, letterLayoutOf, openingNearest, setLetter, topOf,
 } from './model.js';
 import { applyAutoFaces, flipFace, setYaw, clearOverride, travelDirection, defaultYawFor } from './faces.js';
@@ -92,7 +92,7 @@ import {
   RAD, DEG, wrapAngle, gateSupportFeet, apertureFrame, GATE_POST_R_SCALE, leftOf,
 } from './geometry.js';
 import {
-  FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf,
+  FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, unbuiltPolesOf, poleBuilt, uprightIntact, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf,
   FIVE_INCH_PIECES, FIVE_INCH_TOOLS, WHOOP_PIECES, MAP_TOOLS, toolByKey, isFiveInchPiece, isLetterPiece, isUnbuilt, letterExtent, pieceLabel,
   LETTER_TUBE_OD,
 } from './elements.js';
@@ -6985,6 +6985,66 @@ function suiteFrameSides() {
 }
 
 /*
+ * A STACK'S UPRIGHT IS ONE STRETCH PER OPENING. Deleting a side of a double or a triple takes only the stretch
+ * of the opening that was clicked, not the pole the whole height of the stack (the owner, 2026-10-04).
+ */
+function suitePoleStretches() {
+  console.log('\nstacked gate, one upright stretch at a time');
+  const doc = createTrack('stretch', 'micro');
+  const g = place(doc, 'doubleStack', 4, 5);
+  const three = place(doc, 'gate', 8, 5);
+  three.dims.levels = 3;
+  const single = place(doc, 'gate', 12, 5);
+  const levels = (e) => Math.round(e.dims.levels);
+  check('the double is a stack of two', levels(g) === 2, String(levels(g)));
+
+  check('taking one stretch away reports a change', setPoleBuilt(doc, g.id, 'left', 0, false) === true);
+  check('only that stretch is gone', !poleBuilt(g, 'left', 0) && poleBuilt(g, 'left', 1) && poleBuilt(g, 'right', 0) && poleBuilt(g, 'right', 1));
+  check('the side as a whole still reads built', frameSidesOf(g).left && !('unbuiltSides' in g));
+  check('it is written as a stretch', JSON.stringify(g.unbuiltPoles) === '["left:0"]', JSON.stringify(g.unbuiltPoles));
+  check('and the gate counts as having something missing', hasMissingSides(g));
+  check('the whole upright is not intact', !uprightIntact(g, 'left') && uprightIntact(g, 'right'));
+  check('taking the same stretch twice changes nothing', setPoleBuilt(doc, g.id, 'left', 0, false) === false);
+
+  const back = normalize(JSON.parse(serialize(doc))).doc;
+  const gb = elementById(back, g.id);
+  check('a stretch round trips', JSON.stringify(gb.unbuiltPoles) === '["left:0"]' && !poleBuilt(gb, 'left', 0) && poleBuilt(gb, 'left', 1));
+
+  check('the second stretch takes the whole upright with it', setPoleBuilt(doc, g.id, 'left', 1, false) === true
+    && JSON.stringify(g.unbuiltSides) === '["left"]' && !('unbuiltPoles' in g), JSON.stringify([g.unbuiltSides, g.unbuiltPoles]));
+  check('and a stretch of an upright that is gone is nothing to take away', setPoleBuilt(doc, g.id, 'left', 0, false) === false);
+  check('putting one stretch of a gone upright back leaves the other gone', setPoleBuilt(doc, g.id, 'left', 0, true) === true
+    && poleBuilt(g, 'left', 0) && !poleBuilt(g, 'left', 1) && !('unbuiltSides' in g)
+    && JSON.stringify(g.unbuiltPoles) === '["left:1"]', JSON.stringify([g.unbuiltSides, g.unbuiltPoles]));
+  setPoleBuilt(doc, g.id, 'left', 1, true);
+  check('putting every stretch back is the JSON it was', !('unbuiltPoles' in g) && !('unbuiltSides' in g) && !hasMissingSides(g));
+
+  setPoleBuilt(doc, three.id, 'right', 1, false);
+  check('the middle of a triple goes alone', poleBuilt(three, 'right', 0) && !poleBuilt(three, 'right', 1) && poleBuilt(three, 'right', 2)
+    && JSON.stringify(three.unbuiltPoles) === '["right:1"]');
+  check('a whole side taken away covers its stretches and writes none beside it', setSideBuilt(doc, three.id, 'right', false) === true
+    && !('unbuiltPoles' in three) && JSON.stringify(three.unbuiltSides) === '["right"]');
+
+  check('a single gate has no stretches', setPoleBuilt(doc, single.id, 'left', 0, false) === false && unbuiltPolesOf(single).length === 0);
+
+  const raw = JSON.parse(serialize(doc));
+  const rawG = raw.elements.find((e) => e.id === g.id);
+  rawG.unbuiltPoles = ['left:0', 'left:0', 'left:7', 'top:0', 'right:1'];
+  const rawS = raw.elements.find((e) => e.id === single.id);
+  rawS.unbuiltPoles = ['left:0'];
+  const read = normalize(raw).doc;
+  check('a stretch it does not have, or a side it has no stretches for, is dropped on read',
+    JSON.stringify(elementById(read, g.id).unbuiltPoles) === '["left:0","right:1"]'
+    && !('unbuiltPoles' in elementById(read, single.id)), JSON.stringify(elementById(read, g.id).unbuiltPoles));
+
+  const placed = courseFromDocument(doc);
+  const placedBefore = JSON.stringify(placed.stations.map((st) => [st.elementId, st.x, st.z, st.centreY]));
+  setPoleBuilt(doc, g.id, 'left', 0, false);
+  const placedAfter = JSON.stringify(courseFromDocument(doc).stations.map((st) => [st.elementId, st.x, st.z, st.centreY]));
+  check('taking a stretch away moves no station', placedBefore === placedAfter);
+}
+
+/*
  * BENDING THE LINE. A grab on a segment drops a waypoint into the flying
  * order between the two stations that segment joins, the line then runs
  * through it, the game scores exactly what it scored before, and the gates
@@ -13869,6 +13929,7 @@ async function main() {
   suiteScoring();
   suiteWaypoint();
   suiteFrameSides();
+  suitePoleStretches();
   suiteBendLine();
   suitePoleSquare();
   suiteSchemaDoc();
