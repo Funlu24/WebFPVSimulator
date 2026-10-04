@@ -65171,3 +65171,24 @@ All of it run in this turn, after the last edit to the code it is about.
    pick it. Remembering it is one line and a reason to think about a 2048 file nobody asked for.
 5. **Standard's name is sharper.** If you would rather Standard were the old file to the byte, it is `tex.anisotropy = 16` in
    `nameTexture`, set to 1, and the comment over it says what that buys.
+
+## 2026-10-04 | builder, deploy | The push to main, and what the live site serves (the owner's ask)
+
+The owner, answering which verification to run on the entry above: "push to main, i'll test it in the browser." That is the fly it
+scale, done by their own hand. After it I ran only git checks and a comparison of the live site's files with the commit's.
+
+Pushed `c3f62b3` to main as a fast-forward from `daf74f7`. Main had not moved since the branch was cut: `git merge-base` was
+`daf74f7`, the branch was one commit ahead and none behind, and there was no merge and no force. `claude/gracious-keller-0y7inx`
+was at the same commit. The leaderboard repository had nothing to push.
+
+What the live site serves: Render published the deploy at 03:59:30 UTC, eight seconds after the push, which is the builder
+page's Last-Modified and so its stamp (`d=tmd736`, the way `src/trackbuilder/index.html` works it out). The five changed modules,
+fetched at their stamped addresses as a browser loads them, are identical by sha256 to the commit's `animate.js`, `app.js`,
+`gif.js`, `stage.js` and `storage.js`. The unstamped `/sim/src/trackbuilder/storage.js` was still the old file a minute after the
+push. That is the edge's `s-maxage=300` and not an address a browser loading the builder uses, so I did not wait for it. A tab
+that was already open on the builder before the push runs the old modules until it is reloaded.
+
+For whoever reads this next: the builder is `https://webfpv.org/sim/src/trackbuilder/index.html`. Load a big five inch course,
+More, Export animation, then High and Very high, and open the files. Wrong would be a black or blank file, scan lines through the
+name, hairline gates, a sentence about the graphics card, or a Close that does not stop a render. The owner's verdict is not in
+yet and goes below this line when it is.
