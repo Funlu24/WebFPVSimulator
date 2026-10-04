@@ -94,6 +94,26 @@ function check(name, ok, note) {
   }
 }
 
+/*
+ * A TARGET IS MEASURED AND PRINTED AND NEVER COUNTED, as in crash-check.js:
+ * a number the owner has chosen to tune by feel rather than gate on, kept in
+ * the output so it is there when that tuning happens. Only the owner turns a
+ * check into a target, and PROGRESS.md records when they did.
+ */
+let met = 0;
+let missed = 0;
+function target(name, ok, note) {
+  if (ok) {
+    met += 1;
+  } else {
+    missed += 1;
+  }
+  console.log(`  ${ok ? 'met ' : 'not '}  target  ${name}`);
+  if (note) {
+    console.log(`        ${note}`);
+  }
+}
+
 console.log('\nwall-check: a tap comes off the wall, whichever way the map faces\n');
 
 if (!existsSync(WASM)) {
@@ -308,16 +328,44 @@ for (const r of results) {
  * from 4.0 to 11.3 m/s produced six crashes and not one bounce. So the test
  * is the sign of the velocity and the growth of the gap over the window the
  * contact owns.
+ *
+ * THE GAP IS A TARGET AT 3 M/S, by the owner's word on 2026-10-04 ("Target
+ * only"). The sign is still asserted there, as at every speed: a gentle tap
+ * turns back, 0.220 to 0.245 m/s outbound across the four yaws on that day's
+ * module. What it does not do is clear the face on the bounce alone. Traced
+ * at yaw 0, the props touch with the centre 0.1399 m off the face, give
+ * 17 mm and hand back 14 of them while the hit pitches the nose down, and
+ * the craft then rubs down the face, so the furthest gap there is where it
+ * first touched. Across the four yaws it is 0.140 to 0.142 m, against a
+ * square-on reach of 0.1413. That is the soft props the owner chose on
+ * 2026-09-24, a blade that pushes at the motor with no restitution
+ * (src/native/world.c, PROPS), and the old single line, "the craft comes off
+ * the face", had been red at 3 m/s on main since that day. Getting out of the
+ * tap is the pilot's job, and THE PILOT FLIES OUT OF IT below asserts that at
+ * every speed. So at 3 m/s the gap is measured and printed on every run and
+ * never counts, as crash-check.js keeps the same tap's "leaves the wall
+ * rather than sticking". How far a gentle tap carries is the owner's to tune
+ * by feel; gating it again needs a prop strike that gives something back,
+ * which is a change to the contact model and not to this file. At 6 and
+ * 9 m/s the gap is asserted as it always was.
  */
+const GENTLE_TAP = 3;
 for (const r of results) {
   check(
-    `yaw ${r.yawName} deg at ${r.speed} m/s: the craft comes off the face`,
-    r.sawContact && r.peakOut > 0.15 && r.maxGap > SQUARE_REACH,
-    r.sawContact
-      ? `peak outbound ${r.peakOut.toFixed(3)} m/s, furthest gap ${r.maxGap.toFixed(3)} m, `
-        + `square-on reach ${SQUARE_REACH.toFixed(3)} m`
-      : 'no contact was ever recorded',
+    `yaw ${r.yawName} deg at ${r.speed} m/s: the craft turns back off the face`,
+    r.sawContact && r.peakOut > 0.15,
+    r.sawContact ? `peak outbound ${r.peakOut.toFixed(3)} m/s` : 'no contact was ever recorded',
   );
+  const name = `yaw ${r.yawName} deg at ${r.speed} m/s: the bounce carries the hull clear of the face`;
+  const clear = r.sawContact && r.maxGap > SQUARE_REACH;
+  const note = r.sawContact
+    ? `furthest gap ${r.maxGap.toFixed(3)} m, square-on reach ${SQUARE_REACH.toFixed(3)} m`
+    : 'no contact was ever recorded';
+  if (r.speed <= GENTLE_TAP) {
+    target(name, clear, note);
+  } else {
+    check(name, clear, note);
+  }
 }
 
 /*
@@ -654,8 +702,8 @@ for (const [yawName, yaw] of YAWS) {
 
 /* The numbers, for the record. A threshold argued in PROGRESS.md needs the
  * measurement beside it. */
-console.log('\n  approach, rebound and exit, per spawn yaw. The exit is asserted at every');
-console.log('  speed, the rebound and the furthest gap by check 2:');
+console.log('\n  approach, rebound and exit, per spawn yaw. The exit and the rebound are');
+console.log('  asserted at every speed, the furthest gap at 6 and 9 m/s and as a target at 3:');
 for (const r of results) {
   console.log(
     `    yaw ${r.yawName.padStart(3)} deg  in ${r.approach.toFixed(2)} m/s  `
@@ -666,5 +714,5 @@ for (const r of results) {
   );
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
+console.log(`\n${passed} passed, ${failed} failed; targets, not counted: ${met} met, ${missed} not met`);
 process.exit(failed === 0 ? 0 : 1);

@@ -66210,3 +66210,68 @@ craft is not stuck and how far a gentle tap bounces is a feel call. Nothing goes
   physics. Found only because a trace of the 3 m/s exit printed the nose going down under a stick meant to raise it.
 - The entry above reported check:crash's jump as failing "the same line on main's module", which was true, and left it
   there. The line was the check's.
+
+## 2026-10-04 | tests | The gentle wall tap's gap printed as a target, then the grip change to main (the owner's word: "Target only")
+
+Follows the entry above. One file changed, scripts/wall-check.js. Nothing in src/, dist/ or tests/ changed: dist/sim.wasm
+is 0a1f60b4, as verified 18 of 18 above.
+
+### The owner's word, as given
+
+- 12:46 UTC, on the decision card "Pick how to clear the three gentle wall tap tests before pushing", the owner chose
+  "Target only". The option as the owner read it: "Those lines print as a target, like crash-check's for the same tap, so
+  everything is green and I push the grip change. How far a tap bounces stays yours to tune." The other two were
+  "Bouncier props" (a prop strike gives a gentle tap enough bounce to clear the wall alone, and the grip change waits
+  until both are flown) and "Push anyway" (push with the three lines red).
+- Taken to cover two things. First, check:wall check 2's furthest gap at 3 m/s, and only that: the rebound's sign stays
+  asserted at every speed and the gap stays asserted at 6 and 9 m/s, because the card named the three lines and why they
+  were red, and the rebound was not why. Second, the push of the grip change to main once everything else is green, which
+  the owner asked for at 11:08 ("Push to main") and the card restated.
+
+### What changed
+
+check 2 asserted two things in one line per approach: the craft turns back (peak outbound over 0.15 m/s), and the bounce
+carries it past its own square-on reach (furthest gap over 0.1413 m). It is now two lines per approach, so each line's
+name says what it asserts. "The craft turns back off the face" is asserted at every speed. "The bounce carries the hull
+clear of the face" is asserted at 6 and 9 m/s and printed as a target at 3 m/s, marked `met` or `not` and never counted,
+the way crash-check.js prints its own. 70 lines became 78 lines and 4 targets, and the printed table's heading and the
+summary line say which is which. The comment over check 2 carries the owner's word, the yaw 0 trace from the entry above
+and what making the gap count again would take: a prop strike that gives a gentle tap something back, which is a change
+to the contact model and goes to the owner first.
+
+### Left for later, found on the way
+
+- The comment over "below the knee" says the rebound at 3 and 6 m/s measures 0.242 to 0.252 m/s. This tree measures
+  0.220 to 0.287 and main's module 0.071 to 0.279. The line's band, 0.20 to 0.30, is unchanged and passes on this tree.
+  The number in the comment is stale, and so is its account of where the rebound comes from since the soft props. Not
+  touched, because the owner's word covered check 2.
+
+### RUN LOG
+
+    node scripts/wall-check.js         78 passed, 0 failed, targets 1 of 4 met (0a1f60b4). The 3 m/s gap 0.140,
+                                       0.142, 0.140 and 0.140 m at yaws 0, 90, 180 and 270 against 0.1413; the
+                                       3 m/s rebound 0.220 to 0.245 m/s, so all four turn back.
+                                       Main's tree and module (98580b4 with 5408b3e2, a scratch worktree with this
+                                       script copied in): 76 passed, 2 failed, targets 0 of 4. The two: yaw 270 at
+                                       3 m/s does not turn back (0.071 m/s), and "below the knee" (0.071 to 0.279
+                                       m/s). So the split still fails what it should on main's module, and the grip
+                                       change passes a line main's module fails.
+    npm run check:props                all passed
+    npm run check:world                all passed
+    npm run check:world-golden         all passed
+    npm run check:plant                all passed
+    npm run check:crash-pacing         all passed
+    node scripts/crash-check.js        0 guards failed, 7 of 7 controls, worst excess 0 m in all 12
+                                       scenarios. Its own target for the same tap, "leaves the wall
+                                       rather than sticking", not met, as before: gap after 1 s 0.082 m
+    npm run verify                     not run: nothing it reads changed since its 18 of 18 above. The one file is
+                                       a script under scripts/ that it does not import
+
+### The push
+
+main was 98580b4 on a fresh fetch and on `git ls-remote`, which is this branch's merge base, so the push is a fast
+forward of this branch's commits onto main: no merge, no rebase, no force.
+
+### What went wrong
+
+Nothing new in this round.
