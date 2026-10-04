@@ -51,7 +51,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, defaultDims, isFiveInchPiece, trackClassOf } from './elements.js';
+import { ELEMENTS, KIND, defaultDims, isFiveInchPiece, letterDimsFor, trackClassOf } from './elements.js';
 import { elementById, kindOf, apertureCenter, aperturesOf } from './model.js';
 import { SEAT_SLACK } from './seat.js';
 import {
@@ -59,6 +59,7 @@ import {
 } from './snap.js';
 import { inches, GATE_SPACING_NOMINAL } from './racegow.js';
 import { partGhosts } from './parts.js';
+import { primaryOpening } from '../props/letters.js';
 import { scaleOf, say } from './scale.js';
 import { absNodes, vehiclePlace } from './roadtool.js';
 
@@ -728,9 +729,18 @@ export class RoomEditor {
     const at = h.snap(p, e.altKey, { type });
     v.setGuides(h.guides);
     const plan = placementFor(h.doc, at, type, { square: h.square && !h.isWhoopRace() });
-    v.setGhost({ type, position: { x: at.x, y: at.y, z: 0 }, yaw: plan.yaw });
+    /* A letter's ghost is the one in hand: its own size, and which letter it is. */
+    const letter = type === 'letter' ? h.letterTool : null;
+    v.setGhost({
+      type,
+      position: { x: at.x, y: at.y, z: 0 },
+      yaw: plan.yaw,
+      ...(letter ? { props: { letter, dims: letterDimsFor(letter) } } : {}),
+    });
     if (def.kind === KIND.APERTURE) {
-      const ap = aperturesOf({ type, dims: defaultDims(type, trackClassOf(h.doc)) })[0];
+      const ap = aperturesOf(letter
+        ? { type, letter, dims: letterDimsFor(letter), position: { x: at.x, y: at.y, z: 0 }, yaw: plan.yaw, pitch: 0 }
+        : { type, dims: defaultDims(type, trackClassOf(h.doc)) })[letter ? primaryOpening(letter) : 0];
       v.setMeasures(measuresFor(h.doc, { x: at.x, y: at.y, z: ap ? ap.centerH : 0 }));
     } else {
       v.clearMeasures();

@@ -46,7 +46,7 @@
 
 import { sincos } from './trig.js';
 
-export const APERTURE_SHAPES = ['square', 'circle', 'hex'];
+export const APERTURE_SHAPES = ['square', 'circle', 'hex', 'letter'];
 
 /* How many straight pieces a round frame is made of. A hoop in a room is 2.4 m across as built
  * and the pilot flies close to it, so sixteen straight tubes read as a polygon and twenty four
@@ -59,9 +59,11 @@ export const CIRCLE_SEGMENTS = 24;
  * three. Square root is correctly rounded everywhere, which is why it can be written here. */
 export const HEX_HEIGHT_RATIO = Math.sqrt(3) / 2;
 
-/* Any word that is not a shape this knows is a square, which is what every opening was. */
+/* Any word that is not a shape this knows is a square, which is what every opening was. A letter is not
+ * inscribed in a box at all: its holes are polygons of their own (src/props/letters.js), so the word says
+ * only that this is one, and what is in it is for the letter to say. */
 export function shapeOf(word) {
-  return word === 'circle' || word === 'hex' ? word : 'square';
+  return word === 'circle' || word === 'hex' || word === 'letter' ? word : 'square';
 }
 
 const TAU = 2 * Math.PI;
@@ -389,4 +391,268 @@ export function paneFan(shape, w, h) {
     index.push(0, 1 + i, 1 + ((i + 1) % pts.length));
   }
   return { position, uv, index };
+}
+
+/*
+ * ------------------------------------------------------------------------------------------
+ * A POLYGON OPENING: the hole in a letter.
+ *
+ * A hoop and a hex gate are a shape inscribed in a box, and the box is the whole of what a
+ * reader has to know. A letter's hole is not: the gap between the two Vs of a W is a triangle
+ * standing on the ground, the hole of an M is a rectangle with a notch bitten out of its top,
+ * and a B has two of them. So an opening can also be a plain list of corners, counter
+ * clockwise, in the opening's own frame (x across, y up). It need not be convex. Nothing here
+ * assumes it is, because a pass has to be scored against the hole the pilot can see.
+ *
+ * The same four readers as the shapes above, and the same rule: ONE DEFINITION. The pass test
+ * clips a segment against it (clipToPolygon), the scene builds the lit outline on it
+ * (barsAlong over insetPolygon) and its pane from it (paneOfPolygon), and the builder draws
+ * the same points. All of it is arithmetic and square roots, which are correctly rounded
+ * everywhere, so it is the same bits in every engine.
+ * ------------------------------------------------------------------------------------------
+ */
+
+/* Signed area: positive for a counter clockwise run, which is the way every polygon here goes. */
+export function polygonArea(poly) {
+  let sum = 0;
+  for (let i = 0; i < poly.length; i += 1) {
+    const [ax, ay] = poly[i];
+    const [bx, by] = poly[(i + 1) % poly.length];
+    sum += ax * by - bx * ay;
+  }
+  return sum / 2;
+}
+
+/* The box a polygon lies in, as { x0, x1, y0, y1 }. Null for no corners at all. */
+export function polygonBounds(poly) {
+  if (!poly.length) {
+    return null;
+  }
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const [x, y] of poly) {
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  return { x0, x1, y0, y1 };
+}
+
+/* Whether a point is in the polygon, by the even odd rule. The edge is in, as it is for every
+ * other shape: a pass that touches the outline of the hole is a pass. */
+export function insidePolygon(poly, x, y) {
+  const n = poly.length;
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    const along = (x - xj) * (yi - yj) - (y - yj) * (xi - xj);
+    if (Math.abs(along) < 1e-12
+      && x >= Math.min(xi, xj) - 1e-12 && x <= Math.max(xi, xj) + 1e-12
+      && y >= Math.min(yi, yj) - 1e-12 && y <= Math.max(yi, yj) + 1e-12) {
+      return true;
+    }
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/*
+ * WHERE A STRAIGHT TRAVEL IS INSIDE A POLYGON, as clipToShape says it for the shapes: the travel
+ * starts at (ax, ay) and moves (dx, dy) as t goes from 0 to 1, only t between t0 and t1 is asked
+ * about, and the answer is the FIRST stretch of that range spent inside, as [from, to], or null.
+ *
+ * Exact, not sampled. The travel's line is cut at every edge it crosses, and each piece between two
+ * cuts is wholly inside or wholly outside, so one point of it decides. A convex shape has one stretch
+ * and a notched one can have two (a line through the shoulder of an M goes in, out over the notch
+ * and in again); the first is what a pass is credited at, and the pieces that touch are joined.
+ */
+export function clipToPolygon(poly, ax, ay, dx, dy, t0, t1) {
+  const n = poly.length;
+  if (n < 3 || t0 > t1) {
+    return null;
+  }
+  if (dx * dx + dy * dy < 1e-24) {
+    return insidePolygon(poly, ax, ay) ? [t0, t1] : null;
+  }
+  const cuts = [t0, t1];
+  for (let i = 0; i < n; i += 1) {
+    const [px, py] = poly[i];
+    const [qx, qy] = poly[(i + 1) % n];
+    const ex = qx - px;
+    const ey = qy - py;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-18) {
+      /* Parallel to this edge: it cuts the line nowhere, and a line along an edge is decided by
+       * the points between its other cuts, which the midpoints below test. */
+      continue;
+    }
+    const t = ((px - ax) * ey - (py - ay) * ex) / den;
+    const s = ((px - ax) * dy - (py - ay) * dx) / den;
+    if (s >= -1e-12 && s <= 1 + 1e-12 && t > t0 && t < t1) {
+      cuts.push(t);
+    }
+  }
+  cuts.sort((u, v) => u - v);
+  let from = null;
+  let to = null;
+  for (let i = 0; i + 1 < cuts.length; i += 1) {
+    const mid = (cuts[i] + cuts[i + 1]) / 2;
+    if (insidePolygon(poly, ax + dx * mid, ay + dy * mid)) {
+      if (from === null) {
+        from = cuts[i];
+      }
+      to = cuts[i + 1];
+    } else if (from !== null) {
+      break;
+    }
+  }
+  return from === null ? null : [from, to];
+}
+
+/*
+ * A POLYGON PUSHED IN: every edge moved `dist` towards the inside along its own normal, and each
+ * corner put where its two neighbours' new lines meet. `dist` is one number, or one for each edge
+ * (edge i runs from corner i to corner i + 1), which is what a letter's hole needs: the side that is
+ * a pipe is held off by the pipe's radius and the side that is the ground, or is not there at all,
+ * is not held off at all.
+ *
+ * Two collinear edges that are pushed by different amounts leave a step, so the corner between them
+ * becomes two. A hole that is too small for the push comes out turned inside out, and the sign of its area
+ * does not say so when it has an even number of sides (a square pushed past its middle is a smaller square
+ * the wrong way up, and the same way round), so the caller asks whether each corner is still the push from
+ * the sides it was pushed off: layoutLetter in src/props/letters.js does.
+ */
+export function insetPolygon(poly, dist) {
+  const n = poly.length;
+  if (n < 3) {
+    return [];
+  }
+  const push = (i) => (Array.isArray(dist) ? dist[i] : dist);
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    const p = poly[(i + n - 1) % n];
+    const q = poly[i];
+    const r = poly[(i + 1) % n];
+    const la = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const lb = Math.hypot(r[0] - q[0], r[1] - q[1]) || 1;
+    /* The normals point into a counter clockwise polygon: left of the way the edge runs. */
+    const nax = -(q[1] - p[1]) / la;
+    const nay = (q[0] - p[0]) / la;
+    const nbx = -(r[1] - q[1]) / lb;
+    const nby = (r[0] - q[0]) / lb;
+    const da = push((i + n - 1) % n);
+    const db = push(i);
+    const det = nax * nby - nay * nbx;
+    if (Math.abs(det) < 1e-9) {
+      if (Math.abs(da - db) < 1e-12) {
+        out.push([q[0] + nax * da, q[1] + nay * da]);
+      } else {
+        out.push([q[0] + nax * da, q[1] + nay * da], [q[0] + nbx * db, q[1] + nby * db]);
+      }
+      continue;
+    }
+    const ca = nax * q[0] + nay * q[1] + da;
+    const cb = nbx * q[0] + nby * q[1] + db;
+    out.push([(ca * nby - cb * nay) / det, (nax * cb - nbx * ca) / det]);
+  }
+  return out;
+}
+
+/* The mirror image across the vertical axis, still counter clockwise: the corners are turned
+ * about and not just negated, because a mirror reverses the way round a polygon goes. */
+export function mirrorPolygon(poly) {
+  const out = [];
+  for (let i = poly.length - 1; i >= 0; i -= 1) {
+    out.push([-poly[i][0], poly[i][1]]);
+  }
+  return out;
+}
+
+/*
+ * A POLYGON AS TRIANGLES, by cutting off ears: indices into `poly`, three to a triangle. For the
+ * pane across a hole that is not convex, where a fan from the middle would cover the notch.
+ * Collinear corners (the step a letter's hole has where a pipe stops and the open side starts) are
+ * dropped as they are met. A polygon that cannot be cut, which a simple one never is, is fanned.
+ */
+export function triangulate(poly) {
+  const n = poly.length;
+  if (n < 3) {
+    return [];
+  }
+  const idx = poly.map((_, i) => i);
+  if (polygonArea(poly) < 0) {
+    idx.reverse();
+  }
+  const out = [];
+  const crossOf = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  let guard = n * n + 8;
+  while (idx.length > 3 && guard > 0) {
+    guard -= 1;
+    let cut = false;
+    for (let k = 0; k < idx.length && !cut; k += 1) {
+      const i0 = idx[(k + idx.length - 1) % idx.length];
+      const i1 = idx[k];
+      const i2 = idx[(k + 1) % idx.length];
+      const a = poly[i0];
+      const b = poly[i1];
+      const c = poly[i2];
+      if (crossOf(a, b, c) <= 1e-12) {
+        continue;
+      }
+      let ear = true;
+      for (const j of idx) {
+        if (j === i0 || j === i1 || j === i2) {
+          continue;
+        }
+        const p = poly[j];
+        if (crossOf(a, b, p) >= -1e-12 && crossOf(b, c, p) >= -1e-12 && crossOf(c, a, p) >= -1e-12) {
+          ear = false;
+          break;
+        }
+      }
+      if (ear) {
+        out.push(i0, i1, i2);
+        idx.splice(k, 1);
+        cut = true;
+      }
+    }
+    if (!cut) {
+      /* No ear: a flat corner is in the way. Take the first one out, and fan what is left if there is none. */
+      const flat = idx.findIndex((_, k) => Math.abs(crossOf(
+        poly[idx[(k + idx.length - 1) % idx.length]], poly[idx[k]], poly[idx[(k + 1) % idx.length]],
+      )) <= 1e-12);
+      if (flat < 0) {
+        break;
+      }
+      idx.splice(flat, 1);
+    }
+  }
+  if (idx.length >= 3) {
+    for (let k = 1; k + 1 < idx.length; k += 1) {
+      out.push(idx[0], idx[k], idx[k + 1]);
+    }
+  }
+  return out;
+}
+
+/*
+ * A PANE ACROSS A POLYGON HOLE, as data, the way paneFan gives one for a shape: positions in the
+ * opening's own frame, and the uv a rectangle's pane has, so a shader written for the rectangle reads
+ * the same on it. The uv box is `w` by `h` centred on (cx, cy), which is the box the target's wrong
+ * way bar is drawn across, and every corner of the hole is inside it.
+ */
+export function paneOfPolygon(poly, w, h, cx = 0, cy = 0) {
+  const position = [];
+  const uv = [];
+  for (const [x, y] of poly) {
+    position.push(x, y, 0);
+    uv.push((x - cx) / w + 0.5, (y - cy) / h + 0.5);
+  }
+  return { position, uv, index: triangulate(poly) };
 }

@@ -36,7 +36,10 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND, TRACK_CLASS_DEFAULT, TUNING, tuningFor } from './elements.js';
+import {
+  KIND, TRACK_CLASS_DEFAULT, TUNING, isLetterPiece, letterExtent, letterOfPiece, tuningFor,
+} from './elements.js';
+import { openingName } from '../props/letters.js';
 import {
   aperturesOf, apertureCenter, createSequenceEntry, elementById, elementNormal, kindOf,
 } from './model.js';
@@ -74,8 +77,10 @@ export const FIGURES = {
 /* The figures that go round the side of the structure, which is the way they turn: left or right. */
 export const HANDED_FIGURES = ['spiralUp', 'spiralDown'];
 
+/* A letter's holes are not a stack: they stand where the letter has them, side by side or one over another, and none of
+ * the figures below (a spiral up the frame, a split-S through its top and bottom) means anything about a B. */
 export function defaultFigure(el) {
-  return aperturesOf(el).length >= 2 ? 'spiralUp' : 'single';
+  return !isLetterPiece(el) && aperturesOf(el).length >= 2 ? 'spiralUp' : 'single';
 }
 
 export function figureBlurb(el, figureId) {
@@ -105,7 +110,7 @@ export function figureBlurb(el, figureId) {
 
 export function figuresFor(el) {
   const n = aperturesOf(el).length;
-  if (n < 2) {
+  if (n < 2 || isLetterPiece(el)) {
     return [FIGURES.single];
   }
   const out = [FIGURES.spiralUp, FIGURES.splitS, FIGURES.revSplitS];
@@ -119,6 +124,10 @@ export function figuresFor(el) {
 export function levelName(el, index) {
   const n = aperturesOf(el).length;
   const i = Math.max(0, Math.min(n - 1, Math.round(index ?? 0)));
+  /* A letter's hole is named for what it is in that letter. */
+  if (isLetterPiece(el)) {
+    return openingName(letterOfPiece(el), i);
+  }
   if (n === 2) {
     return i === 0 ? 'bottom' : 'top';
   }
@@ -235,7 +244,7 @@ export function upgradeStackedFigures(doc) {
       i += 1;
     }
     const n = aperturesOf(el).length;
-    if (n < 2 || run.length < 2) {
+    if (n < 2 || run.length < 2 || isLetterPiece(el)) {
       continue;
     }
     /* The author has said which way through at least one of these holes.
@@ -448,7 +457,12 @@ export function wrapBetween(el, seqA, seqB, cls = TRACK_CLASS_DEFAULT) {
   /* The author's word on it, when there is one: round the left of the structure, round the right, or over the front. */
   const said = seqB.wrap;
   const leap = said === 'over' || (said !== 'left' && said !== 'right' && (Math.abs(i0 - i1) > 1 || (n === 2 && i0 > i1)));
-  const reach = tuningFor(cls).stackWrap;
+  /* A letter's holes are side by side as well as one over another, so a line that goes round it has to clear its pipe,
+   * which is wider than a stack's frame: at least half the letter's width, past the furthest gap, and a body length. */
+  const base = tuningFor(cls).stackWrap;
+  const reach = isLetterPiece(el)
+    ? Math.max(base, letterExtent(el).width / 2 + Math.max(...aperturesOf(el).map((ap) => Math.abs(ap.centerX ?? 0))) + 1.2)
+    : base;
   const offset = leap ? scale(normalize(travel), reach) : scale(leftOf(travel), reach * (said === 'right' ? -1 : 1));
   const pos = add(mid, offset);
   const tangent = normalize(sub(b, a), travel);

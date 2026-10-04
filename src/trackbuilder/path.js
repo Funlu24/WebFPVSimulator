@@ -43,10 +43,11 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND, trackClassOf, tuningFor, virtualApertureDims } from './elements.js';
+import { KIND, isLetterPiece, trackClassOf, tuningFor, virtualApertureDims } from './elements.js';
 import {
   apertureCenter, aperturesOf, elementById, kindOf, entryAnchor, elementNormal, startPadsOf,
 } from './model.js';
+import { insidePolygon, polygonBounds } from '../props/aperture.js';
 import { nearbyApertureTravel, markerPassDir } from './faces.js';
 import { wrapBetween } from './figures.js';
 import {
@@ -316,16 +317,53 @@ function apertureRects(doc) {
       continue;
     }
     for (const ap of aperturesOf(el)) {
-      out.push({
+      const rect = {
         key: `${el.id}#${ap.index}`,
         c: apertureCenter(el, ap.index),
         f: apertureFrame(el.yaw, el.pitch),
         hw: ap.clearW / 2,
         hh: ap.clearH / 2,
-      });
+      };
+      /* A letter's gap is its polygon and not the box that holds it, and a hole too small for its pipe is not there. */
+      if (ap.shape === 'poly') {
+        if (ap.poly.length < 3) {
+          continue;
+        }
+        Object.assign(rect, polygonRect(ap.poly));
+      }
+      out.push(rect);
     }
   }
   return out;
+}
+
+/*
+ * A POLYGON GAP, AS THE RECT THE DODGE WORKS IN. The corners are about the gap's own point (the racing line goes
+ * through it), the box that holds them is not centred on it, and a crossing is in the gap only when it is inside
+ * the polygon. So the rect carries the polygon, and where its box is centred relative to the point, so that a
+ * crossing can be measured from the box's middle the way a rectangle's is measured from its own.
+ */
+function polygonRect(poly) {
+  const b = polygonBounds(poly);
+  return {
+    poly,
+    cu: (b.x0 + b.x1) / 2,
+    cv: (b.y0 + b.y1) / 2,
+    hw: (b.x1 - b.x0) / 2,
+    hh: (b.y1 - b.y0) / 2,
+  };
+}
+
+/*
+ * WHERE A POINT OF AN OPENING'S PLANE IS AGAINST THE OPENING: null when it is not in it, else { u, v } measured from the
+ * middle of the box that holds the opening, which is the rect's own point for a rectangle and the polygon's box for a
+ * letter's gap. A rectangle is asked exactly as it always was.
+ */
+function inRect(rect, u, v) {
+  if (rect.poly) {
+    return insidePolygon(rect.poly, u, v) ? { u: u - rect.cu, v: v - rect.cv } : null;
+  }
+  return Math.abs(u) <= rect.hw && Math.abs(v) <= rect.hh ? { u, v } : null;
 }
 
 /* Which opening, if any, this knot is standing in. */
@@ -357,16 +395,24 @@ function firstCrossing(a, b, rects, kScale, clear) {
       const s = d0 / (d0 - d1);
       const x = add(prev, scale(sub(p, prev), s));
       const rel = sub(x, r.c);
-      const u = dot(rel, r.f.widthAxis);
-      const v = dot(rel, r.f.heightAxis);
-      if (Math.abs(u) > r.hw || Math.abs(v) > r.hh) {
+      const at = inRect(r, dot(rel, r.f.widthAxis), dot(rel, r.f.heightAxis));
+      if (!at) {
         continue;
       }
+      const { u, v } = at;
       const outU = r.hw - Math.abs(u);
       const outV = r.hh - Math.abs(v);
-      const axis = outU <= outV ? r.f.widthAxis : r.f.heightAxis;
-      const sign = (outU <= outV ? u : v) >= 0 ? 1 : -1;
-      const push = (outU <= outV ? outU : outV) + clear;
+      let axis = outU <= outV ? r.f.widthAxis : r.f.heightAxis;
+      let sign = (outU <= outV ? u : v) >= 0 ? 1 : -1;
+      let push = (outU <= outV ? outU : outV) + clear;
+      /* A letter's gap is taller than it is wide, so the nearer edge of the box that holds it is often the floor:
+       * the line goes round the side of it, and not under the ground. A gate, which is as wide as it is high, never
+       * got here, and its line is the line it was. */
+      if (r.poly && axis === r.f.heightAxis && x.z + r.f.heightAxis.z * sign * push < 0.02) {
+        axis = r.f.widthAxis;
+        sign = u >= 0 ? 1 : -1;
+        push = outU + clear;
+      }
       const tAt = (i - 1 + s) / DODGE_PROBE;
       return {
         pos: add(x, scale(axis, sign * push)),
@@ -477,13 +523,21 @@ function openingRect(doc, knot) {
   if (!ap) {
     return null;
   }
-  return {
+  const rect = {
     c: apertureCenter(el, idx),
     f: apertureFrame(el.yaw, el.pitch),
     hw: ap.clearW / 2,
     hh: ap.clearH / 2,
     forward: normalize(knot.tangent, { x: 1, y: 0, z: 0 }),
   };
+  /* A letter's gap is its polygon: back through the pipe beside it is not back through the gap. */
+  if (ap.shape === 'poly') {
+    if (ap.poly.length < 3) {
+      return null;
+    }
+    Object.assign(rect, polygonRect(ap.poly));
+  }
+  return rect;
 }
 
 /* The next thing the lap actually passes. Wraps are steering, not gates. */
@@ -544,9 +598,9 @@ function reverseOnLeg(knots, from, end, rect, kScale, clear) {
         const s = prevD / (prevD - d);
         const x = add(prev, scale(sub(p, prev), s));
         const rel = sub(x, rect.c);
-        const u = dot(rel, rect.f.widthAxis);
-        const v = dot(rel, rect.f.heightAxis);
-        if (Math.abs(u) <= rect.hw && Math.abs(v) <= rect.hh) {
+        const at = inRect(rect, dot(rel, rect.f.widthAxis), dot(rel, rect.f.heightAxis));
+        if (at) {
+          const { u, v } = at;
           const outU = rect.hw - Math.abs(u);
           const outV = rect.hh - Math.abs(v);
           /* Around a stile, not through the floor. A dead-centre crossing

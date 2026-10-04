@@ -59,7 +59,9 @@
 import { fastestLap, fastestThreeConsecutive, MICRO_SCALE } from './track.js';
 /* What an opening is when it is not a rectangle: pure arithmetic, no Three.js, shared with the
  * scene that draws the frame and the builder that draws the ring. */
-import { clipToShape, insideShape } from '../props/aperture.js';
+import {
+  clipToPolygon, clipToShape, insetPolygon, insidePolygon, insideShape,
+} from '../props/aperture.js';
 
 /*
  * How far the scoring volume sticks out either side of the opening, metres.
@@ -552,9 +554,14 @@ export class Race {
    * rectangle as always and then, exactly, against the shape, so a line through the corner of the
    * box that holds a hoop goes past the ring and does not score. A square, which is every gate
    * there ever was, never reaches that second clip.
+   *
+   * `poly` is a hole that is a list of corners and not a shape inscribed in a box: a letter's. It is
+   * the whole of the hole, and it is not centred on anything, so the box is not asked about at all
+   * and only the depth and the polygon are (halfW and halfH are not read). Left out, as it is for
+   * every opening that ever was, nothing about this changes.
    */
-  openingHits(a, b, halfW, halfH, tMin = 0, shape = 'square') {
-    if (!(halfW > 0) || !(halfH > 0)) {
+  openingHits(a, b, halfW, halfH, tMin = 0, shape = 'square', poly = null) {
+    if (!poly && (!(halfW > 0) || !(halfH > 0))) {
       return -1;
     }
     const dx = b.x - a.x;
@@ -584,16 +591,25 @@ export class Race {
       }
       return t0 <= t1;
     };
-    if (!clip(a.x, dx, -halfW, halfW)) {
-      return -1;
-    }
-    if (!clip(a.y, dy, -halfH, halfH)) {
-      return -1;
+    if (!poly) {
+      if (!clip(a.x, dx, -halfW, halfW)) {
+        return -1;
+      }
+      if (!clip(a.y, dy, -halfH, halfH)) {
+        return -1;
+      }
     }
     if (!clip(a.z, dz, -this.passDepth, this.passDepth)) {
       return -1;
     }
-    if (shape !== 'square') {
+    if (poly) {
+      const inside = clipToPolygon(poly, a.x, a.y, dx, dy, t0, t1);
+      if (!inside) {
+        return -1;
+      }
+      t0 = inside[0];
+      t1 = inside[1];
+    } else if (shape !== 'square') {
       const inside = clipToShape(shape, halfW, halfH, a.x, a.y, dx, dy, t0, t1);
       if (!inside) {
         return -1;
@@ -612,11 +628,32 @@ export class Race {
     return t0;
   }
 
+  /*
+   * A POLYGON HOLE AS IT SCORES: the hole the pilot sees, pushed in by the fingernail every other opening
+   * is shrunk by (a rectangle takes it off each half width, a hoop scales by it). It is the same push on
+   * every edge, the ground's and an open side's included, which costs a centimetre or two nobody can
+   * fly and keeps one rule. Worked out once per opening and kept, because a pass is tested every frame.
+   */
+  holeOf(ap) {
+    if (!this.holes) {
+      this.holes = new WeakMap();
+    }
+    let hole = this.holes.get(ap);
+    if (!hole) {
+      hole = insetPolygon(ap.poly, this.passMargin);
+      this.holes.set(ap, hole);
+    }
+    return hole;
+  }
+
   /* Whether a point is inside opening k of station g's box, the same box
    * openingHits clips against. */
   insideOpening(g, k, p) {
     const ap = g.apertures[k];
     const q = this.local(g, ap.centreY, p.x, p.y, p.z);
+    if (ap.shape === 'poly') {
+      return insidePolygon(this.holeOf(ap), q.x, q.y) && Math.abs(q.z) <= this.passDepth;
+    }
     const halfW = ap.clearW * 0.5 - this.passMargin;
     const halfH = ap.clearH * 0.5 - this.passMargin;
     if (ap.shape === 'circle' || ap.shape === 'hex') {
@@ -678,7 +715,9 @@ export class Race {
       const b = this.local(g, ap.centreY, curr.x, curr.y, curr.z);
       const halfW = ap.clearW * 0.5 - this.passMargin;
       const halfH = ap.clearH * 0.5 - this.passMargin;
-      const tk = this.openingHits(a, b, halfW, halfH, tMin, ap.shape === 'circle' || ap.shape === 'hex' ? ap.shape : 'square');
+      const tk = ap.shape === 'poly'
+        ? this.openingHits(a, b, halfW, halfH, tMin, 'poly', this.holeOf(ap))
+        : this.openingHits(a, b, halfW, halfH, tMin, ap.shape === 'circle' || ap.shape === 'hex' ? ap.shape : 'square');
       if (tk < 0) {
         continue;
       }

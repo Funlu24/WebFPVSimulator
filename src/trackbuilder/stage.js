@@ -64,6 +64,7 @@
 import * as elementLib from './elements.js';
 import { ELEMENTS, KIND, FRAME_TUBE_OD, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD } from './racegow.js';
+import * as modelLib from './model.js';
 import { aperturesOf, elementById, apertureCenter, logoForDecal } from './model.js';
 import { apertureFrame, apertureCorners, clamp } from './geometry.js';
 import { isRoomType, roomWorldBoxes } from '../props/room.js';
@@ -71,8 +72,18 @@ import { isRoomType, roomWorldBoxes } from '../props/room.js';
 import { GROUND_TURF, paintGroundLogo } from '../art/banners.js';
 /* A hoop and a hex gate: the run of tubes round the hole, and a pane in its shape. */
 import { frameOutline, paneFan } from '../props/aperture.js';
+/* A letter: its pipe and its holes, by the namespace for the reason above (a letter is newer than the oldest copy a
+ * browser may still hold of any of these files, and a document that has one is read by this module's own copy). */
+import * as apertureLib from '../props/aperture.js';
 
 const ALL_SIDES = { top: true, bottom: true, left: true, right: true };
+
+/* Whether a piece is a letter, and what its pipe is made of: through the namespace, so a copy of elements.js from
+ * before letters read every piece as the gate it always was. */
+function isLetter(el) {
+  return typeof elementLib.isLetterPiece === 'function' && elementLib.isLetterPiece(el)
+    && typeof modelLib.letterLayoutOf === 'function';
+}
 
 function frameSidesOf(el) {
   if (typeof elementLib.frameSidesOf === 'function') {
@@ -1004,6 +1015,28 @@ export function buildStage(THREE, doc, path, {
     }
     const base = el.position.z;
     /*
+     * A LETTER: its tubes and its joints, in the plane of the piece, from the layout the room and the world are drawn
+     * from (letterLayoutOf in model.js). Its pipe is its own and thicker than a gate's, and it stands on the ground
+     * on its own feet, so there are no posts and no foot stubs to add.
+     */
+    if (isLetter(el)) {
+      const laid = modelLib.letterLayoutOf(el);
+      const f = apertureFrame(el.yaw, el.pitch);
+      const at = ([x, y]) => ({
+        x: el.position.x + f.widthAxis.x * x,
+        y: el.position.y + f.widthAxis.y * x,
+        z: base + y,
+      });
+      const r = (elementLib.LETTER_TUBE_OD ?? 0.06) / 2;
+      for (const [a, b] of laid.tubes) {
+        pipes.push(pipeGeometry(THREE, at(a), at(b), r));
+      }
+      for (const p of laid.joints) {
+        pipes.push(ballGeometry(THREE, at(p), r * 1.4));
+      }
+      return;
+    }
+    /*
      * A HOOP OR A HEX GATE: a run of tubes round the shape, a joint at each corner, and a post and
      * a foot under each of the lowest corners. A tube wholly under the floor is not drawn, as the
      * world does not build it. The same maths as the room and the game, so the pipe stands where
@@ -1660,7 +1693,10 @@ export function buildStage(THREE, doc, path, {
       const ap = levels[idx];
       const centre = apertureCenter(el, idx);
       const f = apertureFrame(el.yaw, el.pitch);
-      const fan = paneFan(shape, ap.clearW, ap.clearH);
+      /* A letter's hole is a polygon about its own point, which is the centre above. */
+      const fan = ap.shape === 'poly' && typeof apertureLib.paneOfPolygon === 'function'
+        ? apertureLib.paneOfPolygon(ap.poly, 1, 1)
+        : paneFan(shape, ap.clearW, ap.clearH);
       const pos = shapedPane.geometry.getAttribute('position');
       for (let i = 0; i < fan.position.length / 3; i += 1) {
         const x = fan.position[3 * i];

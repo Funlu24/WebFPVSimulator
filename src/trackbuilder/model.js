@@ -42,9 +42,12 @@ import {
   ELEMENTS, KIND, TUNING, TRACK_CLASSES, TRACK_CLASS_DEFAULT, FRAME_SIDES, apertureLevels, apertureShapeOf,
   defaultDims, defaultPitch, defaultZ, elementHeight, normalizeFlagSide, normalizeUnbuiltSides,
   trackClassOf, tuningFor, docModeOf, isTrafficType, clampByLimits, FLAG_SIDES, GATE_FLAG_H, GATE_STYLES,
-  ROAD_NODES_MAX, ROAD_NODE_REACH, SINK_MAX,
+  ROAD_NODES_MAX, ROAD_NODE_REACH, SINK_MAX, LETTER_TUBE_OD, isLetterPiece, letterDimsFor, letterOfPiece,
 } from './elements.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
+import {
+  LETTER_DEFAULT, layoutLetter, letterOf, nearestOpening, openingCount, primaryOpening,
+} from '../props/letters.js';
 import {
   styleOf as propStyleOf, clampDim, fitDims, gapPointsOf, styleDims, GAP_POINTS, CAR_STYLES, tiltOf,
 } from '../props/types.js';
@@ -465,6 +468,12 @@ export function createElement(doc, type, position, yaw = 0) {
   if (def.kind === KIND.ANNOTATION) {
     el.text = 'Label';
   }
+  if (isLetterPiece(type)) {
+    /* A letter is named for its letter, which is how the card, the warnings and the strip call it; the name is
+     * the author's to change, and changing the letter keeps it in step only while it is still this one. */
+    el.letter = LETTER_DEFAULT;
+    el.name = letterName(LETTER_DEFAULT);
+  }
   if (def.flagSide) {
     el.flagSide = def.flagSide;
   }
@@ -570,6 +579,54 @@ export function createSequenceEntry(doc, elementId, apertureIndex = 0) {
     overridden: false,
   };
   return entry;
+}
+
+/* What a letter piece is called until its author calls it something else. */
+export function letterName(letter) {
+  return `Letter ${letter}`;
+}
+
+/* A letter piece that has just been made, made the letter asked for: its own size, and its name. */
+export function initLetter(el, letter) {
+  const next = letterOf(letter);
+  el.letter = next;
+  Object.assign(el.dims, letterDimsFor(next));
+  el.name = letterName(next);
+  return el;
+}
+
+/*
+ * TURN A LETTER INTO ANOTHER LETTER, in place: the same piece, standing where it stood and facing the way it faced,
+ * as another letter. It keeps the author's scale (a letter stretched half as wide again again is another letter
+ * stretched the same, see letterDimsFor), keeps its name if the name was the one it was given, and keeps its
+ * place in the flying order: a pass through the old letter's primary hole is a pass through the new letter's
+ * primary hole, and a pass through any other is the nearest hole the new letter has. Returns true when the
+ * document changed.
+ */
+export function setLetter(doc, elementId, letter) {
+  const el = elementById(doc, elementId);
+  if (!el || !isLetterPiece(el)) {
+    return false;
+  }
+  const next = letterOf(letter);
+  const was = letterOfPiece(el);
+  if (next === was && el.letter === next) {
+    return false;
+  }
+  const wasPrimary = primaryOpening(was);
+  Object.assign(el.dims, letterDimsFor(next, el));
+  if (!el.name || el.name === letterName(was)) {
+    el.name = letterName(next);
+  }
+  el.letter = next;
+  const count = openingCount(next);
+  for (const s of doc.sequence) {
+    if (s.elementId === elementId) {
+      const index = s.apertureIndex ?? 0;
+      s.apertureIndex = index === wasPrimary ? primaryOpening(next) : Math.min(index, count - 1);
+    }
+  }
+  return true;
 }
 
 /*
@@ -722,9 +779,66 @@ export function aperturesOf(el) {
   if (kindOf(el) !== KIND.APERTURE) {
     return [];
   }
+  if (isLetterPiece(el)) {
+    return letterLayoutOf(el).apertures;
+  }
   const levels = apertureLevels(el.dims);
   const shape = apertureShapeOf(el);
   return shape === 'square' ? levels : levels.map((ap) => ({ ...ap, shape }));
+}
+
+/*
+ * THE LETTER'S LAYOUT, in the document's frame: where each tube, joint and hole is for this piece's letter and
+ * its size, with x along the piece's widthAxis and y up from its base. One layout for every reader, which is
+ * what keeps the room, the plan, the card and the game from each drawing a W of their own. It is cached by
+ * letter and size, because the views ask for it on every frame and it is the same until the piece is edited.
+ * READ ONLY: what comes back is shared.
+ *
+ * A letter reads the right way round from the side a pilot approaches it, flying along its normal, and
+ * widthAxis is the pilot's LEFT from there, so the layout is the mirror of the one the pilot sees.
+ *
+ * `apertures` is the same holes in the shape aperturesOf gives every opening: each hole's polygon is relative
+ * to its own point (centerX across, centerH up), which is where the racing line goes through it.
+ */
+const LETTER_LAYOUTS = new Map();
+
+export function letterLayoutOf(el) {
+  const letter = letterOfPiece(el);
+  const key = `${letter}|${el.dims.clearW}|${el.dims.clearH}`;
+  let laid = LETTER_LAYOUTS.get(key);
+  if (!laid) {
+    laid = layoutLetter(letter, el.dims.clearW, el.dims.clearH, LETTER_TUBE_OD / 2, { mirror: true });
+    laid.apertures = Object.freeze(laid.openings.map((o) => Object.freeze({
+      index: o.index,
+      sillH: o.sillH,
+      centerH: o.cy,
+      centerX: o.cx,
+      clearW: o.clearW,
+      clearH: o.clearH,
+      shape: 'poly',
+      /* A hole too small for its pipe has no area, and is a hole with no corners: nothing scores. */
+      poly: o.ok ? o.poly.map(([x, y]) => [x - o.cx, y - o.cy]) : [],
+    })));
+    if (LETTER_LAYOUTS.size > 256) {
+      LETTER_LAYOUTS.clear();
+    }
+    LETTER_LAYOUTS.set(key, laid);
+  }
+  return laid;
+}
+
+/* The point of an opening the racing line goes through: the piece's position, across by centerX and up by
+ * centerH. Only a letter's openings have an across, so for everything else this is what it always was. */
+function openingPoint(el, ap) {
+  if (!ap.centerX) {
+    return { x: el.position.x, y: el.position.y, z: el.position.z + ap.centerH };
+  }
+  const f = apertureFrame(el.yaw, el.pitch);
+  return {
+    x: el.position.x + f.widthAxis.x * ap.centerX,
+    y: el.position.y + f.widthAxis.y * ap.centerX,
+    z: el.position.z + ap.centerH + f.widthAxis.z * ap.centerX,
+  };
 }
 
 /*
@@ -743,7 +857,7 @@ export function entryAnchor(doc, seq) {
     if (!ap) {
       return null;
     }
-    return { x: el.position.x, y: el.position.y, z: el.position.z + ap.centerH };
+    return openingPoint(el, ap);
   }
   return { x: el.position.x, y: el.position.y, z: el.position.z };
 }
@@ -755,7 +869,35 @@ export function apertureCenter(el, index) {
   if (!ap) {
     return { ...el.position };
   }
-  return { x: el.position.x, y: el.position.y, z: el.position.z + ap.centerH };
+  return openingPoint(el, ap);
+}
+
+/*
+ * WHICH HOLE A POINT IS NEAREST, for the Fly order tool and a click on a letter: the hole the point is in,
+ * else the one whose racing line point is nearest. `point` is a world point (x, y, z). For a gate that is
+ * decided by height alone (apertureAt in passes.js); a letter's holes can stand side by side at one height,
+ * so this looks across as well.
+ */
+export function openingNearest(el, point) {
+  const aps = aperturesOf(el);
+  if (aps.length < 2) {
+    return 0;
+  }
+  if (!isLetterPiece(el)) {
+    let best = 0;
+    let gap = Infinity;
+    aps.forEach((ap, i) => {
+      const d = Math.abs(el.position.z + ap.centerH - (point?.z ?? 0));
+      if (d < gap) {
+        gap = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+  const f = apertureFrame(el.yaw, el.pitch);
+  const across = (point.x - el.position.x) * f.widthAxis.x + (point.y - el.position.y) * f.widthAxis.y;
+  return nearestOpening(letterLayoutOf(el), across, (point.z ?? 0) - el.position.z);
 }
 
 /* The unsigned normal of an element's aperture plane. Every opening on one
@@ -767,7 +909,7 @@ export function elementNormal(el) {
 export function topOf(el) {
   /* Style and tilt, for the assets: a container stood on end is as tall as it
    * is long, and which length depends on its style. */
-  return el.position.z + elementHeight(defOf(el), el.dims, propStyleOf(el), tiltOf(el));
+  return el.position.z + elementHeight(defOf(el), el.dims, isLetterPiece(el) ? el.letter : propStyleOf(el), tiltOf(el));
 }
 
 /* How many sequence entries point at an element. Multi referenced elements
@@ -954,6 +1096,12 @@ export function normalize(raw) {
       repairs.push(`dropped a ${def.label.toLowerCase()}: roads and vehicles are a map's only.`);
       continue;
     }
+    /* A letter is a five inch race piece: the whoop palette and a map's do not have one, and nothing on either
+     * would build it. */
+    if (isLetterPiece(type) && (doc.mode === 'freestyle' || doc.trackClass === 'micro')) {
+      repairs.push(`dropped a letter: letters are a five inch track's, and this is ${doc.mode === 'freestyle' ? 'a map' : 'a whoop track'}.`);
+      continue;
+    }
     let id = str(rawEl.id);
     if (!id || seenIds.has(id)) {
       id = nextId([...seenIds, ...rawIds], 'el');
@@ -963,6 +1111,12 @@ export function normalize(raw) {
 
     const dims = {};
     const isProp = def.kind === KIND.STRUCTURE || def.kind === KIND.ZONE;
+    /* The letter a letter piece is, read before its sizes because a size that is missing or is no size is the one
+     * THAT letter starts at. A word that is not one of the twenty six is the default, and says so. */
+    const letter = isLetterPiece(type) ? letterOf(rawEl.letter) : null;
+    if (letter && rawEl.letter !== undefined && String(rawEl.letter).trim().toUpperCase() !== letter) {
+      repairs.push(`${id}: letter "${String(rawEl.letter).slice(0, 20)}" is not one of A to Z, so it is ${letter}.`);
+    }
     for (const key of Object.keys(def.dims)) {
       const wanted = num(rawEl.dims?.[key], def.dims[key]);
       /* Levels is a count and everything else is a length. Both have to be
@@ -984,7 +1138,7 @@ export function normalize(raw) {
        * note names the gate and the size so the author can put it right.
        */
       if (def.kind === KIND.APERTURE && GATE_SIZES.includes(key) && !(dims[key] > 0)) {
-        const fallback = defaultDims(type, doc.trackClass)[key];
+        const fallback = letter ? letterDimsFor(letter)[key] : defaultDims(type, doc.trackClass)[key];
         repairs.push(`${id}: ${key} was ${wanted}, which is not a size a gate can have, so it is ${fallback} m, what a new ${def.label.toLowerCase()} starts at.`);
         dims[key] = fallback;
       }
@@ -1011,9 +1165,21 @@ export function normalize(raw) {
      * the builder and the game draw one frame each, so a document that says otherwise is read
      * as the one it can draw, and says so.
      */
-    if (def.kind === KIND.APERTURE && apertureShapeOf(type) !== 'square' && dims.levels !== 1) {
+    if (def.kind === KIND.APERTURE && apertureShapeOf(type) !== 'square' && !letter && dims.levels !== 1) {
       repairs.push(`${id}: a ${def.label.toLowerCase()} has one opening, so its levels was ${dims.levels} and is 1.`);
       dims.levels = 1;
+    }
+    /*
+     * A LETTER HAS AS MANY HOLES AS ITS LETTER DOES, and stands on the ground. Its `levels` is that count and is
+     * not the author's to set, so it is read from the letter without a word (a document this builder wrote has it
+     * right), and a sill height is the one thing a letter has no use for: the pipe is on the floor.
+     */
+    if (letter) {
+      dims.levels = openingCount(letter);
+      if (dims.sillH !== 0) {
+        repairs.push(`${id}: a letter stands on the ground, so its sill height was ${dims.sillH} and is 0.`);
+        dims.sillH = 0;
+      }
     }
 
     const el = {
@@ -1036,6 +1202,14 @@ export function normalize(raw) {
     };
     if (def.kind === KIND.ANNOTATION) {
       el.text = str(rawEl.text, 'Label');
+    }
+    if (letter) {
+      /* Upright: the pipe of a letter is a plane that stands on the ground. */
+      if (el.pitch !== 0) {
+        repairs.push(`${id}: a letter stands upright, so its tilt was ${Math.round((el.pitch * 180) / Math.PI)} degrees and is 0.`);
+        el.pitch = 0;
+      }
+      el.letter = letter;
     }
     /* An asset that stands on end holds the pitch it is built at: upright or a
      * quarter turn either way, so the inspector never shows 50 degrees for a
@@ -1121,7 +1295,7 @@ export function normalize(raw) {
      * Kept only on apertures and only when something is missing, so an
      * ordinary gate reads back the same shape it was written. A name that
      * is not a side is dropped and said, because it is somebody's edit. */
-    if (def.kind === KIND.APERTURE && rawEl.unbuiltSides !== undefined) {
+    if (def.kind === KIND.APERTURE && rawEl.unbuiltSides !== undefined && !letter) {
       const sides = normalizeUnbuiltSides(rawEl.unbuiltSides);
       const raw = Array.isArray(rawEl.unbuiltSides) ? rawEl.unbuiltSides : [rawEl.unbuiltSides];
       if (raw.some((side) => !FRAME_SIDES.includes(side))) {
@@ -1147,7 +1321,7 @@ export function normalize(raw) {
     /* The dress a gate wears besides the MultiGP one: see GATE_STYLES in elements.js. Only on an
      * aperture and only when it is one this build knows. A style this build has never heard of is
      * the usual dress and is said, because it is somebody's edit or a newer build's. */
-    if (def.kind === KIND.APERTURE && rawEl.style !== undefined) {
+    if (def.kind === KIND.APERTURE && rawEl.style !== undefined && !letter) {
       if (GATE_STYLES.includes(rawEl.style)) {
         el.style = rawEl.style;
       } else {
@@ -1179,7 +1353,7 @@ export function normalize(raw) {
 
     let apertureIndex = null;
     if (def.kind === KIND.APERTURE) {
-      const count = apertureLevels(el.dims).length;
+      const count = aperturesOf(el).length;
       const wanted = int(rawSeq.apertureIndex, 0, 0);
       apertureIndex = Math.min(wanted, count - 1);
       if (apertureIndex !== wanted) {
@@ -1364,6 +1538,14 @@ export function toPlain(doc) {
       if (isProp) {
         fitDims(el.type, out.dims);
       }
+      /* A letter says which one it is, has the holes that letter has, stands on the ground and upright. */
+      const letter = isLetterPiece(el) ? letterOfPiece(el) : null;
+      if (letter) {
+        out.letter = letter;
+        out.dims.levels = openingCount(letter);
+        out.dims.sillH = 0;
+        out.pitch = 0;
+      }
       if (road) {
         out.nodes = roadNodesRead(el.nodes).nodes;
         out.closed = el.closed === true;
@@ -1398,13 +1580,13 @@ export function toPlain(doc) {
       }
       if (def.kind === KIND.APERTURE) {
         const sides = normalizeUnbuiltSides(el.unbuiltSides);
-        if (sides.length) {
+        if (sides.length && !letter) {
           out.unbuiltSides = sides;
         }
         if (typeof el.group === 'string' && el.group.trim() !== '') {
           out.group = el.group.slice(0, GROUP_NAME_MAX);
         }
-        if (GATE_STYLES.includes(el.style)) {
+        if (GATE_STYLES.includes(el.style) && !letter) {
           out.style = el.style;
         }
       }

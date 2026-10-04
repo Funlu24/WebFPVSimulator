@@ -1259,6 +1259,22 @@
       .tb-run-shapes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1); }
       .tb-run-opts .tb-seg-btn { padding: 4px 6px; font-size: var(--t-small); }
 
+      /* The Letter tool's choice, under its button while it is in hand, and the same grid in the inspector of a letter:
+         the twenty six capitals, the one in hand lit like any chosen card, and a line under the palette's saying what
+         that letter has to fly through. */
+      .tb-letter-opts {
+        margin: 0 0 var(--s2);
+        padding: var(--s2);
+        border: 1px solid var(--rule);
+        border-radius: var(--r-ctl);
+        background: var(--raised);
+      }
+      .tb-letter-opts[hidden] { display: none; }
+      .tb-letter-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin: var(--s2) 0 var(--s3); }
+      .tb-letter-opts .tb-letter-grid { margin: 0; }
+      .tb-letter-grid .tb-seg-btn { min-width: 0; padding: 3px 0; font-size: var(--t-small); font-weight: 650; }
+      .tb-letter-note { margin: var(--s2) 0 0; font-size: var(--t-small); line-height: 1.4; color: var(--slate); }
+
       /* A gate's four sides, laid out the way the gate stands: the top bar
          over the two uprights over the bottom bar, with the hole in the
          middle. A side that is there is lit like any chosen card; one taken
@@ -1971,6 +1987,8 @@
        * general rule above wins on width, height and radius, and a ring would be drawn as a square. */
       .tb-chip[data-kind="ring"]:not(.tb-chip-add):not(.tb-chip-bend)::after { width: 9px; height: 9px; border-radius: 50%; }
       .tb-chip[data-kind="hex"]:not(.tb-chip-add):not(.tb-chip-bend)::after { width: 11px; height: 10px; border-width: 0; border-radius: 0; background: currentColor; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+      /* An opening with no frame is dashed, as the plan draws it. */
+      .tb-chip[data-invisible]:not(.tb-chip-add):not(.tb-chip-bend)::after { border-style: dashed; }
       .tb-chip[data-kind="cone"]::after { width: 0; height: 0; border: 4px solid transparent; border-bottom: 8px solid currentColor; border-top-width: 0; border-radius: 0; }
       .tb-chip-bend { min-width: 10px; width: 10px; height: 10px; padding: 0; border-radius: 50%; background: rgba(255, 212, 92, 0.5); border-color: transparent; }
       .tb-chip-bend.on { background: var(--amber); }
@@ -2043,6 +2061,8 @@
         font: var(--t-micro) / 1.2 var(--mono);
       }
       .tb-card-swap { margin: var(--s3) 0 0; }
+      /* The letter's own row sits among the card's choices and not above its buttons, so it keeps the choices' spacing. */
+      .tb-card-swap.tb-card-letter { margin: 0 0 var(--s3); }
       /* A piece's passes: a row of chips, the one the card is about filled. */
       .tb-card-passes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 var(--s3); }
       .tb-card-passes-label { font-size: var(--t-micro); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; margin-right: 2px; }
@@ -2187,6 +2207,7 @@
          * not fit on one line of a tablet's card. */
         .tb-seg.tb-seg-card { flex-wrap: wrap; }
         .tb-seg-card .tb-seg-btn { min-height: 44px; padding: 0 10px; }
+        .tb-letter-grid .tb-seg-btn { min-height: 40px; }
         .tb-card-grid .tb-field input, .tb-card-swap select { min-height: 40px; font-size: var(--t-body); }
         #tb-side .tb-field input, #tb-side .tb-field select, #tb-side .tb-btn, #tb-side .tb-mini { min-height: 40px; }
         .tb-keys > span { display: none; }

@@ -24,7 +24,7 @@
 
 import {
   ELEMENTS, KIND, MICRO_PALETTE_ORDER, trackClassOf, docModeOf, defaultDims, defaultPitch, defaultZ, apertureShapeOf,
-  FRAME_TUBE_OD, wallPitchFor,
+  FRAME_TUBE_OD, isLetterPiece, wallPitchFor,
 } from './elements.js';
 import { say, scaleOf } from './scale.js';
 import {
@@ -32,8 +32,8 @@ import {
   POLE_FROM_GATE_MIN, POLE_FROM_POLE_MIN, PIPE_OD,
 } from './racegow.js';
 import {
-  apertureCenter, aperturesOf, createElement, deepClone, elementById, entryAnchor, isSequenceable, kindOf,
-  newElementId, newGroupId, setSideBuilt,
+  apertureCenter, aperturesOf, createElement, deepClone, elementById, entryAnchor, initLetter, isSequenceable, kindOf,
+  letterLayoutOf, newElementId, newGroupId, setSideBuilt,
 } from './model.js';
 import { cubeFaces } from './cube.js';
 import { addToSequence, gateNumbers, moveInSequence, removeFromSequence } from './sequence.js';
@@ -42,6 +42,7 @@ import { applyAutoFaces, defaultYawFor, lastAnchorOf } from './faces.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
 import { isRoomType } from '../props/room.js';
 import { HEX_HEIGHT_RATIO } from '../props/aperture.js';
+import { primaryOpening } from '../props/letters.js';
 
 /* ------------------------------------------------------------------ */
 /* What is in frame                                                    */
@@ -54,7 +55,12 @@ import { HEX_HEIGHT_RATIO } from '../props/aperture.js';
  */
 function reachOf(el) {
   const d = el.dims || {};
-  return Math.max(0.05, (d.clearW || 0) / 2, (d.width || 0) / 2, (d.depth || 0) / 2, d.clearance || 0);
+  /* A letter reaches as far as its pipe does, and that is a great deal further than its primary hole is wide. */
+  const letter = isLetterPiece(el) ? letterLayoutOf(el) : null;
+  return Math.max(
+    0.05, (d.clearW || 0) / 2, (d.width || 0) / 2, (d.depth || 0) / 2, d.clearance || 0,
+    letter ? Math.max(Math.abs(letter.left), Math.abs(letter.right)) : 0,
+  );
 }
 
 /* The floor rectangle that holds every element, or null for a track with none. */
@@ -263,6 +269,10 @@ export function placeOnTrack(doc, type, position, opts = {}) {
   const def = ELEMENTS[type];
   const plan = placementFor(doc, position, type, opts);
   const el = createElement(doc, type, position, def.kind === KIND.ANNOTATION ? 0 : plan.yaw);
+  /* A letter is the one the tool has in hand. */
+  if (isLetterPiece(el)) {
+    initLetter(el, opts.letter);
+  }
   if (plan.pin) {
     el.yawOverridden = true;
   }
@@ -277,7 +287,8 @@ export function placeOnTrack(doc, type, position, opts = {}) {
   }
   doc.elements.push(el);
   if (isSequenceable(el)) {
-    addToSequence(doc, el.id, 0);
+    /* A new pass goes through a letter's primary hole, which is the one the letter is sized by. */
+    addToSequence(doc, el.id, isLetterPiece(el) ? primaryOpening(el.letter) : 0);
     const fig = defaultFigure(el);
     if (fig !== 'single') {
       applyFigure(doc, el.id, fig);
@@ -659,11 +670,15 @@ export function sideBySideYaw(doc, at, ignore = []) {
  * a gate to. A millimetre is the width of "exactly".
  */
 function fieldBesideYaw(doc, at, type, ignore = []) {
+  /* A letter is not a bay: its width is the letter's, and nothing shares its uprights. */
+  if (isLetterPiece(type)) {
+    return null;
+  }
   const skip = new Set(ignore);
   const cls = trackClassOf(doc);
   const mine = defaultDims(type, cls);
   for (const g of doc.elements) {
-    if (skip.has(g.id) || kindOf(g) !== KIND.APERTURE) {
+    if (skip.has(g.id) || kindOf(g) !== KIND.APERTURE || isLetterPiece(g)) {
       continue;
     }
     const w = widthAxisOf(g);
@@ -852,10 +867,10 @@ function fieldMagnetFor(doc, at, opts) {
   const others = doc.elements.filter((e) => !skip.has(e.id));
 
   let best = null;
-  if (mover && mover.kind === KIND.APERTURE) {
+  if (mover && mover.kind === KIND.APERTURE && !isLetterPiece(mover)) {
     const mine = opts.dims ?? defaultDims(opts.type, cls);
     for (const g of others) {
-      if (kindOf(g) !== KIND.APERTURE) {
+      if (kindOf(g) !== KIND.APERTURE || isLetterPiece(g)) {
         continue;
       }
       const w = widthAxisOf(g);

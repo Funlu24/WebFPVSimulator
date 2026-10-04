@@ -107,11 +107,18 @@ const HEAVY = ['built', 'city'];
  * document's model read their sizes. Making them lazy would make
  * buildFieldScene asynchronous for three element types, to save 19 KB. They
  * reached boot with commits 8af871a and 4cc1e18 and this list was not
- * updated, so the check has failed on every run since. The rest of src/props,
- * the layouts and the meshes, stays off the wire, and the list stays exact so
- * that it does.
+ * updated, so the check has failed on every run since.
+ *
+ * The fourth is one module, since 2026-10-04, and it is the five inch builder's: src/props/letters.js, the twenty six
+ * capitals of pipe and the gaps in them, 28 KB of source and 9 KB gzipped, which is about half a per cent of what a boot
+ * loads on the reckoning above. It is pure arithmetic with no asset in it and imports only ./aperture.js, which is already
+ * here. The builder's element table reads a letter's size and its count of gaps from it, the document's model lays one
+ * out from it, the Track map's renderer builds the pipe from it and the race's pass test scores a pass against the gap it
+ * lays out, all with static imports, for the reason aperture.js is above: a track that holds a W draws and scores one the
+ * moment the world is built, and making it lazy would make buildFieldScene asynchronous for one element type to save
+ * 9 KB. The rest of src/props, the layouts and the meshes, stays off the wire, and the list stays exact so that it does.
  */
-const BOOT_PROPS = ['types.js', 'trig.js', 'aperture.js', 'room.js', 'parts.js', 'solids.js'];
+const BOOT_PROPS = ['types.js', 'trig.js', 'aperture.js', 'letters.js', 'room.js', 'parts.js', 'solids.js'];
 
 /*
  * Every URL the page has fetched, as a plain list. Resource timing is the

@@ -266,6 +266,9 @@ const LEVELS = {
   tower: 2,
   hoop: 1,
   hexGate: 1,
+  /* A letter's holes are as many as its letter has; a mark carries the count (levels), and this is the one a
+   * letter with none to say starts from. */
+  letter: 1,
 };
 
 /*
@@ -274,7 +277,94 @@ const LEVELS = {
  * the board's iframe and the game's menus both load it as it stands. The selftest holds it to
  * src/trackbuilder/elements.js, which is the copy of record. Exported for that.
  */
-export const PLAN_SHAPE = { hoop: 'circle', hexGate: 'hex' };
+export const PLAN_SHAPE = { hoop: 'circle', hexGate: 'hex', letter: 'letter' };
+
+/*
+ * THE PIPE OF A LETTER, as the card draws it: for each capital, its strokes (runs of points on a design grid ten
+ * units tall, ';' between runs) and the box of its primary hole (x0, y0, x1, y1 on the same grid), which is what
+ * sizes the whole letter. A table of its own and not an import because this file has no imports; the selftest
+ * rebuilds it from src/props/letters.js, which is the copy of record, and holds the two to each other. Exported
+ * for that. The size of a letter on the card is the mark's own clearW and clearH, the primary hole's, and every
+ * other length follows from them in the proportions of the grid.
+ */
+export const PLAN_LETTERS = {
+  A: ['0,0 5,10 10,0;1.75,3.5 8.25,3.5', 1.75, 3.5, 8.25, 10],
+  B: ['0,0 0,10;0,10 5,10 7,8 7,7 5,5 0,5;0,5 5,5 7,3 7,2 5,0 0,0', 0, 0, 7, 5],
+  C: ['8,8 6,10 2,10 0,8 0,2 2,0 6,0 8,2', 0, 0, 8, 10],
+  D: ['0,0 0,10;0,10 6,10 8,8 8,2 6,0 0,0', 0, 0, 8, 10],
+  E: ['0,0 0,10;0,10 7,10;0,5 6,5;0,0 7,0', 0, 0, 6, 5],
+  F: ['0,0 0,10;0,10 7,10;0,5 6,5', 0, 5, 6, 10],
+  G: ['8,8 6,10 2,10 0,8 0,2 2,0 6,0 8,2 8,5 4,5', 0, 0, 8, 5],
+  H: ['0,0 0,10;7,0 7,10;0,5 7,5', 0, 0, 7, 5],
+  I: ['0,10 9,10;0,0 9,0;4.5,0 4.5,10', 0, 0, 4.5, 10],
+  J: ['2,10 8,10;6,10 6,2 4,0 2,0 0,2 0,5', 0, 0, 6, 5],
+  K: ['0,0 0,10;8,10 0,4;2,5.5 8,0', 0, 0, 8, 5.5],
+  L: ['0,10 0,0 7,0', 0, 0, 7, 6],
+  M: ['0,0 0,10 5.5,4 11,10 11,0', 0, 0, 11, 10],
+  N: ['0,0 0,10 8,0 8,10', 0, 0, 8, 10],
+  O: ['2,0 6,0 8,2 8,8 6,10 2,10 0,8 0,2 2,0', 0, 0, 8, 10],
+  P: ['0,0 0,10;0,10 6,10 8,8 8,6.5 6,4.5 0,4.5', 0, 4.5, 8, 10],
+  Q: ['2,0 6,0 8,2 8,8 6,10 2,10 0,8 0,2 2,0;7,1 9.5,0', 0, 0, 8, 10],
+  R: ['0,0 0,10;0,10 6,10 8,8 8,6.5 6,4.5 0,4.5;4,4.5 8,0', 0, 4.5, 8, 10],
+  S: ['8,8 6,10 2,10 0,8 0,7 2,5 6,5 8,3 8,2 6,0 2,0 0,2', 0, 0, 8, 5],
+  T: ['0,10 9,10;4.5,0 4.5,10', 0, 0, 4.5, 10],
+  U: ['0,10 0,2 2,0 6,0 8,2 8,10', 0, 0, 8, 10],
+  V: ['0,10 5,0 10,10', 0, 0, 10, 10],
+  W: ['0,10 3.5,0 7,9 10.5,0 14,10', 3.5, 0, 10.5, 9],
+  X: ['0,10 9,0;0,0 9,10', 0, 0, 9, 5],
+  Y: ['0,10 4.5,5 9,10;4.5,5 4.5,0', 0, 5, 9, 10],
+  Z: ['0,10 8,10 0,0 8,0', 0, 0, 8, 10],
+};
+
+/* The pipe of a letter is 2 inch nominal, 2.375 in across the outside, so a tube radius of 30.1625 mm: LETTER_TUBE_OD
+ * in src/units.js halved, which is what the builder and the game build it from. The selftest holds the two together. */
+const LETTER_TUBE_R = 0.0301625;
+
+/*
+ * A LETTER'S TUBES IN THE CARD'S FRAME, for a mark that says which letter it is: each [[u0, v0], [u1, v1]] with u
+ * across the piece along its width axis (the document's, which is the pilot's left as they fly along the normal, so
+ * the letter reads the right way round from the side it is flown in from) and v up from the ground, plus where the
+ * pipe ends left and right. The same arithmetic as layoutLetter in src/props/letters.js, mirrored the way the
+ * builder lays it. Null for a mark that is not a letter, or one this build does not draw.
+ */
+const LETTER_LAID = new Map();
+
+export function letterTubes(mark) {
+  const entry = mark && PLAN_LETTERS[mark.letter];
+  if (!entry) {
+    return null;
+  }
+  const clearW = Number(mark.clearW) > 0 ? Number(mark.clearW) : 2.45;
+  const clearH = Number(mark.clearH) > 0 ? Number(mark.clearH) : 3.15;
+  const key = `${mark.letter}|${clearW}|${clearH}`;
+  let laid = LETTER_LAID.get(key);
+  if (!laid) {
+    const [runs, x0, y0, x1, y1] = entry;
+    const sx = clearW / (x1 - x0);
+    const sy = clearH / (y1 - y0);
+    const ox = (x0 + x1) / 2;
+    const at = (p) => [-(p[0] - ox) * sx, p[1] === 0 ? LETTER_TUBE_R : p[1] * sy];
+    const tubes = [];
+    let left = Infinity;
+    let right = -Infinity;
+    for (const run of runs.split(';')) {
+      const pts = run.trim().split(/\s+/).map((q) => at(q.split(',').map(Number)));
+      for (let i = 0; i < pts.length; i += 1) {
+        left = Math.min(left, pts[i][0]);
+        right = Math.max(right, pts[i][0]);
+        if (i > 0) {
+          tubes.push([pts[i - 1], pts[i]]);
+        }
+      }
+    }
+    laid = { tubes, left: left - LETTER_TUBE_R, right: right + LETTER_TUBE_R };
+    if (LETTER_LAID.size > 128) {
+      LETTER_LAID.clear();
+    }
+    LETTER_LAID.set(key, laid);
+  }
+  return laid;
+}
 
 /*
  * The corners of a shape in its box, x across and y up from the middle, the same points
@@ -435,7 +525,7 @@ function openingOf(mark, fallback) {
   return Number.isFinite(w) && w > 0 ? w : fallback;
 }
 
-function aperture(ctx, s, levels, openW) {
+function aperture(ctx, s, levels, openW, depthW = openW) {
   const half = Math.max(3.2, (openW * 0.5) * s);
   /*
    * THE FRAME DEPTH IS A PROPORTION OF THE OPENING AND HAS TO BE.
@@ -451,7 +541,7 @@ function aperture(ctx, s, levels, openW) {
    * opening gives back exactly 0.36: the ratio is exactly 1 there and the
    * multiply is exact.
    */
-  const depth = Math.max(1.8, GATE_D * (openW / GATE_W) * s) * (levels > 1 ? 1.8 : 1);
+  const depth = Math.max(1.8, GATE_D * (depthW / GATE_W) * s) * (levels > 1 ? 1.8 : 1);
   ctx.beginPath();
   ctx.rect(-depth * 0.5, -half, depth, half * 2);
   ctx.fillStyle = C.gate;
@@ -877,6 +967,12 @@ export function drawPlan(canvas, plan, options = {}) {
       marker(ctx, box.s, type === 'cone', small);
     } else if (type === 'diveGate') {
       diveGate(ctx, box.s, openingOf(mark, small ? MICRO_GATE_W : DIVE_W));
+    } else if (type === 'letter' && letterTubes(mark)) {
+      /* From above a letter is a bar as long as the letter is wide, where its pipe is: the piece stands on the middle
+       * of its primary hole, which is not the middle of every letter. A gate's thickness, and none of a stack's ticks. */
+      const pipe = letterTubes(mark);
+      ctx.translate(0, -((pipe.left + pipe.right) / 2) * box.s);
+      aperture(ctx, box.s, 1, pipe.right - pipe.left, GATE_W);
     } else {
       /* The authored level count and the authored opening when the plan
        * carries them, the type default and the class's standard gate when
@@ -917,11 +1013,17 @@ export function drawPlan(canvas, plan, options = {}) {
  */
 const PLAN_SKIP = new Set(['label', 'waypoint']);
 const PLAN_APERTURE = new Set([
-  'gate', 'flaggedGate', 'doubleStack', 'flaggedDoubleStack', 'ladder', 'tower', 'diveGate', 'hoop', 'hexGate',
+  'gate', 'flaggedGate', 'doubleStack', 'flaggedDoubleStack', 'ladder', 'tower', 'diveGate', 'hoop', 'hexGate', 'letter',
 ]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/* A letter as the document writes it: the first character, in capitals; A when it is none of the twenty six. */
+function letterWord(word) {
+  const first = typeof word === 'string' ? word.trim().charAt(0).toUpperCase() : '';
+  return PLAN_LETTERS[first] ? first : 'A';
 }
 
 export function planFromDocument(doc) {
@@ -1014,6 +1116,8 @@ export function planFromDocument(doc) {
       /* A hoop's is 'circle' and a hex gate's is 'hex'. Not there at all
        * on a gate, for the same reason. */
       ...(PLAN_SHAPE[type] ? { shape: PLAN_SHAPE[type] } : {}),
+      /* Which capital a letter is, one character, so the card draws its pipe. Not there at all on anything else. */
+      ...(type === 'letter' ? { letter: letterWord(item.letter) } : {}),
     });
   }
   const path = [];
@@ -1166,7 +1270,8 @@ export function isoApertures(mark, small) {
   const cw = mark.clearW || (small ? 0.711 : 1.524);
   const ch = mark.clearH || cw;
   const lp = mark.levelPitch || (ch + 0.034);
-  const levels = Math.max(1, Math.round(mark.levels || 1));
+  /* A letter's holes are not a stack: its pane is the box of its primary hole, which is where the piece stands. */
+  const levels = mark.type === 'letter' ? 1 : Math.max(1, Math.round(mark.levels || 1));
   const s0 = mark.sillH || 0;
   const base = mark.z || 0;
   const yaw = mark.yaw || 0;
@@ -1238,6 +1343,20 @@ export function isoShapes(mark, small) {
   const wy = hx;
   const type = String(mark.type || '');
   const out = [];
+  /* A letter is drawn as its pipe, which is what makes a W a W on a card. An invisible one has none, like a gate with
+   * no frame. */
+  const pipe = type === 'letter' ? letterTubes(mark) : null;
+  if (pipe) {
+    if (!mark.unbuilt) {
+      for (const [a, b] of pipe.tubes) {
+        out.push({
+          pts: [[mark.x + wx * a[0], mark.y + wy * a[0], base + a[1]], [mark.x + wx * b[0], mark.y + wy * b[0], base + b[1]]],
+          colour: C.gate,
+        });
+      }
+    }
+    return out;
+  }
   if (PLAN_APERTURE.has(type)) {
     /*
      * A gap in the lattice has no structure to draw: the bar under it and

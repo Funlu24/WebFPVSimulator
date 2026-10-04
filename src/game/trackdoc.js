@@ -56,10 +56,11 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, hasMissingSides, isPlain, isUnbuilt, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
+import { ELEMENTS, KIND, GATE_FLAG_POLE_R, apertureShapeOf, docModeOf, flagLeanSign, flagSideOf, flagSideSigns, frameSidesOf, gateFlagHeight, hasMissingSides, isLetterPiece, isPlain, isUnbuilt, letterOfPiece, trackClassOf, virtualApertureDims } from '../trackbuilder/elements.js';
 import {
   normalize, elementById, aperturesOf, startPadsOf, logosOf, logoForDecal, dressOrder,
 } from '../trackbuilder/model.js';
+import { mirrorPolygon } from '../props/aperture.js';
 import { seatFloating } from '../trackbuilder/seat.js';
 import { buildPath } from '../trackbuilder/path.js';
 import { apertureFrame } from '../trackbuilder/geometry.js';
@@ -151,6 +152,12 @@ export function headingForTravel(tx, tz) {
 function meshFlipsX(el, t) {
   const n = apertureFrame(el.yaw, el.pitch).normal;
   return Math.hypot(t.x, t.y) > 1e-9 && (t.x * n.x + t.y * n.y) > 0;
+}
+
+/* A letter's hole, scaled as the world builds it and turned for the way it is flown (see the station above). */
+function stationPolygon(poly, scale, along) {
+  const flat = poly.map(([x, y]) => [x * scale, y * scale]);
+  return along ? flat : mirrorPolygon(flat);
 }
 
 function meshSidesFor(el, t, sides) {
@@ -423,6 +430,11 @@ function buildCourse(raw) {
     if (kind === KIND.APERTURE && apertureShapeOf(el) !== 'square') {
       s.shape = apertureShapeOf(el);
     }
+    /* A letter says which one it is: the world builds its pipe from that and the size above
+     * (src/props/letters.js), and the first pass through it decides which way round it is built, below. */
+    if (kind === KIND.APERTURE && isLetterPiece(el)) {
+      s.letter = letterOfPiece(el);
+    }
     /* The openings that are a gap in the lattice and not a gate: no pipe
      * is built for them anywhere. See isUnbuilt in elements.js. */
     if (kind === KIND.APERTURE && isUnbuilt(el)) {
@@ -632,7 +644,29 @@ function buildCourse(raw) {
       }
     }
 
-    const pos = toScene(field, { x: el.position.x, y: el.position.y });
+    /*
+     * A LETTER'S HOLE IS NOT ON THE PIECE'S MIDDLE, always: an N has two, one to each side. The station stands at the
+     * hole, so every reader of one (the guide, the glow, the number) is told where the hole is, and the mesh stands at
+     * the piece (coursePlacements). For everything else the hole is on the middle and this is the position it was.
+     *
+     * AND IT IS BUILT FACING THE FIRST PASS, as every gate is, which for a letter decides which way round its pipe is
+     * laid: a letter reads the right way round to a pilot flying along its normal (entry +1), so a first pass the other
+     * way round is built turned about its axis, and every pass through it after that is scored in the frame it is
+     * flown in. `along` is whether this pass is flown along the normal.
+     */
+    const letter = isLetterPiece(el);
+    const along = letter ? meshFlipsX(el, knot.tangent) : false;
+    if (letter && structure.letterMirror === undefined) {
+      structure.letterMirror = !along;
+    }
+    /* The hole's own across offset is part of the letter and so goes through the obstacle scale with it, as the pipe
+     * does. (Positions are never scaled: the piece stands where the author put it.) */
+    const f = apertureFrame(el.yaw, el.pitch);
+    const across = letter ? (ap.centerX ?? 0) * gateScale : 0;
+    const pos = toScene(field, {
+      x: el.position.x + f.widthAxis.x * across,
+      y: el.position.y + f.widthAxis.y * across,
+    });
     stations.push({
       elementId: el.id,
       structure,
@@ -646,6 +680,9 @@ function buildCourse(raw) {
       clearW: ap.clearW * gateScale,
       clearH: ap.clearH * gateScale,
       ...(ap.shape ? { shape: ap.shape } : {}),
+      /* The hole as this pass scores it: its corners about its own point, in the frame the pass test works in, which
+       * is the document's across axis when the pass is along the normal and the other way round when it is not. */
+      ...(ap.shape === 'poly' ? { poly: stationPolygon(ap.poly, gateScale, along) } : {}),
       yaw,
       pitch: tilt,
       name: structure.name,

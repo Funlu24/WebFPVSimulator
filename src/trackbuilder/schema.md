@@ -239,8 +239,9 @@ course; that is what `sequence` is for.
 | `points` | integer | **Named gaps only.** What flying through it is worth: one of 100, 250, 500, 1000 or 2500, and anything else snaps to the nearest. |
 | `flagSide` | `"left"`, `"right"`, `"both"` or `"top"` | **Flagged gates and flagged doubles, and a barrier that has flags.** Where the pennant stands on the top header, as seen facing the gate. `top` is one mast on the CENTRE of the board, over the opening. Default `left` on a flagged gate. Not a dimension; the mast's height is, and it is `dims.flagH`. On a **barrier** the field is **optional**: it is written only when the barrier has flags (a hurdle), with `dims.flagH` beside it, and a barrier without it is the JSON it always was. There the masts stand at the two ends of the board, along the way it is turned, and `left` is the `-heading` end. |
 | `style` | `"plain"`, or absent | **Apertures only.** The dress a gate wears besides the MultiGP one. A MultiGP gate in the world has a printed sleeve round each upright and a header board wider than the frame; `plain` has no sleeves and a header board exactly as wide as the frame, so a pennant on the header stands on the upright and the bays of a wall sit end to end. Written only when set, so every gate that exists serialises as it did. Only a vertical, square gate has a dress. A value this build does not know is dropped on read with a repair note. See `isPlain` in `elements.js`. |
+| `letter` | `"A"` to `"Z"` | **Letters only.** Which capital the element is: one character, in capitals. A word that is not one of the twenty six reads as `"A"` and says so in the repairs; one in lower case is read as the capital without a word. Not a dimension. The shape of the pipe and of each gap is the capital's, kept in `src/props/letters.js` and not in the document, so there is no polygon in a track to get wrong. Written on every letter and on nothing else. See **A letter** below. |
 | `logoId` | string | **Ground logos only.** The `id` of the entry in `branding.logos` this footprint is painted with. Empty means the course's first logo. Not a dimension. |
-| `unbuilt` | `true`, or absent | **Apertures only.** The opening is a GAP IN THE LATTICE rather than a gate with a frame of its own: it scores, it lights, it carries its number and it pins the racing line, and no pipe is built for it in the world, the export, the preview or the card. The pipe that bounds it belongs to the structures around it. Written only when true, so an ordinary gate's JSON is unchanged. RaceGOW builds this way wherever a leg is carried up past a bar: the opening over the bar has the bar below and a pole beside and nothing else, and drawing a square there puts PVC in mid air. See `isUnbuilt` in `elements.js` and `TRACK-FROM-GIF.md`. |
+| `unbuilt` | `true`, or absent | **Apertures only.** The opening is a GAP IN THE LATTICE rather than a gate with a frame of its own: it scores, it lights, it carries its number and it pins the racing line, and no pipe is built for it in the world, the export, the preview or the card. The pipe that bounds it belongs to the structures around it. Written only when true, so an ordinary gate's JSON is unchanged. RaceGOW builds this way wherever a leg is carried up past a bar: the opening over the bar has the bar below and a pole beside and nothing else, and drawing a square there puts PVC in mid air. A `gate` with it set and nothing else different is the builder's **invisible gate**, and a `letter` with it set is a letter that is its gaps alone: see **An invisible gate** below. See `isUnbuilt` in `elements.js` and `TRACK-FROM-GIF.md`. |
 | `unbuiltSides` | array of strings, or absent | **Apertures only.** The sides of the frame that have no pipe, taken away one at a time: any of `"top"`, `"bottom"`, `"left"`, `"right"`, each once, written in that order. The opening still scores, lights, carries its number and pins the racing line; only the pipe is gone, along with what belongs to it (an upright's foot, fittings and printed sleeve, the top bar's header board). Four sides per STRUCTURE: `left` and `right` are the two uprights, the whole height of a stack, `top` is the bar over the top opening and `bottom` the bar under the lowest. A bar between two openings of a stack holds both up and is not one of the four. Left and right are as seen facing the gate, the same reading `flagSide` has: `left` is the `-widthAxis` upright and `top` the `+heightAxis` bar. Written only when at least one side is missing, so a gate with all four is the same JSON it was before this existed; a name that is not a side is dropped on read with a repair note. `unbuilt: true` means all four and more (no pipe at all), and wins when both are present. See `FRAME_SIDES` in `elements.js`, and `meshSidesFor` in `src/game/trackdoc.js` for how the race field, which builds each gate facing its first pass, turns these into its own frame. |
 | `group` | string, or absent | **Apertures only.** A name shared by the gates that are one object: today, the faces of a cube. A name and nothing else, at most 40 characters, made by the builder (`grp-1`, `grp-2`) and meaningful only to be the same on every member; anything that is not a non-empty string is dropped on read with a repair note, so the gate is on its own. The builder selects, moves, turns, copies and removes a group as one piece, and a group is not replaced with another part. Written only when there is one, so a gate on its own is the same JSON it was before this existed. A gate in a group is BUILT in the world whether or not the flying order goes through it, as solid pipe with nothing to score, which a gate on its own is not: see `loose` in `src/game/trackdoc.js` and **A cube** below. |
 
@@ -303,6 +304,7 @@ Each row's `kind` decides everything the tool does with it.
 | `diveGate` | D | aperture | yes, once per opening | same |
 | `hoop` | none | aperture | yes, once | same, with `levels` always 1. A round gate: the opening is the ellipse that touches all four sides of the `clearW` by `clearH` box, a circle when the two are equal, which is what a new one is. The whoop palette's only. See **The shape of an opening**. |
 | `hexGate` | none | aperture | yes, once | same, with `levels` always 1. A six sided gate: a point at each end of `clearW` and a flat above and below, so it is a regular hexagon when `clearH` is `clearW` times the square root of three over two, which is what a new one is. The whoop palette's only. See **The shape of an opening**. |
+| `letter` | none | aperture | yes, once per gap that is flown | same, with `levels` always the number of gaps the `letter` has (one to three) and `sillH` always 0: a letter stands on the ground, and upright, so `pitch` is always 0. A capital of 2 inch pipe with gaps in it to fly through. `clearW` and `clearH` are the size of its PRIMARY gap, box axis to axis, and the whole letter follows them. A five inch track's only, on the palette after the dive gate, with no key. See **A letter**. |
 | `barrier` | B | obstacle | **never** | `width depth height`. Optional `flagSide`, and then `flagH` in `dims`, make it a hurdle: see `flagSide`. The palette's Hurdle is a barrier 4 m by 0.1 m by 1 m with two flags and a waypoint over it in the flying order. |
 | `flag` | F | marker | yes, with a pass side | `height poleRadius clearance` |
 | `cone` | C | marker | yes, with a pass side | `height baseRadius clearance` |
@@ -321,7 +323,8 @@ palette, the whoop palette and a map's palette. `pole` and `horizontalPole`
 are on the whoop's and a map's, not the five inch's, and a key that is not on
 the palette in front of the author does nothing. `table`, `chair`, `banner`,
 `hoop` and `hexGate` are on the whoop's alone and have no key at all: the
-letters ran out.
+letters ran out. `letter` is on the five inch palette alone and has none
+either, for the same reason: the free ones are a map's.
 
 **The furniture is sized by three numbers and built of boxes.** A `table`, a
 `chair` and a `banner` hold `width`, `depth` and `height` exactly as a
@@ -368,6 +371,61 @@ that name two of its faces and can be changed like any others, and only the
 faces the order goes through score. The layout is worked out in
 `src/trackbuilder/cube.js` from the opening, the pipe and the lift alone, so
 the document holds no word for a cube of its own.
+
+**A letter.** The WA State Champs have a W on the course, built of pipe, and the gate is the gap between its two Vs.
+A `letter` is that in general: every capital from A to Z, each a run of straight tubes (the way a person builds a letter
+of PVC, with a chamfer where a curve would be) and one to three gaps, each of which scores like a gate. It is one
+element of the five inch palette, with the five numbers every opening has, and a word, `letter`, that says which
+capital it is. Nothing about the shape is in the document: the design of each capital is `src/props/letters.js`, the
+copy of record, and the builder, the game, the plan card and the board all ask it.
+
+- **The size is the primary gap's.** `clearW` and `clearH` are the size of the letter's PRIMARY gap, measured box
+  axis to axis, which is the one a new pass goes through and the one a letter is sized by, and the rest of the
+  letter is drawn round it in the proportions of the design, so that every reader that reads those two numbers and
+  nothing else (the envelope, the rules, the cards, the board) reads a letter as it reads a gate. A W is built with
+  a gap 2.45 m wide on the ground and 3.15 m to the point, which makes the letter 4.9 m wide and 3.5 m tall, and
+  every capital is 3.5 m tall at the size it starts at. Each axis scales on its own, so a letter can be made narrower
+  or taller than the type draws it, and the builder offers a width and a height and works out the two numbers.
+- **The pipe** is 2 inch, 2.375 in across the outside (`LETTER_TUBE_OD` in `src/units.js`), a size of its own and not
+  the gate's one inch. It is solid, and a letter is built at the same obstacle scale a gate is, so what the pilot flies
+  is a little bigger than the builder draws, as it is for a gate. A letter stands on the ground: a foot is lifted by
+  one radius so the tube rests on the floor and is not half in it.
+- **Where it stands.** `position` is the middle of the primary gap's width, on the ground. The letter's own frame has
+  x across it, which is the pilot's RIGHT as they fly along the piece's normal, so a letter reads the right way round
+  from the side it is flown in from when the pass's `entry` is 1; the document's `widthAxis` is the pilot's left from
+  there, and the builder draws the letter mirrored to match. The game builds a letter facing its first pass, as it
+  builds every gate, so a first pass the other way round is built turned about its axis.
+- **Its gaps** are numbered from the ground up, and where two are at one height from left to right as the letter is read:
+  an A has `under the bar` (0) and `counter` (1), a B `lower bowl` and `upper bowl`, a W one, `between the Vs`. A
+  sequence entry's `apertureIndex` names one, and each gap that is flown is a gate of its own in the course, so
+  flying both bowls of a B is two passes. The point a pass goes through is not on the middle of the piece: an N's two
+  triangles stand to either side of it. A gap that is not a rectangle is scored for the shape it is, as a hoop is:
+  the hole the pilot sees is the design's polygon pushed in by the pipe's radius from every side that is pipe and not
+  from the ground or an open side (`insetPolygon` in `src/props/aperture.js`), and a line that stays in the pipe all
+  the way through does not count, for a W's triangle or an M's notched box. The check that a pass is a pass is exact
+  (`clipToPolygon`), and a gap that is not convex can be entered twice: the first stretch inside is what is credited.
+- **Fixed by the type, so repaired on read:** `levels` is the capital's count of gaps whatever the document says, `sillH`
+  is 0 and `pitch` is 0 with a note, and a size that is not a size is the size THAT capital starts at. A pass at a gap
+  the capital has not is the last one it has. A letter on a whoop track or on a map is dropped with a note, because
+  nothing on either palette builds it. `unbuiltSides`, `style` and the flags mean nothing to one and are not written.
+- **Warnings.** `letter-gap` says a flown gap is narrower than 0.9 m across at its widest (a standard gate is
+  1.5 m; the smallest gap any capital has at its default size is an A's, under the bar, at 1.16 m), or has nothing
+  left once the pipe is round it.
+- **The board** holds it as a gate: it is an opening in the flying order, so it is one of the gates a card counts,
+  one of the stations the lap floor is measured to and a mark the plan draws, as the bar its pipe is from above.
+  **Deploy the board before the simulator** for this, or a letter published from a new builder is counted as
+  nothing by an old board.
+
+**An invisible gate.** An opening with nothing built round it: you fly through it, it scores and lights when it is the
+next one, and there is no pipe, no flag and nothing to hit. It is not an element of its own and the document holds
+nothing new: it is an aperture with `unbuilt: true`, which is what a gap in a lattice already was, so the game, the
+board, the card and the lap GIF already read it. The builder lays one in a click (the Invisible gate piece on the
+five inch palette, key I, is a `gate` with the flag set), and takes the frame from any gate, stack or letter, or puts it
+back, with Frame on the card. A flag goes with the frame, since a pennant on a mast round nothing would hang in the air,
+and a piece that shares its pipe with others, a bay of a wall or a face of a cube, is not offered it, because taking one
+bay's frame would take the upright the next stands on. An invisible letter is its gaps alone. The sides taken away one
+at a time (`unbuiltSides`) are the other spelling of a frame that is not all there, and an invisible gate is the one
+that says all four.
 
 The game builds a group whole. It builds a gate for every pass and for nothing
 else, so a gate the order leaves out is on the field in the builder and not in
@@ -1169,6 +1227,15 @@ is missing, with a default, all four built, that is what every gate before it
 was. A reader that does not know it builds the whole frame, which is a
 picture with pipe the author took away rather than a document whose meaning
 changed: the openings, the flying order and the scoring are untouched.
+
+### A letter is not a bump
+
+`letter` is a new element type with one optional field of its own, and an invisible gate is a flag that was already
+there. A reader that does not know the type drops the element on read with a repair note, which is the best effort
+behaviour above, and the passes that named it with it: an older simulator flies a track with a W on it as a track with
+no W, and says so, and the openings, the faces and the scoring of everything else are untouched. The layout fingerprint
+hashes the elements as they stand, so adding a letter to a published track is a change of layout and clears its times,
+as moving a gate would.
 
 ### A stack's wrap is not a bump
 
