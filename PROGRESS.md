@@ -65004,3 +65004,170 @@ I traced it before touching anything, and my first reading of it was wrong.
 3. **`lint:memory` is not in `npm run verify`**, by its own header ("verify builds the WASM module and this has nothing to say about
    the flight model"). It was red for three days with nobody told. Adding it as a row is yours to decide.
 4. **`BOOT_PROPS` is widened,** as above, on your word.
+
+## 2026-10-04 | builder | A size to choose for the animation export, and bigger ones that are sharper and not thinner (the owner's ask)
+
+The owner: "i would like a way to select a high resolution export so that we can get a larger graphic that is clearer, see
+attached as an example as to why we need this." The attachment is a 512 by 512 export of a course called "WA State Champs 20":
+a field of poles and gates seen from above and to one side, a red ribbon, and the name in the floor, with the lettering soft and
+every gate a few pixels of grey.
+
+The only picture the builder makes that looks like that is Export animation, which drew every file at 512 and offered no choice.
+The board stores only the 384 by 240 card animation and has no picture download of its own, so nothing in the board's repository
+changed. The branch is `claude/gracious-keller-0y7inx` in both repositories, and only the simulator's has a commit.
+
+### What it does now
+
+Export animation has a Size choice: Standard (512 by 512, the default), High (1024) and Very high (2048). Each says what it
+costs. The file is named for its size unless it is Standard (`wa-state-champs-2025-1024px.gif`), so two exports saved side by
+side are not left to the browser to call "(1)". The box can be closed while it renders and that stops the render, which it could
+not before and which matters now that a render can be minutes. `scripts/trackgif.js --size` took up to 2048 already and now
+reads the limit from the exporter instead of keeping its own copy.
+
+Standard is the file it was, with one difference: the name in the floor is filtered better and so is sharper (below). With that
+switched off, a 512 export is the old file to the byte.
+
+### Why raising the size alone would not have worked
+
+I rendered the 2025 WA States course at 2048 with the code as it stood, before changing anything, and looked at it. It was worse
+than the 512 file, in three separate ways, and each has its own cause:
+
+- **The gates were hairlines.** A pipe's readable minimum (`MIN_PIPE_PX`, and the ribbon's) is counted in pixels and was tuned on
+  a picture 512 across. On a full sized field the real pipe is about a tenth of a pixel, so the drawn width is the minimum, and the
+  minimum at 2048 is a quarter of the weight it has at 512. Those are now measured against 512 (`REFERENCE_EDGE`), so a bigger
+  picture is the same picture with more pixels in it. At 512 and under the number is unchanged.
+- **The lettering had scan lines through it.** The name is a 1024 wide texture, about one texel to the pixel at 2048, sampled
+  without anisotropic filtering on a plate lying at 40 degrees. It is drawn up to four times the width now (`detailOf`), and the
+  filtering is on.
+- **The pool of light was stair stepped.** A 512 square gradient laid over a floor many times its own width puts about a hundred
+  texels across the lit part, which is twenty pixels a texel at 2048. With the contrast boosted the old edges are 20 to 30 pixel
+  stairs and the new ones are fine dots about 5 across; at normal contrast the old ones showed and the new ones do not.
+
+The shadow map grows with them, and I nearly took that out. On the big course a 1024 map and a 4096 map looked the same at 2048,
+so my first reading was that it did not matter. On the micro living room, where the pipe is its real 27 mm, 1024 drew the shadow
+of a pipe as a smear and the shadow on the pipe as a blotch, and 4096 drew clean edges. Which course shows it depends on how dark
+the floor is and how thick the pipe is drawn, so it is not argued per track.
+
+### What changed
+
+    src/trackbuilder/stage.js     detailOf (the sizes of the name, the pool and the shadow map for a given picture), REFERENCE_EDGE,
+                                  anisotropic filtering on the name. Nothing changes at 512 and under except the name's filtering.
+    src/trackbuilder/gif.js       PaletteHistogram: the histogram split from the median cut, so frames can be fed one at a time.
+                                  buildPalette is the same function over it. The cut itself is not touched.
+    src/trackbuilder/animate.js   MIN_EDGE and MAX_EDGE, a stop (AbortSignal), the card's limits asked before anything big is
+                                  allocated, a lost context and an empty first frame turned into sentences, one yield a frame
+                                  for frames over 512 square, and the palette sample no longer kept (it was 19 MB at 512 and
+                                  over 600 MB at 2048 for a 600 frame lap).
+    src/trackbuilder/app.js       the Size choice, the stop on close, the size in the file name.
+    src/trackbuilder/storage.js   animationFilename(doc, edge), ANIMATION_EDGE.
+    scripts/trackgif.js           reads the limits from animate.js, and wants whole numbers.
+    scripts/gif-selftest.js       66 checks, 38 before.
+    scripts/builder-flow-check.js a case, "animation size", 14 checks.
+
+No module was added or removed, so the preload lists are untouched. No physics, plant, module ABI or build change, and
+`git diff --stat vendor/betaflight` is empty.
+
+### What it costs, measured
+
+The 2025 WA States course is a 600 frame lap, the longest the exporter makes. The micro living room is 48 frames. Both were
+rendered whole through `scripts/trackgif.js`, on the software rasteriser this harness uses, so the times are what a machine
+with no graphics card does and a real card is faster. The ratios are the part to trust, and they held across the two.
+
+                 WA States, 600 frames        micro living room, 48 frames
+    512          0.92 MB,  65 s               0.11 MB,  4.9 s
+    1024         2.44 MB, 201 s               0.28 MB, 16.3 s
+    2048         6.27 MB, 746 s               0.76 MB, 58.2 s
+
+The file is two and a half times the size for the first step and seven times for both; the time is three times for the first
+step and about twelve for both. The dialog's notes say exactly that. The 746 s was run while I was rendering other things on the
+same four cores, so it is a little high. The JavaScript half of a 2048 export, the part a real card does not make faster, is 38
+ms a frame on real frames in Node (worst 104 ms), about 25 s of a 600 frame lap, in a process of about 300 MB of which 200 is the test's own twelve frames. The shipping
+Standard export of the WA States lap is 928,457 bytes against 919,308 before, 1 per cent more for the sharper name, and two runs
+of it gave the same bytes.
+
+### The deploy hazard I checked and did not have
+
+`stage.js` explains at length why it reads `frameSidesOf` through a namespace import: a browser holding an old copy of a module
+makes a named import of something new fail, and the dialog then shows the link error. This change adds new named exports that
+other files import (`detailOf`, `PaletteHistogram`, `ANIMATION_EDGE`), so I read `src/fresh.js` before assuming it was fine. It is:
+every module of a deploy is given the deploy's stamp through the import map, so "a page is never half one deploy and half
+another", and the namespace import predates that. `detail` is optional in `buildStage` all the same, because a caller with no
+renderer to ask should still get the right sizes.
+
+### What was checked
+
+All of it run in this turn, after the last edit to the code it is about.
+
+    gif:selftest                66 passed, 0 failed (38 before)
+    check:clip                  2268 passed, 0 failed (the builder's own, in Node)
+    lint:nouns                  PASS
+    lint:preload                up to date (boot 127, city 76, built 34, 251 served)
+    check:builder --only        "animation size": 14 passed, 40 s. Not the rest of the file
+    mutations                   each turned a check red, and the unmutated copy was 66 of 66: detailOf never grows, detailOf
+                                has no floor, detailOf ignores the card's limit, the size limit not enforced, a stop under the
+                                wrong name, the histogram skipping pixels, a second frame replacing the first, the file name
+                                never carrying the size. Against the page: the old source (no Size choice), the stop not
+                                wired (a second file arrives), the select not locked
+    Standard, 24 frames         anisotropy off: identical to the old source's file to the byte (56,873)
+    Standard, 600 frames        anisotropy off: identical to the old source's file to the byte (919,308)
+    the board's card, 384x240   no name plate, the micro course (64,790) and the WA States lap (1,061,901): identical to the byte,
+                                old source against this tree
+    the streaming histogram     the 512 and 2048 clips rendered with the sample kept and with the histogram: identical to the byte
+    the dialog, in the browser  3 sizes, Standard chosen, the label and the note tied together, the note changes; rendered at High
+                                from the dialog on the micro course: `living-room-1-1024px.gif`, 277,725 bytes, which is the
+                                same size scripts/trackgif.js wrote for that course and size; the select locked while it
+                                rendered; the box closed part way through and nothing was saved afterwards
+    the CLI                     `--size 4096` and `--size 512.5` refused with the range
+    looked at                   the WA States and the micro course at 2048, before and after (name, gates, the pool at boosted
+                                contrast, the micro shadow at 1024 against 4096), the dialog at each size and while rendering,
+                                and a frame of the full length 2048 file
+    dashes                      none in anything added: em 0, en 0, with a deliberate em dash found by the same scan as a control
+
+### What was not run, and why
+
+- **`npm run verify`.** Nothing under `src/native`, `patches`, `vendor/betaflight` or `src/input` changed, and nothing in the
+  simulation trace can move: this is the track builder's export. `CLAUDE.md` says not to run it unless asked.
+- **`node scripts/shots.js`.** It drives the shell, which does not open Export animation.
+- **The rest of `check:builder`, `lint:memory`, `lint:boot`.** `storage.js` is on the simulator's boot graph and gained an export
+  and no import, and `lint:preload` and `check:clip` are green, but the two browser lints were not run on it.
+- **A real graphics card, or any browser but Chromium on SwiftShader.** Everything above ran there. Whether a 2048 render is
+  comfortable on the owner's machine, and what a phone does with one, is not something this machine can say.
+
+### What went wrong
+
+- **I expected Standard to come out byte for byte the same and it did not.** A 512 render of the 2025 WA States course differed
+  from before in about 3,300 pixels spread over the whole track, not only the name. I switched the anisotropic filtering off and
+  rendered again: the file was identical to the byte, so everything else in `stage.js` is a no op at 512 and the difference is the
+  name's sharper pixels moving the shared 256 colour palette by a shade at antialiased edges. The name is visibly crisper at 512
+  with it on, so I kept it, and the comment over it says that it is the one thing that changes a 512 picture.
+- **I almost removed the shadow map's growth.** See above: on the big course it made no visible difference, and I had written
+  that down as a reason to drop it before I tried the micro track, where it is the clearest difference of the three.
+- **My first draft of the dialog's notes said High was "too big for some chats".** It is 2.4 MB. The measured file sizes
+  corrected that before it was committed, and the notes now say what was measured.
+- **My first draft of a comment overclaimed.** It said the missing anisotropic filtering was "most of why" the name read soft at
+  512. The before and after at 512 show an improvement, not a different picture, and the comment now says that.
+- **Things I wrote and took back before they left the working tree.** A `role="status"` on the progress line, which updates on
+  every frame and would have a screen reader reading out six hundred of them; a garbled memory figure in the histogram's comment;
+  a comment that said the builder reads `MAX_EDGE` when it deliberately does not; and `press('Cancel')` in my own browser case,
+  when this dialog's button is "Close", which would have made the stop test do nothing and pass.
+- **A test of mine could not fail.** "Frames fed one at a time give the palette of the list" compared two routes through the same
+  class. It now feeds the same pixels as one frame and as three, and counts a frame by hand.
+- **A scan for dashes that did not run.** `grep -P` with a code point above 0xFF printed an error and my "none above means
+  clean" line made it look like a pass. I ran it again on the raw UTF-8 bytes with a deliberate em dash as a control.
+- **A background render looked as if it had written nothing.** I read its output file a moment before it finished. The file was
+  there and the number was right; I re-ran it in the foreground and got the same bytes.
+
+### For the owner
+
+1. **Which verification you want, and at what scale.** None of the expensive ones has been run. The honest one is to fly it:
+   open the builder, load a big course, Export animation, High and then Very high, and look at the file. Wrong would be a black
+   or blank file, scan lines through the name, hairline gates, a sentence about the graphics card, or a Close that does not stop it.
+2. **A still PNG of the same picture is not built.** The clearest graphic for a poster is 24 bit with no 256 colour palette, and
+   it would be the same render with one frame and no encoder. It is a new export and a new choice, so it is yours to ask for. The
+   GIF's flat bands in the floor's light are the format's, and are invisible at normal contrast.
+3. **The picture leaves a lot of black round the track.** The camera frames the track and the name together and the frame is
+   square, so a long thin field is a small part of it. A tighter frame would make the gates bigger in the same file. Not touched.
+4. **The size is not remembered between visits.** Standard every time is the safe choice; someone who always wants High has to
+   pick it. Remembering it is one line and a reason to think about a 2048 file nobody asked for.
+5. **Standard's name is sharper.** If you would rather Standard were the old file to the byte, it is `tex.anisotropy = 16` in
+   `nameTexture`, set to 1, and the comment over it says what that buys.

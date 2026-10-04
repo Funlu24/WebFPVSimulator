@@ -165,6 +165,58 @@ class Bytes {
 }
 
 /*
+ * THE HISTOGRAM, kept apart from the cut so that frames can be fed to it one
+ * at a time and let go. It used to be built inside buildPalette from a list
+ * of frames the caller had kept, and the animation keeps a sixteenth of its
+ * frames for that: twenty to forty megabytes at 512, and sixteen times that at
+ * 2048, which is over 600 MB for a 600 frame lap and more than a browser tab
+ * will give. Here the memory is the four tables below however many frames go
+ * through, 262144 entries each, and the sums come out the same because frames
+ * are added in the same order and the same pixel order as before.
+ */
+export class PaletteHistogram {
+  constructor() {
+    this.count = new Uint32Array(HIST_SIZE);
+    this.sumR = new Float64Array(HIST_SIZE);
+    this.sumG = new Float64Array(HIST_SIZE);
+    this.sumB = new Float64Array(HIST_SIZE);
+  }
+
+  /* One frame of RGBA, whatever its size. The alpha is never read. */
+  add(rgba) {
+    const { count, sumR, sumG, sumB } = this;
+    for (let i = 0; i < rgba.length; i += 4) {
+      const r = rgba[i];
+      const g = rgba[i + 1];
+      const b = rgba[i + 2];
+      const bin = ((r >> HIST_SHIFT) << (HIST_BITS * 2))
+        | ((g >> HIST_SHIFT) << HIST_BITS)
+        | (b >> HIST_SHIFT);
+      count[bin] += 1;
+      sumR[bin] += r;
+      sumG[bin] += g;
+      sumB[bin] += b;
+    }
+  }
+
+  /* The palette for everything added so far: 768 bytes, 256 RGB triples. */
+  palette(options) {
+    return medianCut(this, options);
+  }
+}
+
+/* The palette of a list of frames in hand, which is what every caller did
+ * before frames could be fed one at a time and is still how the self test
+ * and anything small goes about it. */
+export function buildPalette(rgbaFrames, { colors = 256 } = {}) {
+  const histogram = new PaletteHistogram();
+  for (const rgba of rgbaFrames) {
+    histogram.add(rgba);
+  }
+  return histogram.palette({ colors });
+}
+
+/*
  * MEDIAN CUT.
  *
  * Every pixel handed in lands in a six bit bin that keeps a count and the
@@ -180,27 +232,8 @@ class Bytes {
  * in it, not the centre of the box, because a box holding one dense bin and
  * one sparse one should land on the dense one.
  */
-export function buildPalette(rgbaFrames, { colors = 256 } = {}) {
+function medianCut({ count, sumR, sumG, sumB }, { colors = 256 } = {}) {
   const wanted = Math.max(2, Math.min(256, Math.floor(colors)));
-  const count = new Uint32Array(HIST_SIZE);
-  const sumR = new Float64Array(HIST_SIZE);
-  const sumG = new Float64Array(HIST_SIZE);
-  const sumB = new Float64Array(HIST_SIZE);
-
-  for (const rgba of rgbaFrames) {
-    for (let i = 0; i < rgba.length; i += 4) {
-      const r = rgba[i];
-      const g = rgba[i + 1];
-      const b = rgba[i + 2];
-      const bin = ((r >> HIST_SHIFT) << (HIST_BITS * 2))
-        | ((g >> HIST_SHIFT) << HIST_BITS)
-        | (b >> HIST_SHIFT);
-      count[bin] += 1;
-      sumR[bin] += r;
-      sumG[bin] += g;
-      sumB[bin] += b;
-    }
-  }
 
   /* The populated bins, and their channel coordinates, so the split below
    * sorts small integers rather than unpacking a bin index every compare. */

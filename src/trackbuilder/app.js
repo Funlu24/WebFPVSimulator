@@ -85,7 +85,7 @@ import {
   vehiclePlace, absNodes, OPEN_MIN, LOOP_MIN,
 } from './roadtool.js';
 import {
-  animationFilename, deleteTrack, downloadBlob, downloadTrack, keepDisplaced, listTracks, pictureFilename,
+  ANIMATION_EDGE, animationFilename, deleteTrack, downloadBlob, downloadTrack, keepDisplaced, listTracks, pictureFilename,
   loadTrack, makeAutosaver, readAutosave, readFileText, saveTrack, shipMaps, shipTracks, trackExists, writeAutosave,
   savedTrack, restoreTrack, librarySize,
 } from './storage.js';
@@ -556,6 +556,56 @@ const SIDE_WORDS = {
   left: 'That upright',
   right: 'That upright',
 };
+
+/*
+ * THE SIZES THE ANIMATION CAN BE DRAWN AT, which the Export animation box
+ * offers as a choice. Standard is what it has always been and stays first and
+ * the default, because it is the one that posts anywhere. The other two are
+ * for a file that will be looked at closely, on a big screen or in print, where
+ * Standard comes out soft: a bigger one is the same picture with more pixels in
+ * it (see detailOf in stage.js), so the choice is sharpness against file size
+ * and time, and the notes say what each costs.
+ *
+ * The edges are held to MAX_EDGE in animate.js, which refuses anything above
+ * it with a sentence, so a size added here that is too big is told, not quiet.
+ * It is not imported for the check: the exporter and Three.js are loaded when
+ * somebody asks for an animation and not before (exportAnimation).
+ *
+ * WHAT THE NOTES SAY WAS MEASURED, on 2026-10-04, and they say it as ratios
+ * because the ratios held across two very different tracks and the sizes in
+ * megabytes do not. The 2025 WA States course, a 600 frame lap, which is the
+ * longest the exporter makes, came to 0.92, 2.44 and 6.27 MB at 512, 1024 and
+ * 2048: two and a half times the file for the first step and seven times for
+ * both. The micro living room, a 48 frame lap, came to 0.11, 0.28 and 0.76 MB,
+ * which is the same two and a half and the same seven. Time went three times
+ * for the first step and about twelve times for both, on both tracks (65, 201
+ * and 746 seconds; 4.9, 16.3 and 58.2), on the software renderer the harness
+ * uses, so a machine with a real graphics card is faster and the ratio is the
+ * part to trust. The only figure in megabytes the notes give is the 6 MB of a
+ * long lap at the top.
+ */
+const ANIMATION_SIZES = [
+  {
+    edge: ANIMATION_EDGE,
+    label: 'Standard',
+    note: 'The usual size, around 1 to 2 MB, which posts anywhere. About a minute.',
+  },
+  {
+    edge: 1024,
+    label: 'High',
+    note: 'Four times the pixels, so lines and lettering stay sharp on a big screen. '
+      + 'The file is about two and a half times the size of Standard, and it takes '
+      + 'about three times as long.',
+  },
+  {
+    edge: 2048,
+    label: 'Very high',
+    note: 'Sixteen times the pixels of Standard, for a poster or a projector. The file is '
+      + 'about seven times the size, around 6 MB for a long lap, which is more than some '
+      + 'chats take, and it takes roughly a dozen times as long. It wants a computer with a '
+      + 'good graphics card, and a phone or a small tablet may not manage it.',
+  },
+];
 
 export class App {
   constructor(nodes) {
@@ -3844,41 +3894,98 @@ export class App {
     help.className = 'tb-help';
     /* No duration named any more, because there is no one duration: the
      * quad flies a steady pace and a longer lap simply takes longer to go
-     * round. See LAP_SPEED in stage.js. */
-    help.textContent = 'One lap of the racing line, 512 by 512, looping, flown at the '
-      + 'same pace whatever the track, so a longer lap is a longer clip. '
-      + 'It comes out around 1 to 2 MB, which posts anywhere. Rendering takes a minute '
-      + 'or so and this tab has to stay open while it does.';
+     * round. See LAP_SPEED in stage.js. No size named either, because the
+     * pilot chooses it just below. */
+    help.textContent = 'One lap of the racing line, looping, flown at the same pace '
+      + 'whatever the track, so a longer lap is a longer clip. This tab has to stay '
+      + 'open while it renders, and closing this box stops it.';
+    body.append(help);
+
+    /*
+     * THE SIZE. A select, with what the choice costs said underneath and tied
+     * to it for a screen reader, because the three are not equally good
+     * things to ask for: the biggest is a file too heavy to paste into a chat
+     * and minutes of waiting, and somebody who has never seen either should
+     * read that before pressing the button and not after.
+     */
+    const sizeField = document.createElement('div');
+    sizeField.className = 'tb-field';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.className = 'tb-field-label';
+    sizeLabel.textContent = 'Size';
+    const sizePick = document.createElement('select');
+    sizePick.id = 'tb-animation-size';
+    sizeLabel.htmlFor = sizePick.id;
+    for (const s of ANIMATION_SIZES) {
+      const o = document.createElement('option');
+      o.value = String(s.edge);
+      o.textContent = `${s.label}, ${s.edge} by ${s.edge}`;
+      sizePick.append(o);
+    }
+    sizeField.append(sizeLabel, sizePick);
+    const sizeNote = document.createElement('p');
+    sizeNote.className = 'tb-help';
+    sizeNote.id = 'tb-animation-size-note';
+    sizePick.setAttribute('aria-describedby', sizeNote.id);
+    const saySize = () => {
+      const s = ANIMATION_SIZES.find((x) => String(x.edge) === sizePick.value) || ANIMATION_SIZES[0];
+      sizeNote.textContent = s.note;
+    };
+    sizePick.addEventListener('change', saySize);
+    saySize();
+    body.append(sizeField, sizeNote);
+
+    /* No live region on this one, as before: it changes on every frame, and a
+     * screen reader reading out each of six hundred is not help. */
     const status = document.createElement('p');
     status.className = 'tb-help';
-    body.append(help, status);
+    body.append(status);
+
+    /* Closing the box stops the render. See afterModal below. */
+    const stop = new AbortController();
 
     const go = document.createElement('button');
     go.type = 'button';
     go.className = 'tb-btn tb-primary';
     go.textContent = 'Render the animation';
     go.addEventListener('click', async () => {
+      const edge = Number(sizePick.value);
       go.disabled = true;
+      /* Not changeable mid render: the file is the size it was asked for. */
+      sizePick.disabled = true;
       status.textContent = 'Loading the renderer.';
       try {
         const { exportTrackGif } = await import('./animate.js');
         const bytes = await exportTrackGif(this.doc, {
+          size: edge,
+          signal: stop.signal,
           onProgress: (done, total) => {
             status.textContent = `Frame ${done} of ${total}.`;
           },
         });
-        downloadBlob(bytes, animationFilename(this.doc), 'image/gif');
+        const file = animationFilename(this.doc, edge);
+        downloadBlob(bytes, file, 'image/gif');
         const mb = (bytes.length / 1e6).toFixed(2);
-        status.textContent = `Done. ${mb} MB, saved as ${animationFilename(this.doc)}.`;
+        status.textContent = `Done. ${mb} MB, saved as ${file}.`;
         go.textContent = 'Render it again';
-        go.disabled = false;
       } catch (e) {
+        /* The box was closed, which is the answer and not a failure, and
+         * there is no box left to say anything in. */
+        if (e && e.name === 'AbortError') {
+          return;
+        }
         status.textContent = e && e.message ? e.message : String(e);
+      } finally {
         go.disabled = false;
+        sizePick.disabled = false;
       }
     });
     body.append(go);
     this.modal('Export animation', body);
+    /* Set after modal(), which clears it for the dialog it replaces. A render
+     * left running behind a closed box would finish minutes later and save a
+     * file nobody was expecting. */
+    this.afterModal = () => stop.abort();
   }
 
   /*
