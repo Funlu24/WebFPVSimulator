@@ -6142,6 +6142,39 @@ export class Ui {
     });
   }
 
+  /* The camera tilt stepper, shared by the Quad room (where it is the
+   * machine's setting) and the Rates screen (where the yaw it rolls into the
+   * picture is tuned). One definition, so the two cannot drift. */
+  cameraAngleRow(s) {
+    return stepper(
+      'Camera angle',
+      /*
+       * The yaw sentence is not a caveat, it is the main thing a pilot
+       * needs to know before they crank this up, and the menu never said
+       * it. A camera tilted up by t sees a pure yaw as sin(t) of image
+       * roll and cos(t) of image yaw, which is geometry and is exactly
+       * what a real tilted camera does. At 30 that is half. At 40 it is
+       * nearly two thirds, which is the tilt a pilot wrote in about.
+       */
+      `How far the camera tilts up from the airframe. ${CAMERA_ANGLE_MIN} is flat, looking along the nose. ${CAMERA_ANGLE_DEFAULT} is a typical cruise. 45 to ${CAMERA_ANGLE_MAX} is race. Above about 30, yaw starts to roll the horizon: at ${s.cameraAngle} degrees, ${Math.round(Math.sin(cameraTiltRad(s.cameraAngle)) * 100)} percent of a yaw shows up as roll in the picture. That is what a real tilted camera does. Lower Yaw max rate on the Rates screen to tame it.`,
+      `${s.cameraAngle}°`,
+      (d) => {
+        const before = s.cameraAngle;
+        s.cameraAngle = clampCameraAngle(before + d);
+        /* On the way UP across the threshold only, and only if the yaw
+         * rate is above what would be offered. Stepping back down and up
+         * again inside one session does not ask twice. */
+        if (before < YAW_TIP_TILT
+          && s.cameraAngle >= YAW_TIP_TILT
+          && fullStickDeg(s.rates, 'yaw') > YAW_TIP_RATE
+          && yawTipFixable(s.rates)
+          && !this.yawTipAsked) {
+          this.offerYawTip();
+        }
+      },
+    );
+  }
+
   /*
    * The tip that fires when the camera goes past the angle where yaw starts
    * to roll the horizon hard. Offered ONCE per session, only on the way UP
@@ -7974,33 +8007,7 @@ export class Ui {
           note: `Every Betaflight 4.5.1 key the module compiles, tab by tab, in Configurator’s own colours. Opens as a tool, in its own frame. Save becomes Your edits and the Tune row above starts naming it; the picker that puts you back on stock is in ${SCREEN_TITLES.pids}. There is no CLI paste.`,
         },
         { label: 'Camera', section: true },
-        stepper(
-          'Camera angle',
-          /*
-           * The yaw sentence is not a caveat, it is the main thing a pilot
-           * needs to know before they crank this up, and the menu never said
-           * it. A camera tilted up by t sees a pure yaw as sin(t) of image
-           * roll and cos(t) of image yaw, which is geometry and is exactly
-           * what a real tilted camera does. At 30 that is half. At 40 it is
-           * nearly two thirds, which is the tilt a pilot wrote in about.
-           */
-          `How far the camera tilts up from the airframe. ${CAMERA_ANGLE_MIN} is flat, looking along the nose. ${CAMERA_ANGLE_DEFAULT} is a typical cruise. 45 to ${CAMERA_ANGLE_MAX} is race. Above about 30, yaw starts to roll the horizon: at ${s.cameraAngle} degrees, ${Math.round(Math.sin(cameraTiltRad(s.cameraAngle)) * 100)} percent of a yaw shows up as roll in the picture. That is what a real tilted camera does. Lower Yaw max rate on the Rates screen to tame it.`,
-          `${s.cameraAngle}°`,
-          (d) => {
-            const before = s.cameraAngle;
-            s.cameraAngle = clampCameraAngle(before + d);
-            /* On the way UP across the threshold only, and only if the yaw
-             * rate is above what would be offered. Stepping back down and up
-             * again inside one session does not ask twice. */
-            if (before < YAW_TIP_TILT
-              && s.cameraAngle >= YAW_TIP_TILT
-              && fullStickDeg(s.rates, 'yaw') > YAW_TIP_RATE
-              && yawTipFixable(s.rates)
-              && !this.yawTipAsked) {
-              this.offerYawTip();
-            }
-          },
-        ),
+        this.cameraAngleRow(s),
         choice(
           'Field of view',
           'Wider sees more, narrower magnifies. 75 matches what an FPV lens does to the middle of the frame; 85 gives some of that back for width; 115 is the widest this projection can honestly offer, about 145 degrees corner to corner, and the gates will look smaller for it.',
@@ -8889,6 +8896,7 @@ export class Ui {
         ...(split ? [{ label: 'Pitch', section: true }, ...axisRows('pitch')] : []),
         { label: 'Yaw', section: true },
         ...axisRows('yaw'),
+        this.cameraAngleRow(s),
         { label: 'Throttle', section: true },
         choice(
           'Throttle limit',
