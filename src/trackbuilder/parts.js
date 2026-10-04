@@ -30,17 +30,20 @@
  */
 
 import {
-  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, defaultDims, elementHeight, flagSideOf,
-  flagSideSigns, isPlain, trackClassOf, wallPitchFor,
+  ELEMENTS, KIND, FLAG_SIDES, FRAME_TUBE_OD, GATE_FLAG_H, GATE_PRESETS, applyGatePreset, apertureShapeOf, defaultDims,
+  docModeOf, elementHeight, flagSideOf, flagSideSigns, isLetterPiece, isPlain, isUnbuilt, letterDimsFor,
+  levelPitchFor, trackClassOf, wallPitchFor,
 } from './elements.js';
 import {
-  apertureCenter, aperturesOf, createElement, elementById, elementNormal, entryAnchor, kindOf, newGroupId,
+  apertureCenter, aperturesOf, createElement, elementById, elementNormal, entryAnchor, initLetter, kindOf, newGroupId,
   setSideBuilt,
 } from './model.js';
-import { addToSequence } from './sequence.js';
+import { addToSequence, removeFromSequence } from './sequence.js';
 import { applyAutoFaces, defaultYawFor, lastAnchorOf } from './faces.js';
 import { apertureFrame, wrapAngle } from './geometry.js';
 import { runGhosts } from './runs.js';
+import { placeOnTrack, placementFor } from './snap.js';
+import { openingCount, primaryOpening } from '../props/letters.js';
 import { GATE_SCALE } from '../units.js';
 import { GATE_BANNER_H } from '../art/banners.js';
 
@@ -885,6 +888,159 @@ export function placeUpGate(doc, at, opts = {}) {
 }
 
 /* ------------------------------------------------------------------ */
+/* The invisible gate                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * AN INVISIBLE GATE IS AN OPENING WITH NOTHING BUILT ROUND IT. The owner's words: "an opening that I need to
+ * fly through, like a gate, but with no gate graphics around it, this will allow me to more easily build complex
+ * elements by assigning arbitrary targets that aren't framed by a gate". It is the opening and not the frame, so
+ * it is the thing `unbuilt` (isUnbuilt in elements.js) already was: an aperture that scores, lights when it is
+ * the next one, numbers itself in the flying order and pins the racing line, and has no pipe, no pennant and no
+ * collider. Nothing new is written to the document, so every reader of one, the game, the board, the lap GIF and
+ * the card, already knows how to read it.
+ *
+ * ANY GATE CAN BE MADE ONE and any letter, and made visible again, because the document says only `unbuilt` and
+ * the two states are one flag apart. A gate that is flagged loses its pennant when it goes: a flag on a mast
+ * round nothing would hang in the air. The frame it had one side at a time (unbuiltSides) goes with it, because
+ * the two spellings of a missing frame mean one thing and the flag is the one that can say all four.
+ *
+ * A piece that is part of a group is not offered it: a cube's faces and a wall's bays share their pipe, and
+ * taking one bay's frame away would take the upright the next bay stands on.
+ */
+export function canBeInvisible(el) {
+  return Boolean(el) && kindOf(el) === KIND.APERTURE && !el.group;
+}
+
+/* Make a piece invisible, or put its frame back. Returns true when the document changed. */
+export function setInvisible(doc, id, on) {
+  const el = elementById(doc, id);
+  if (!canBeInvisible(el)) {
+    return false;
+  }
+  if (on) {
+    if (el.unbuilt === true) {
+      return false;
+    }
+    if (canFlag(el) && flagsOf(el) !== 'none') {
+      setFlags(doc, id, 'none');
+    }
+    el.unbuilt = true;
+    delete el.unbuiltSides;
+    return true;
+  }
+  if (el.unbuilt !== true) {
+    return false;
+  }
+  delete el.unbuilt;
+  return true;
+}
+
+/*
+ * PUT AN INVISIBLE GATE DOWN, in the flying order, where a gate would go and facing the way a gate would face:
+ * it is placed by the rule every gate is (placeOnTrack in snap.js), and then its frame is taken away. Returns the
+ * element.
+ */
+export function placeInvisibleGate(doc, at, opts = {}) {
+  const el = placeOnTrack(doc, 'gate', at, opts);
+  setInvisible(doc, el.id, true);
+  return el;
+}
+
+/* ------------------------------------------------------------------ */
+/* Letters, from gates and back                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A GATE THAT IS ALREADY ON THE TRACK CAN BECOME A LETTER, which is how a track is edited and not only built: a
+ * course that was drawn with a gate where its W is, or an A, takes the letter in the gate's place without a gate
+ * being deleted, a letter placed and the order put right. The piece keeps what is the track's and not the
+ * piece's: its id (so everything that points at it, the flying order and the figure it is flown in, still
+ * does), its name if the author gave it one, where it stands, which way it faces and whether that is pinned,
+ * and its place in the lap. What a letter has of its own, the letter and its size, is a new letter's. A pass
+ * that was through the gate's one opening is through the letter's primary hole, the one the letter is sized by,
+ * which is where a new pass through a letter goes.
+ *
+ * Only a plain upright gate on a five inch track: a stack, a tilted gate and a round or hexagonal one have
+ * shapes and passes of their own that a letter has no answer for, and the whoop canvas and a map have no
+ * letters.
+ */
+export function canBecomeLetter(doc, el) {
+  return Boolean(el) && (el.type === 'gate' || el.type === 'flaggedGate') && !el.group
+    && apertureShapeOf(el) === 'square' && Math.round(el.dims.levels) === 1
+    && trackClassOf(doc) !== 'micro' && docModeOf(doc) !== 'freestyle';
+}
+
+export function turnIntoLetter(doc, id, letter) {
+  const el = elementById(doc, id);
+  if (!canBecomeLetter(doc, el)) {
+    return false;
+  }
+  const named = el.name && el.name !== ELEMENTS[el.type].label;
+  const keep = el.name;
+  el.type = 'letter';
+  delete el.flagSide;
+  delete el.unbuiltSides;
+  delete el.style;
+  el.pitch = 0;
+  el.position.z = 0;
+  el.dims = { ...letterDimsFor(letter) };
+  initLetter(el, letter);
+  if (named) {
+    el.name = keep;
+  }
+  for (const s of doc.sequence) {
+    if (s.elementId === id) {
+      s.apertureIndex = primaryOpening(el.letter);
+    }
+  }
+  applyAutoFaces(doc);
+  return true;
+}
+
+/*
+ * A LETTER BACK INTO A GATE, standing where its primary hole is and as big as it is: the gate a letter was a
+ * gap of. The gate is centred on the racing line point of the primary hole and its opening is that hole's box,
+ * so a pass through it is the pass it was. A pass through any other hole of the letter has no opening left to
+ * go through and is taken out of the order, as replaceWith does for a stack that becomes a gate.
+ */
+export function turnIntoGate(doc, id) {
+  const el = elementById(doc, id);
+  if (!el || !isLetterPiece(el) || el.group) {
+    return false;
+  }
+  const primary = primaryOpening(el.letter);
+  const hole = aperturesOf(el)[primary];
+  const at = apertureCenter(el, primary);
+  el.type = 'gate';
+  delete el.letter;
+  el.position = { x: at.x, y: at.y, z: 0 };
+  el.pitch = 0;
+  el.dims = {
+    levels: 1,
+    sillH: hole.sillH,
+    clearW: hole.clearW,
+    clearH: hole.clearH,
+    levelPitch: levelPitchFor(hole.clearH),
+  };
+  if (el.name && /^Letter [A-Z]$/.test(el.name)) {
+    el.name = '';
+  }
+  for (const s of [...doc.sequence]) {
+    if (s.elementId !== id) {
+      continue;
+    }
+    if ((s.apertureIndex ?? 0) === primary) {
+      s.apertureIndex = 0;
+    } else {
+      removeFromSequence(doc, s.id);
+    }
+  }
+  applyAutoFaces(doc);
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* Round the flag                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1198,6 +1354,17 @@ export function partGhosts(doc, type, a, b = a, opts = {}) {
         position: { x: a.x, y: a.y, z: BAR_HURDLE.height },
         yaw: hurdleYaw(doc, a, opts.square),
         props: { dims: { ...defaultDims('horizontalPole', cls), width: BAR_HURDLE.width, depth: BAR_HURDLE.thick, height: BAR_HURDLE.thick } },
+      }],
+    };
+  }
+  if (type === 'invisibleGate') {
+    return {
+      plan: null,
+      items: [{
+        type: 'gate',
+        position: { x: a.x, y: a.y, z: 0 },
+        yaw: placementFor(doc, a, 'gate', { square: opts.square }).yaw,
+        props: { dims: { ...defaultDims('gate', cls) }, pitch: 0, unbuilt: true },
       }],
     };
   }

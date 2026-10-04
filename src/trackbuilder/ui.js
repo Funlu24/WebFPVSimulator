@@ -35,7 +35,9 @@ import {
   GATE_PRESETS, MICRO_GATE_PRESETS, gatePresetsFor,
   applyGatePreset, matchingGatePreset, presetHeight, levelPitchFor, apertureLevels, apertureShapeOf,
   elementHeight, TRACK_CLASS_DEFAULT, trackClassOf, docModeOf, paletteGroupOf, clampByLimits, lowestBase,
+  isLetterPiece, isUnbuilt, letterExtent, pieceLabel,
 } from './elements.js';
+import { LETTERS, openingCount, openingName } from '../props/letters.js';
 import {
   aperturesOf, elementById, kindOf, isSequenceable, logosOf, logoForDecal,
   SCENE_TIMES, SCENE_GROUNDS, sceneOf,
@@ -44,7 +46,7 @@ import { gateNumbers, gateNumberOf, sequenceLabel, faceLabel, unsequencedElement
 import { labelOf, MAP_TOOLS, WHOOP_TOOLS, FIVE_INCH_PIECES, FIVE_INCH_TOOLS } from './elements.js';
 import { replacementsFor } from './snap.js';
 import {
-  canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
+  canBecomeLetter, canBeInvisible, canFlag, flagsAsFlown, flagsOf, roundFlagOf, wallOf, wallFlagsOf, wallIsWoven, wallSizeOf, HURDLE,
   HURDLE_LINES, HURDLE_SIZES, HURDLE_TYPES, canFlyOver, hurdleAngleOf, hurdleLineOf, hurdleSizeOf,
 } from './parts.js';
 import { scaleOf, say as sayLength } from './scale.js';
@@ -80,7 +82,7 @@ import { BOARD_UNKNOWN_TYPES } from '../share/board.js';
 /* The small mark a chip on the lap strip wears for the piece it is a pass of. */
 const CHIP_KINDS = {
   gate: 'gate', doubleStack: 'tall', ladder: 'tall', tower: 'tall', diveGate: 'flat',
-  pole: 'pole', horizontalPole: 'pole', cone: 'cone', flag: 'pole', hoop: 'ring', hexGate: 'hex',
+  pole: 'pole', horizontalPole: 'pole', cone: 'cone', flag: 'pole', hoop: 'ring', hexGate: 'hex', letter: 'tall',
 };
 
 /* Metres a second in kilometres an hour. A vehicle's speed is m/s in the
@@ -117,6 +119,18 @@ const WHOOP_WORDS = {
 const IN = 0.0254;
 const FT = 0.3048;
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
+
+/*
+ * WHAT A LETTER HAS TO FLY THROUGH, in a sentence: "W has one gap: between the Vs", "B has two gaps: lower bowl and
+ * upper bowl". The names are the letter's own (src/props/letters.js), the ones the flying order and the card call
+ * each gap by.
+ */
+function letterNote(letter) {
+  const n = openingCount(letter);
+  const names = Array.from({ length: n }, (_, i) => openingName(letter, i));
+  const list = n === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[n - 1]}`;
+  return `${letter} has ${n === 1 ? 'one gap' : (n === 2 ? 'two gaps' : 'three gaps')}: ${list}.`;
+}
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -436,6 +450,8 @@ export class Panels {
     this.paletteClass = cls;
     this.paletteMode = mode;
     this.paletteButtons = new Map();
+    this.runBox = null;
+    this.letterBox = null;
 
     /* A phone's palette is a drawer, with its own close button; the
      * stylesheet shows it only there. */
@@ -459,6 +475,12 @@ export class Panels {
         ? `A sponsor logo painted on the ${ground}. Pick which of the logos it wears, and its size, in the inspector.`
         : def.note);
       (def.group === 'track' ? track : extra).append(b);
+      /* The letter has a choice to make before it is laid, so the twenty six stand under its button while it is in hand. */
+      if (def.id === 'letter') {
+        this.letterBox = el('div', 'tb-letter-opts');
+        this.letterBox.hidden = true;
+        track.append(this.letterBox);
+      }
       /* A five inch track's wall, up gate and hurdle stand among the pieces, each after the one it is made from. */
       if (cls !== 'micro' && def.group === 'track') {
         for (const part of FIVE_INCH_PIECES.filter((p) => p.after === def.id)) {
@@ -640,12 +662,54 @@ export class Panels {
     }
   }
 
+  /*
+   * THE TWENTY SIX, as a grid of capitals: one press picks, the one lit is the one the next click lays or, on a
+   * letter that is selected, the one it is. `onPick` is handed the letter. A group of buttons, each named for what
+   * it is, so a keyboard and a screen reader reach every one.
+   */
+  letterGrid(current, onPick, label) {
+    const grid = el('div', 'tb-letter-grid');
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', label);
+    for (const letter of LETTERS) {
+      const on = letter === current;
+      const b = button(letter, on ? 'tb-seg-btn on' : 'tb-seg-btn', () => onPick(letter), letterNote(letter));
+      b.dataset.letter = letter;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      grid.append(b);
+    }
+    return grid;
+  }
+
+  /*
+   * THE LETTER TOOL'S CHOICE, under its button while it is in hand: which letter the next click lays, and what that
+   * letter has to fly through. They are set before the click and the ghost in the room shows the letter in hand;
+   * afterwards the piece is ordinary and its card changes it.
+   */
+  renderLetterOptions() {
+    const box = this.letterBox;
+    if (!box) {
+      return;
+    }
+    const armed = this.host.armed === 'letter';
+    box.hidden = !armed;
+    box.textContent = '';
+    if (!armed) {
+      return;
+    }
+    const letter = this.host.letterTool;
+    box.append(el('div', 'tb-run-label', 'Letter'));
+    box.append(this.letterGrid(letter, (next) => this.host.setLetterTool(next), 'The letter the next click lays'));
+    box.append(el('p', 'tb-letter-note', letterNote(letter)));
+  }
+
   renderPalette() {
     for (const [id, b] of this.paletteButtons) {
       b.classList.toggle('on', this.host.armed === id);
       b.setAttribute('aria-pressed', this.host.armed === id ? 'true' : 'false');
     }
     this.renderRunOptions();
+    this.renderLetterOptions();
     /* What the pointer does now is said by the coach line, and whether the card
      * shows changes the moment a tool is armed or put away. */
     this.renderCoach();
@@ -863,7 +927,8 @@ export class Panels {
       if (apertures.some((e2) => e2.group)) {
         host.append(el('p', 'tb-help', 'A cube is one piece, five gates that share their pipe. It is flown in at one face and out at another: change which with the Fly order tool.'));
       }
-      const loose = apertures.filter((e2) => !e2.group);
+      /* A letter is sized by its width and height, and a standard gate's opening would make a W the size of a gate. */
+      const loose = apertures.filter((e2) => !e2.group && !isLetterPiece(e2));
       if (loose.length) {
         this.renderGatePresets(host, loose);
       }
@@ -893,6 +958,12 @@ export class Panels {
       this.renderFlagSidePicker(host, element);
     }
 
+    /* A letter's own section is the first thing asked about it, as a gate's flags are: which letter it is and how big
+     * it stands are what it is, and the flight path under it is a screen long. */
+    if (!freestyle && isLetterPiece(element)) {
+      this.renderLetterInspector(host, element);
+    }
+
     if (def.kind === KIND.STRUCTURE) {
       this.renderStructureInspector(host, element, def);
       return;
@@ -920,11 +991,12 @@ export class Panels {
       }
     }
 
-    /* How a stack is flown is a flying order question, and a map has none. */
-    if (!freestyle && def.kind === KIND.APERTURE && aperturesOf(element).length > 1) {
+    /* How a stack is flown is a flying order question, and a map has none. A letter's holes are not a stack:
+     * each is a gate of its own, picked on the pass. */
+    if (!freestyle && def.kind === KIND.APERTURE && aperturesOf(element).length > 1 && !isLetterPiece(element)) {
       this.renderFigurePicker(host, doc, element);
     }
-    if (def.kind === KIND.APERTURE) {
+    if (def.kind === KIND.APERTURE && !isLetterPiece(element)) {
       this.renderGatePresets(host, [element]);
     }
 
@@ -955,7 +1027,7 @@ export class Panels {
       this.appendYawField(host, element);
     }
 
-    if (def.kind === KIND.APERTURE) {
+    if (def.kind === KIND.APERTURE && !isLetterPiece(element)) {
       /*
        * PITCH IS SHOWN FOR EVERY APERTURE ELEMENT, not only for the dive
        * gate, because the tilt is a property of the aperture plane and an
@@ -975,7 +1047,8 @@ export class Panels {
     /* Dimensions, all of them, named the way elements.js names them. */
     const dims = el('div', 'tb-grid2');
     const shape = def.kind === KIND.APERTURE ? apertureShapeOf(element) : 'square';
-    for (const key of Object.keys(def.dims)) {
+    /* A letter's dimensions are its width and its height, set in the letter's own section above. */
+    for (const key of (isLetterPiece(element) ? [] : Object.keys(def.dims))) {
       /*
        * A HOOP AND A HEX GATE HAVE ONE OPENING AND ONE SIZE. There is no stack of hoops, so no count of
        * levels and no spacing; and a hoop is as high as it is wide and a hex gate as high as a hexagon
@@ -1028,11 +1101,22 @@ export class Panels {
     }
     host.append(dims);
     if (def.kind === KIND.APERTURE) {
-      this.renderApertureReadout(host, def, element);
+      if (!isLetterPiece(element)) {
+        this.renderApertureReadout(host, def, element);
+      }
       /* Which sides have pipe. A map's gates are furniture with no opening
        * that scores, so taking a side off one would only be a broken gate. */
       if (!freestyle && shape === 'square') {
         this.renderFrameSides(host, element);
+      } else if (!freestyle && isLetterPiece(element)) {
+        this.renderLetterFrame(host, element);
+      }
+      /* A plain gate on a five inch track can be a letter: the way a track that was drawn with gates is edited. */
+      if (!freestyle && canBecomeLetter(doc, element)) {
+        host.append(el('h3', null, 'Make it a letter'));
+        host.append(el('p', 'tb-help', 'This gate becomes a capital of pipe, standing where it stands and facing the way it faces, in the same place in the flying order. The gap the pass goes through is the one the letter is sized by.'));
+        host.append(this.letterSelect('Letter', '', (next) => this.host.setPieceLetter(element.id, next),
+          `make-letter-${element.id}`, 'Takes this gate\u2019s place in the track as a letter'));
       }
     }
 
@@ -2012,6 +2096,49 @@ export class Panels {
   }
 
   /*
+   * A LETTER'S OWN SECTION: which letter it is, how big it stands, what it has to fly through and the way back to a
+   * gate. The letter is picked from all twenty six, as on the palette, and changing it keeps the size the author
+   * gave it and its place in the flying order. The size is the letter's as it stands, pipe and all, and not the
+   * gap's: the author is thinking of a letter, and the gap follows (src/props/letters.js).
+   */
+  renderLetterInspector(host, element) {
+    const id = element.id;
+    host.append(el('h3', null, 'Letter'));
+    host.append(this.letterGrid(element.letter, (next) => this.host.setPieceLetter(id, next), 'Which letter this is'));
+    host.append(el('p', 'tb-help', `${letterNote(element.letter)} Each gap is a gate of its own in the flying order: the pass says which one it goes through.`));
+    const size = letterExtent(element);
+    const grid = el('div', 'tb-grid2');
+    grid.append(
+      this.lengthField(`letter-w-${id}`, 'Letter width', size.width, (val) => this.host.setLetterSize(id, { width: val }), { step: 0.25, min: 0.5 }),
+      this.lengthField(`letter-h-${id}`, 'Letter height', size.height, (val) => this.host.setLetterSize(id, { height: val }), { step: 0.25, min: 0.5 }),
+    );
+    host.append(grid);
+    const holes = aperturesOf(element);
+    const n = (m) => show(m, 2);
+    host.append(el('p', 'tb-fig-blurb', `${holes.map((h, i) => (h.poly.length
+      ? `${openingName(element.letter, i)}: a gap that fits in ${n(h.clearW)} by ${n(h.clearH)} m`
+      : `${openingName(element.letter, i)}: too small for the pipe, so nothing scores there`)).join('. ')}. The pipe is 2 inch, and the pipe of a letter is solid.`));
+    if (!element.group) {
+      host.append(button('Make it a gate', 'tb-btn', () => this.host.makeLetterAGate(id),
+        'A plain gate where the primary gap is, as big as it is. The pass through any other gap is taken out of the order.'));
+    }
+  }
+
+  /*
+   * A LETTER'S FRAME, as one choice. A letter has no four sides to take away one at a time: it has its pipe, or, made
+   * invisible, only its gaps, which still score and light and have nothing to hit.
+   */
+  renderLetterFrame(host, element) {
+    const hidden = isUnbuilt(element);
+    host.append(el('h3', null, 'Frame'));
+    host.append(el('p', 'tb-help', hidden
+      ? 'The pipe is taken away: the gaps still score and light, and there is nothing to hit. It shows in the room as its gaps alone.'
+      : 'The letter is built of pipe. Make it invisible to keep its gaps as targets with nothing built round them.'));
+    host.append(button(hidden ? 'Put the pipe back' : 'Make it invisible', 'tb-btn',
+      () => this.host.setPieceInvisible(element.id, !hidden)));
+  }
+
+  /*
    * THE FOUR SIDES OF THE FRAME, each a toggle: lit means there is pipe
    * there. Taking one away keeps the opening, which still scores, lights and
    * pins the line (FRAME_SIDES in elements.js); this is also where a side
@@ -2038,8 +2165,9 @@ export class Panels {
       grid.append(b);
     }
     host.append(grid);
+    const hidden = isUnbuilt(element);
     if (FRAME_SIDES.some((side) => !sides[side])) {
-      host.append(button('Put every side back', 'tb-btn', () => {
+      host.append(button(hidden ? 'Put the frame back' : 'Put every side back', 'tb-btn', () => {
         this.host.edit('put the frame back', (d) => {
           const e2 = elementById(d, element.id);
           if (e2) {
@@ -2048,6 +2176,12 @@ export class Panels {
           }
         });
       }));
+    }
+    /* All four at once, as an invisible gate: an opening with nothing built round it, which is the way to put a target
+     * where no frame of its own is wanted. A cube's faces and a wall's bays share their pipe and are not offered it. */
+    if (!hidden && canBeInvisible(element) && !this.host.isWhoopRace()) {
+      host.append(button('Make it invisible', 'tb-btn', () => this.host.setPieceInvisible(element.id, true),
+        'Take every side away, and the flag if it has one: the opening still scores and lights, with nothing to hit.'));
     }
   }
 
@@ -2495,7 +2629,7 @@ export class Panels {
       }
       /* A whole course made one size: Select all, and one press. A cube's faces and a wall's bays are sized as the
        * pieces they are. */
-      const loose = ids.map((id) => elementById(doc, id)).filter((e2) => e2 && kindOf(e2) === KIND.APERTURE && !e2.group);
+      const loose = ids.map((id) => elementById(doc, id)).filter((e2) => e2 && kindOf(e2) === KIND.APERTURE && !e2.group && !isLetterPiece(e2));
       if (!this.host.isWhoopRace() && loose.length) {
         const looseIds = loose.map((e2) => e2.id);
         const sameAs = (preset) => loose.every((e2) => Math.abs(e2.dims.clearW - preset.clearW) < 1e-6);
@@ -2523,7 +2657,7 @@ export class Panels {
     const at = entries.find((q) => q.id === focusId) ?? entries[0] ?? null;
     const number = at ? numbers.get(at.id) : null;
     const flown = entries.length;
-    const called = element.name || labelOf(element.type, cls);
+    const called = element.name || pieceLabel(element, cls);
     if (flown > 1 && touched) {
       /* On a touched screen the strip along the foot is the way to another pass (a chip
        * is a finger there, and the passes of this piece are ringed on it): a row of
@@ -2565,6 +2699,8 @@ export class Panels {
     /* THE FIVE INCH PIECE'S OWN CHOICES: which way it faces, its flags, and the flag gone round before the pass the
      * card is about. */
     this.cardFacing(card, element);
+    this.cardLetter(card, element, at);
+    this.cardFrame(card, element);
     this.cardPassOn(card, element, at);
     this.cardFlags(card, element);
     this.cardHurdle(card, element, touched);
@@ -2765,7 +2901,15 @@ export class Panels {
           this.host.edit('move', (d) => { elementById(d, id).position.y = round6(val); });
         }, { step: 1, places: 2 }),
       );
-      if (def.kind === KIND.APERTURE) {
+      if (def.kind === KIND.APERTURE && isLetterPiece(element)) {
+        /* How big the letter stands, pipe and all: its primary gap follows (setLetterSize in app.js). It stands on the
+         * ground and upright, so it has no height off the ground and no tilt. */
+        const size = letterExtent(element);
+        grid.append(
+          this.field(`card-lw-${id}`, 'Width (m)', size.width, (val) => this.host.setLetterSize(id, { width: val }), { step: 0.25, places: 2, min: 0.5 }),
+          this.field(`card-lh-${id}`, 'Height (m)', size.height, (val) => this.host.setLetterSize(id, { height: val }), { step: 0.25, places: 2, min: 0.5 }),
+        );
+      } else if (def.kind === KIND.APERTURE) {
         grid.append(this.field(`card-h-${id}`, 'Height off ground (m)', element.dims.sillH ?? 0, (val) => {
           this.host.edit('resize', (d) => { elementById(d, id).dims.sillH = round6(Math.max(0, val)); });
         }, { step: 0.25, places: 2, min: 0 }));
@@ -2912,6 +3056,94 @@ export class Panels {
   }
 
   /*
+   * A SELECT OF THE TWENTY SIX, in the card's own row: a label and the letters, the way Replace with is offered. A
+   * select and not the grid the palette has, because the card is a few rows beside a piece and a grid of twenty six
+   * is three of them. `current` is lit; with none it asks to be chosen.
+   */
+  letterSelect(label, current, onPick, key, title) {
+    const row = el('label', 'tb-field tb-card-swap tb-card-letter');
+    row.append(el('span', 'tb-field-label', label));
+    const sel = el('select');
+    sel.dataset.tbkey = key;
+    sel.title = title;
+    if (!current) {
+      const none = el('option', null, 'Choose a letter');
+      none.value = '';
+      sel.append(none);
+    }
+    for (const letter of LETTERS) {
+      const opt = el('option', null, `${letter}, ${letterNote(letter).replace(`${letter} has `, '')}`);
+      opt.value = letter;
+      if (letter === current) {
+        opt.selected = true;
+      }
+      sel.append(opt);
+    }
+    sel.addEventListener('change', () => {
+      if (sel.value) {
+        onPick(sel.value);
+      }
+    });
+    row.append(sel);
+    return row;
+  }
+
+  /*
+   * A LETTER, AND A GATE THAT COULD BE ONE. A letter says which it is and changes to another in place, keeping its size,
+   * where it stands and its place in the flying order; one with more than one gap says which gap this pass goes
+   * through. A plain gate on a five inch track offers to become a letter, which is how a track that already has a gate
+   * where its W is edited, without a gate being deleted and the order put right. Only a five inch track: a hall and a
+   * map have no letters.
+   */
+  cardLetter(card, element, at) {
+    if (this.host.isWhoopRace()) {
+      return;
+    }
+    if (isLetterPiece(element)) {
+      card.append(this.letterSelect('Letter', element.letter, (next) => this.host.setPieceLetter(element.id, next),
+        `card-letter-${element.id}`, 'Another letter in its place: the same size, the same spot in the flying order'));
+      const holes = aperturesOf(element);
+      if (at && holes.length > 1) {
+        card.append(this.cardChoice('Flies through', holes.map((h, i) => ({
+          label: openingName(element.letter, i),
+          on: (at.apertureIndex ?? 0) === i,
+          className: 'tb-card-wide',
+          run: () => this.host.setSequenceAperture(at.id, i),
+          title: `This pass goes through the gap ${openingName(element.letter, i)}`,
+        })), 'Which gap of the letter this pass goes through'));
+      }
+      return;
+    }
+    if (canBecomeLetter(this.host.doc, element)) {
+      card.append(this.letterSelect('Make it a letter', '', (next) => this.host.setPieceLetter(element.id, next),
+        `card-make-letter-${element.id}`, 'Takes this gate\u2019s place in the track as a letter: where it stands, which way it faces and its place in the flying order stay'));
+    }
+  }
+
+  /*
+   * THE FRAME, AS ONE CHOICE: built, or invisible. An invisible gate has nothing built round its opening: it scores
+   * and it lights when it is the next one, and there is no pipe to hit. Any gate or letter can be made one and put
+   * back, and the four sides one at a time are in the details. Only a five inch piece, and not one that shares its
+   * pipe with others in a wall or a cube.
+   */
+  cardFrame(card, element) {
+    if (this.host.isWhoopRace() || !canBeInvisible(element)) {
+      return;
+    }
+    const hidden = isUnbuilt(element);
+    card.append(this.cardChoice('Frame', [
+      {
+        label: 'Built', on: !hidden, run: () => this.host.setPieceInvisible(element.id, false),
+        title: 'Pipe round the opening, as a gate or a letter is built',
+      },
+      {
+        label: 'Invisible', on: hidden, run: () => this.host.setPieceInvisible(element.id, true),
+        title: 'Nothing built: the opening still scores and lights, and there is nothing to hit. A flag goes with the frame.',
+      },
+    ], 'Whether the opening has a frame round it'));
+  }
+
+  /*
    * WHICH SIDE OF A FLAG THE LINE GOES ROUND, as the compass: the line passes on the north side of it, or the south,
    * or either of the others, and the pass is turned to face that way and kept there. That is what a turn flag at
    * the end of a long oval is, a pass on its far side, and it was a round handle on the plan that had to be dragged
@@ -2938,7 +3170,7 @@ export class Panels {
    * seen facing the gate. A hurdle has no top, because its flags are at its ends. Only on a five inch track.
    */
   cardFlags(card, element) {
-    if (this.host.isWhoopRace() || !canFlag(element)) {
+    if (this.host.isWhoopRace() || !canFlag(element) || isUnbuilt(element)) {
       return;
     }
     const now = flagsOf(element);
@@ -2959,7 +3191,8 @@ export class Panels {
    * refused, with the reason, because Flags is the row above. `label` lets a wall's card say which bay it is about.
    */
   cardRound(card, element, at, label = 'Round the flag') {
-    if (this.host.isWhoopRace() || !at || kindOf(element) !== KIND.APERTURE) {
+    /* A letter has no pennant to go round, and nor has a gate with no frame. */
+    if (this.host.isWhoopRace() || !at || kindOf(element) !== KIND.APERTURE || isLetterPiece(element) || isUnbuilt(element)) {
       return;
     }
     const has = flagsAsFlown(this.host.doc, at.id);
@@ -3277,6 +3510,10 @@ export class Panels {
       chip.dataset.seq = p.seq.id;
       chip.dataset.el = p.element.id;
       chip.dataset.kind = CHIP_KINDS[p.element.type] ?? 'gate';
+      /* An opening with no frame is drawn dashed, as the plan draws it, so a strip can be read without the room. */
+      if (isUnbuilt(p.element)) {
+        chip.dataset.invisible = '1';
+      }
       if (warned.has(p.seq.id)) {
         chip.classList.add('warn');
       }

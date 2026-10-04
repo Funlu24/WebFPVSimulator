@@ -36,7 +36,10 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND, TRACK_CLASS_DEFAULT, TUNING, tuningFor } from './elements.js';
+import {
+  KIND, TRACK_CLASS_DEFAULT, TUNING, isLetterPiece, letterOfPiece, tuningFor,
+} from './elements.js';
+import { openingName } from '../props/letters.js';
 import {
   aperturesOf, apertureCenter, createSequenceEntry, elementById, elementNormal, kindOf,
 } from './model.js';
@@ -74,8 +77,10 @@ export const FIGURES = {
 /* The figures that go round the side of the structure, which is the way they turn: left or right. */
 export const HANDED_FIGURES = ['spiralUp', 'spiralDown'];
 
+/* A letter's holes are not a stack: they stand where the letter has them, side by side or one over another, and none of
+ * the figures below (a spiral up the frame, a split-S through its top and bottom) means anything about a B. */
 export function defaultFigure(el) {
-  return aperturesOf(el).length >= 2 ? 'spiralUp' : 'single';
+  return !isLetterPiece(el) && aperturesOf(el).length >= 2 ? 'spiralUp' : 'single';
 }
 
 export function figureBlurb(el, figureId) {
@@ -105,7 +110,7 @@ export function figureBlurb(el, figureId) {
 
 export function figuresFor(el) {
   const n = aperturesOf(el).length;
-  if (n < 2) {
+  if (n < 2 || isLetterPiece(el)) {
     return [FIGURES.single];
   }
   const out = [FIGURES.spiralUp, FIGURES.splitS, FIGURES.revSplitS];
@@ -119,6 +124,10 @@ export function figuresFor(el) {
 export function levelName(el, index) {
   const n = aperturesOf(el).length;
   const i = Math.max(0, Math.min(n - 1, Math.round(index ?? 0)));
+  /* A letter's hole is named for what it is in that letter. */
+  if (isLetterPiece(el)) {
+    return openingName(letterOfPiece(el), i);
+  }
   if (n === 2) {
     return i === 0 ? 'bottom' : 'top';
   }
@@ -235,7 +244,7 @@ export function upgradeStackedFigures(doc) {
       i += 1;
     }
     const n = aperturesOf(el).length;
-    if (n < 2 || run.length < 2) {
+    if (n < 2 || run.length < 2 || isLetterPiece(el)) {
       continue;
     }
     /* The author has said which way through at least one of these holes.

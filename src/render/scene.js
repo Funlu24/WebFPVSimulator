@@ -114,8 +114,14 @@ import { Colliders } from '../game/collide.js';
 /* A living room's furniture: a table, a chair and a banner, made of boxes. */
 import { isRoomType, roomSolids, ROOM_COLOURS } from '../props/room.js';
 import { addSolids } from '../props/solids.js';
-/* A hoop and a hex gate: the outline of the hole, and of the run of tubes round it. */
-import { frameParts, outlineOf, barsAlong, paneFan } from '../props/aperture.js';
+/* A hoop and a hex gate: the outline of the hole, and of the run of tubes round it. A letter's holes are
+ * polygons, which push in and cut into triangles for the same two jobs. */
+import {
+  frameParts, outlineOf, barsAlong, paneFan, insetPolygon, paneOfPolygon, polygonArea, polygonBounds,
+} from '../props/aperture.js';
+/* The capital letters as pipe, and the holes in them. */
+import { layoutLetter } from '../props/letters.js';
+import { LETTER_TUBE_OD } from '../units.js';
 
 /*
  * Static scenery merger. A forest of individual Groups costs a draw call
@@ -1803,11 +1809,35 @@ function outlineBars(shape, halfW, halfH, bar) {
 }
 
 /*
+ * THE LIT OUTLINE OF A LETTER'S HOLE: the same bar, laid along the polygon pulled in by half a bar so its outer
+ * face is on the hole's edge. A hole too small to take the bar pulled in (the point of a W at a small size) is
+ * outlined where it stands, which is a thick line on a thin hole and still the hole.
+ */
+function polygonBars(poly, bar) {
+  const inner = insetPolygon(poly, bar * 0.5);
+  return barsAlong(inner.length >= 3 && polygonArea(inner) > 1e-6 ? inner : poly, bar);
+}
+
+/*
  * THE TARGET PANE OF A ROUND OR SIX SIDED OPENING: src/props/aperture.js's fan of triangles, with the
  * uv the square's pane has, so the wrong way bar on it is drawn by the same shader.
  */
 function shapedPaneGeometry(shape, w, h) {
   const fan = paneFan(shape, w, h);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(fan.position, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(fan.uv, 2));
+  geo.setIndex(fan.index);
+  return geo;
+}
+
+/*
+ * THE TARGET PANE OF A LETTER'S HOLE: the polygon cut into triangles, about the middle of the box it fits in
+ * (where the cue is put) and a little inside it, with the uv a rectangle's pane has across that box.
+ */
+function polygonPaneGeometry(hole, scale) {
+  const rel = hole.poly.map(([x, y]) => [(x - hole.bx) * scale, (y - hole.by) * scale]);
+  const fan = paneOfPolygon(rel, hole.bw, hole.bh);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(fan.position, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(fan.uv, 2));
@@ -1828,7 +1858,7 @@ function shapedPaneGeometry(shape, w, h) {
  * the obstacle's own local frame and returns them, along with which
  * opening ended up carrying the glow.
  */
-function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWanted, micro = false, shape = 'square') {
+function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWanted, micro = false, shape = 'square', holes = null) {
   /*
    * The aperture markers. Square now, because the opening is square, and
    * built as one merged geometry per obstacle so a stacked obstacle still
@@ -1907,7 +1937,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
     const halfH = clearH * 0.5;
     /* Four thin bars just inside the frame, so the lit line the pilot aims
      * at is the clear opening itself and not the tube around it. */
-    const parts = shape === 'square' ? [
+    const parts = shape === 'square' && !holes ? [
       [0, cy + halfH - bar * 0.5, clearW, bar],
       [0, cy - halfH + bar * 0.5, clearW, bar],
       [-halfW + bar * 0.5, cy, bar, clearH],
@@ -1924,8 +1954,23 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
       hg.translate(px, py, 0);
       haloGeos.push(hg);
     }
+    /* A letter's hole is a polygon of its own, in the letter's frame and not in a box that is centred on anything:
+     * its lit outline is the same bar, one length for each side of it. */
+    if (holes) {
+      for (const seg of polygonBars(holes[k].poly, bar)) {
+        const geo = new THREE.BoxGeometry(seg.len, bar, bar);
+        geo.rotateZ(seg.angle);
+        geo.translate(seg.x, seg.y, 0);
+        outlineGeos.push(geo);
+        const grow = micro ? 0.009 * MICRO_SCALE : 0.05;
+        const hg = new THREE.BoxGeometry(seg.len * 1.06 + grow, bar * 1.06 + grow, bar * 0.7);
+        hg.rotateZ(seg.angle);
+        hg.translate(seg.x, seg.y, 0);
+        haloGeos.push(hg);
+      }
+    }
     /* A hoop's and a hex gate's outline is the same bar, in one length for each side of the shape. */
-    if (shape !== 'square') {
+    if (shape !== 'square' && !holes) {
       for (const seg of outlineBars(shape, halfW, halfH, bar)) {
         const geo = new THREE.BoxGeometry(seg.len, bar, bar);
         geo.rotateZ(seg.angle);
@@ -1973,7 +2018,12 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
    * as light around a gate rather than as a pane in one, at a size the room
    * can hold. The gain is turned down with it, at the call sites.
    */
-  const glowSize = Math.max(clearW, clearH) * (micro ? 1.5 : 2.6);
+  /* A letter's glow sits round the box of the hole it is on, which is not the box of the letter and is not
+   * centred on its racing line point. */
+  const lit = holes ? holes[primary] : null;
+  const glowW = lit ? lit.bw : clearW;
+  const glowH = lit ? lit.bh : clearH;
+  const glowSize = Math.max(glowW, glowH) * (micro ? 1.5 : 2.6);
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(glowSize, glowSize),
     new THREE.ShaderMaterial({
@@ -1988,7 +2038,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
         uGain: { value: 0.1 },
         /* Half the clear opening as a fraction of the plane, so the lit
          * band lands on the frame whatever size the opening is. */
-        uEdge: { value: (clearW * 0.5) / glowSize },
+        uEdge: { value: (glowW * 0.5) / glowSize },
         /*
          * How much of the wash goes ACROSS the opening, and it is zero in a
          * room. The comment on the term below says what it is for: it is
@@ -2004,8 +2054,9 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
         uFill: { value: micro ? 0.0 : 0.16 },
         /* What a hoop and a hex gate need to find their own edge: half the opening as a fraction
          * of the plane along each axis, and whether it is a hexagon. Unused by a square's. */
-        uHalf: { value: new THREE.Vector2((clearW * 0.5) / glowSize, (clearH * 0.5) / glowSize) },
-        uHex: { value: shape === 'hex' ? 1.0 : 0.0 },
+        uHalf: { value: new THREE.Vector2((glowW * 0.5) / glowSize, (glowH * 0.5) / glowSize) },
+        /* 0 an ellipse, 1 a hexagon, 2 a box (a letter's hole, which is lit round the box it fits in). */
+        uHex: { value: shape === 'hex' ? 1.0 : (holes ? 2.0 : 0.0) },
       },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
@@ -2014,7 +2065,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
-      fragmentShader: shape !== 'square' ? /* glsl */ `
+      fragmentShader: shape !== 'square' || holes ? /* glsl */ `
         varying vec2 vUv;
         uniform vec3 uFront;
         uniform vec3 uBack;
@@ -2028,7 +2079,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
            * radius is its length and the hexagon's is the larger of its flat and its slant, and
            * either is put back into the square's units, where the band sits at uEdge. */
           vec2 u = abs(vUv - 0.5) / uHalf;
-          float rho = mix(length(u), max(u.y, u.x + 0.5 * u.y), uHex);
+          float rho = uHex > 1.5 ? max(u.x, u.y) : mix(length(u), max(u.y, u.x + 0.5 * u.y), uHex);
           float r = rho * uEdge;
           float band = exp(-pow((r - uEdge) / 0.055, 2.0));
           float fill = smoothstep(uEdge, 0.0, r) * uFill;
@@ -2059,14 +2110,22 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
       `,
     }),
   );
-  glow.position.y = sills[primary] + clearH * 0.5;
+  if (lit) {
+    glow.position.set(lit.bx, lit.by, 0);
+  } else {
+    glow.position.y = sills[primary] + clearH * 0.5;
+  }
   glow.layers.set(1);
   group.add(glow);
   /* The pane the pilot actually aims at: green from the entry face, red
    * from the other. Hidden until the race names this gate as next, then
    * it jumps with the target. */
-  const cue = gateCue(clearW, clearH, shape);
-  cue.position.y = sills[primary] + clearH * 0.5;
+  const cue = gateCue(glowW, glowH, lit ? 'poly' : shape, lit);
+  if (lit) {
+    cue.position.set(lit.bx, lit.by, 0);
+  } else {
+    cue.position.y = sills[primary] + clearH * 0.5;
+  }
   group.add(cue);
   return {
     ring, halo, rings, halos, glow, cue, fillMat: cue.userData.fillMat, ringColor, primary,
@@ -2091,7 +2150,7 @@ function apertureMarkers(group, sills, clearW, clearH, stack, isStart, primaryWa
  * value of it: a gate that scores differently from how it looks is a gate the
  * pilot cannot learn.
  */
-function gateCue(clearW, clearH, shape = 'square') {
+function gateCue(clearW, clearH, shape = 'square', hole = null) {
   const cue = new THREE.Group();
   cue.visible = false;
   const mat = new THREE.ShaderMaterial({
@@ -2148,7 +2207,7 @@ function gateCue(clearW, clearH, shape = 'square') {
   const fill = new THREE.Mesh(
     shape === 'square'
       ? new THREE.PlaneGeometry(clearW * 0.94, clearH * 0.94)
-      : shapedPaneGeometry(shape, clearW * 0.94, clearH * 0.94),
+      : (hole ? polygonPaneGeometry(hole, 0.94) : shapedPaneGeometry(shape, clearW * 0.94, clearH * 0.94)),
     mat,
   );
   cue.add(fill);
@@ -3119,6 +3178,14 @@ function coursePlacements(course) {
     unbuilt: structure.unbuilt === true,
     /* 'circle' for a hoop and 'hex' for a hex gate; not there for a gate. */
     ...(structure.shape ? { shape: structure.shape } : {}),
+    /* A letter: which one, which way round it is built, and the size of its PRIMARY hole, which is what its pipe is
+     * laid out from whichever hole the first pass is through. Not there for a gate. */
+    ...(structure.letter ? {
+      letter: structure.letter,
+      mirror: structure.letterMirror === true,
+      clearW: structure.dims.clearW,
+      clearH: structure.dims.clearH,
+    } : {}),
     /* The plain dress: no sleeves, a header board as wide as the frame. Not there for a gate in the
      * MultiGP dress, which is every gate that has ever shipped. */
     ...(structure.plain ? { plain: true } : {}),
@@ -3175,8 +3242,9 @@ function coursePlacements(course) {
       const structure = st.structure;
       pl = {
         spec: specFor(structure, st.clearW, st.clearH),
-        x: st.x,
-        z: st.z,
+        /* The piece stands at its own middle, and a letter's station stands at its hole. */
+        x: structure.letter ? structure.x : st.x,
+        z: structure.letter ? structure.z : st.z,
         baseY: st.baseY,
         /* The MESH takes the first station's heading and the SCORING takes
          * each station's own. A vertical frame drawn at a heading and at
@@ -3209,6 +3277,11 @@ function coursePlacements(course) {
       pitch: st.pitch,
       cue: st.cue ?? '',
       elementId: st.elementId,
+      /* A letter's hole scores where it is and as it is shaped, which is not the piece's middle and not a box:
+       * the station says so. Nothing here for any other piece. */
+      ...(st.poly ? {
+        x: st.x, z: st.z, poly: st.poly, centreY: st.centreY, clearW: st.clearW, clearH: st.clearH,
+      } : {}),
     });
   });
   /*
@@ -3614,6 +3687,120 @@ function shapedGate(spec, index, isStart, pitch, opts = {}) {
     primary: 0,
     aperture,
     colliders: parts.caps,
+  };
+}
+
+/*
+ * A LETTER: a run of straight tubes in the shape of a capital, with one to three holes to fly through.
+ *
+ * The pipe is src/props/letters.js's: layoutLetter says where every tube and joint is for the primary hole's size,
+ * which is the size this structure was handed (spec.clearW by spec.clearH, already through the game's obstacle
+ * scale, with the tube's radius to match), so what is drawn, what is solid and what is scored are one layout.
+ * Each tube is a cylinder and a capsule made from the same two points, as a hoop's are; a joint is a fitting where
+ * two tubes meet and a plain cap where one ends. Fittings are not solid, as an upright gate's corners are not.
+ *
+ * WHICH WAY ROUND. A letter reads the right way round to a pilot flying along its normal, and the mesh is built
+ * facing the first pass through it, so a first pass the other way is built turned about the vertical axis
+ * (spec.mirror, from src/game/trackdoc.js). The holes score in each station's own frame and are turned
+ * for it there, not here.
+ *
+ * AN INVISIBLE LETTER (spec.unbuilt) has no pipe, no joint and no solid, and keeps what it is for: the holes,
+ * which score, light and carry the line. The same rule as a gate that is a gap in the lattice.
+ *
+ * The lit target: each hole has its own outline and halo, so only the hole a pass names lights, and the glow and
+ * the pane are put on the hole the race wants next (setNextGate moves them to `glowAt`). Local frame, and
+ * colliders, match obstacle(): x across, y up from the base, z through.
+ */
+function letterGate(spec, index, isStart, opts = {}) {
+  const g = new THREE.Group();
+  const mats = sharedObstacleMats();
+  /* A letter's own pipe, 2 inch, through the obstacle scale as the gate's is. */
+  const tubeR = LETTER_TUBE_OD * GATE_SCALE * 0.5;
+  const laid = layoutLetter(spec.letter, spec.clearW, spec.clearH, tubeR, { mirror: spec.mirror === true });
+  const unbuilt = spec.unbuilt === true;
+  const caps = [];
+
+  if (!unbuilt) {
+    const up = new THREE.Vector3(0, 1, 0);
+    const along = new THREE.Vector3();
+    const joins = new Map();
+    const at = (p) => `${Math.round(p[0] * 1e4)},${Math.round(p[1] * 1e4)}`;
+    for (const [a, b] of laid.tubes) {
+      along.set(b[0] - a[0], b[1] - a[1], 0);
+      const len = along.length();
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(tubeR, tubeR, len, 8), mats.frame);
+      tube.position.set((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, 0);
+      tube.quaternion.setFromUnitVectors(up, along.divideScalar(len));
+      tube.castShadow = true;
+      outlineHull(tube, 1.06);
+      g.add(tube);
+      caps.push({
+        kind: 'gate', ax: a[0], ay: a[1], az: 0, bx: b[0], by: b[1], bz: 0, r: tubeR,
+      });
+      for (const p of [a, b]) {
+        joins.set(at(p), (joins.get(at(p)) ?? 0) + 1);
+      }
+    }
+    for (const p of laid.joints) {
+      const fitted = (joins.get(at(p)) ?? 0) > 1;
+      const joint = new THREE.Mesh(
+        new THREE.SphereGeometry(fitted ? tubeR * 1.5 : tubeR, 8, 6),
+        fitted ? mats.fitting : mats.frame,
+      );
+      joint.position.set(p[0], p[1], 0);
+      joint.castShadow = true;
+      g.add(joint);
+    }
+  }
+
+  /* The holes as the lit target draws them: each polygon in the letter's frame, with the box it fits in. A hole
+   * the pipe has squeezed to nothing is drawn where its centre lines put it, so there is still something lit. */
+  const holes = laid.openings.map((o) => {
+    const poly = o.ok ? o.poly : o.nominal;
+    const b = polygonBounds(poly);
+    return {
+      poly,
+      bx: (b.x0 + b.x1) / 2,
+      by: (b.y0 + b.y1) / 2,
+      bw: Math.max(0.05, b.x1 - b.x0),
+      bh: Math.max(0.05, b.y1 - b.y0),
+    };
+  });
+  const marks = apertureMarkers(
+    g, holes.map(() => 0), spec.clearW, spec.clearH, holes.length, isStart, opts.primary, false, 'letter', holes,
+  );
+  const apertures = laid.openings.map((o, k) => ({
+    shape: 'poly',
+    index: k,
+    sillH: o.sillH,
+    centreY: o.cy,
+    centreX: o.cx,
+    clearW: o.clearW,
+    clearH: o.clearH,
+    glowAt: [holes[k].bx, holes[k].by],
+  }));
+
+  return {
+    group: g,
+    kindName: spec.kindName ?? 'letter',
+    /* An invisible letter is not there to be cleared by anything. */
+    top: unbuilt ? 0 : laid.top,
+    animate: [...marks.rings, ...marks.halos, marks.glow, marks.cue],
+    ringMat: marks.ring.material,
+    haloMat: marks.halo.material,
+    ringMeshes: marks.rings,
+    haloMeshes: marks.halos,
+    glowMat: marks.glow.material,
+    glowMesh: marks.glow,
+    cueGroup: marks.cue,
+    fillMat: marks.fillMat,
+    ringColor: marks.ringColor,
+    apertures,
+    primary: marks.primary,
+    aperture: apertures[marks.primary],
+    colliders: caps,
+    /* Where a number goes beside a letter whose holes are each flown: past the pipe, not past the primary hole. */
+    badgeX: Math.max(Math.abs(laid.left), Math.abs(laid.right)) + 0.3,
   };
 }
 
@@ -5286,19 +5473,21 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     const dress = st.virtual ? null : kit.forGate(st.dress ?? i);
     const made = st.virtual
       ? virtualGate(st.spec.clearW, st.spec.clearH, st.marker)
-      : (st.spec.shape
-        ? shapedGate(st.spec, flyOrder, st.isStart, st.pitch, { micro })
-        : (Math.abs(st.pitch) > 1e-6
+      : (st.spec.letter
+        ? letterGate(st.spec, flyOrder, st.isStart, { primary: st.primary })
+        : (st.spec.shape
+          ? shapedGate(st.spec, flyOrder, st.isStart, st.pitch, { micro })
+          : (Math.abs(st.pitch) > 1e-6
           ? tiltedGate(st.spec, flyOrder, st.isStart, st.pitch, { kit: dress, micro })
-          : obstacle(st.spec, flyOrder, st.isStart, {
-            micro,
-            primary: st.primary,
-            kit: dress,
-            flagSigns: st.flagSigns,
-            flagLeans: st.flagLeans,
-            flagH: st.flagH,
-            flagPoleR: st.flagPoleR,
-          })));
+            : obstacle(st.spec, flyOrder, st.isStart, {
+              micro,
+              primary: st.primary,
+              kit: dress,
+              flagSigns: st.flagSigns,
+              flagLeans: st.flagLeans,
+              flagH: st.flagH,
+              flagPoleR: st.flagPoleR,
+            }))));
     const g = made.group;
     const y = height(st.x, st.z) + st.baseY;
     const yaw = st.yaw;
@@ -5351,7 +5540,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
           continue;
         }
         const badge = openingBadge(station.flyOrder + 1);
-        badge.position.set(st.spec.clearW * 0.5 + 0.22, ap.centreY, 0);
+        badge.position.set(made.badgeX ?? (st.spec.clearW * 0.5 + 0.22), ap.centreY, 0);
         g.add(badge);
       }
     }
@@ -5426,9 +5615,20 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
       const named = station.apertureIndex == null
         ? null
         : Math.min(made.apertures.length - 1, Math.max(0, station.apertureIndex));
+      /* A letter's hole scores in the frame of the station that flies it: its own corners, turned for the way it is
+       * flown (src/game/trackdoc.js), about its own point, with the height it is at. The mesh's hole, in the
+       * mesh's frame, is only what is lit. */
       const scoring = named == null
         ? made.apertures
-        : [made.apertures[named]];
+        : [station.poly
+          ? {
+            ...made.apertures[named],
+            poly: station.poly,
+            centreY: station.centreY,
+            clearW: station.clearW,
+            clearH: station.clearH,
+          }
+          : made.apertures[named]];
       /*
        * Which openings LIGHT UP when this station is the target. A designed
        * stack names its hole, so exactly one lights and the pilot can see
@@ -5440,7 +5640,8 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
         ? made.apertures.map((_, k) => k)
         : [named];
       gates.push({
-        position: new THREE.Vector3(p.x, y, p.z),
+        /* At the structure, or for a letter at the hole this station flies. */
+        position: new THREE.Vector3(station.poly ? station.x : p.x, y, station.poly ? station.z : p.z),
         heading: station.yaw,
         /* The tilt of the direction of travel. Zero everywhere on the built
          * in circuit, which is why race.js's frame reduces to the old one
@@ -5477,6 +5678,9 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
         aperture: scoring[0],
         apertures: scoring,
         primary: made.primary,
+        /* Where the lit target's glow and pane go on this hole, in the mesh's frame: a letter's holes are not one
+         * above another. Nothing for any other piece. */
+        glowAt: named == null ? null : (made.apertures[named].glowAt ?? null),
         kindName: made.kindName,
         cue: station.cue ?? '',
         trackGlow: station.apertureIndex != null && (st.spec.stack ?? 1) > 1,
@@ -5532,6 +5736,10 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
       continue;
     }
     for (const ap of gt.apertures) {
+      /* A letter's holes are each their own size: the polygon is what scores, and checkLetter holds it to the pipe. */
+      if (ap.shape === 'poly') {
+        continue;
+      }
       if (Math.abs(ap.clearW - gt.wantW) > 0.01 || Math.abs(ap.clearH - gt.wantH) > 0.01) {
         throw new Error(
           `scene: ${gt.kindName} opening measured ${ap.clearW.toFixed(4)} by `
@@ -5657,11 +5865,21 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     /* A stacked figure shares one glow across its openings. Put that
      * glow, and the pane, on the hole this station names. */
     if (target.trackGlow && target.aperture) {
-      if (target.glowMesh) {
-        target.glowMesh.position.y = target.aperture.centreY;
-      }
-      if (target.cueGroup) {
-        target.cueGroup.position.y = target.aperture.centreY;
+      if (target.glowAt) {
+        /* A letter's holes are at their own places across the piece as well as up it. */
+        if (target.glowMesh) {
+          target.glowMesh.position.set(target.glowAt[0], target.glowAt[1], 0);
+        }
+        if (target.cueGroup) {
+          target.cueGroup.position.set(target.glowAt[0], target.glowAt[1], 0);
+        }
+      } else {
+        if (target.glowMesh) {
+          target.glowMesh.position.y = target.aperture.centreY;
+        }
+        if (target.cueGroup) {
+          target.cueGroup.position.y = target.aperture.centreY;
+        }
       }
     }
     /*

@@ -36,7 +36,7 @@
 /* FT and IN come from src/units.js, shared with src/game/track.js. The
  * builder must not import the game, so the constants they both need live in
  * a leaf module rather than being typed out twice. */
-import { FT, IN, FRAME_TUBE_OD, GATE_SCALE } from '../units.js';
+import { FT, IN, FRAME_TUBE_OD, GATE_SCALE, LETTER_TUBE_OD } from '../units.js';
 import {
   GATE_OPENING_DEFAULT, GATE_OPENING_MAX, GATE_SPACING_NOMINAL,
   ELEVATED_SILL_MIN, PIPE_OD, POLE_FROM_GATE_MIN, ROOM_WIDTH, ROOM_DEPTH, GRID as MICRO_GRID,
@@ -52,9 +52,14 @@ import { ROOM_SIZES } from '../props/room.js';
 /* What an opening is when it is not a square, and the height a regular hexagon has over its
  * width, again in the one place the shape is written down. */
 import { shapeOf, HEX_HEIGHT_RATIO } from '../props/aperture.js';
+/* The capital letters as pipe, with the holes in them: what a letter piece is made of, in the one place it is
+ * written down. Pure, and imports only the aperture arithmetic above. */
+import {
+  LETTER_DEFAULT, dimsForLetterSize, letterDefaults, letterOf, letterSizeOf, openingCount,
+} from '../props/letters.js';
 
 /* Re-exported because this module's consumers already read it from here. */
-export { FRAME_TUBE_OD };
+export { FRAME_TUBE_OD, LETTER_TUBE_OD };
 
 /*
  * THE TWO TRACK CLASSES.
@@ -774,6 +779,42 @@ export const ELEMENTS = {
       levelPitch: GATE_SPACING_NOMINAL,
     },
   },
+  /*
+   * A CAPITAL LETTER OF PIPE, WITH THE GAPS IN IT TO FLY THROUGH. The WA State Champs have a W on the course
+   * and its gate is the gap between the two Vs; a letter is that in general, every capital from A to Z
+   * (src/props/letters.js draws them), each with one to three holes that score. Which letter it is is the
+   * element's own `letter`, a word of one capital, and the shape of the holes is the letter's, so the document
+   * holds no polygon to get wrong.
+   *
+   * IT KEEPS THE FIVE NUMBERS OF EVERY OPENING. clearW and clearH are the size of its PRIMARY hole measured
+   * axis to axis, and the whole letter is drawn round that hole in the proportions of the design, so the
+   * envelope, the rules, the cards and the board's plan, which read those two numbers and nothing else, read a
+   * letter as they read a gate. `levels` is how many holes the letter has (the reader sets it from the letter),
+   * `sillH` is zero because a letter stands on the ground, and `levelPitch` means nothing and is kept so that
+   * what reads it finds a number. The defaults here are the default letter's.
+   *
+   * A FIVE INCH RACE PIECE: not on the whoop palette and not on a map. Upright (its pitch is zero), and its pipe
+   * is the gate's pipe.
+   */
+  letter: {
+    id: 'letter',
+    label: 'Letter',
+    /* No key of its own: the free ones on the five inch palette are an asset's on a map (the self test pins that the
+     * race palettes' keys are what they were), so the chip is empty and the tool is a click. */
+    key: '',
+    group: 'track',
+    kind: KIND.APERTURE,
+    shape: 'letter',
+    note: 'A capital letter built of pipe, with the gaps in it to fly through: every letter from A to Z. Pick the letter under the tool. A W is the gap between its two Vs; an A has its counter and the space under the bar. Each gap is a gate of its own in the flying order.',
+    pitch: 0,
+    dims: {
+      levels: openingCount(LETTER_DEFAULT),
+      sillH: 0,
+      clearW: letterDefaults(LETTER_DEFAULT).clearW,
+      clearH: letterDefaults(LETTER_DEFAULT).clearH,
+      levelPitch: levelPitchFor(letterDefaults(LETTER_DEFAULT).clearH),
+    },
+  },
   barrier: {
     id: 'barrier',
     label: 'Barrier',
@@ -1321,7 +1362,9 @@ export function presetHeight(preset, shape = 'square') {
  * ladder resized to championship is still a three level ladder.
  */
 export function applyGatePreset(dims, preset, shape = 'square') {
-  if (!dims || !preset) {
+  /* A letter is not sized by a gate's preset: its two numbers are its primary hole's, and a standard gate's would make
+   * a W the size of a gate. Its own size is set by width and height (letterDimsForSize). */
+  if (!dims || !preset || shape === 'letter') {
     return dims;
   }
   dims.clearW = preset.clearW;
@@ -1352,7 +1395,7 @@ export function applyGatePreset(dims, preset, shape = 'square') {
  * draws. It is written out rather than derived from Object.keys so a future
  * reorder is one obvious edit. */
 export const PALETTE_ORDER = [
-  'gate', 'flaggedGate', 'doubleStack', 'flaggedDoubleStack', 'ladder', 'tower', 'diveGate', 'barrier', 'flag', 'cone', 'waypoint',
+  'gate', 'flaggedGate', 'doubleStack', 'flaggedDoubleStack', 'ladder', 'tower', 'diveGate', 'letter', 'barrier', 'flag', 'cone', 'waypoint',
 ];
 
 /*
@@ -1573,6 +1616,15 @@ export function labelOf(type, cls = TRACK_CLASS_DEFAULT) {
 }
 
 /*
+ * WHAT A PIECE IS CALLED WHEN ITS AUTHOR HAS NOT NAMED IT: its type's label, and an opening with no frame says so,
+ * because a gate in the strip that is not a gate to look at is the one a pilot asks about.
+ */
+export function pieceLabel(el, cls = TRACK_CLASS_DEFAULT) {
+  const base = labelOf(el.type, cls);
+  return isUnbuilt(el) ? `Invisible ${base.toLowerCase()}` : base;
+}
+
+/*
  * THE WHOOP CANVAS'S TOOLS THAT ARE NOT PIECES. A row of gates is RaceGOW's Side
  * by Side Gates, dragged out along the floor, the ruler measures between two
  * points, and Fly order adds a pass through the piece that is clicked. None is an
@@ -1626,6 +1678,14 @@ export const WHOOP_TOOLS = [
  * src/trackbuilder/parts.js for what each writes.
  */
 export const FIVE_INCH_PIECES = [
+  {
+    id: 'invisibleGate',
+    label: 'Invisible gate',
+    /* I for invisible, which is free: E and Q turn, X reverses, V is the view and P the line. */
+    key: 'I',
+    after: 'gate',
+    note: 'A target with nothing built round it: an opening you fly through and score like a gate, lit when it is the next one, with no pipe, no flag and nothing to hit. It is an ordinary gate with its frame taken away, so it is sized, turned, copied and flown in order like one, and any gate or letter can be made invisible the same way, or have its frame put back. Use it to put a target where a structure has a gap that no gate of its own frames.',
+  },
   {
     id: 'wall',
     label: 'Wall',
@@ -1827,6 +1887,50 @@ export function apertureShapeOf(what) {
   return shapeOf(ELEMENTS[type]?.shape);
 }
 
+/* Whether a piece, or the name of a type, is a letter. */
+export function isLetterPiece(what) {
+  return (typeof what === 'string' ? what : what?.type) === 'letter';
+}
+
+/* The letter a piece is: its own, or the default when it has none or has one this build does not draw. */
+export function letterOfPiece(el) {
+  return letterOf(el?.letter);
+}
+
+/*
+ * THE DIMS OF A LETTER. For a letter that is new they are its defaults; for one that is being changed into another
+ * (`from` is the piece as it is) they keep the author's scale: a W stretched to half as wide again as it is drawn is
+ * an A stretched the same way, which is what turning a letter into another one should leave you with. `levels` is
+ * the new letter's hole count, and the pitch is the one a stack of the new size would have.
+ */
+export function letterDimsFor(letter, from = null) {
+  const next = letterOf(letter);
+  const base = letterDefaults(next);
+  let kx = 1;
+  let ky = 1;
+  if (from && from.dims && Number.isFinite(from.dims.clearW) && Number.isFinite(from.dims.clearH)) {
+    const was = letterDefaults(letterOf(from.letter));
+    kx = from.dims.clearW / was.clearW;
+    ky = from.dims.clearH / was.clearH;
+  }
+  const clearW = base.clearW * kx;
+  const clearH = base.clearH * ky;
+  return {
+    levels: openingCount(next), sillH: 0, clearW, clearH, levelPitch: levelPitchFor(clearH),
+  };
+}
+
+/* How big the letter stands, pipe and all: { width, height } in metres, for the card and the height limits. */
+export function letterExtent(el) {
+  return letterSizeOf(letterOfPiece(el), el.dims.clearW, el.dims.clearH, LETTER_TUBE_OD);
+}
+
+/* The primary hole's size that makes a letter this wide and this tall, which is what an author asking for a
+ * letter's size is asking for. */
+export function letterDimsForSize(el, width, height) {
+  return dimsForLetterSize(letterOfPiece(el), width, height, LETTER_TUBE_OD);
+}
+
 export function apertureLevels(dims) {
   const out = [];
   const n = Math.max(1, Math.round(dims.levels));
@@ -1846,6 +1950,10 @@ export function apertureLevels(dims) {
 /* Overall height of an element, for the 3D view and for the height drag
  * limits. Aperture elements are as tall as their top opening plus a tube. */
 export function elementHeight(def, dims, style = null, tilt = 0) {
+  if (def.kind === KIND.APERTURE && def.id === 'letter') {
+    /* A letter is as tall as it is drawn, which is the letter's doing and not its top hole's: `style` is the letter. */
+    return letterSizeOf(letterOf(style), dims.clearW, dims.clearH, LETTER_TUBE_OD).height;
+  }
   if (def.kind === KIND.APERTURE) {
     const levels = apertureLevels(dims);
     const top = levels[levels.length - 1];

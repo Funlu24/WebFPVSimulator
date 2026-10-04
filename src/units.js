@@ -46,6 +46,18 @@ export const IN = FT / 12;
 export const FRAME_TUBE_OD = 1.315 * IN;
 
 /*
+ * The pipe a LETTER is made of: 2 inch nominal schedule 40 PVC, outside diameter 2.375 in (60.3 mm).
+ *
+ * A gate's 1 inch pipe is a thin line on a four metre letter: drawn at that size a W is four hairlines
+ * and reads as a drawing of one, and a real letter that tall built of 1 inch pipe would not stand up. 2 inch
+ * is what a person would build one of, and what a pilot can see from across the field. Like the gate's, it is an
+ * ASSUMPTION and not a citation: nothing publishes a letter, and the figure only sets how thick the pipe is
+ * drawn and how far each hole is held in from it. It changes no opening's size, because a letter's opening is
+ * measured axis to axis.
+ */
+export const LETTER_TUBE_OD = 2.375 * IN;
+
+/*
  * How much larger than published every obstacle is BUILT on the sixty metre
  * field, as a pure number. The argument for it, and what it does not touch, is
  * written once, in src/game/track.js, where the number was born; it lives here

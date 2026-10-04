@@ -34,13 +34,13 @@
  */
 
 import {
-  ELEMENTS, KIND, FRAME_TUBE_OD, flagLeanSign, flagSideOf, flagSideSigns, trackClassOf, virtualApertureDims,
-  docModeOf, hasMissingSides, unbuiltSidesOf,
+  ELEMENTS, KIND, FRAME_TUBE_OD, LETTER_TUBE_OD, flagLeanSign, flagSideOf, flagSideSigns, isLetterPiece, isUnbuilt, trackClassOf,
+  virtualApertureDims, docModeOf, hasMissingSides, unbuiltSidesOf,
 } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD } from './racegow.js';
 import { knotForSeq, markerSquare } from './path.js';
 import {
-  aperturesOf, elementById, kindOf, apertureCenter, logoForDecal,
+  aperturesOf, elementById, kindOf, apertureCenter, letterLayoutOf, logoForDecal,
 } from './model.js';
 import { sequenceNumbers } from './sequence.js';
 import { arrowLanes, stretchOf } from './passes.js';
@@ -323,6 +323,18 @@ export function planShapeOf(el, doc = null) {
   }
   if (def.kind === KIND.ZONE) {
     return boxCorners(el.position, el.yaw || 0, ZONE_PICK_DEPTH, Math.max(0.2, el.dims.width));
+  }
+  if (def.kind === KIND.APERTURE && isLetterPiece(el)) {
+    /* A letter stands in a plane, so from above it is a bar as long as the letter is wide: from the left end of its
+     * pipe to the right, about a pipe thick. Its pipe is not centred on the piece (the piece stands on the middle of
+     * its primary hole), so the bar is laid where the pipe is. */
+    const laid = letterLayoutOf(el);
+    const mid = (laid.left + laid.right) / 2;
+    const across = { x: -Math.sin(el.yaw), y: Math.cos(el.yaw) };
+    return boxCorners(
+      { x: el.position.x + across.x * mid, y: el.position.y + across.y * mid, z: el.position.z },
+      el.yaw, LETTER_TUBE_OD, laid.right - laid.left,
+    );
   }
   if (def.kind === KIND.APERTURE) {
     const aps = aperturesOf(el);
@@ -2060,7 +2072,10 @@ export class View2D {
     ctx.fill();
     ctx.strokeStyle = selected ? C.selected : (hovered ? '#ffffff' : C.element);
     ctx.lineWidth = selected ? 2.4 : 1.6;
+    /* An opening with nothing built round it is dashed, like paint: there is no pipe to hit, and the plan says so. */
+    ctx.setLineDash(isUnbuilt(el) ? [5, 4] : []);
     ctx.stroke();
+    ctx.setLineDash([]);
 
     /* A dive gate is hatched, so a horizontal aperture never reads as a
      * barrier or as a wide gate seen edge on. */
@@ -2073,7 +2088,7 @@ export class View2D {
     /* Every level of a multi level structure gets a tick along the frame, so
      * a ladder is visibly not a gate from the plan alone. */
     const levels = aperturesOf(el);
-    if (levels.length > 1 && !dive) {
+    if (levels.length > 1 && !dive && !isLetterPiece(el)) {
       const c = this.toScreen(el.position);
       ctx.fillStyle = selected ? C.selected : C.element;
       for (let i = 0; i < levels.length; i += 1) {
@@ -2232,7 +2247,8 @@ export class View2D {
     if (!dir) {
       return;
     }
-    const c = this.toScreen(el.position);
+    /* At the hole this pass goes through: a letter's holes are not on the middle of the piece. */
+    const c = this.toScreen(isLetterPiece(el) ? apertureCenter(el, entry.apertureIndex ?? 0) : el.position);
     const flat = { x: dir.x, y: dir.y, z: 0 };
     const flatLen = Math.hypot(flat.x, flat.y);
     if (!style) {
@@ -2603,24 +2619,26 @@ export class View2D {
       return;
     }
     /* Stacked upward when a structure carries more than one, so a ladder
-     * flown twice shows both of its positions. */
+     * flown twice shows both of its positions. A letter's number stands at the hole it is flown through. */
+    const letter = isLetterPiece(el);
     numbers.forEach((n, i) => {
-      const y = c.y - 16 - i * 19;
+      const at = letter ? this.toScreen(apertureCenter(el, n.apertureIndex ?? 0)) : c;
+      const y = at.y - 16 - i * 19;
       ctx.beginPath();
-      ctx.arc(c.x, y, 9, 0, Math.PI * 2);
+      ctx.arc(at.x, y, 9, 0, Math.PI * 2);
       ctx.fillStyle = selected ? C.numberBgSel : C.numberBg;
       ctx.fill();
       ctx.fillStyle = C.number;
       ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(n.number), c.x, y + 0.5);
+      ctx.fillText(String(n.number), at.x, y + 0.5);
       const levels = aperturesOf(el);
       if (levels.length > 1) {
         ctx.font = '9px ui-monospace, monospace';
         ctx.fillStyle = C.numberBg;
         ctx.textAlign = 'left';
-        ctx.fillText(figureCue(this.host.doc, el, n.seq) || `L${(n.apertureIndex ?? 0) + 1}`, c.x + 12, y + 0.5);
+        ctx.fillText(figureCue(this.host.doc, el, n.seq) || `L${(n.apertureIndex ?? 0) + 1}`, at.x + 12, y + 0.5);
       }
     });
   }
@@ -2858,7 +2876,7 @@ export class View2D {
     ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${def.label}  ${round1(at.x)}, ${round1(at.y)} m`, p.x + 18, p.y);
+    ctx.fillText(`${def.id === 'letter' ? `Letter ${this.host.letterTool}` : def.label}  ${round1(at.x)}, ${round1(at.y)} m`, p.x + 18, p.y);
   }
 
   /*

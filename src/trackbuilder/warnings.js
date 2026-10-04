@@ -35,7 +35,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ELEMENTS, KIND, TUNING, trackClassOf, tuningFor, docModeOf, apertureShapeOf } from './elements.js';
+import { ELEMENTS, KIND, TUNING, trackClassOf, tuningFor, docModeOf, apertureShapeOf, isLetterPiece } from './elements.js';
 /* A map is checked against the world it builds, not against a racing line:
  * the same placed solids the simulator hands the physics. All pure, no
  * Three.js, so the checks run in Node too. */
@@ -49,7 +49,8 @@ import {
   GROUND_GATE_CENTRE_MAX, STACK2_CENTRE_MIN, STACK3_CENTRE_MIN,
   POLE_FROM_GATE_MIN, POLE_FROM_POLE_MIN, PIPE_OD, ROOM_HEIGHT, envelopeFor, inches,
 } from './racegow.js';
-import { elementById, elementNormal, kindOf, startPadsOf } from './model.js';
+import { aperturesOf, elementById, elementNormal, kindOf, startPadsOf } from './model.js';
+import { GAP_ADVISORY, widestCircle } from '../props/letters.js';
 /* How far the pads' Base may be from their seat before the builder says so.
  * The same number is how far any base may be over what it stands on before
  * it floats, which is why it is owned there. */
@@ -174,6 +175,21 @@ export function collectWarnings(doc, path) {
     const el = elementById(doc, s.elementId);
     if (!el) {
       return;
+    }
+    /* A letter's gap that its own pipe has filled: the hole is pushed in by the pipe's radius from every side that is
+     * pipe, and a letter made small enough has no hole left, so nothing can score there. */
+    if (isLetterPiece(el)) {
+      const gap = aperturesOf(el)[s.apertureIndex ?? 0];
+      const across = gap ? widestCircle(gap.poly) : 0;
+      if (gap && across < GAP_ADVISORY) {
+        const name = `${gateNumberOf(doc, s.id) ?? i + 1}. ${sequenceLabel(doc, s)}`;
+        out.push(warn('letter-gap', across === 0
+          ? `${name} is too small for its pipe: the gap it is flown through has nothing left once the pipe is round it, so nothing can score there. Make the letter bigger.`
+          : `${name} has a gap only ${across.toFixed(2)} m across at its widest, against a standard gate's 1.5 m, so a quad has little room to fly it. If the track means it, ignore this; otherwise make the letter bigger.`, {
+          seqId: s.id,
+          elementId: el.id,
+        }));
+      }
     }
     if (kindOf(el) === KIND.APERTURE && s.entry === 0) {
       out.push(warn('no-face', `${gateNumberOf(doc, s.id) ?? i + 1}. ${sequenceLabel(doc, s)} has no entry face set, so the line guessed one.`, {

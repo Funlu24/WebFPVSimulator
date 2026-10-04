@@ -31,8 +31,9 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { KIND } from './elements.js';
-import { elementById, kindOf, aperturesOf } from './model.js';
+import { KIND, isLetterPiece, letterOfPiece } from './elements.js';
+import { elementById, kindOf, aperturesOf, openingNearest } from './model.js';
+import { primaryOpening } from '../props/letters.js';
 import { addToSequence, removeFromSequence, gateNumbers } from './sequence.js';
 
 /* A lap this long is not a lap somebody flies. The tool that adds a pass with a
@@ -216,11 +217,18 @@ export function stretchOf(path, seqId) {
  * click on the bar between two openings goes to one of them and a click above
  * or below goes to the end one. A gate, a pole and anything that is not there
  * have only the first.
+ *
+ * A LETTER'S HOLES CAN STAND SIDE BY SIDE, the two sides of an I at one height, so for a letter the point
+ * (a world point, when the caller has one) is looked at across as well as up, and with no point at all the
+ * answer is the letter's own primary hole, which is the one a pass added without a choice goes through.
  */
-export function apertureAt(doc, elementId, z) {
+export function apertureAt(doc, elementId, z, point = null) {
   const el = elementById(doc, elementId);
   if (!el || kindOf(el) !== KIND.APERTURE) {
     return 0;
+  }
+  if (isLetterPiece(el)) {
+    return point ? openingNearest(el, point) : primaryOpening(letterOfPiece(el));
   }
   const levels = aperturesOf(el);
   let best = 0;

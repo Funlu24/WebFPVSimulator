@@ -31,15 +31,16 @@
  */
 
 import {
-  ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, elementHeight, isFiveInchPiece, labelOf, toolByKey, trackClassOf, docModeOf,
-  lowestBase,
+  ELEMENTS, GATE_PRESETS, KIND, apertureShapeOf, applyGatePreset, elementByKey, elementHeight, isFiveInchPiece, isLetterPiece, labelOf, letterDimsForSize,
+  letterExtent, levelPitchFor, toolByKey, trackClassOf, docModeOf, lowestBase,
 } from './elements.js';
+import { LETTER_DEFAULT, letterOf } from '../props/letters.js';
 import { styleOf as propStyleOf, tiltOf } from '../props/types.js';
 import {
   createTrack, createElement, deepClone, deserialize, duplicateTrack,
   elementById, kindOf, normalize, startPadsOf, touch,
   aperturesOf, toPlain, logosOf, brandingBytes, newLogoId, dressOrder, setSideBuilt,
-  LOGO_SLOTS, BRANDING_MAX_CHARS, expandGroups,
+  LOGO_SLOTS, BRANDING_MAX_CHARS, expandGroups, letterLayoutOf, setLetter,
 } from './model.js';
 import { applyAutoFaces, clearOverride, flipFace, setYaw } from './faces.js';
 import {
@@ -54,9 +55,9 @@ import {
   replaceWith, rowPlan, snapTurn, turnGroups, turnStepFor,
 } from './snap.js';
 import {
-  addSpiral, flyOver, placeBarHurdle, placeHurdle, placeUpGate, placeWall, removeSpiral, reverseWall, roundFlagOf, setFlags, setWallFlags,
-  setHurdleAngle, setHurdleLine, setHurdleSize,
-  setWallSize, setWallWeave, wallOf,
+  addSpiral, canBecomeLetter, canBeInvisible, flyOver, placeBarHurdle, placeHurdle, placeInvisibleGate, placeUpGate, placeWall,
+  removeSpiral, reverseWall, roundFlagOf, setFlags, setInvisible, setWallFlags, setHurdleAngle, setHurdleLine, setHurdleSize,
+  setWallSize, setWallWeave, turnIntoGate, turnIntoLetter, wallOf,
 } from './parts.js';
 import { cloneElements, anyCloneable } from './clone.js';
 import {
@@ -249,6 +250,31 @@ function readSquare() {
 function rememberSquare(on) {
   try {
     localStorage.setItem(SQUARE_KEY, on ? '1' : '0');
+  } catch (e) {
+    /* Private mode. It is as it was for this visit. */
+  }
+}
+
+/*
+ * THE LETTER THE LETTER TOOL LAYS: the one the author last picked, kept like Square is, because a track with a W
+ * and an A on it is built by laying the one and then the other, and a tool that forgot between visits would
+ * start every session at A. A way of working and not a fact about the track, so it is the author's own and is in
+ * the builder's key, not in the document.
+ */
+export const LETTER_KEY = 'webfpv.trackbuilder.letter.v1';
+
+function readLetter() {
+  try {
+    const v = localStorage.getItem(LETTER_KEY);
+    return v ? letterOf(v) : LETTER_DEFAULT;
+  } catch (e) {
+    return LETTER_DEFAULT;
+  }
+}
+
+function rememberLetter(letter) {
+  try {
+    localStorage.setItem(LETTER_KEY, letter);
   } catch (e) {
     /* Private mode. It is as it was for this visit. */
   }
@@ -565,6 +591,8 @@ export class App {
     this.square = readSquare();
     /* FIVE INCH TRACK ONLY. Whether the card's Round the flag spirals down a whole turn first or just goes round. */
     this.spiralDown = true;
+    /* FIVE INCH TRACK ONLY. Which letter the Letter tool lays: see LETTER_KEY. */
+    this.letterTool = readLetter();
     /* WHOOP CANVAS ONLY. Whether a drag that starts on the racing line bends
      * it into a waypoint. Off by default: the line runs through the middle of
      * every gate, so with it able to take a press, a click in a gate's opening
@@ -1239,7 +1267,7 @@ export class App {
       }
       return made;
     }
-    const opening = kindOf(el) === KIND.APERTURE ? apertureAt(this.doc, elementId, point ? point.z : 0) : 0;
+    const opening = kindOf(el) === KIND.APERTURE ? apertureAt(this.doc, elementId, point ? point.z : 0, point) : 0;
     return this.flyPieceAgain(elementId, opening);
   }
 
@@ -1313,6 +1341,17 @@ export class App {
         const ys = nodes.map((p) => p.y);
         return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, z: 0 };
       }
+    }
+    if (isLetterPiece(el)) {
+      /* The middle of the letter, halfway up it: a letter stands on the middle of its primary hole, which is not
+       * where a W or an N is, and it is the letter that is being looked at. */
+      const laid = letterLayoutOf(el);
+      const mid = (laid.left + laid.right) / 2;
+      return {
+        x: el.position.x - Math.sin(el.yaw) * mid,
+        y: el.position.y + Math.cos(el.yaw) * mid,
+        z: el.position.z + laid.height / 2,
+      };
     }
     return el.position;
   }
@@ -1538,6 +1577,9 @@ export class App {
     this.requestDraw();
     if (this.armed === 'ruler' && this.mode === '2d') {
       this.sayOnce('ruler in 2d', 'The ruler measures in 3D, at an angle or from the top. Press V, or 3D on the bar.');
+    }
+    if (this.armed === 'letter') {
+      this.sayOnce('arm letter', `Pick the letter under the tool, then click the ${wordsFor(this.doc).place}. Each gap in it is a gate to fly through: a W has the one between its two Vs, a B has two.`);
     }
     if (this.armed === 'road') {
       this.sayOnce('arm road', 'Click to lay the road’s nodes: it bends through them the way a car can drive. Click the first node to close a loop, press Enter or double click to finish it open, Escape to stop.');
@@ -1959,7 +2001,7 @@ export class App {
       /* The rule for where it faces, the flying order it joins and the figure
        * a stack is flown in are one function in snap.js, so the self test
        * runs the same code this does. */
-      const element = placeOnTrack(d, type, world, { square: this.square && !this.isWhoopRace() });
+      const element = placeOnTrack(d, type, world, { square: this.square && !this.isWhoopRace(), letter: this.letterTool });
       /* The logo the Sponsor logos dialog armed this with, if it armed it.
        * createElement has already put the course's first logo on a decal, so
        * this only overrides, and only for a logo that is still on the
@@ -1974,7 +2016,7 @@ export class App {
     if (newId) {
       this.setSelection([newId]);
       const placed = elementById(this.doc, newId);
-      if (placed && aperturesOf(placed).length > 1) {
+      if (placed && aperturesOf(placed).length > 1 && !isLetterPiece(placed)) {
         if (!this.pathVisible) {
           this.togglePath();
         }
@@ -2165,9 +2207,16 @@ export class App {
       this.edit('place a launch gate', (d) => { made = placeLaunchGate(d, world, { square: this.square }); });
     } else if (type === 'upGate') {
       this.edit('place an up gate', (d) => { made = placeUpGate(d, world, { square: this.square }); });
+    } else if (type === 'invisibleGate') {
+      this.edit('place an invisible gate', (d) => { made = placeInvisibleGate(d, world, { square: this.square }); });
     }
     if (made) {
       this.setSelection([made.id]);
+      /* An invisible gate is a gate, and a complex element is made of many of them: it stays in hand, as a gate does. */
+      if (type === 'invisibleGate') {
+        this.sayOnce('invisible laid', 'An invisible gate scores and lights like any gate and has nothing built round it. It is lit in the room only while it is the next one. Size, turn and fly it like a gate, and Frame on its card puts the pipe back.');
+        return;
+      }
       /* One of these is what a person lays at a time, and what they do next is read its card: the tool is put
        * away, which is what shows the card. A gate stays armed, because ten gates are ten clicks. */
       this.disarm();
@@ -2266,6 +2315,96 @@ export class App {
 
   reverseWallOf(id) {
     this.edit('reverse the wall', (d) => { reverseWall(d, id); });
+  }
+
+  /* ---------------- letters, and gates with no frame ---------------- */
+
+  /* The letter the Letter tool lays, picked on the palette: kept for the next visit (LETTER_KEY). The ghost is the one
+   * in hand, so it is cleared and the pointer's next move draws the new one. */
+  setLetterTool(letter) {
+    this.letterTool = letterOf(letter);
+    rememberLetter(this.letterTool);
+    this.panels.renderLetterOptions();
+    this.clearGhost();
+    this.requestDraw();
+  }
+
+  /*
+   * THE SELECTED PIECE AS ANOTHER LETTER, in place, one undo step: a letter is changed with setLetter (model.js
+   * says what stays), and a gate that is already on the track is made a letter with turnIntoLetter (parts.js says
+   * what stays), which is how a track that was drawn with gates is edited into one with a W.
+   */
+  setPieceLetter(id, letter) {
+    const element = elementById(this.doc, id);
+    if (!element) {
+      return;
+    }
+    const next = letterOf(letter);
+    if (isLetterPiece(element)) {
+      this.edit(`letter ${next}`, (d) => { setLetter(d, id, next); });
+      return;
+    }
+    if (!canBecomeLetter(this.doc, element)) {
+      return;
+    }
+    this.edit(`make it a letter ${next}`, (d) => { turnIntoLetter(d, id, next); });
+    /* It is the letter the author is laying now, so the next one placed is the same. */
+    this.letterTool = next;
+    rememberLetter(next);
+    this.panels.renderLetterOptions();
+    this.toast(`That gate is a ${next} now, in the same place and the same place in the flying order. Letter on its card changes it to another, and Make it a gate puts it back.`);
+  }
+
+  /* A letter as a plain gate again, standing where its primary hole was and as big as it was. */
+  makeLetterAGate(id) {
+    this.edit('make it a gate', (d) => { turnIntoGate(d, id); });
+  }
+
+  /*
+   * A LETTER'S SIZE, as the author thinks of it: how wide and how tall it stands with its pipe. The document keeps
+   * the size of its primary hole (the two numbers every opening has) and the rest follows, so this turns a width
+   * and a height into those two. Either may be left alone; a size that is not a size is not taken.
+   */
+  setLetterSize(id, patch) {
+    const element = elementById(this.doc, id);
+    if (!element || !isLetterPiece(element)) {
+      return;
+    }
+    const now = letterExtent(element);
+    const width = Number.isFinite(patch.width) ? patch.width : now.width;
+    const height = Number.isFinite(patch.height) ? patch.height : now.height;
+    if (!(width > 0) || !(height > 0)) {
+      return;
+    }
+    const dims = letterDimsForSize(element, width, height);
+    if (!(dims.clearW > 0) || !(dims.clearH > 0)) {
+      this.toast('That is smaller than the letter\u2019s own pipe, so there would be no gap left to fly through.');
+      return;
+    }
+    this.edit('letter size', (d) => {
+      const live = elementById(d, id);
+      if (live) {
+        live.dims.clearW = Math.round(dims.clearW * 1e6) / 1e6;
+        live.dims.clearH = Math.round(dims.clearH * 1e6) / 1e6;
+        live.dims.levelPitch = levelPitchFor(live.dims.clearH);
+      }
+    });
+  }
+
+  /*
+   * A GATE, OR A LETTER, WITH NO FRAME: an invisible gate, or the frame put back. One undo step, and what is
+   * selected stays so. See setInvisible in parts.js for what goes with the frame.
+   */
+  setPieceInvisible(id, on) {
+    const element = elementById(this.doc, id);
+    if (!element || !canBeInvisible(element)) {
+      return;
+    }
+    const hadFlags = on && (element.type === 'flaggedGate' || element.type === 'flaggedDoubleStack');
+    this.edit(on ? 'make it invisible' : 'put the frame back', (d) => { setInvisible(d, id, on); });
+    if (hadFlags) {
+      this.toast('The flag went with the frame: a pennant on a mast round nothing would hang in the air.');
+    }
   }
 
   /*
@@ -2685,10 +2824,17 @@ export class App {
       return;
     }
     let reach = 0;
+    /* How big the biggest letter in the selection stands, which the camera has to stand off by: a W is five metres
+     * across, and a gate is not. */
+    let span = 0;
     for (const id of this.selection) {
       const e = elementById(this.doc, id);
       if (e) {
         reach = Math.max(reach, Math.hypot(e.position.x - c.x, e.position.y - c.y));
+        if (isLetterPiece(e)) {
+          const size = letterExtent(e);
+          span = Math.max(span, size.width, size.height);
+        }
       }
     }
     this.view2d.centerOn(c);
@@ -2709,7 +2855,7 @@ export class App {
       }
       this.view3d.focusDoc({ x: c.x, y: c.y, z: Math.min(high, 30) * 0.4 }, Math.max(reach * 2.6, high * 1.8) + 10);
     } else {
-      this.view3d.focusDoc(c, Math.max(1.4, reach * 3 + 1.2));
+      this.view3d.focusDoc(c, Math.max(1.4, reach * 3 + 1.2, span * 1.7 + 1.5));
     }
     this.requestDraw();
   }
