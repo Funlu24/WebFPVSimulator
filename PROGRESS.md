@@ -65808,3 +65808,5 @@ The renderer already skipped the pipe for `unbuilt` on a whoop gate.
 Checked. `src/trackbuilder/selftest.js` 2478 passed, 0 failed (four new checks in `suiteInvisibleGate`: palette and key, laying at
 the whoop size, finite height, round trip). `lint:shell`, `lint:boot` and `gen-preload --check` pass. Not run: `npm run verify` (no
 physics, plant, ABI or build change) and `node scripts/shots.js`. Not looked at: the whoop palette and the room in a browser.
+
+Approval. On 2026-10-04 the owner said "push to main" in the thread, after the draft PR (#29) was up and the verification choices had been put to them. That covers this change only, pushed to main as a fast forward with no force.
