@@ -65803,3 +65803,20 @@ selected: a different selection, or none, puts it back to following the piece. N
 
 Checked. `node --check`, `lint:shell` and `lint:nouns` pass. Not run: `shots`, `verify`, and nobody has dragged it in a real
 browser, so touch and the clamp at the stage edges are unseen.
+## 2026-10-04: the invisible gate on the whoop builder
+
+Request, the owner's: "in the whoop track builder, add an invisible gate that I can add like in the 5 inch builder".
+
+Change: the piece is the five inch canvas's, unchanged, so the document holds nothing new (a gate with `unbuilt`) and tracks written
+on either canvas read on the other, in the game, on the board and on the card. `WHOOP_PIECES` in elements.js carries it, after the
+gate on the palette, on the same key (I, free on the whoop palette). The palette, `toolByKey` and the key uniqueness check read it
+for a whoop canvas, and the three `isWhoopRace()` guards that kept the Frame choice, the "Make it invisible" button and the Square
+ghost off a whoop are gone or corrected (Square stays off on a whoop, as for every other whoop piece). It lays at the whoop gate's
+size by `placeOnTrack`, and its height comes from `elementHeight` like any gate's, so it is not the NaN of the ground logo bug above.
+The renderer already skipped the pipe for `unbuilt` on a whoop gate.
+
+Checked. `src/trackbuilder/selftest.js` 2478 passed, 0 failed (four new checks in `suiteInvisibleGate`: palette and key, laying at
+the whoop size, finite height, round trip). `lint:shell`, `lint:boot` and `gen-preload --check` pass. Not run: `npm run verify` (no
+physics, plant, ABI or build change) and `node scripts/shots.js`. Not looked at: the whoop palette and the room in a browser.
+
+Approval. On 2026-10-04 the owner said "push to main" in the thread, after the draft PR (#29) was up and the verification choices had been put to them. That covers this change only, pushed to main as a fast forward with no force.

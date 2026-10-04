@@ -93,7 +93,7 @@ import {
 } from './geometry.js';
 import {
   FRAME_SIDES, frameSidesOf, hasMissingSides, unbuiltSidesOf, isPlain, wallPitchFor, WHOOP_TOOLS, labelOf, trackClassOf,
-  FIVE_INCH_PIECES, FIVE_INCH_TOOLS, MAP_TOOLS, toolByKey, isFiveInchPiece, isLetterPiece, isUnbuilt, letterExtent, pieceLabel,
+  FIVE_INCH_PIECES, FIVE_INCH_TOOLS, WHOOP_PIECES, MAP_TOOLS, toolByKey, isFiveInchPiece, isLetterPiece, isUnbuilt, letterExtent, pieceLabel,
   LETTER_TUBE_OD,
 } from './elements.js';
 import { PRESETS } from './presets.js';
@@ -10749,8 +10749,11 @@ function suiteInvisibleGate() {
     const keys = [...FIVE_INCH_PIECES, ...FIVE_INCH_TOOLS].map((x) => x.key).filter(Boolean).concat(paletteItems('full').map((x) => x.key).filter(Boolean));
     check('the piece is on the five inch palette, standing after the gate, with a key of its own that nothing else has',
       piece && piece.after === 'gate' && piece.key === 'I' && toolByKey('I', 'full')?.id === 'invisibleGate' && new Set(keys).size === keys.length && piece.note.length > 40);
-    check('and is not on a whoop palette, which has its own vocabulary, and the keys of every other tool are where they were',
-      toolByKey('I', 'micro') === undefined && toolByKey('K', 'full')?.id === 'wall' && toolByKey('J', 'full')?.id === 'run' && toolByKey('N', 'full')?.id === 'route');
+    check('and the whoop palette has it too, after the gate, on the same key and with nothing else on that key, and the keys of every other tool are where they were',
+      toolByKey('I', 'micro')?.id === 'invisibleGate' && WHOOP_PIECES[0].after === 'gate' && WHOOP_PIECES[0].key === 'I' && WHOOP_PIECES[0].note.length > 40
+      && [...WHOOP_PIECES, ...WHOOP_TOOLS].map((x) => x.key).concat(paletteItems('micro').map((x) => x.key)).filter((k) => k === 'I').length === 1
+      && toolByKey('H', 'micro')?.id === 'row' && toolByKey('K', 'micro')?.id === 'cube'
+      && toolByKey('K', 'full')?.id === 'wall' && toolByKey('J', 'full')?.id === 'run' && toolByKey('N', 'full')?.id === 'route');
     check('it is not an element: it is in no palette order and in no document, because the document holds a gate with its frame taken away',
       !ELEMENTS.invisibleGate && !PALETTE_ORDER.includes('invisibleGate') && isFiveInchPiece('invisibleGate'));
   }
@@ -10781,6 +10784,27 @@ function suiteInvisibleGate() {
     const sq = partGhosts(five(), 'invisibleGate', { x: 5, y: 5 }, { x: 5, y: 5 }, { square: true });
     check('and square to the field when Square is on: its heading is a whole number of quarter turns',
       near(sq.items[0].yaw / (Math.PI / 2), Math.round(sq.items[0].yaw / (Math.PI / 2)), 1e-9), String(sq.items[0].yaw));
+  }
+
+  /* ON A WHOOP CANVAS: the same piece, the whoop room's gate size, and a document that reads on either canvas */
+  {
+    const doc = createTrack('invisible whoop', 'micro');
+    placeOnTrack(doc, 'gate', { x: 2, y: 2 });
+    const el = placeInvisibleGate(doc, { x: 4, y: 3 }, {});
+    const plain = createTrack('plain whoop', 'micro');
+    placeOnTrack(plain, 'gate', { x: 2, y: 2 });
+    const g = placeOnTrack(plain, 'gate', { x: 4, y: 3 });
+    check('a whoop canvas lays a gate with nothing built, in the flying order, at the whoop gate size and facing as a whoop gate would',
+      el.type === 'gate' && el.unbuilt === true && doc.sequence.length === 2 && doc.sequence[1].elementId === el.id
+      && JSON.stringify(g.dims) === JSON.stringify(el.dims) && near(g.yaw, el.yaw) && pieceLabel(el, 'micro') === 'Invisible gate');
+    check('it has a real height, so the 3D camera and the card can place it: the gate\'s own, finite and positive (a gate holds its levels and not a height)',
+      Number.isFinite(elementHeight(ELEMENTS.gate, el.dims)) && elementHeight(ELEMENTS.gate, el.dims) > 0);
+    check('it is written as a gate with `unbuilt` and nothing else, so a whoop track with one round trips and reads on the five inch canvas',
+      roundTripsCleanly(doc) && deserialize(serialize(doc)).repairs.length === 0 && deserialize(serialize(doc)).doc.elements[1].unbuilt === true);
+    const ghost = partGhosts(doc, 'invisibleGate', { x: 1, y: 1 }, { x: 1, y: 1 }, {});
+    check('and its ghost is that gate on a whoop canvas, at the whoop size',
+      ghost.items.length === 1 && ghost.items[0].type === 'gate' && ghost.items[0].props.unbuilt === true
+      && JSON.stringify(ghost.items[0].props.dims) === JSON.stringify(el.dims));
   }
 
   /* THE DOCUMENT: nothing new in it */
@@ -13438,7 +13462,7 @@ async function suiteMenus() {
   /* ---- one letter, one tool (1.20, 4.2a) ---- */
   const keysOf = (cls, mode) => [
     ...paletteItems(cls, mode).map((d) => [d.key, d.id]),
-    ...(cls === 'micro' && mode === 'race' ? WHOOP_TOOLS.map((t) => [t.key, t.id]) : []),
+    ...(cls === 'micro' && mode === 'race' ? [...WHOOP_PIECES, ...WHOOP_TOOLS].map((t) => [t.key, t.id]) : []),
   ].filter(([k]) => k);
   for (const [name, cls, mode] of [['five inch', 'full', 'race'], ['whoop', 'micro', 'race'], ['map', 'full', 'freestyle']]) {
     const seen = new Map();
