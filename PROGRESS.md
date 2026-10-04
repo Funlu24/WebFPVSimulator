@@ -65661,6 +65661,14 @@ Checked: `node --check`, `lint:fc` 33 of 33, `lint:presets` 4 of 4. `lint:catalo
 not checked out). `lint:shell` FAILS: rates overflow grew from 338 to 382 px, which is one 44 px row. I did not touch the
 baseline: it is a recorded number and moving it is the owner's call. Not run: `npm run verify`, nothing here touches physics.
 
+## 2026-10-04 | shell | Two overflow baselines re-recorded, on the owner's word
+
+Owner (Mat, 2026-10-04, "fix it", answering whether to re-record the baseline after the Camera angle row went onto Rates): re-record.
+`tests/shell-baseline.json`: rates 338 to 382 px, which is the one 44 px Camera angle row. Pilot 634 to 678 px, also one 44 px row, and
+not mine: it is the Show FPS toggle from #27 landing on main, which `lint:shell` flagged once main moved under this branch. Both
+edited by hand to the measured numbers, so no other screen's entry moved. Checked: `lint:shell` passes after both. Not run:
+`npm run verify`, nothing here touches physics. The owner also reported Camera angle on Rates working and tested.
+
 ## 2026-10-04 | builder | An official track does not open in the builder for anybody but an admin (the owner's ask)
 
 The owner tried the first build and reported that they could still open an official track in the builder. That was a gap against
@@ -65725,9 +65733,10 @@ again on the merged tree, and again at 390 by 844 with touch emulation. I looked
 changes line and of the picker at both sizes, and of the admin's opened track at the phone size: nothing overflows and every
 button can be reached. Not run: `npm run verify`, which nothing here calls for, and anything against the live board.
 
-`lint:shell` FAILS, and it is not this change. After merging main it reports pilot 634 to 678 px and rates 338 to 382 px. It fails
-the same way on a clean checkout of `origin/main` at 731c424, so it came in with the Show FPS toggle and the Camera angle row on the
-Rates screen, and the entry above this one already reports the rates number. I did not touch the baseline.
+`lint:shell` failed when I first merged main, and it was not this change. It reported pilot 634 to 678 px and rates 338 to 382 px,
+and it failed the same way on a clean checkout of `origin/main` at 731c424, so it came in with the Show FPS toggle and the Camera
+angle row on the Rates screen. The owner has since had both baselines re-recorded on main (the entry above this one); I merged
+that in, and `lint:shell` passes on this branch now. I did not touch the baseline.
 
 What went wrong. `lint:preload` was already stale on `main`: "Admin sign in and official tracks" says I regenerated `src/fresh.js`
 for `admin.js`, and I did, but `gen:preload` builds `MODULES` from the files git tracks, and `admin.js` was new and not yet added, so
