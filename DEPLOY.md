@@ -52,6 +52,12 @@ mark to five. The board accepts 1 and 2. Whenever
 teach `inspectDocument` in the board's `src/validate.js` the new number and
 deploy the board before the simulator, the same way round as the URL above.
 
+Official tracks are the same shape again. Since 2026-10-04 an admin can mark a track official on the board, and the board refuses
+every change to it from anybody but an admin. The builder's Admin sign in, its Mark official button and the admin's in place edit
+all need the board's `/api/tracks/:id/official` route and its `official` field. A simulator deployed ahead of the board reads every
+track as not official and gets a 404 from the mark route, and nothing breaks, so the order costs a missing feature and not a wrong
+answer. The board's `schema.sql` adds the two columns on start, additively.
+
 The Weight slider is the same shape of problem the other way round, and
 quieter. Since 2026-09-27 a time or a freestyle run carries the `weight` it
 was flown at, and the simulator no longer refuses one off 100. A board that

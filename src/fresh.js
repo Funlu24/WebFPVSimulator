@@ -420,6 +420,7 @@
       'src/share/session.js',
       'configs/pids.js',
       'src/share/board.js',
+      'src/share/admin.js',
       'src/game/proven.js',
       'src/ui/trickfilm.js',
       'src/share/bugs.js',

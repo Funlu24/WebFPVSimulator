@@ -118,7 +118,9 @@ import {
   partsTheBoardDoesNotKnow, unknownPartsSentence,
   adoptShareFromLocation, TRACK_TAGS, TRACK_TAGS_MAX, tagLabel, usableTags, tagsForClass,
   fetchTrackList, fetchTrackDocument,
+  adminSignIn, adminVerify, fetchTrackOfficial, setTrackOfficial,
 } from '../share/board.js';
+import { clearAdminSession, readAdminSession } from '../share/admin.js';
 import { sendCardAnimation } from '../share/cardgif.js';
 import { sendShareCard } from '../share/card.js';
 import { BOARD_WINDOW, SIM_WINDOW, claimWindowName } from '../share/windows.js';
@@ -126,7 +128,7 @@ import { patreonAnchor } from '../share/patreon.js';
 import { nameRules, readPilotName, writePilotName } from '../share/pilot.js';
 import {
   clearShareImport, readBuilderIntent, readEditKey, readMapListing, readShareImport,
-  setActiveTrackClass, takeBuilderIntent, writeMapListing,
+  setActiveTrackClass, takeBuilderIntent, writeBind, writeMapListing,
 } from '../share/session.js';
 import {
   bindOwnedCanvas,
@@ -821,8 +823,21 @@ export class App {
       }
       const owned = Boolean(readEditKey(share.id));
       const fromBoard = Boolean(params.get('share'));
-      const wantRemix = (intent && intent.kind === 'remix') || (!owned && fromBoard);
-      const wantEdit = owned && (fromBoard || (intent && intent.kind === 'edit'));
+      /*
+       * AN ADMIN OPENS AN OFFICIAL TRACK TO EDIT IT, NOT TO COPY IT.
+       *
+       * Everyone else gets a remix of somebody's track, which is right: it
+       * is theirs to make their own version of. An official track is the
+       * board's own and an admin is the one person who may change it, so for
+       * them the link opens it in place and Publish updates the original.
+       * Only while the board says it is official, so a signed in admin
+       * opening an ordinary track still gets the copy everybody gets, and
+       * only when they did not ask for a remix by name.
+       */
+      const adminEdit = !owned && fromBoard && !(intent && intent.kind === 'remix')
+        && await this.adminMayEditOfficial(share);
+      const wantRemix = !adminEdit && ((intent && intent.kind === 'remix') || (!owned && fromBoard));
+      const wantEdit = adminEdit || (owned && (fromBoard || (intent && intent.kind === 'edit')));
       if (!wantRemix && !wantEdit) {
         return;
       }
@@ -849,7 +864,22 @@ export class App {
             }
             local = `Your local changes are in Load as "${copy.name}".`;
           }
-          this.loadDocument(incoming, [`Editing "${incoming.name}" on the board.`, local].filter(Boolean).join(' '));
+          if (adminEdit) {
+            /* The bind is what inspectCourse reads in place of an edit key.
+             * Written here, after the confirm below can no longer decline. */
+            writeBind(incoming.id, {
+              board: share.board || boardOrigin(),
+              author: share.author || '',
+              nameOnBoard: share.name || incoming.name,
+              layoutFingerprint: layoutFingerprint(incoming),
+              owned: false,
+              adminEdit: true,
+            });
+          }
+          const editing = adminEdit
+            ? `Editing the official track "${incoming.name}" as an admin. Update the board puts your changes live.`
+            : `Editing "${incoming.name}" on the board.`;
+          this.loadDocument(incoming, [editing, local].filter(Boolean).join(' '));
         };
         if (!isEmptyCanvas(seated) && seated.id !== incoming.id) {
           this.confirm(
@@ -901,6 +931,30 @@ export class App {
     } finally {
       this.syncBoardIdentity();
     }
+  }
+
+  /*
+   * IS THIS TAB AN ADMIN, AND IS THE TRACK IT IS OPENING OFFICIAL.
+   *
+   * Two questions and the board answers both, so a token this clock still
+   * likes but the board has dropped (a changed password, a removed address)
+   * is found out here, by a request, and cleared, rather than at the moment
+   * somebody presses Update and is refused. Anything that goes wrong reads as
+   * "no": the cost of a wrong no is a copy where an admin wanted the
+   * original, which the Admin dialog and a second try put right.
+   */
+  async adminMayEditOfficial(share) {
+    const origin = share.board || boardOrigin();
+    if (!readAdminSession(origin)) {
+      return false;
+    }
+    const who = await adminVerify(origin);
+    if (who === null) {
+      clearAdminSession();
+      this.updateTopBar();
+      return false;
+    }
+    return (await fetchTrackOfficial(share.id, origin)) === true;
   }
 
   /*
@@ -4413,8 +4467,184 @@ export class App {
         this.toast(`Could not publish: ${e.message || e}`);
       }
     });
+    /*
+     * OFFICIAL TRACKS.
+     *
+     * Asked of the board, which is the only thing that knows, once the
+     * dialog is up. If the track is official and this tab is not an admin,
+     * Update is switched off here with the reason, because the board would
+     * refuse it (OFFICIAL_LOCKED in its src/store.js) and a button that
+     * cannot work is a worse thing to offer than a sentence. That is a
+     * courtesy: the lock is the board's, and a build that skipped this
+     * would simply be told no.
+     *
+     * An admin gets the switch itself: Mark official, or take the mark off.
+     * Only for a track already on the board, because the mark is on the
+     * board's row for it.
+     *
+     * If the board cannot be reached the dialog is left exactly as it was,
+     * and the answer comes back from the publish itself if it matters.
+     */
+    if (owned) {
+      const origin = boardOrigin();
+      const admin = readAdminSession(origin);
+      const note = document.createElement('p');
+      note.className = 'tb-help';
+      note.setAttribute('role', 'status');
+      body.append(note);
+      let toggle = null;
+      if (admin) {
+        toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'tb-btn';
+        toggle.disabled = true;
+        toggle.textContent = 'Checking whether it is official';
+        body.append(toggle);
+      }
+      const show = (official) => {
+        if (official && !admin) {
+          send.disabled = true;
+          note.textContent = 'This is an official track, so only a board admin can change it. Use Duplicate in More for a copy you can publish under your own name.';
+        } else if (official) {
+          note.textContent = 'This is an official track. You are signed in as an admin, so updating it goes through, and nobody else can.';
+        } else {
+          note.textContent = '';
+        }
+        if (toggle) {
+          toggle.disabled = false;
+          toggle.textContent = official ? 'Remove the official mark' : 'Mark this track official';
+          toggle.onclick = async () => {
+            toggle.disabled = true;
+            try {
+              const done = await setTrackOfficial({ id: this.doc.id, official: !official, origin });
+              show(Boolean(done.official));
+              this.toast(done.official
+                ? `"${this.doc.name}" is official. Only admins can change it now.`
+                : `"${this.doc.name}" is no longer official.`);
+            } catch (e) {
+              toggle.disabled = false;
+              if (e && e.status === 403) {
+                clearAdminSession();
+                this.updateTopBar();
+                note.textContent = 'The board no longer accepts this admin sign in. Sign in again from More.';
+              } else {
+                note.textContent = (e && e.message) || 'The board could not be asked.';
+              }
+            }
+          };
+        }
+      };
+      fetchTrackOfficial(this.doc.id, origin).then((official) => {
+        if (official === null) {
+          if (toggle) {
+            toggle.textContent = 'Could not reach the board to check';
+          }
+          return;
+        }
+        show(official);
+      });
+    }
+
     const shown = this.modal(owned ? 'Update this track' : (remix ? 'Publish as yours' : 'Publish this track'), body, [], { primary: send });
     nameAsk.start();
+  }
+
+  /*
+   * ADMIN, IN ONE DIALOG: sign in, or see who is signed in and sign out.
+   *
+   * What signing in unlocks is the board's to decide and the board enforces
+   * it on its own side. This dialog only gets the token (see ../share/admin.js
+   * for where it lives). An admin can mark a track official, which locks it
+   * against everybody else, and can still edit official tracks, which the
+   * board refuses to anybody who is not one. Nothing here changes what any
+   * other pilot can do, so there is no warning to read before signing in.
+   *
+   * One message for every wrong answer, as the board's own sign in gives
+   * one, so this dialog cannot be used to ask which addresses are admins.
+   */
+  openAdmin() {
+    const origin = boardOrigin();
+    const body = document.createElement('div');
+    const session = readAdminSession(origin);
+    const status = document.createElement('p');
+    status.className = 'tb-help';
+    status.setAttribute('role', 'status');
+    if (session) {
+      const who = document.createElement('p');
+      who.className = 'tb-help';
+      const until = session.expiresUtc ? Date.parse(session.expiresUtc) : NaN;
+      const when = Number.isNaN(until)
+        ? 'Closing this tab ends it.'
+        : `It runs out at ${new Date(until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, and closing this tab ends it sooner.`;
+      who.textContent = `Signed in to the board as ${session.email || 'an admin'}. ${when} Publish has a Mark official button for any track that is on the board, and an official track opened from a link to it opens here to edit in place.`;
+      body.append(who);
+      const out = document.createElement('button');
+      out.type = 'button';
+      out.className = 'tb-btn';
+      out.textContent = 'Sign out';
+      out.addEventListener('click', () => {
+        clearAdminSession();
+        this.closeModal();
+        this.toast('Signed out of the board admin.');
+        this.updateTopBar();
+      });
+      this.modal('Board admin', body, [], { primary: out });
+      return;
+    }
+    const help = document.createElement('p');
+    help.className = 'tb-help';
+    help.textContent = 'For the people who run the board. An admin can mark a track official, which only admins can change after that, and can still edit the official ones. Everyone else keeps publishing and flying as they always have.';
+    body.append(help);
+    const field = (labelText, type, autocomplete) => {
+      const row = document.createElement('div');
+      row.className = 'tb-field';
+      const label = document.createElement('label');
+      label.className = 'tb-field-label';
+      label.textContent = labelText;
+      const input = document.createElement('input');
+      input.type = type;
+      input.autocomplete = autocomplete;
+      input.id = `tb-admin-${type}`;
+      label.htmlFor = input.id;
+      row.append(label, input);
+      body.append(row);
+      return input;
+    };
+    const email = field('Email', 'email', 'username');
+    const password = field('Password', 'password', 'current-password');
+    body.append(status);
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'tb-btn tb-primary';
+    go.textContent = 'Sign in';
+    const submit = async () => {
+      if (!email.value.trim() || !password.value) {
+        status.textContent = 'Type the email and the password.';
+        return;
+      }
+      go.disabled = true;
+      status.textContent = 'Checking.';
+      try {
+        const done = await adminSignIn({ email: email.value.trim(), password: password.value, origin });
+        this.closeModal();
+        this.toast(`Signed in to the board as ${done.email}.`);
+        this.updateTopBar();
+      } catch (e) {
+        go.disabled = false;
+        password.value = '';
+        status.textContent = e && e.message ? e.message : 'The board could not be asked.';
+        password.focus();
+      }
+    };
+    go.addEventListener('click', submit);
+    password.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+    this.modal('Board admin', body, [], { primary: go });
+    email.focus();
   }
 
   /*
@@ -5477,6 +5707,7 @@ export class App {
       ['sheet', 'Build sheet', () => this.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy', ''],
       ['picture', 'Picture', () => this.savePicture(), 'Save a picture of the room as it is on the screen, numbers and all', ''],
       ['animation', 'Export animation', () => this.exportAnimation(), 'Write a looping .gif of one lap', ''],
+      ['admin', 'Admin', () => this.openAdmin(), 'Sign in as a board admin, to mark tracks official and to edit the ones that are', ''],
       ['delete', 'Delete', () => this.confirmRemove(), 'Remove this track from this browser', 'tb-danger'],
     ]) {
       const b = btn(label, () => { this.closeMore(); fn(); }, title, `tb-more-item ${cls}`.trim());
@@ -5835,6 +6066,11 @@ export class App {
       this.moreItems.get('export').title = `Write a .json ${noun} file`;
       this.moreItems.get('delete').title = `Remove this ${noun} from this browser`;
       this.moreItems.get('animation').style.display = map ? 'none' : '';
+      /* Says who is signed in, so an admin can see it from here. Hidden on a
+       * map: the board takes maps without any official mark. */
+      const adminNow = readAdminSession(boardOrigin());
+      this.moreItems.get('admin').textContent = adminNow ? `Admin: ${adminNow.email || 'signed in'}` : 'Admin';
+      this.moreItems.get('admin').style.display = map ? 'none' : '';
       /* The share link is a race track's, on either canvas (MENUS-PLAN.md
        * 4.2b); the build sheet and the picture are the room's. */
       this.moreItems.get('link').style.display = map ? 'none' : '';

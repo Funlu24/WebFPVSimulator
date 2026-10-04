@@ -34,6 +34,7 @@ import { readAutosave, writeAutosave } from '../trackbuilder/storage.js';
 import {
   boardOrigin, fetchTrackDocument, fetchTrackList, publishTrack, TRACK_TAGS, usableTags,
 } from './board.js';
+import { readAdminSession } from './admin.js';
 import { readPilotName } from './pilot.js';
 import {
   clearShareImport,
@@ -236,6 +237,24 @@ function summaryOf(doc, extra) {
 }
 
 /*
+ * WHETHER THIS TAB MAY EDIT THIS TRACK IN PLACE AS AN ADMIN.
+ *
+ * Both halves are needed. The bind says the canvas was opened as an admin's
+ * edit of an official track (see adoptIncomingShare in the builder), and the
+ * session says this tab is still signed in to the board that holds it. Lose
+ * the session and the canvas is a copy nobody can publish over the original,
+ * which is what it should be: the board would refuse it anyway, and this
+ * keeps the dialog from offering a button that cannot work.
+ *
+ * It is a convenience for the dialog and never the rule. The board checks
+ * the token on every publish, animation and share card.
+ */
+export function adminEditFor(id) {
+  const bind = id ? readBind(id) : null;
+  return Boolean(bind && bind.adminEdit && readAdminSession(bind.board || boardOrigin()));
+}
+
+/*
  * What this browser will fly, and what the menus should offer.
  *
  *   community   a published course opened from the board, not ours
@@ -256,6 +275,7 @@ export function inspectCourse(parts = {}) {
     }
   });
   const editKeyFor = parts.editKeyFor || readEditKey;
+  const adminFor = parts.adminEditFor || adminEditFor;
   const bindFor = parts.bindFor || readBind;
   const currentName = pick(parts, 'pilotName', () => readPilotName());
 
@@ -294,7 +314,7 @@ export function inspectCourse(parts = {}) {
   if (share && share.document) {
     const doc = share.document;
     const id = share.id || doc.id;
-    const owned = Boolean(editKeyFor(id));
+    const owned = Boolean(editKeyFor(id)) || adminFor(id);
     const bind = bindFor(id);
     const fp = layoutFingerprint(doc);
     const layoutMatch = !bind || !bind.layoutFingerprint || bind.layoutFingerprint === fp;
@@ -342,7 +362,7 @@ export function inspectCourse(parts = {}) {
   }
 
   const id = doc.id;
-  const owned = Boolean(editKeyFor(id));
+  const owned = Boolean(editKeyFor(id)) || adminFor(id);
   const bind = bindFor(id) || {};
   const remix = Boolean(bind.sourceId) && !owned;
   const fp = layoutFingerprint(doc);
@@ -551,6 +571,9 @@ export function rememberPublish(doc, posted, origin, author, extra = {}) {
      */
     tags: [posted && posted.tags, extra.tags, prev.tags].find(Array.isArray),
     owned: true,
+    /* Kept across a publish, or the second update of an official track
+     * would find its canvas no longer an admin's. */
+    adminEdit: Boolean(prev.adminEdit),
     sourceId: prev.sourceId || '',
     sourceName: prev.sourceName || '',
     sourceAuthor: prev.sourceAuthor || '',

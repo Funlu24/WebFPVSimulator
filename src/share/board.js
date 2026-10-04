@@ -49,6 +49,7 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { adminAuthHeaders, writeAdminSession } from './admin.js';
 import { readShareImport, writeShareImport } from './session.js';
 
 /*
@@ -244,6 +245,11 @@ async function readJson(res) {
     const err = new Error(message);
     err.status = res.status;
     err.conflict = Boolean(body && body.conflict) || res.status === 409;
+    /* The board's refusal for a track an admin has marked official: a 403
+     * that is neither a collision (conflict) nor a wrong key, and which the
+     * builder words for itself. See OFFICIAL_LOCKED in the board's
+     * src/store.js. */
+    err.official = Boolean(body && body.official);
     throw err;
   }
   return body;
@@ -349,6 +355,10 @@ export async function fetchTrackList(origin = boardOrigin()) {
      * document, so an older board that does not send it leaves every listing
      * reading as the field, correctly. */
     trackClass: t.trackClass === 'micro' ? 'micro' : 'full',
+    /* An admin has marked it official: only admins can change it. Read by
+     * nothing that draws yet, and carried so the courses screen can say so
+     * without another request. A board from before the mark sends none. */
+    official: Boolean(t.official),
     board,
   })).filter((t) => t.id);
 }
@@ -630,7 +640,10 @@ export async function publishTrack({
   const board = trimOrigin(origin || boardOrigin());
   const res = await fetch(`${board}/api/tracks`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    /* The admin's token when this tab is signed in as one, which is what
+     * lets a publish through to an official track with no edit key. Nobody
+     * else sends it, and the board decides what it is worth. */
+    headers: { 'content-type': 'application/json', ...adminAuthHeaders(board) },
     body: JSON.stringify({
       author,
       document,
@@ -683,7 +696,7 @@ export async function postTrackGif({ id, gif, editKey, origin }) {
   const board = trimOrigin(origin || boardOrigin());
   const res = await fetch(`${board}/api/tracks/${encodeURIComponent(id)}/gif`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...adminAuthHeaders(board) },
     body: JSON.stringify({ gif, editKey: editKey || undefined }),
   });
   return readJson(res);
@@ -704,8 +717,84 @@ export async function postShareCard({
   const route = kind === 'map' ? 'maps' : 'tracks';
   const res = await fetch(`${board}/api/${route}/${encodeURIComponent(id)}/card`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...adminAuthHeaders(board) },
     body: JSON.stringify({ card, editKey: editKey || undefined }),
+  });
+  return readJson(res);
+}
+
+/*
+ * ADMIN, AS THE BOARD SEES IT.
+ *
+ * The board holds the whitelist and the passwords and decides everything
+ * here; these four functions are a way to ask it. See ./admin.js for where
+ * the token lives and why that is safe.
+ *
+ *   adminSignIn     { email, password } for a token, remembered for this tab
+ *   adminVerify     is the remembered token still good, as an email or null
+ *   fetchTrackOfficial   is this track official, as a boolean, or null when
+ *                   the board could not be asked
+ *   setTrackOfficial     mark or unmark it, which only an admin's token can do
+ *
+ * An official track is the board's own: only an admin may republish it, put
+ * an animation on it or change its share card, and the board refuses anybody
+ * else with a 403 whose body says `official: true`. Flying it, and posting a
+ * time, stay open to everyone.
+ */
+export async function adminSignIn({ email, password, origin }) {
+  const board = trimOrigin(origin || boardOrigin());
+  const res = await fetch(`${board}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await readJson(res);
+  const session = {
+    token: String((body && body.token) || ''),
+    email: String((body && body.email) || email || ''),
+    expiresUtc: String((body && body.expiresUtc) || ''),
+    board,
+  };
+  if (!writeAdminSession(session)) {
+    throw new Error('The board answered without a sign in. Try again.');
+  }
+  return session;
+}
+
+export async function adminVerify(origin) {
+  const board = trimOrigin(origin || boardOrigin());
+  const headers = adminAuthHeaders(board);
+  if (!headers.authorization) {
+    return null;
+  }
+  try {
+    const res = await fetch(`${board}/api/admin/session`, { headers });
+    const body = await readJson(res);
+    return body && typeof body.email === 'string' ? body.email : '';
+  } catch (e) {
+    /* A 401 or 403 is the board saying no, and the caller drops the token
+     * on null. A board that is merely down also lands here, which costs an
+     * admin one more sign in, and is cheaper than keeping a dead token. */
+    return null;
+  }
+}
+
+export async function fetchTrackOfficial(trackId, origin = boardOrigin()) {
+  try {
+    const res = await boardGet(`${trimOrigin(origin)}/api/tracks/${encodeURIComponent(trackId)}`, 4000);
+    const body = await readJson(res);
+    return Boolean(body && body.official);
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function setTrackOfficial({ id, official, origin }) {
+  const board = trimOrigin(origin || boardOrigin());
+  const res = await fetch(`${board}/api/tracks/${encodeURIComponent(id)}/official`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...adminAuthHeaders(board) },
+    body: JSON.stringify({ official: Boolean(official) }),
   });
   return readJson(res);
 }

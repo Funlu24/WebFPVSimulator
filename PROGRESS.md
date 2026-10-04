@@ -65564,3 +65564,49 @@ Checked by rendering the 2025 WA States layout with three logos at 2048 and look
 with no logos at 1024. `gif:selftest` (81), `check:clip` (2428), both lints and the setting case pass; stage mode at 512 and 2048 is
 byte identical to before. Nothing automated asserts that a board is on a gate: it is looked at. At the whole field view the boards
 are small, as the real ones are, and their print is legible only in a close crop.
+
+## 2026-10-04 | builder and board | Admin sign in and official tracks (the owner's ask)
+
+The owner asked for an admin login in the track editor and for an admin to be able to mark a track official, with official tracks
+read only for everyone but admins, enforced on the server wherever tracks are saved and not only in the UI.
+
+Where the rule lives. Tracks are saved in the browser until they are published, and the only server is the board, which is the
+other repository (`WebFPVSimulator-LeaderBoard`). The board already had an admin login (`/api/admin/login`, a whitelist in its
+`src/admin.js`), so there is no second login system: the builder signs in to that one. The owner added the board's repository to the
+project and chose to build both sides. The board's half is its own commit on the same branch name, `claude/project-thread-7xpghl`,
+and it is not pushed.
+
+Board (its own `CLAUDE.md` has the decision): `tracks.official` and `official_utc`, additive. `POST /api/tracks/:id/official`
+`{ official: true | false }`, admin only, the same 403 for a stranger whether or not the id exists. `OFFICIAL_LOCKED` in `store.js`
+refuses a republish, an animation and a share card from anybody who is not an admin, the publisher's edit key included, in the file
+store and in Postgres. The refusal is a 403 carrying `official: true`, which is how the builder tells it from a collision (409).
+An admin's republish of an official track needs no edit key, keeps the publisher as the author (otherwise the rename branch would
+have renamed the publisher's posted times to the admin's handle) and keeps the stored edit key. An admin gets no pass on a track that
+is not official. Flying and posting a time are untouched. The board's page prints an Official chip and gives an admin a switch.
+
+Builder: `src/share/admin.js` keeps the token in `sessionStorage` for one board, expiring, never in `localStorage` and never a
+cookie. `board.js` adds it as a bearer on exactly three writes, the publish, the animation and the share card, and only to the
+board that issued it. More has an Admin item (not on the phone menu, and not on a map). An admin sees Mark official in Publish for
+a track that is on the board, and a signed in admin who opens an official track from its link gets it in place under its own id
+(a bind with `adminEdit`, which stands in for an edit key only while the session lasts) instead of a remix. Anybody else who owns an
+official track is told so in Publish and Update is switched off, though that is a courtesy: the board refuses regardless.
+
+Decisions I took and the owner can reverse. Tracks only: maps have no official mark. The existing admin whitelist is the only
+source of admins. Official does not stop a time being posted. Unmarking returns the track to its publisher's key. The builder's
+admin session is its own tab's, so an admin signed in on the board's page signs in again in the builder, which are different
+origins. A new simulator talking to a board from before this change reads every track as not official and gets a 404 from the mark
+route, so deploy the board first, as DEPLOY.md says for every board change.
+
+Checked. Board `npm test` passes with 29 new checks over HTTP against the file store, plus a scratch Postgres 16 run of the same
+store calls (15 checks, all passing, not part of the suite). Builder `check:clip` 2457 passed including 29 new ones for the session,
+the three bearers, the official refusal and the admin canvas. `lint:shell`, `lint:boot`, `lint:frame` pass; `lint:preload` was stale
+because `admin.js` joins the boot graph and I regenerated `src/fresh.js` (one line). A scripted headless Chromium run drove the real
+builder against a real board: publish as a pilot, wrong then right admin password, mark official, the owner locked out in the
+dialog and by the board, an admin editing the official track from its link with no key, and the same link opening a remix with no
+session. 19 steps, all passing. A second run opened the board's page, marked and unmarked from the sheet. I looked at the
+screenshots of the dialog and the sheet. Not run: `npm run verify` and `check:builder` (nothing here touches physics, the plant,
+the ABI or the build), a phone viewport, and anything against the live board.
+
+What went wrong. My first builder test failed because it forgot to clear the admin session before asserting signed out behaviour,
+which was the test's fault. Starting a scratch Postgres as another user failed on directory permissions twice before it worked. The
+disabled Update button in the locked dialog is dark on dark; it is the builder's existing disabled style and I left it.

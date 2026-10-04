@@ -164,13 +164,15 @@ import {
 } from '../props/letters.js';
 import { AIRFRAMES, airframeById } from '../../configs/airframes.js';
 import {
-  inspectCourse, layoutFingerprint, publishCurrentCourse, publishedTags, rememberPublish,
+  adminEditFor, inspectCourse, layoutFingerprint, publishCurrentCourse, publishedTags, rememberPublish,
   suggestRemixName, tagsToSend,
 } from '../share/listing.js';
 import { readBind, readEditKey, writeBind, writeBuilderIntent, takeBuilderIntent } from '../share/session.js';
 import {
   publishTrack, partsTheBoardDoesNotKnow, unknownPartsSentence, BOARD_UNKNOWN_TYPES, TRACK_TAGS, tagsForClass,
+  adminSignIn, adminVerify, fetchTrackOfficial, setTrackOfficial, postTrackGif, postShareCard,
 } from '../share/board.js';
+import { clearAdminSession, readAdminSession, writeAdminSession } from '../share/admin.js';
 import { planFromDocument, PLAN_SHAPE, PLAN_LETTERS, isoApertures, isoShapes, letterTubes } from '../share/plan.js';
 import {
   keepDisplaced, readAutosave, shipTracks, listTracks, loadTrack, trackExists, saveTrack, deleteTrack, savedTrack, restoreTrack, librarySize,
@@ -13585,6 +13587,171 @@ async function suiteMenus() {
   }
 }
 
+/*
+ * ADMIN AND OFFICIAL TRACKS, the simulator's half.
+ *
+ * The rule itself (an official track changes for admins only) is enforced
+ * by the board and tested in its own src/selftest.js. What this half owns
+ * is smaller and still worth pinning: the token is kept per tab and per
+ * board, goes only where it should, is sent on exactly the three writes an
+ * admin needs it on, and lets an admin's canvas stand in for an edit key
+ * without ever making anyone else's canvas look owned.
+ */
+async function suiteOfficial() {
+  console.log('admin and official tracks');
+  const hadLocal = globalThis.localStorage;
+  const hadSession = globalThis.sessionStorage;
+  const hadFetch = globalThis.fetch;
+  const local = new Map();
+  const session = new Map();
+  const shim = (map) => ({
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => {
+      map.set(k, String(v));
+    },
+    removeItem: (k) => {
+      map.delete(k);
+    },
+  });
+  globalThis.localStorage = shim(local);
+  globalThis.sessionStorage = shim(session);
+  const board = 'http://127.0.0.1:3100';
+  const calls = [];
+  const reply = (status, body) => ({
+    ok: status < 400,
+    status,
+    text: async () => JSON.stringify(body),
+  });
+  let answer = () => reply(200, {});
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return answer(String(url), init);
+  };
+  try {
+    clearAdminSession();
+    check('nobody is signed in to begin with', readAdminSession(board) === null);
+
+    /* THE SESSION: per board, expiring, and in this tab only. */
+    const future = new Date(Date.now() + 3600e3).toISOString();
+    check('a session needs a token and a board', !writeAdminSession({ token: '', board })
+      && !writeAdminSession({ token: 't', board: '' }));
+    writeAdminSession({ token: 'tok-1', email: 'keeper@example.com', expiresUtc: future, board: `${board}/` });
+    check('it is read back for the board that issued it, trailing slash or not',
+      readAdminSession(board) && readAdminSession(board).token === 'tok-1' && readAdminSession(`${board}/`) !== null);
+    check('and for no other board, so a ?board= elsewhere is never handed it',
+      readAdminSession('https://elsewhere.example') === null && readAdminSession('') === null);
+    check('it lives in sessionStorage and never localStorage',
+      session.size === 1 && local.size === 0);
+    writeAdminSession({ token: 'tok-old', email: 'keeper@example.com', expiresUtc: new Date(Date.now() - 1000).toISOString(), board });
+    check('an expired one reads as none, so a stale token is never sent', readAdminSession(board) === null);
+    writeAdminSession({ token: 'tok-1', email: 'keeper@example.com', expiresUtc: future, board });
+
+    /* WHERE IT GOES: the three writes, and only to its own board. */
+    const plain = toPlain(createTrack('Official Loop'));
+    const auth = () => calls[calls.length - 1].init.headers.authorization;
+    await publishTrack({ author: 'Ada Rook', document: plain, origin: board });
+    check('a publish carries the token as a bearer', auth() === 'Bearer tok-1');
+    await postTrackGif({ id: 'trk-1a2b3c4d', gif: 'R0lG', editKey: '', origin: board });
+    check('so does an animation', auth() === 'Bearer tok-1');
+    await postShareCard({ kind: 'track', id: 'trk-1a2b3c4d', card: 'AAAA', editKey: '', origin: board });
+    check('and a share card', auth() === 'Bearer tok-1');
+    await publishTrack({ author: 'Ada Rook', document: plain, origin: 'https://elsewhere.example' });
+    check('a publish to another board carries none', auth() === undefined);
+    clearAdminSession();
+    await publishTrack({ author: 'Ada Rook', document: plain, origin: board });
+    check('and nor does anybody signed out', auth() === undefined);
+    check('the token is never in a body', !calls.some((c) => String(c.init.body || '').includes('tok-1')));
+
+    /* SIGNING IN, and being told no in the board's own words. */
+    answer = () => reply(200, { token: 'tok-2', email: 'keeper@example.com', expiresUtc: future });
+    const done = await adminSignIn({ email: 'keeper@example.com', password: 'pw', origin: board });
+    check('signing in keeps the token for this board',
+      done.token === 'tok-2' && readAdminSession(board).token === 'tok-2' && readAdminSession(board).email === 'keeper@example.com');
+    const login = calls[calls.length - 1];
+    check('and sends the password to the login route and nowhere else',
+      login.url === `${board}/api/admin/login` && JSON.parse(login.init.body).password === 'pw'
+      && !login.init.headers.authorization);
+    clearAdminSession();
+    answer = () => reply(401, { error: 'That email and password do not open this board.' });
+    let refused = null;
+    try {
+      await adminSignIn({ email: 'x@example.com', password: 'no', origin: board });
+    } catch (e) {
+      refused = e;
+    }
+    check('a wrong password throws the board\'s sentence and keeps nothing',
+      refused && refused.message === 'That email and password do not open this board.' && readAdminSession(board) === null);
+
+    /* VERIFY: a token the board has dropped is found out. */
+    writeAdminSession({ token: 'tok-3', email: 'keeper@example.com', expiresUtc: future, board });
+    answer = () => reply(200, { email: 'keeper@example.com', kind: 'session' });
+    check('verify answers the signed in address', (await adminVerify(board)) === 'keeper@example.com');
+    answer = () => reply(401, { error: 'Not signed in.' });
+    check('and answers null when the board says no', (await adminVerify(board)) === null);
+    clearAdminSession();
+    const before = calls.length;
+    check('and asks nothing when there is no token', (await adminVerify(board)) === null && calls.length === before);
+
+    /* OFFICIAL: asked, set, and refused in words the builder can tell apart. */
+    answer = () => reply(200, { id: 'trk-1a2b3c4d', official: true, times: [] });
+    check('a track the board says is official reads as official', (await fetchTrackOfficial('trk-1a2b3c4d', board)) === true);
+    answer = () => reply(200, { id: 'trk-1a2b3c4d', times: [] });
+    check('a board from before the mark reads as not official', (await fetchTrackOfficial('trk-1a2b3c4d', board)) === false);
+    answer = () => reply(503, { error: 'down' });
+    check('a board that cannot answer reads as unknown, not as not official',
+      (await fetchTrackOfficial('trk-1a2b3c4d', board)) === null);
+    writeAdminSession({ token: 'tok-4', email: 'keeper@example.com', expiresUtc: future, board });
+    answer = () => reply(200, { id: 'trk-1a2b3c4d', official: true, changed: true });
+    const marked = await setTrackOfficial({ id: 'trk-1a2b3c4d', official: true, origin: board });
+    const markCall = calls[calls.length - 1];
+    check('marking posts true to the track\'s official route with the bearer',
+      marked.official === true && markCall.url === `${board}/api/tracks/trk-1a2b3c4d/official`
+      && JSON.parse(markCall.init.body).official === true && markCall.init.headers.authorization === 'Bearer tok-4');
+    answer = () => reply(403, {
+      error: 'This is an official track, so only a board admin can change it.', official: true, conflict: false,
+    });
+    let locked = null;
+    try {
+      await publishTrack({ author: 'Ada Rook', document: plain, origin: board, editKey: 'k' });
+    } catch (e) {
+      locked = e;
+    }
+    check('the board\'s official refusal is told apart from a collision, so the builder does not fork a copy',
+      locked && locked.official === true && locked.conflict === false && locked.status === 403);
+    answer = () => reply(409, { error: 'This track is already on the board.', conflict: true });
+    let clash = null;
+    try {
+      await publishTrack({ author: 'Ada Rook', document: plain, origin: board });
+    } catch (e) {
+      clash = e;
+    }
+    check('and a collision is still a collision', clash && clash.conflict === true && clash.official === false);
+
+    /* THE CANVAS: an admin's edit stands in for an edit key, only while signed in. */
+    const doc = createTrack('Official Loop');
+    const bindBase = { board, author: 'Ada Rook', nameOnBoard: 'Official Loop', owned: false };
+    writeBind(doc.id, { ...bindBase, adminEdit: true });
+    check('the bind keeps the admin flag and leaves it out when false',
+      readBind(doc.id).adminEdit === true && !('adminEdit' in (writeBind('trk-ffffffff', bindBase), readBind('trk-ffffffff'))));
+    clearAdminSession();
+    check('signed out, an admin edit canvas is not owned',
+      adminEditFor(doc.id) === false && inspectCourse({ share: null, autosave: { doc } }).kind !== 'owned');
+    writeAdminSession({ token: 'tok-5', email: 'keeper@example.com', expiresUtc: future, board });
+    check('signed in, it is owned, so the dialog offers an update',
+      adminEditFor(doc.id) === true && inspectCourse({ share: null, autosave: { doc } }).kind === 'owned');
+    const stranger = createTrack('Somebody Else');
+    writeBind(stranger.id, { ...bindBase, adminEdit: false });
+    check('and a canvas that was never an admin edit is not made owned by signing in',
+      adminEditFor(stranger.id) === false && inspectCourse({ share: null, autosave: { doc: stranger } }).kind !== 'owned');
+    rememberPublish(doc, { id: doc.id, name: doc.name }, board, 'Ada Rook');
+    check('and the flag survives a publish, or the second update would lose it', readBind(doc.id).adminEdit === true);
+  } finally {
+    globalThis.fetch = hadFetch;
+    globalThis.localStorage = hadLocal;
+    globalThis.sessionStorage = hadSession;
+  }
+}
+
 async function main() {
   if (process.argv.includes('--emit')) {
     process.stdout.write(serialize(demoTrack()));
@@ -13662,6 +13829,7 @@ async function main() {
   suiteLaunchGate();
   suiteFiveInchRoom();
   await suiteMenus();
+  await suiteOfficial();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exitCode = failed ? 1 : 0;
 }

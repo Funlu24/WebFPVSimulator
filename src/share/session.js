@@ -279,6 +279,16 @@ export function writeBind(trackId, bind) {
     sourceName: String(bind.sourceName || ''),
     sourceAuthor: String(bind.sourceAuthor || ''),
     /*
+     * An admin editing a track in place that is not theirs, which is
+     * allowed only while the board says it is official. It stands in for an
+     * edit key in inspectCourse and nowhere else, and only while this tab is
+     * still signed in (see adminEditFor in ./listing.js), so a bind left
+     * behind by an expired session is a plain local copy again. Written as a
+     * boolean and left out when false, so every other bind is byte for byte
+     * what it was.
+     */
+    ...(bind.adminEdit ? { adminEdit: true } : {}),
+    /*
      * The tags the board is showing this track under, and until 25
      * September this list of fields did not name them, so rememberPublish
      * wrote them and they were dropped here on the way in. The publish
