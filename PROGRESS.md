@@ -65894,3 +65894,5 @@ drops the list. A tilted stack is still built as one opening by `tiltedGate`, as
 run: `npm run verify` (no physics, plant, ABI or build change) and `node scripts/shots.js`, so the inspector section, the 3D drawing and
 the built geometry have not been looked at in a browser; the owner has not approved pushing this to main, so it is a branch and a draft
 pull request.
+
+The owner approved the push of the per-opening stack sizing change to main on 2026-10-04 ("push to main"), without choosing a verification scale: the builder self test (2559 passed) and the lints named above were the only checks run, and the inspector, the 3D drawing and the built geometry are still unlooked at in a browser. It went as a fast forward of main.
