@@ -5478,7 +5478,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
         : (st.spec.shape
           ? shapedGate(st.spec, flyOrder, st.isStart, st.pitch, { micro })
           : (Math.abs(st.pitch) > 1e-6
-          ? tiltedGate(st.spec, flyOrder, st.isStart, st.pitch, { kit: dress, micro })
+            ? tiltedGate(st.spec, flyOrder, st.isStart, st.pitch, { kit: dress, micro })
             : obstacle(st.spec, flyOrder, st.isStart, {
               micro,
               primary: st.primary,

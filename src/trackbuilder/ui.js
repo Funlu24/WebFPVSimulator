@@ -1162,8 +1162,9 @@ export class Panels {
         host.append(this.sequenceCard(doc, element, s, i, named));
       }
       if (def.kind === KIND.APERTURE && aperturesOf(element).length > 1 && !named) {
-        host.append(button('Fly another level', 'tb-btn', () => this.host.addLevel(element.id),
-          'Add another gate on this stack, on the next unused opening.'));
+        const letter = isLetterPiece(element);
+        host.append(button(letter ? 'Fly another gap' : 'Fly another level', 'tb-btn', () => this.host.addLevel(element.id),
+          letter ? 'Add a pass through the next gap of this letter that is not flown yet.' : 'Add another gate on this stack, on the next unused opening.'));
       }
     }
   }
@@ -2240,7 +2241,7 @@ export class Panels {
     const levels = aperturesOf(element);
     if (levels.length > 1 && !namedFigure) {
       const row = el('label', 'tb-field');
-      row.append(el('span', 'tb-field-label', 'Hole'));
+      row.append(el('span', 'tb-field-label', isLetterPiece(element) ? 'Gap' : 'Hole'));
       const sel = el('select');
       sel.dataset.tbkey = `lvl-${seq.id}`;
       levels.forEach((ap, i) => {

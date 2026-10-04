@@ -10435,6 +10435,62 @@ function suiteLetterPiece() {
     check('the inventory counts letters, after the dive gate', tally.some((r) => r.type === 'letter' && r.count === 2) && formatElementCounts(tally).includes('letter'), formatElementCounts(tally));
   }
 
+  /* THE RACING LINE */
+  {
+    const roles = (letter) => {
+      const d = createTrack('line', 'full');
+      d.elements.push(createElement(d, 'startPads', { x: 4, y: 20 }, 0));
+      placeOnTrack(d, 'letter', { x: 20, y: 20 }, { letter });
+      placeOnTrack(d, 'gate', { x: 40, y: 22 });
+      return buildPath(d).knots.map((k) => k.role);
+    };
+    check('the line to a letter and on from it is the line to a gate: three knots and no steering, for letters whose gaps share a plane and whose boxes overlap',
+      ['N', 'W', 'B', 'M', 'Y', 'A', 'X', 'T'].every((l) => roles(l).join() === 'aperture,aperture,finish'), ['N', 'W', 'B', 'M'].map((l) => roles(l).join('+')).join(' '));
+    /* A line past a letter that is not in its way is left alone, and one through its gap is steered round it, as for a gate. */
+    /* The steering knots a line between two gates has with a W beside it (across metres to the side of the line) and
+     * with none, so what a W adds is the difference: the closing leg turns round the last gate with or without it. */
+    const steering = (across, sill, letter = true) => {
+      const d = createTrack('past', 'full');
+      d.elements.push(createElement(d, 'startPads', { x: 4, y: 20 }, 0));
+      const a = placeOnTrack(d, 'gate', { x: 14, y: 20 });
+      a.yaw = 0;
+      a.yawOverridden = true;
+      a.dims.sillH = sill;
+      const b = placeOnTrack(d, 'gate', { x: 46, y: 20 });
+      b.yaw = 0;
+      b.yawOverridden = true;
+      b.dims.sillH = sill;
+      if (letter) {
+        const w = placeOnTrack(d, 'letter', { x: 30, y: 20 + across }, { letter: 'W' });
+        w.yaw = 0;
+        w.yawOverridden = true;
+      }
+      d.sequence.length = 0;
+      for (const g of [a, b]) {
+        const q = createSequenceEntry(d, g.id, 0);
+        q.entry = 1;
+        q.overridden = true;
+        d.sequence.push(q);
+      }
+      const knots = buildPath(d).knots.filter((k) => k.role === 'wrap');
+      return { n: knots.length, low: Math.min(...knots.map((k) => k.pos.z), 9) };
+    };
+    const added = (across, sill) => steering(across, sill).n - steering(across, sill, false).n;
+    check('a line that goes through a W\'s gap is steered round it, as it is round a gate it was not asked to go through, and round the side and not under the ground',
+      added(0, 0) > 0 && steering(0, 0).low >= 0, `${added(0, 0)} ${steering(0, 0).low}`);
+    check('and one that crosses its plane inside the box that holds the gap but in the pipe, beside the slope of the triangle and up near its point, is not steered: the gap is the triangle and not the box',
+      added(0.5, 1.24) === 0 && added(0.9, 2.4) === 0 && added(0.2, 1.24) > 0, `${added(0.5, 1.24)} ${added(0.9, 2.4)} ${added(0.2, 1.24)}`);
+    const twice = createTrack('twice', 'full');
+    twice.elements.push(createElement(twice, 'startPads', { x: 4, y: 20 }, 0));
+    const n = placeOnTrack(twice, 'letter', { x: 20, y: 20 }, { letter: 'N' });
+    addToSequence(twice, n.id, 1);
+    placeOnTrack(twice, 'gate', { x: 40, y: 22 });
+    const wraps = buildPath(twice).knots.filter((k) => k.role === 'wrap');
+    const across = (k) => Math.abs((k.pos.x - n.position.x) * apertureFrame(n.yaw, 0).widthAxis.x + (k.pos.y - n.position.y) * apertureFrame(n.yaw, 0).widthAxis.y);
+    check('two passes through an N in a row go round it between them, once, and the line clears the pipe: further out than half the letter and the furthest gap',
+      wraps.length === 1 && across(wraps[0]) > letterExtent(n).width / 2 + 0.49, wraps.map((k) => across(k).toFixed(2)).join());
+  }
+
   /* WARNINGS */
   {
     const { doc, el } = lay('W');

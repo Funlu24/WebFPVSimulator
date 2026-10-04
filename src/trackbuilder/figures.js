@@ -37,7 +37,7 @@
  */
 
 import {
-  KIND, TRACK_CLASS_DEFAULT, TUNING, isLetterPiece, letterOfPiece, tuningFor,
+  KIND, TRACK_CLASS_DEFAULT, TUNING, isLetterPiece, letterExtent, letterOfPiece, tuningFor,
 } from './elements.js';
 import { openingName } from '../props/letters.js';
 import {
@@ -457,7 +457,12 @@ export function wrapBetween(el, seqA, seqB, cls = TRACK_CLASS_DEFAULT) {
   /* The author's word on it, when there is one: round the left of the structure, round the right, or over the front. */
   const said = seqB.wrap;
   const leap = said === 'over' || (said !== 'left' && said !== 'right' && (Math.abs(i0 - i1) > 1 || (n === 2 && i0 > i1)));
-  const reach = tuningFor(cls).stackWrap;
+  /* A letter's holes are side by side as well as one over another, so a line that goes round it has to clear its pipe,
+   * which is wider than a stack's frame: at least half the letter's width, past the furthest gap, and a body length. */
+  const base = tuningFor(cls).stackWrap;
+  const reach = isLetterPiece(el)
+    ? Math.max(base, letterExtent(el).width / 2 + Math.max(...aperturesOf(el).map((ap) => Math.abs(ap.centerX ?? 0))) + 1.2)
+    : base;
   const offset = leap ? scale(normalize(travel), reach) : scale(leftOf(travel), reach * (said === 'right' ? -1 : 1));
   const pos = add(mid, offset);
   const tangent = normalize(sub(b, a), travel);

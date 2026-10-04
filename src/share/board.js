@@ -557,7 +557,8 @@ export function usableTags(list) {
  * is counted as nothing and drawn as nothing, which is the safe direction and
  * still a wrong card, so a track that holds one is not sent until the board
  * has been taught them. THIS LIST IS EMPTIED IN THE SAME CHANGE THAT TEACHES
- * THE BOARD, and the board deploys first.
+ * THE BOARD, and the board deploys first. A letter was taught in the change that made it (2026-10-04), so it was never on
+ * the list, and the board goes first for it all the same: see DEPLOY.md.
  *
  * A CUBE IS NOT A TYPE. It is five or six ordinary gates that share a `group`,
  * which is a field the board does not read: it would keep the gates, lose the

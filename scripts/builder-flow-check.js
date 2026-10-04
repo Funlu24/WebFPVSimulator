@@ -5495,6 +5495,186 @@ kase('animation size', async () => {
   }
 });
 
+/*
+ * LETTERS, AND GATES WITH NO FRAME, on the five inch canvas, laid and changed the way a person does it: the palette's
+ * button and its chooser, a click on the plan, the card beside what was laid. A letter is a capital of pipe with gaps in
+ * it to fly through (the WA State Champs' W), and an invisible gate is an opening with nothing built round it. The pure
+ * half is in the self test; what only a page can say is that the chooser is there, that a click lays the letter that is lit,
+ * that the card offers what a letter and a gate each can be, and that each change is ONE step to undo.
+ */
+kase('letters and invisible gates', async () => {
+  const page = await openBuilder('?class=full');
+  try {
+    await page.evaluate("window.trackBuilder.setMode('2d'), 1");
+    await page.sleep(500);
+    const at = (x, y) => json(page, `(() => {
+      const app = window.trackBuilder;
+      const s = app.view2d.toScreen({ x: ${x}, y: ${y} });
+      const r = app.view2d.canvas.getBoundingClientRect();
+      return { x: r.left + s.x, y: r.top + s.y };
+    })()`);
+    const steps = () => page.evaluate('window.trackBuilder.history.past.length');
+    const tool = (id) => page.evaluate(`document.querySelector('#tb-palette .tb-tool[data-tool="${id}"]').click(), 1`);
+    const card = () => page.evaluate("(document.getElementById('tb-card') || {}).innerText || ''");
+    const choiceButton = (label, index) => page.evaluate(`(() => {
+      const row = [...document.querySelectorAll('#tb-card .tb-card-choice')].find((r) => r.innerText.trim().toUpperCase().startsWith(${JSON.stringify(label.toUpperCase())}));
+      if (!row) { return false; }
+      row.querySelectorAll('button')[${index}].click();
+      return true;
+    })()`);
+    const pick = (key, value) => page.evaluate(`(() => {
+      const sel = document.querySelector('[data-tbkey="${key}"]');
+      if (!sel) { return false; }
+      sel.value = ${JSON.stringify(value)};
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    const docOf = (i) => json(page, `window.trackBuilder.doc.elements[${i}]`);
+
+    /* THE TOOL AND ITS CHOOSER */
+    const palette = await json(page, `({
+      tools: [...document.querySelectorAll('#tb-palette .tb-tool')].map((b) => b.dataset.tool),
+      letterKey: document.querySelector('#tb-palette .tb-tool[data-tool="letter"] .tb-tool-key').textContent,
+      invisibleKey: document.querySelector('#tb-palette .tb-tool[data-tool="invisibleGate"] .tb-tool-key').textContent,
+      boxShownBefore: !document.querySelector('.tb-letter-opts').hidden,
+    })`);
+    check('the five inch palette has a Letter tool, after the dive gate and before the barrier, and an Invisible gate piece, right after the gate',
+      palette.tools.indexOf('diveGate') < palette.tools.indexOf('letter') && palette.tools.indexOf('letter') < palette.tools.indexOf('barrier')
+      && palette.tools.indexOf('invisibleGate') === palette.tools.indexOf('gate') + 1, palette.tools.join());
+    check('the invisible gate has its key, I, and the letter has none, because the free ones are a map\'s', palette.invisibleKey === 'I' && palette.letterKey === '', `${palette.invisibleKey} ${palette.letterKey}`);
+    check('the chooser is not shown until the tool is in hand', palette.boxShownBefore === false);
+    await tool('letter');
+    await page.until("window.trackBuilder.armed === 'letter' && !document.querySelector('.tb-letter-opts').hidden", 5000);
+    const chips = await json(page, `[...document.querySelectorAll('.tb-letter-grid [data-letter]')].map((b) => b.dataset.letter)`);
+    check('with the tool in hand the chooser shows all twenty six capitals', chips.join('') === 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', chips.join(''));
+    await page.evaluate("document.querySelector('.tb-letter-grid [data-letter=\"W\"]').click(), 1");
+    check('a chip lights, and is the letter in hand', await page.evaluate('window.trackBuilder.letterTool') === 'W'
+      && await page.evaluate("document.querySelector('.tb-letter-grid [data-letter=\"W\"]').getAttribute('aria-pressed')") === 'true');
+
+    /* LAYING ONE */
+    const before = await steps();
+    const w = await at(24, 20);
+    await click(page, w.x, w.y);
+    await page.until("window.trackBuilder.doc.elements.some((e) => e.type === 'letter')", 5000);
+    const laid = await docOf(0);
+    check('a click on the plan lays the letter in hand, a W, in the flying order, as one step',
+      laid.type === 'letter' && laid.letter === 'W' && laid.name === 'Letter W' && await page.evaluate('window.trackBuilder.doc.sequence.length') === 1
+      && await steps() === before + 1, JSON.stringify(laid));
+    check('and the tool stays in hand for the next one, as a gate does', await page.evaluate('window.trackBuilder.armed') === 'letter');
+    await page.evaluate("document.querySelector('.tb-letter-grid [data-letter=\"B\"]').click(), 1");
+    const b = await at(34, 24);
+    await click(page, b.x, b.y);
+    await page.until("window.trackBuilder.doc.elements.length === 2", 5000);
+    const second = await docOf(1);
+    check('another chip, another letter: a B, whose first pass is through its lower bowl', second.letter === 'B' && await page.evaluate('window.trackBuilder.doc.sequence[1].apertureIndex') === 0);
+    check('and the choice is remembered for the next visit', await page.evaluate("localStorage.getItem('webfpv.trackbuilder.letter.v1')") === 'B');
+
+    /* THE CARD OF A LETTER */
+    await page.evaluate('window.trackBuilder.disarm(), window.trackBuilder.setSelection([window.trackBuilder.doc.elements[0].id]), 1');
+    await page.until("document.getElementById('tb-card') && !document.getElementById('tb-card').hidden", 5000);
+    let text = await card();
+    check('the card of a letter names it, offers the other capitals, the frame and the size, and has no flag to go round',
+      /Letter W/.test(text) && /FRAME/i.test(text) && /Width \(m\)/.test(text) && /Height \(m\)/.test(text) && !/ROUND THE FLAG/i.test(text) && !/FLAGS/i.test(text), text.slice(0, 160));
+    const was = await steps();
+    check('Letter on the card changes it to an N in place', await pick(`card-letter-${laid.id}`, 'N'));
+    await page.sleep(200);
+    const changed = await docOf(0);
+    check('the same piece, another letter, as one step: it keeps its place and its size follows the scale it had',
+      changed.id === laid.id && changed.letter === 'N' && changed.name === 'Letter N' && await steps() === was + 1 && await page.evaluate('window.trackBuilder.doc.sequence.length') === 2, JSON.stringify(changed));
+    await page.until("document.querySelector('#tb-card .tb-card-choice') && /FLIES THROUGH/i.test(document.getElementById('tb-card').innerText)", 5000);
+    check('an N has two gaps, and the card says which one this pass goes through', await choiceButton('Flies through', 1));
+    await page.sleep(200);
+    check('and choosing the other gap moves the pass', await page.evaluate('window.trackBuilder.doc.sequence[0].apertureIndex') === 1);
+    check('Frame: Invisible takes the pipe away, and Built puts it back, each one step',
+      await choiceButton('Frame', 1) && (await page.sleep(150), await docOf(0)).unbuilt === true && await choiceButton('Frame', 0) && (await page.sleep(150), await docOf(0)).unbuilt === undefined);
+    await page.evaluate('window.trackBuilder.undo && window.trackBuilder.undo(), 1');
+
+    /* AN INVISIBLE GATE, from the palette */
+    await page.evaluate('window.trackBuilder.disarm(), window.trackBuilder.setSelection([]), 1');
+    await tool('invisibleGate');
+    await page.until("window.trackBuilder.armed === 'invisibleGate'", 5000);
+    const g = await at(44, 22);
+    const n0 = await steps();
+    await click(page, g.x, g.y);
+    await page.until("window.trackBuilder.doc.elements.length === 3", 5000);
+    const inv = await docOf(2);
+    check('a click with the Invisible gate piece lays a gate with nothing built, in the flying order, as one step',
+      inv.type === 'gate' && inv.unbuilt === true && await page.evaluate('window.trackBuilder.doc.sequence.length') === 3 && await steps() === n0 + 1, JSON.stringify(inv));
+    check('it stays in hand, like a gate', await page.evaluate('window.trackBuilder.armed') === 'invisibleGate');
+    await page.evaluate('window.trackBuilder.disarm(), 1');
+    await page.until("document.getElementById('tb-card') && !document.getElementById('tb-card').hidden", 5000);
+    text = await card();
+    check('its card calls it an invisible gate, offers Frame with Invisible lit, and offers to make it a letter', /Invisible gate/.test(text) && /FRAME/i.test(text) && /Make it a letter/.test(text), text.slice(0, 120));
+    check('and has no flags to put on a thing with nothing built', !/FLAGS/i.test(text));
+
+    /* A GATE THAT IS THERE BECOMES A LETTER: how a track is edited */
+    await page.evaluate('window.trackBuilder.pickTool("gate"), 1');
+    const gp = await at(50, 12);
+    await click(page, gp.x, gp.y);
+    await page.until("window.trackBuilder.doc.elements.length === 4", 5000);
+    await page.evaluate('window.trackBuilder.disarm(), 1');
+    await page.until("document.getElementById('tb-card') && !document.getElementById('tb-card').hidden", 5000);
+    const gate = await docOf(3);
+    const order = await json(page, 'window.trackBuilder.doc.sequence.map((s) => s.elementId)');
+    const s0 = await steps();
+    check('a plain gate\'s card offers Make it a letter, and choosing one makes it that letter', await pick(`card-make-letter-${gate.id}`, 'K'));
+    await page.sleep(250);
+    const made = await docOf(3);
+    check('in the same place, with the same id, in the same place in the flying order, as one step',
+      made.type === 'letter' && made.letter === 'K' && made.id === gate.id && Math.abs(made.position.x - gate.position.x) < 1e-9 && Math.abs(made.position.y - gate.position.y) < 1e-9
+      && JSON.stringify(await json(page, 'window.trackBuilder.doc.sequence.map((s) => s.elementId)')) === JSON.stringify(order) && await steps() === s0 + 1, JSON.stringify(made));
+    await page.evaluate('window.trackBuilder.undo && window.trackBuilder.undo(), 1');
+    check('and Undo puts the gate back, as it was', (await docOf(3)).type === 'gate');
+
+    /* IN THE ROOM: a letter is picked by its pipe, and by the gap that is the gate */
+    await page.evaluate(`(() => {
+      const t = window.trackBuilder;
+      t.edit('lay a W for the room', (d) => {
+        d.elements.length = 0;
+        d.sequence.length = 0;
+      });
+      t.pickTool('letter');
+      t.setLetterTool('W');
+      t.placeAt({ x: 30, y: 20 });
+      t.disarm();
+      t.setSelection([]);
+      return 1;
+    })()`);
+    await inThreeD(page);
+    await page.evaluate('window.trackBuilder.setSelection([window.trackBuilder.doc.elements[0].id]), window.trackBuilder.frameSelection(), window.trackBuilder.setSelection([]), 1');
+    await page.sleep(500);
+    const lone = await json(page, 'window.trackBuilder.doc.elements[0]');
+    const gap = await screenOf(page, 'view3d', lone.position.x, lone.position.y, 1.05);
+    check('the gap of a W is on the screen', Boolean(gap), JSON.stringify(gap));
+    await click(page, gap.x, gap.y);
+    await page.sleep(250);
+    check('a click in the gap between the Vs picks the W', await page.evaluate('window.trackBuilder.selection.has(window.trackBuilder.doc.elements[0].id)') === true);
+    await page.evaluate('window.trackBuilder.setSelection([]), 1');
+    await page.sleep(200);
+    const leg = await screenOf(page, 'view3d', lone.position.x, lone.position.y + 1.8375, 1.765);
+    await click(page, leg.x, leg.y);
+    await page.sleep(250);
+    check('and a click on its left pipe picks it too', await page.evaluate('window.trackBuilder.selection.has(window.trackBuilder.doc.elements[0].id)') === true, JSON.stringify(leg));
+    await page.evaluate('window.trackBuilder.setSelection([]), window.trackBuilder.setSelection([window.trackBuilder.doc.elements[0].id]), 1');
+    await page.evaluate("window.trackBuilder.setPieceInvisible(window.trackBuilder.doc.elements[0].id, true), window.trackBuilder.setSelection([]), 1");
+    await page.sleep(300);
+    await click(page, gap.x, gap.y);
+    await page.sleep(250);
+    check('an invisible W is still found by its gap, which is all that is left of it', await page.evaluate('window.trackBuilder.selection.has(window.trackBuilder.doc.elements[0].id)') === true);
+
+    /* THE FILE AND THE ROUND TRIP */
+    const kept = await json(page, `(() => {
+      const t = window.trackBuilder;
+      const text = JSON.stringify(t.doc);
+      return { letters: t.doc.elements.filter((e) => e.type === 'letter').length, hasSchema: t.doc.schemaVersion };
+    })()`);
+    check('the document holds the letter and the schema version is the one it was', kept.letters === 1 && kept.hasSchema === 3, JSON.stringify(kept));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
 async function main() {
   console.log(`builder flow check${rootArg ? ` (against ${root})` : ''}\n`);
   for (const [name, fn] of CASES) {

@@ -65171,3 +65171,210 @@ All of it run in this turn, after the last edit to the code it is about.
    pick it. Remembering it is one line and a reason to think about a 2048 file nobody asked for.
 5. **Standard's name is sharper.** If you would rather Standard were the old file to the byte, it is `tex.anisotropy = 16` in
    `nameTexture`, set to 1, and the comment over it says what that buys.
+
+---
+
+## 2026-10-04 | builder, game, board | Letters for the five inch builder, and gates with no frame (the owner's ask)
+
+The owner, in two messages: "in the 5 inch track builder i want to be able to add flyable letter elements like capital A or B, etc
+through Z. The initial use case is building the WA state champs track where we have the letter W as a track element with the 'gate'
+being the gap in the W between the 2 'v'. I want be able to edit existing tracks with this feature also", and, while that was being
+built: "additionally, i want the ability to add in invisable gates, ie an opening that i need to fly through, like a gate, but with no
+gate graphics around it, this will allow me to more easily build complex elements by assigning arbitary targets that arn't framed by
+a gate".
+
+The branch is `claude/elegant-mendel-moext3` in both repositories. The board's has one commit, and the order of deploy matters: see
+the end.
+
+### What it does now
+
+**A letter** is a capital of 2 inch pipe, A to Z, with one to three gaps in it, and each gap that is flown is a gate. A W is the gap
+between its two Vs, which is the owner's case: 2.45 m across on the ground and 3.15 m to the point, in a letter 4.9 m wide and 3.5 m
+tall (every capital is 3.5 m tall at the size it starts at). An A has its counter and the space under its bar, a B its two bowls, a Y
+three gaps. It is a piece on the five inch palette, after the dive gate, with a chooser of the twenty six under its button while it
+is in hand, and no key (see below). A click lays the one that is lit, in the flying order, through its primary gap, and the choice is
+remembered for the next visit.
+
+Its card has the letter (a select of the twenty six, changing it in place, keeping the size the author gave it and its place in the
+flying order), which gap this pass goes through, Frame, and the letter's width and height as it stands, pipe and all. The More drawer
+has the same with the whole alphabet as a grid, and Make it a gate. A letter is drawn in the room, on the plan and on the plan
+card, and the room picks it by its pipe and by the gap, an invisible one by the gap alone.
+
+**Editing an existing track** is the other half of the ask. A plain gate that is already on a five inch track has Make it a letter on its
+card and in the drawer: it becomes that capital in the same place, with the same id, the same heading, a name the author gave it and its
+place in the flying order, as one undo step, and Make it a gate puts a gate where the letter's primary gap was. So a track that was drawn
+with a gate where its W is takes the W without a gate being deleted and the order put right. A letter can be put on any loaded track the
+same way as a gate can, and copied, turned, resized and flown twice.
+
+**An invisible gate** is an opening with nothing built round it: it scores and lights when it is the next one, and there is no pipe, no
+flag and nothing to hit. The Invisible gate piece lays one in a click (key I, right after the gate on the palette), and Frame on any gate's
+card, or Make it invisible in the drawer, takes the frame from a gate, a stack or a letter and puts it back. In the game it is nothing
+until it is the target and then it is the lit outline and pane any target has, and a letter that is invisible is its gaps alone. It is not
+a new kind of element: the document already had `unbuilt`, which is what a gap in a lattice is, and an invisible gate is a gate with it
+set. So the game, the board, the card and the lap GIF already read it.
+
+### How it is built, and why
+
+- **One table of capitals, `src/props/letters.js`, is the copy of record.** Strokes (runs of straight tubes, with a chamfer where a letter
+  curves, which is how a person builds one out of PVC) and holes (polygons, counter clockwise, with the edges that are pipe and the edges
+  that are not: the ground, the open side of a C). The builder, the game and the plan card all read it, and a self test checks every
+  design: holes in order, pipe edges along strokes, no stroke through a hole, each gap wide enough to fly. The smallest circle in any
+  gap at the default size is 1.16 m (an A, under its bar); a standard gate is 1.52.
+- **The size is the primary gap's, because that is what every opening already is.** The document holds `clearW` and `clearH` for a
+  letter as it does for a gate, and they are the size of its primary gap, so the envelope, the rules, the cards and the board, which
+  read those two numbers and nothing else, read a letter as they read a gate. The rest of the letter follows in the proportions of the
+  design, each axis on its own. `levels` is the capital's count of gaps (fixed by the letter, repaired silently on read), `sillH` and
+  `pitch` are 0. The one new field is `letter`, a word of one capital. `schemaVersion` stays 3: a reader that does not know the type
+  drops it with a note, which `schema.md` now says in so many words.
+- **A pass is scored against the hole the pilot sees, not the box that holds it.** A hoop and a hex gate were already a shape inscribed in
+  a box; a W's gap is a triangle on the ground and an M's is a rectangle with a notch bitten out of it, which no box describes. So an
+  opening can now also be a list of corners (`clipToPolygon` in `src/props/aperture.js`, exact and not sampled, and not assuming convex;
+  where a line enters a notched gap twice, the first stretch is what is credited). The gap is pushed in by the pipe's radius from every
+  side that is pipe and not from the ground or an open side, so the shape that scores is the shape that is drawn and the shape that is
+  solid, which is what `aperture.js` says of every other opening. In `src/game/race.js` a station with a polygon takes the polygon
+  branch; every other station never reaches it.
+- **Frames, and the one place a mirror is decided.** A letter's own frame has x across it, the pilot's right as they fly along the piece's
+  normal, so it reads the right way round from the side it is flown in from (entry 1); the document's width axis is the pilot's left,
+  so the builder draws it mirrored. The game builds a letter facing its first pass, as it builds every gate, so a first pass the other
+  way round is built turned about its axis, and every station is scored in the frame it is flown in. The hole's own offset across the piece
+  (an N's two triangles stand to either side of it) goes through the obstacle scale with the pipe, and positions are never scaled.
+  `suiteLetterCourse` holds the polygon a station scores to the pipe the world builds, for six letters, four headings and both first
+  passes, to a nanometre.
+- **Nothing in the physics changed.** A letter's pipe is the same capsule list a gate's frame is (a cylinder and a capsule from the same two
+  points; a joint is a fitting and not solid, as an upright gate's corners are not). The most a letter adds is 11 capsules (a B), five on
+  average. The module ABI, the plant, `patches/`, `src/native` and the build are untouched (nothing under `vendor/betaflight` is in the
+  diff), and nothing in letters.js is a sine, a cosine, a power or a random (a self test reads the file for them): only arithmetic and
+  square roots, which are the same bits in every engine. I did not put this to the owner before starting, because it adds geometry to the world and does not
+  change the model's shape or the ABI; if the owner reads "the physics model's shape" more widely than that, this entry is where to say so.
+- **The board is taught a letter in the same change, and goes first.** To the board a letter is a gate: it counts on the card, it is a
+  station the lap floor is measured to (at the foot of the primary gap, which can be a metre off the hole the pass goes through, and a
+  floor is a floor), and its plan mark carries the capital, drawn from above as the bar its pipe is. So a letter is not on
+  `BOARD_UNKNOWN_TYPES`, and a track that has one can be published. See the end for the order.
+
+### What changed
+
+    src/props/letters.js          NEW. The twenty six, their layout, the validator, widestCircle, the narrowest gap before a warning.
+    src/props/aperture.js         The polygon helpers: area, bounds, inside, clipToPolygon, insetPolygon, mirror, triangulate, a pane.
+    src/game/race.js              The polygon branch of the pass test, and the hole pushed in by the fingernail.
+    src/game/trackdoc.js          A letter's structure, which way round it is built, and a station at its hole with its polygon.
+    src/render/scene.js           letterGate: the pipe, the capsules, each hole's lit outline, the glow and pane on the hole that is next.
+    src/units.js                  LETTER_TUBE_OD, 2.375 in.
+    src/trackbuilder/elements.js  The letter element, the Invisible gate piece, pieceLabel, the letter helpers, gate presets leave a letter alone.
+    src/trackbuilder/model.js     letterLayoutOf (cached, frozen), the openings and the anchor of a hole, setLetter, repairs, the round trip.
+    src/trackbuilder/parts.js     setInvisible, placeInvisibleGate, turnIntoLetter, turnIntoGate, the invisible gate's ghost.
+    src/trackbuilder/app.js       The letter tool and its remembered choice, the letter and frame edits, framing and centring a letter.
+    src/trackbuilder/ui.js        The chooser, the letter's card and drawer, Frame, Make it a letter, the strip's chip.
+    src/trackbuilder/view3d.js    buildLetter, the ghost of the letter in hand, numbers and panes at the hole.
+    src/trackbuilder/view2d.js    A letter's bar, a dashed footprint for a gate with no frame, the number at the gap.
+    src/trackbuilder/stage.js     A letter in the lap animation (through namespace imports, for the reason that file gives).
+    src/trackbuilder/path.js      The racing line reads a letter's gap as its polygon, and round a letter goes the side and not under.
+    src/trackbuilder/{edit3d,figures,passes,sequence,snap,warnings,index.html}  The ghost, no stack figures for a letter and a wrap that
+                                  clears its width, the nearest gap, the label, no side by side snap, the letter-gap warning, the
+                                  chooser's styles.
+    src/share/plan.js             A table of the capitals and their tubes, the card draws a letter as its pipe and a bar from above.
+    src/share/board.js, DEPLOY.md A comment, and the order of deploy.
+    src/trackbuilder/schema.md    The element, the field, A letter, An invisible gate, and why neither is a version bump.
+    src/trackbuilder/selftest.js  160 checks, in five suites. 2268 on main before, 2428 now.
+    scripts/builder-flow-check.js A case, "letters and invisible gates", 28 checks, with real clicks on the plan and in the room.
+    scripts/memory-check.js       letters.js joins the exact list of props modules a boot may fetch, with the argument (9 KB gzipped).
+    src/fresh.js                  Regenerated: letters.js is in the boot wave, 128 modules (127 before).
+    the board, src/validate.js, public/plan.js, src/selftest.js   A letter is a gate, a station and a bar. Five checks.
+
+### What was checked
+
+All of it run in this turn, after the last edit to the code it is about, except where it says otherwise.
+
+    check:clip (the builder, Node)        2428 passed, 0 failed (2268 on main)
+    the board, npm test                   all passed (five new checks); lint:licence and lint:nouns clean
+    check:builder --only letters ...      28 passed, 0 failed, 8 s: the chooser, a click on the plan, the card, one undo step each,
+                                          Make it a letter and Undo, the invisible piece, and a click in the room on the gap, on the
+                                          pipe, and on an invisible letter's gap
+    check:builder, the whole file         774 passed, 2 failed, 63 cases, on the tree before my last three edits (the racing line,
+                                          the two labels in the drawer): "Reverse turns the direction it is flown round", which passed
+                                          alone and failed in a whole file run, and "and the ring is at its foot" in "map: build by
+                                          pointer", which fails the same way on origin/main (I ran it twice on each). Neither is
+                                          about a letter, and I did not touch either
+    lint:preload                          up to date (boot 128, city 76, built 34, 252 served)
+    lint:memory                           PASS, with letters.js in the boot list and the argument above it (it names letters.js among the
+                                          props a boot fetched, and failed by name before the list had it)
+    lint:presets, lint:frame, lint:nouns  clean. check:fresh 18 of 18. gif:selftest 66 of 66 (merged with main's export change)
+    mutations                             a station polygon not mirrored, the hole not pushed in, the held-off check always true and a
+                                          flag left on an invisible gate each turned a check red; the unmutated tree was 0 failed
+    looked at                             the builder (the palette with the chooser, a letter's card and drawer, a gate's card, an
+                                          invisible gate, the plan card from above and in three quarters), and the game, through
+                                          shots.js: a W, an N, a B and a K from the front and at an angle, the lit gap of each when it is
+                                          the target, and an invisible gate and an invisible A, which are nothing until they are the target
+    through the real exporter             a four letter track rendered by scripts/trackgif.js at 384 px, 165 frames, no error
+    dashes                                none in anything added, in either repository
+
+### What was not run, and why
+
+- **`npm run verify`.** Nothing under `src/native`, `patches`, `vendor/betaflight` or `src/input` changed and the simulation trace cannot
+  move. `CLAUDE.md` says not to run it unless asked, and I was not.
+- **`lint:catalog`.** It does not start here: `vendor/betaflight` is not checked out in this container (ENOENT on `parameter_names.h`),
+  which is true of main as well and has nothing to do with this change.
+- **`lint:shell`, `lint:boot`, `lint:responsive` and the other browser lints.** None of what they look at moved, apart from the module
+  list `lint:memory` holds, which is named above.
+- **A real flight through a letter at speed.** What a headless browser on a software rasteriser can say is where the polygon is, which
+  chords score and which do not. It said it in the game for an N: two chords inside the lower left gap scored (one of which I had
+  labelled "should not pass", and I was wrong about it, not the code), and a chord through the upper right gap, which is a different
+  gate in the flying order, and one through the pipe beside the stem did not. Whether a W of this size is pleasant to fly, and whether 2.45 m at the foot is
+  what the real W is, is for the pilot who flies it.
+- **The merge with main.** I merged `origin/main` (the export size change) into the branch after the first push and re-ran the self
+  test, the preload check and the gif self test on the result. The flow check below was run on the merged tree.
+
+### What went wrong
+
+- **A hole too small for its pipe could still score.** Pushing the sides of a polygon in past its middle turns it inside out, and with an
+  even number of sides it comes out the same way round, so its area is positive: an O of 5 cm came out as a smaller octagon, wrong way up,
+  and `ok`. I only found it because I wrote a test for "too small", expecting it to be easy. The fix asks where the corners are
+  (each must be a pipe's radius off every side that was pushed), and my first version of that failed the G, because the step at the
+  end of a bar, where the pipe stops and the open side starts, is on the tube's own axis. It now lets a corner on a side that was not
+  pushed alone. All twenty six designs pass and the smallest O that has a gap is 13 cm across.
+- **The pipe was a gate's first.** A letter built of 1 inch pipe looked like wire in the game. It is the 2 inch the owner's W is built of
+  (`LETTER_TUBE_OD`, 2.375 in), which is a size of its own and not `FRAME_TUBE_OD`.
+- **The hole's offset was not scaled with the pipe.** An N's two triangles are off the piece's middle, and the station's offset did not
+  go through the obstacle scale as the pipe does, so the scored hole was 2 to 24 cm off the drawn one. A consistency script found it and
+  `suiteLetterCourse` now holds it.
+- **I gave the Letter tool the key Y and the self test said no.** The race palettes' key maps are pinned, and Y is a map asset's key,
+  which a test says does nothing on a race track. I took the key off rather than move a pin. The Invisible gate has I, which is checked
+  the way the wall's K and the section's J are.
+- **Six of my own checks could not fail, as I first wrote them.** A control for "a letter is not a bay" passed because a gate beside a
+  gate does not pin either at a spacing that is not exact; one allowed a repair note or none; one ended in `|| true`; one compared an
+  object to itself; one was a flag I had set to true; one asked whether a hole's flag was `ok` or its area positive, which is its
+  definition. Each was rebuilt so that it fails when the code is wrong, and the mutations above are the evidence that the rest do.
+- **Several of my expectations were wrong about my own designs.** An N's two gaps are 0.98 m apart and not more than a metre; the
+  point of an M's V that I tried to fly through was in the notch, not the arm. The tests were wrong and the code was right, and I
+  read each against the design before I changed it.
+- **The racing line dodged a letter's own gaps, and I found it last, by hand.** The line keeps out of an opening it was not asked to
+  go through by treating every opening as the box that holds it, and an N's two gaps are two triangles whose boxes are the same
+  box, so the line leaving one of them was "going through" the other, and the dodge inserted a steering knot at the same place
+  twelve times, to its limit. Nothing in the self test saw it because nothing built a line to a letter. I found it trying a Turn
+  after an N, because a figure laid after the pass had looked odd. The line now reads a gap as its polygon (as the pass test
+  does), and a gap taller than it is wide is escaped round the side and not under the ground, which a gate never needed. Four
+  checks now build lines to and past letters, and one was weak enough to pass with the fix taken out until I moved its point.
+- **A first plan card drew a letter as a gate** the width of its primary gap, a bar half the letter. It is the pipe now, and the
+  table it draws from is checked against the designs.
+- **Three checks outside my case fail, and none is mine.** In the whole file run on this branch "Reverse turns the direction it is flown
+  round" failed; run alone, the same case failed once in three goes on a different check ("More opens the drawer with everything else in
+  it"), and run alone against `origin/main` it failed on that one too. They are timing on a software rasteriser, on main as well as
+  here. And in "map: build by pointer", "and the ring is at its foot" fails the same way on `origin/main` (twice there, twice here).
+  I changed no threshold and did not fix them.
+
+### For the owner
+
+1. **Which verification you want, and at what scale.** None of the expensive ones has been run. The honest one is to fly it: open the
+   builder on the five inch canvas, lay a W (Letter, W, click), open your WA State Champs track and Make it a letter on the gate where
+   the W is, then Fly this track and go through it. Wrong would be a W the wrong way round, a gap that does not score where it is
+   lit, a pass that scores through the pipe, a lit outline that is not the gap, or a letter you cannot select.
+2. **Deploy the board first.** The simulator publishes a track with a letter as soon as it is deployed; an old board counts it as nothing
+   and says nothing. `DEPLOY.md` has the paragraph.
+3. **The size of a W is a guess at yours.** 4.9 m wide and 3.5 m tall, its gap 2.45 by 3.15 m, is the proportion of a capital W in
+   2 inch pipe at a gate sized for a quad. The card's Width and Height set it, and the gap follows. If the real one is different, tell me
+   what it is and the default moves, once, in `GRID` in `letters.js`.
+4. **An invisible gate shows only while it is the target.** It is the lit outline and pane any target has, and nothing else, so a pilot
+   who has not got the course in their head cannot see where the next one is until it is next. If you want a faint marker always on, it
+   is a small change in the scene's gate builders, and a decision about what a pilot can see, so it is yours.
+5. **No hotkey for Letter.** The free letters are a map's, and a test pins the race palettes' keys. It is a click, and I is the Invisible gate.
+6. **Not built, because not asked:** digits and punctuation, a letter on the whoop canvas (a room has no pipe that size), a build sheet
+   cut list for a letter (the sheet is RaceGOW's), and a letter in a group with others as one piece.

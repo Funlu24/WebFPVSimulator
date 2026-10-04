@@ -63,6 +63,15 @@ the board first. Its band has to hold the simulator's, `WEIGHT_MIN` to
 `WEIGHT_MAX` in `src/ui/ui.js`, so widening the slider is a board change
 first as well, or the new end is refused with a sentence about a weight.
 
+A letter is the third. Since 2026-10-04 the five inch builder lays capitals of pipe (`type: "letter"`), and the board
+reads one as a gate: it counts as one of the gates a card shows, as a station the lap floor is measured to and as a mark
+the plan draws, and carries which capital it is on the plan. Its side is `PLAN_APERTURE`, `letterWord` and the plan's
+marks in the board's `src/validate.js`, and the drawing in its `public/plan.js`. The simulator does not hold a track with
+a letter back from Publish (`BOARD_UNKNOWN_TYPES` in `src/share/board.js` does not list it, because the board knows it),
+so a simulator deployed ahead of the board publishes tracks that the old board counts as having one gate fewer for each
+pass through a letter, measures the lap floor to fewer stations (a lower floor, which is the safe way round) and draws
+a letter as nothing. Nothing is refused and nothing says so. Deploy the board first. An invisible gate needs nothing from the board: it is a gate with its frame taken away.
+
 ## By hand, rather than from the blueprints
 
 The blueprints below are the short path. If you would rather create each
