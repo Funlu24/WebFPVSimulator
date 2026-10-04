@@ -195,6 +195,18 @@ async function loadThree() {
   return loading;
 }
 
+/* Start the download now rather than at the first press of the 3D button.
+ * The five inch and the whoop open IN 3D, so the first frame of the page is
+ * waiting on Three.js, a megabyte from the CDN, and the builder (unlike the
+ * simulator, see fresh.js PRELOAD) has no modulepreload for it: the fetch
+ * began only once App had been built, behind the whole module graph, and the
+ * track stayed an empty frame until it came. Kicked off here it runs beside
+ * that graph instead of after it. A failure is not reported here: it is
+ * cached in `loading`, and setEnabled awaits the same promise and says so. */
+if (typeof document !== 'undefined') {
+  loadThree().catch(() => {});
+}
+
 /*
  * THE FREESTYLE HALF, filled in by loadFreestyle() the first time the 3D
  * view opens on a map. It comes in two parts because they fail differently:

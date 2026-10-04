@@ -65610,3 +65610,53 @@ the ABI or the build), a phone viewport, and anything against the live board.
 What went wrong. My first builder test failed because it forgot to clear the admin session before asserting signed out behaviour,
 which was the test's fault. Starting a scratch Postgres as another user failed on directory permissions twice before it worked. The
 disabled Update button in the locked dialog is dark on dark; it is the builder's existing disabled style and I left it.
+
+## 2026-10-04: builder's 3D view waited on Three.js
+
+Report: opening 3D mode in the builder, the track does not render straight away. The five inch and the whoop open in 3D, so this is
+the first frame of the page. Cause, from reading the code and not from a timing: `src/trackbuilder/index.html` has no
+`data-preload`, so Three.js is not modulepreloaded the way the simulator's boot does it, and view3d.js began `import('three')` only
+in `setEnabled`, after App was built and behind the whole module graph. Until it arrived the canvas was an empty frame. It is not
+the admin work: that commit only added `admin.js` to the boot graph and touches nothing in view3d.js or the draw path.
+
+Change: view3d.js starts the Three.js download when the module is evaluated (browser only). One call, no behaviour change when it
+arrives, the failure path is the same cached promise. Checked: `src/trackbuilder/selftest.js` 2457 passed, `lint:shell` and
+`lint:boot` pass. Headless Chromium through the shots harness: the builder opens, and a track of five gates draws in 3D and again
+after 2D to 3D. Not shown: a measured before and after, because the harness serves the CDN through Node with a cache and so cannot
+reproduce a slow network. A real cold load on a slow connection is the thing to look at. Not run: `npm run verify`, nothing here
+touches physics.
+
+What went wrong. I could not reproduce the delay locally, so the cause is a reading of the code and the fix is a safe early start,
+not a proven cure. If the empty frame is still there on a cold load, the next step is a builder preload list in gen-preload.js.
+
+## 2026-10-04: Show FPS toggle in Settings
+
+Request: an option under Settings to show the frame rate on screen, on or off. Added `showFps` (boolean, default false, saved with the
+other settings), a "Show FPS" row beside Crosshairs, and an `.osd-fps` readout at the top left of the flight OSD. The count is taken
+in `setOsd` from `performance.now()` over half second windows and is display only: nothing the flight reads sees it, so physics and
+determinism are untouched. `syncFps` runs from `show()` like `syncCrosshair` and restarts the count so a pause is not read as a slow
+frame.
+
+Checked: `node --check src/ui/ui.js`, `lint:boot` passes (9 of 9). `lint:shell` FAILS on the Settings screen: overflow grew from 634
+to 678 px, which is exactly one more row (44 px) in a list that already scrolls. It passes on main without this change. I did not
+re-record the baseline, because the rule is not to move a threshold to make a check pass. Whether one more row on a scrolling list is
+a deliberate re-record is the owner's call. Not run: `npm run verify` (no physics, ABI or build change), `shots.js`, and I have not
+seen the readout on screen.
+
+What went wrong. Nothing broke, but the readout is unseen: placement at the top left may collide with the clock on a phone viewport.
+## 2026-10-04 | menus | Camera angle on the Rates screen again
+
+Report: "in a recent pr to the menu system i seem to have removed the camera angle adjustment option, please put it back under
+rates - camera angle". Finding, from `git log -S"Camera angle"`: nothing was removed. 353c68a (Menus: one name per room) deleted
+only the Settings signpost row that said where Camera angle had gone, and the row itself has lived in the Quad room under
+"Camera" since before it. It was never on the Rates screen in the history I can read (117 commits). So the pilot did not lose it
+to a bug, but they are right that it is not where they look for it, and it is the setting the yaw rate has to be tuned against.
+
+Change: `cameraAngleRow(s)` in `src/ui/ui.js` is the one definition of the stepper (same clamp, same yaw tip offered once on the
+way up past YAW_TIP_TILT, same stored `s.cameraAngle`). The Quad room still shows it, via the method, and the Rates screen now has
+it between Yaw and Throttle. Persistence is unchanged because both rows write the same field. No section heading on Rates: a
+heading of its own is decoration and decoration gives way.
+
+Checked: `node --check`, `lint:fc` 33 of 33, `lint:presets` 4 of 4. `lint:catalog` cannot run in this container (vendor/betaflight is
+not checked out). `lint:shell` FAILS: rates overflow grew from 338 to 382 px, which is one 44 px row. I did not touch the
+baseline: it is a recorded number and moving it is the owner's call. Not run: `npm run verify`, nothing here touches physics.

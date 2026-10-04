@@ -1189,6 +1189,14 @@ const DEFAULTS = {
    * typeof gate accepts it, and loadSettings holds it to CROSSHAIRS.
    */
   crosshair: 'off',
+  /*
+   * FPS READOUT: the frame rate the browser is drawing at, in the corner of
+   * the flight picture. Off by default, because a number nobody asked for
+   * is a number in the way. Only the picture: it is counted from the frames
+   * setOsd is handed, never from anything the flight reads. A boolean so
+   * the typeof gate accepts it.
+   */
+  showFps: false,
   packVoltage: 4.2,
   /*
    * How heavy the quad is, as a percentage of the weight the airframe is
@@ -4732,7 +4740,12 @@ export class Ui {
     this.osdCross = el('div', 'osd-cross is-off');
     this.osdCross.append(el('i', 'xh-l'), el('i', 'xh-r'), el('i', 'xh-t'), el('i', 'xh-b'), el('i', 'xh-dot'));
     this.osdCrossShape = 'off';
-    this.osd.append(this.osdCross, top, packBlock, flightBlock, sticks, this.osdLaunch, this.buildTargetLock());
+    /* The FPS readout, counted in setOsd and shown by syncFps. */
+    this.osdFps = el('div', 'osd-fps');
+    this.osdFps.hidden = true;
+    this.osdFpsFrames = 0;
+    this.osdFpsAt = 0;
+    this.osd.append(this.osdFps, this.osdCross, top, packBlock, flightBlock, sticks, this.osdLaunch, this.buildTargetLock());
     r.append(this.osd);
 
     /*
@@ -6140,6 +6153,39 @@ export class Ui {
       noBtn.addEventListener('click', () => finish(false));
       yesBtn.focus();
     });
+  }
+
+  /* The camera tilt stepper, shared by the Quad room (where it is the
+   * machine's setting) and the Rates screen (where the yaw it rolls into the
+   * picture is tuned). One definition, so the two cannot drift. */
+  cameraAngleRow(s) {
+    return stepper(
+      'Camera angle',
+      /*
+       * The yaw sentence is not a caveat, it is the main thing a pilot
+       * needs to know before they crank this up, and the menu never said
+       * it. A camera tilted up by t sees a pure yaw as sin(t) of image
+       * roll and cos(t) of image yaw, which is geometry and is exactly
+       * what a real tilted camera does. At 30 that is half. At 40 it is
+       * nearly two thirds, which is the tilt a pilot wrote in about.
+       */
+      `How far the camera tilts up from the airframe. ${CAMERA_ANGLE_MIN} is flat, looking along the nose. ${CAMERA_ANGLE_DEFAULT} is a typical cruise. 45 to ${CAMERA_ANGLE_MAX} is race. Above about 30, yaw starts to roll the horizon: at ${s.cameraAngle} degrees, ${Math.round(Math.sin(cameraTiltRad(s.cameraAngle)) * 100)} percent of a yaw shows up as roll in the picture. That is what a real tilted camera does. Lower Yaw max rate on the Rates screen to tame it.`,
+      `${s.cameraAngle}°`,
+      (d) => {
+        const before = s.cameraAngle;
+        s.cameraAngle = clampCameraAngle(before + d);
+        /* On the way UP across the threshold only, and only if the yaw
+         * rate is above what would be offered. Stepping back down and up
+         * again inside one session does not ask twice. */
+        if (before < YAW_TIP_TILT
+          && s.cameraAngle >= YAW_TIP_TILT
+          && fullStickDeg(s.rates, 'yaw') > YAW_TIP_RATE
+          && yawTipFixable(s.rates)
+          && !this.yawTipAsked) {
+          this.offerYawTip();
+        }
+      },
+    );
   }
 
   /*
@@ -7974,33 +8020,7 @@ export class Ui {
           note: `Every Betaflight 4.5.1 key the module compiles, tab by tab, in Configurator’s own colours. Opens as a tool, in its own frame. Save becomes Your edits and the Tune row above starts naming it; the picker that puts you back on stock is in ${SCREEN_TITLES.pids}. There is no CLI paste.`,
         },
         { label: 'Camera', section: true },
-        stepper(
-          'Camera angle',
-          /*
-           * The yaw sentence is not a caveat, it is the main thing a pilot
-           * needs to know before they crank this up, and the menu never said
-           * it. A camera tilted up by t sees a pure yaw as sin(t) of image
-           * roll and cos(t) of image yaw, which is geometry and is exactly
-           * what a real tilted camera does. At 30 that is half. At 40 it is
-           * nearly two thirds, which is the tilt a pilot wrote in about.
-           */
-          `How far the camera tilts up from the airframe. ${CAMERA_ANGLE_MIN} is flat, looking along the nose. ${CAMERA_ANGLE_DEFAULT} is a typical cruise. 45 to ${CAMERA_ANGLE_MAX} is race. Above about 30, yaw starts to roll the horizon: at ${s.cameraAngle} degrees, ${Math.round(Math.sin(cameraTiltRad(s.cameraAngle)) * 100)} percent of a yaw shows up as roll in the picture. That is what a real tilted camera does. Lower Yaw max rate on the Rates screen to tame it.`,
-          `${s.cameraAngle}°`,
-          (d) => {
-            const before = s.cameraAngle;
-            s.cameraAngle = clampCameraAngle(before + d);
-            /* On the way UP across the threshold only, and only if the yaw
-             * rate is above what would be offered. Stepping back down and up
-             * again inside one session does not ask twice. */
-            if (before < YAW_TIP_TILT
-              && s.cameraAngle >= YAW_TIP_TILT
-              && fullStickDeg(s.rates, 'yaw') > YAW_TIP_RATE
-              && yawTipFixable(s.rates)
-              && !this.yawTipAsked) {
-              this.offerYawTip();
-            }
-          },
-        ),
+        this.cameraAngleRow(s),
         choice(
           'Field of view',
           'Wider sees more, narrower magnifies. 75 matches what an FPV lens does to the middle of the frame; 85 gives some of that back for width; 115 is the widest this projection can honestly offer, about 145 degrees corner to corner, and the gates will look smaller for it.',
@@ -8290,6 +8310,14 @@ export class Ui {
           s.crosshair,
           (id) => CROSSHAIR_LABEL[id],
           (id) => { s.crosshair = id; },
+        ),
+        toggle(
+          'Show FPS',
+          s.showFps
+            ? 'On: the frame rate is drawn in the top corner while you fly, updated twice a second. It is the rate the browser is drawing at, so it reads the display, not the physics.'
+            : 'Off: no frame rate on screen. Turn it on to see how smoothly this machine is drawing the flight.',
+          s.showFps,
+          (v) => { s.showFps = v; },
         ),
         { label: 'Sound', section: true },
         toggle('Sound', 'All sound: motors, wind, music, cues and every lap time called out loud.', s.sound, (v) => { s.sound = v; }),
@@ -8889,6 +8917,7 @@ export class Ui {
         ...(split ? [{ label: 'Pitch', section: true }, ...axisRows('pitch')] : []),
         { label: 'Yaw', section: true },
         ...axisRows('yaw'),
+        this.cameraAngleRow(s),
         { label: 'Throttle', section: true },
         choice(
           'Throttle limit',
@@ -12476,6 +12505,7 @@ export class Ui {
     /* A toggle, not a className: setOsd keeps is-free on the same node. */
     this.osd.classList.toggle('dim', screen === 'paused');
     this.syncCrosshair();
+    this.syncFps();
     this.pauseAirSlider(screen);
     /* The score follows the OSD onto and off the screen, but only in
      * freestyle: a race has no score and an empty Score 0 over a lap timer
@@ -13636,6 +13666,7 @@ export class Ui {
 
   setOsd({ mode, lapMs, lastLapMs, gate, gateCount, gateCue, volts, packFrac, altitude, speedKph, throttle, flightMode, bounces, launchState, launchPitch, ghostGapMs, ghostFinal, runState, runRemainMs, runTimed, runScored }) {
     const freestyle = mode === 'freestyle';
+    this.countFps();
     /* Whether the continuous readouts are due this frame: see
      * OSD_NUMBERS_MS. A running clock waits for its tick; a clock that has
      * just stopped, started or changed what it counts is written at once,
@@ -13880,6 +13911,39 @@ export class Ui {
       this.lookShown = look;
       this.root.classList.toggle('no-manga', !look);
       this.letterScreen(this.screen);
+    }
+  }
+
+  /*
+   * The FPS readout follows the Show FPS row. Called from show() for the
+   * same reason syncCrosshair is. The count restarts on every show so a
+   * pause does not read as one very slow frame.
+   */
+  syncFps() {
+    if (!this.osdFps) {
+      return;
+    }
+    const on = this.settings.showFps === true;
+    this.osdFps.hidden = !on;
+    this.osdFpsFrames = 0;
+    this.osdFpsAt = 0;
+  }
+
+  /* One frame drawn: counts, and rewrites the number twice a second. */
+  countFps() {
+    if (this.settings.showFps !== true || !this.osdFps) {
+      return;
+    }
+    const now = performance.now();
+    if (this.osdFpsAt === 0) {
+      this.osdFpsAt = now;
+      return;
+    }
+    this.osdFpsFrames += 1;
+    if (now - this.osdFpsAt >= 500) {
+      Ui.text(this.osdFps, `${Math.round((this.osdFpsFrames * 1000) / (now - this.osdFpsAt))} FPS`);
+      this.osdFpsFrames = 0;
+      this.osdFpsAt = now;
     }
   }
 
