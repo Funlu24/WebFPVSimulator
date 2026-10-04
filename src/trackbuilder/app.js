@@ -132,12 +132,14 @@ import {
 } from '../share/session.js';
 import {
   bindOwnedCanvas,
+  boardHolding,
   courseChip,
   flyCanvasWithoutListing,
   forkDocument,
   inspectCourse,
   isEmptyCanvas,
   layoutFingerprint,
+  officialBlocksOpen,
   publishedTags,
   rememberPublish,
   suggestRemixName,
@@ -541,6 +543,16 @@ function localDrift(seated, incoming) {
 }
 
 /*
+ * Whether a question to the board is worth sending: not when the device says
+ * it is offline, where the answer is already known to be none. The builder has
+ * to keep working on a pilot's own tracks with no connection, so every check
+ * that is only a courtesy (is this track official) is skipped there.
+ */
+function boardMayBeAsked() {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
+
+/*
  * A MAP GOES ON THE BOARD NOW. Publish did nothing on a map while the
  * board knew only race tracks (FREESTYLE-MAPS-PLAN.md, section 13, which
  * left it out of that plan). The owner asked for published maps on the
@@ -744,6 +756,9 @@ export class App {
     this.view3d.frameTrack();
     this.refresh();
     this.syncViewToCanvas();
+    /* The canvas restore() reopened on may hold a track that was made
+     * official while this browser was away. */
+    this.guardOfficial();
     if (asking) {
       this.openChooser();
     }
@@ -821,130 +836,165 @@ export class App {
       if (!share || !share.document) {
         return;
       }
-      const owned = Boolean(readEditKey(share.id));
-      const fromBoard = Boolean(params.get('share'));
-      /*
-       * AN ADMIN OPENS AN OFFICIAL TRACK TO EDIT IT, NOT TO COPY IT.
-       *
-       * Everyone else gets a remix of somebody's track, which is right: it
-       * is theirs to make their own version of. An official track is the
-       * board's own and an admin is the one person who may change it, so for
-       * them the link opens it in place and Publish updates the original.
-       * Only while the board says it is official, so a signed in admin
-       * opening an ordinary track still gets the copy everybody gets, and
-       * only when they did not ask for a remix by name.
-       */
-      const adminEdit = !owned && fromBoard && !(intent && intent.kind === 'remix')
-        && await this.adminMayEditOfficial(share);
-      const wantRemix = !adminEdit && ((intent && intent.kind === 'remix') || (!owned && fromBoard));
-      const wantEdit = adminEdit || (owned && (fromBoard || (intent && intent.kind === 'edit')));
-      if (!wantRemix && !wantEdit) {
-        return;
-      }
-      const incoming = normalize(share.document).doc;
-      /* What the incoming track replaces is whatever its OWN seat holds,
-       * which is the canvas on screen only when the two are the same kind:
-       * a room from a board link opened on a five inch lands in the whoop
-       * seat, and asking about the five inch track on screen asked about
-       * the one thing that was not going to change. */
-      const seated = this.seatedFor(incoming);
-      if (wantEdit) {
-        const load = () => {
-          /* The seat may hold this same track with edits the board has not
-           * had: the Publish button calls that drift and offers to send it.
-           * Opening the board's version must not drop them, so they are
-           * kept in Load as a copy under a new id (never under the board's
-           * id, which would be two documents behind one edit key). */
-          let local = '';
-          if (!isEmptyCanvas(seated) && seated.id === incoming.id && localDrift(seated, incoming)) {
-            const copy = duplicateTrack(seated, `${seated.name} (local changes)`);
-            if (!saveTrack(copy)) {
-              this.toast(`Nothing was opened: "${seated.name}" has changes the board does not, and they could not be kept because local storage is unavailable or full. Export it first.`);
-              return;
-            }
-            local = `Your local changes are in Load as "${copy.name}".`;
-          }
-          if (adminEdit) {
-            /* The bind is what inspectCourse reads in place of an edit key.
-             * Written here, after the confirm below can no longer decline. */
-            writeBind(incoming.id, {
-              board: share.board || boardOrigin(),
-              author: share.author || '',
-              nameOnBoard: share.name || incoming.name,
-              layoutFingerprint: layoutFingerprint(incoming),
-              owned: false,
-              adminEdit: true,
-            });
-          }
-          const editing = adminEdit
-            ? `Editing the official track "${incoming.name}" as an admin. Update the board puts your changes live.`
-            : `Editing "${incoming.name}" on the board.`;
-          this.loadDocument(incoming, [editing, local].filter(Boolean).join(' '));
-        };
-        if (!isEmptyCanvas(seated) && seated.id !== incoming.id) {
-          this.confirm(
-            ...this.replaceWords(seated, incoming, 'This published track', [
-              'Replace the track on the canvas?',
-              'Your current canvas will be replaced with this published track. Save it first if you still need it.',
-            ]),
-            load,
-          );
-        } else {
-          load();
-        }
-        return;
-      }
-      const { copy, commit } = forkDocument(incoming, {
-        sourceId: share.id,
-        sourceName: share.name || incoming.name,
-        sourceAuthor: share.author || '',
-        board: share.board || boardOrigin(),
-      });
-      const load = () => {
-        /* The other canvas's document is kept FIRST, because it can fail
-         * (storage full), and then nothing may happen: loadDocument would
-         * refuse, but only after the bind below was committed. The keep
-         * is handed to loadDocument rather than asked for twice. */
-        const keep = canvasOf(copy) !== canvasOf(this.doc) ? this.keepSeat(copy) : null;
-        if (keep && !keep.ok) {
-          this.toast(keep.said);
-          return;
-        }
-        /* Committed HERE, not in forkDocument: the confirm below can be
-         * declined, and a bind for a copy the author never opened is a
-         * course this browser claims to own and has never seen. */
-        commit();
-        clearShareImport();
-        this.loadDocument(copy, `This is your copy of "${share.name || incoming.name}". Publish it under a new name to put it on the board.`, keep);
-      };
-      if (!isEmptyCanvas(seated) && seated.id !== share.id) {
-        this.confirm(
-          ...this.replaceWords(seated, incoming, `A copy of "${share.name || incoming.name}"`, [
-            `Open a copy of "${share.name || incoming.name}"?`,
-            'The track on your canvas will be replaced. Save it first if you still need it.',
-          ]),
-          load,
-        );
-      } else {
-        load();
-      }
+      await this.openShared(share, intent, Boolean(params.get('share')));
     } finally {
       this.syncBoardIdentity();
     }
   }
 
   /*
-   * IS THIS TAB AN ADMIN, AND IS THE TRACK IT IS OPENING OFFICIAL.
+   * WHAT A BOARD LINK, OR THE SIMULATOR'S EDIT AND REMIX, ASKED FOR, DONE.
    *
-   * Two questions and the board answers both, so a token this clock still
-   * likes but the board has dropped (a changed password, a removed address)
-   * is found out here, by a request, and cleared, rather than at the moment
-   * somebody presses Update and is refused. Anything that goes wrong reads as
-   * "no": the cost of a wrong no is a copy where an admin wanted the
-   * original, which the Admin dialog and a second try put right.
+   * Split from adoptIncomingShare so that the dialog an official track stops
+   * at can run it again once the pilot has signed in as an admin: the link is
+   * out of the address and the intent has been taken by then, so what they
+   * asked for is handed in rather than read again.
    */
-  async adminMayEditOfficial(share) {
+  async openShared(share, intent, fromBoard) {
+    const owned = Boolean(readEditKey(share.id));
+    const remixAsked = Boolean(intent && intent.kind === 'remix');
+    /* A share seat left behind by a flight is not a request to open anything. */
+    if (!(fromBoard || remixAsked || (owned && intent && intent.kind === 'edit'))) {
+      return;
+    }
     const origin = share.board || boardOrigin();
+    /*
+     * AN OFFICIAL TRACK DOES NOT OPEN FOR ANYBODY BUT AN ADMIN.
+     *
+     * Not as the publisher's own track in place, not as a copy, not from a
+     * link and not from the simulator's Edit or Remix: the owner's rule of
+     * 2026-10-04, after the first build opened one for the browser that
+     * published it. It can still be flown, which is the simulator's door and
+     * not this one. Asked of the board, which is the only thing that knows;
+     * a shipped track is not on the board and is not asked about, and a
+     * board that cannot be reached answers null, which is "not official" here
+     * because the board's own lock refuses the publish whatever this does.
+     */
+    const official = !share.stock && boardMayBeAsked() && (await fetchTrackOfficial(share.id, origin)) === true;
+    const admin = official && await this.adminSignedIn(origin);
+    if (official && !admin) {
+      this.explainOfficial(share.name || share.document.name, { retry: () => this.openShared(share, intent, fromBoard) });
+      return;
+    }
+    /*
+     * AN ADMIN OPENS AN OFFICIAL TRACK TO EDIT IT, NOT TO COPY IT.
+     *
+     * Everyone else gets a remix of somebody's track, which is right: it
+     * is theirs to make their own version of. An official track is the
+     * board's own and an admin is the one person who may change it, so for
+     * them the link opens it in place and Publish updates the original.
+     * Only while the board says it is official, so a signed in admin
+     * opening an ordinary track still gets the copy everybody gets, and
+     * only when they did not ask for a remix by name.
+     */
+    const adminEdit = admin && !owned && fromBoard && !remixAsked;
+    const wantEdit = adminEdit || (owned && (fromBoard || (intent && intent.kind === 'edit')));
+    const incoming = normalize(share.document).doc;
+    /* What the incoming track replaces is whatever its OWN seat holds,
+     * which is the canvas on screen only when the two are the same kind:
+     * a room from a board link opened on a five inch lands in the whoop
+     * seat, and asking about the five inch track on screen asked about
+     * the one thing that was not going to change. */
+    const seated = this.seatedFor(incoming);
+    if (wantEdit) {
+      const load = () => {
+        /* The seat may hold this same track with edits the board has not
+         * had: the Publish button calls that drift and offers to send it.
+         * Opening the board's version must not drop them, so they are
+         * kept in Load as a copy under a new id (never under the board's
+         * id, which would be two documents behind one edit key). */
+        let local = '';
+        if (!isEmptyCanvas(seated) && seated.id === incoming.id && localDrift(seated, incoming)) {
+          const copy = duplicateTrack(seated, `${seated.name} (local changes)`);
+          if (!saveTrack(copy)) {
+            this.toast(`Nothing was opened: "${seated.name}" has changes the board does not, and they could not be kept because local storage is unavailable or full. Export it first.`);
+            return;
+          }
+          local = `Your local changes are in Load as "${copy.name}".`;
+        }
+        if (adminEdit) {
+          /* The bind is what inspectCourse reads in place of an edit key.
+           * Written here, after the confirm below can no longer decline. */
+          writeBind(incoming.id, {
+            board: share.board || boardOrigin(),
+            author: share.author || '',
+            nameOnBoard: share.name || incoming.name,
+            layoutFingerprint: layoutFingerprint(incoming),
+            owned: false,
+            adminEdit: true,
+          });
+        }
+        const editing = adminEdit
+          ? `Editing the official track "${incoming.name}" as an admin. Update the board puts your changes live.`
+          : `Editing "${incoming.name}" on the board.`;
+        this.loadDocument(incoming, [editing, local].filter(Boolean).join(' '));
+      };
+      if (!isEmptyCanvas(seated) && seated.id !== incoming.id) {
+        this.confirm(
+          ...this.replaceWords(seated, incoming, 'This published track', [
+            'Replace the track on the canvas?',
+            'Your current canvas will be replaced with this published track. Save it first if you still need it.',
+          ]),
+          load,
+        );
+      } else {
+        load();
+      }
+      return;
+    }
+    const { copy, commit } = forkDocument(incoming, {
+      sourceId: share.id,
+      sourceName: share.name || incoming.name,
+      sourceAuthor: share.author || '',
+      board: share.board || boardOrigin(),
+    });
+    const load = () => {
+      /* The other canvas's document is kept FIRST, because it can fail
+       * (storage full), and then nothing may happen: loadDocument would
+       * refuse, but only after the bind below was committed. The keep
+       * is handed to loadDocument rather than asked for twice. */
+      const keep = canvasOf(copy) !== canvasOf(this.doc) ? this.keepSeat(copy) : null;
+      if (keep && !keep.ok) {
+        this.toast(keep.said);
+        return;
+      }
+      /* Committed HERE, not in forkDocument: the confirm below can be
+       * declined, and a bind for a copy the author never opened is a
+       * course this browser claims to own and has never seen. */
+      commit();
+      clearShareImport();
+      this.loadDocument(copy, `This is your copy of "${share.name || incoming.name}". Publish it under a new name to put it on the board.`, keep);
+    };
+    if (!isEmptyCanvas(seated) && seated.id !== share.id) {
+      this.confirm(
+        ...this.replaceWords(seated, incoming, `A copy of "${share.name || incoming.name}"`, [
+          `Open a copy of "${share.name || incoming.name}"?`,
+          'The track on your canvas will be replaced. Save it first if you still need it.',
+        ]),
+        load,
+      );
+    } else {
+      load();
+    }
+  }
+
+  /*
+   * IS THIS TAB SIGNED IN AS A BOARD ADMIN, as the board sees it.
+   *
+   * The board answers, so a token this clock still likes but the board has
+   * dropped (a changed password, a removed address) is found out here, by a
+   * request, and cleared, rather than at the moment somebody presses Update
+   * and is refused. Anything that goes wrong reads as "no": the cost of a
+   * wrong no is a closed door where an admin wanted the original, which the
+   * Admin dialog and a second try put right.
+   *
+   * Used where the answer decides what gets built, as it does for an admin's
+   * edit in place. The doors that only ask whether a track may open read the
+   * remembered session and no more (officialBlocksOpen in ../share/listing.js):
+   * a request there would sign an admin out every time their connection
+   * stumbled while they opened their own track.
+   */
+  async adminSignedIn(origin) {
     if (!readAdminSession(origin)) {
       return false;
     }
@@ -954,7 +1004,120 @@ export class App {
       this.updateTopBar();
       return false;
     }
-    return (await fetchTrackOfficial(share.id, origin)) === true;
+    return true;
+  }
+
+  /*
+   * MAY THIS DOCUMENT OPEN HERE: the rule for official tracks (see
+   * openShared) at every door that hands the builder a document it did not
+   * just make, which is Load, an import and a link that carries the track.
+   *
+   * It asks the board only when something says the board might know the
+   * track: this browser published it, or opened it as an admin's edit
+   * (boardHolding), or the document came from outside, where nothing can be
+   * said (`external`). A track that was never published, a shipped one and
+   * anything opened offline go straight through with no request and no
+   * wait. When the track is official and this tab is not an admin, the
+   * pilot is told why (explainOfficial) and the answer is false.
+   */
+  async mayOpen(doc, { external = false, retry = null } = {}) {
+    const origin = boardHolding(doc.id) || (external ? boardOrigin() : '');
+    if (!origin || !boardMayBeAsked()) {
+      return true;
+    }
+    if (!(await officialBlocksOpen(doc.id, origin))) {
+      return true;
+    }
+    this.explainOfficial(doc.name, { retry });
+    return false;
+  }
+
+  /*
+   * "THAT ONE IS OFFICIAL": what a pilot who is not an admin is told when a
+   * track on its way into the builder turns out to be official. A dialog and
+   * not a toast, because it is the answer to a press and it has to be read:
+   * the track did not open, and why, and what is still theirs.
+   *
+   * `retry` runs if the pilot turns out to be an admin and signs in from
+   * here, so the door they were stopped at opens without their going back
+   * to find it. `note` is for the canvas that held one when the builder
+   * reopened (guardOfficial), which says where its changes went.
+   */
+  explainOfficial(name, { retry = null, note = '' } = {}) {
+    const body = document.createElement('div');
+    const why = document.createElement('p');
+    why.className = 'tb-help';
+    why.textContent = `"${name}" is an official track. Only a board admin can open an official track in the builder, so it cannot be changed or copied here.`;
+    body.append(why);
+    if (note) {
+      const kept = document.createElement('p');
+      kept.className = 'tb-help';
+      kept.textContent = note;
+      body.append(kept);
+    }
+    const still = document.createElement('p');
+    still.className = 'tb-help';
+    still.textContent = 'Everybody can still fly it and post a time on Tracks and times. To make a track of your own, start a new one.';
+    body.append(still);
+    const admin = document.createElement('button');
+    admin.type = 'button';
+    admin.className = 'tb-btn';
+    admin.textContent = 'Board admin? Sign in';
+    admin.addEventListener('click', () => this.openAdmin(retry));
+    body.append(admin);
+    return this.modal('Official track', body);
+  }
+
+  /*
+   * AN OFFICIAL TRACK THAT CAME BACK WITHOUT BEING ASKED FOR: the canvas this
+   * browser reopened on, or the one a canvas switch returned to. Those are
+   * installed at once, because a canvas cannot wait for a request, so the
+   * board is asked afterwards and an official track is taken off the canvas
+   * when it answers. A track nobody here published is not asked about.
+   *
+   * Nothing is lost to it. What this browser holds of the track that the
+   * board's version does not (localDrift, the test adoptIncomingShare keeps
+   * local edits by) goes into Load as a copy under a new id first, and when
+   * the board's version cannot be had there is assumed to be something to
+   * keep. If the copy cannot be kept the canvas is left as it is and the pilot
+   * is told to export, because a rule that costs somebody their work is worse
+   * than the rule not holding for one more session. The board's own lock does
+   * not depend on this: Publish is refused for anybody but an admin whatever
+   * is on the canvas.
+   */
+  async guardOfficial() {
+    const held = this.doc;
+    const origin = boardHolding(held.id);
+    if (!origin || !boardMayBeAsked()) {
+      return;
+    }
+    if (!(await officialBlocksOpen(held.id, origin))) {
+      return;
+    }
+    let theirs = null;
+    try {
+      const payload = await fetchTrackDocument(held.id, origin);
+      theirs = normalize(payload.document || payload).doc;
+    } catch (e) {
+      /* The board answered a moment ago and not now. Keep what is here. */
+    }
+    /* The pilot opened something else while the board was answering. */
+    const doc = this.doc;
+    if (doc.id !== held.id) {
+      return;
+    }
+    let note = '';
+    if (!theirs || localDrift(doc, theirs)) {
+      const copy = duplicateTrack(doc, `${doc.name} (local changes)`);
+      if (!saveTrack(copy)) {
+        this.toast(`"${doc.name}" is an official track and cannot stay open here, but it has changes the board does not and they could not be kept, because local storage is unavailable or full. Export it from More first.`);
+        return;
+      }
+      note = `What you had changed since you published it is in Load as "${copy.name}".`;
+    }
+    this.loadDocument(createTrack(undefined, trackClassOf(doc)), '', { ok: true, said: '' });
+    /* Named as the board has it, which is not what a local rename made it. */
+    this.explainOfficial((theirs && theirs.name) || doc.name, { note });
   }
 
   /*
@@ -3720,14 +3883,30 @@ export class App {
       open.type = 'button';
       open.className = 'tb-btn';
       open.textContent = 'Open';
-      open.addEventListener('click', () => {
+      open.addEventListener('click', async () => {
         const found = loadTrack(t.id);
+        const said = found ? `Opened "${found.doc.name}".` : '';
+        /* A track this browser put on the board may have been made official
+         * since, and an official track opens for nobody but an admin. The
+         * board is asked only for those (mayOpen), so every other row opens
+         * as it always did, offline included. */
+        if (found && boardHolding(found.doc.id)) {
+          open.disabled = true;
+          open.textContent = 'Opening';
+          if (!(await this.mayOpen(found.doc, { retry: () => this.openIncoming(found.doc, said) }))) {
+            return;
+          }
+          /* The list was closed while the board answered: they moved on. */
+          if (!open.isConnected) {
+            return;
+          }
+        }
         this.closeModal();
         /* Through openIncoming, which keeps what the canvas held in Load
          * first: Open went straight to loadDocument, and on the same canvas
          * that wrote over work nobody had saved with nothing kept or said. */
         if (found) {
-          this.openIncoming(found.doc, `Opened "${found.doc.name}".`);
+          this.openIncoming(found.doc, said);
         }
       });
       /* No Delete on a shipped track. There is nothing to delete: it is
@@ -3828,7 +4007,8 @@ export class App {
       status.textContent = `The board has no five inch tracks yet. ${fromNothing}`;
       return;
     }
-    status.textContent = `${tracks.length} five inch track${tracks.length === 1 ? '' : 's'}, most flown first.`;
+    const closed = tracks.filter((t) => t.official && !readAdminSession(t.board || origin)).length;
+    status.textContent = `${tracks.length} five inch track${tracks.length === 1 ? '' : 's'}, most flown first.${closed ? ' Official ones can be flown, and only a board admin can open them here.' : ''}`;
     tracks.sort((a, b) => (b.times - a.times) || (b.gates - a.gates) || a.name.localeCompare(b.name));
     for (const t of tracks) {
       const row = document.createElement('div');
@@ -3841,7 +4021,7 @@ export class App {
       const meta = document.createElement('div');
       meta.className = 'tb-load-meta';
       const by = t.designer || t.author;
-      meta.textContent = [by ? `by ${by}` : '', `${t.gates} gate${t.gates === 1 ? '' : 's'}`, t.times ? `${t.times} time${t.times === 1 ? '' : 's'} posted` : 'no times yet']
+      meta.textContent = [by ? `by ${by}` : '', `${t.gates} gate${t.gates === 1 ? '' : 's'}`, t.times ? `${t.times} time${t.times === 1 ? '' : 's'} posted` : 'no times yet', t.official ? 'official' : '']
         .filter(Boolean).join(' · ');
       name.append(title, meta);
       const open = document.createElement('button');
@@ -3849,6 +4029,14 @@ export class App {
       open.className = 'tb-btn';
       open.textContent = 'Open a copy';
       open.title = `Your own copy of "${t.name}", to change and publish under your name`;
+      /* An official track opens for nobody but an admin (see openShared), and
+       * the list already says which are official, so the row says so and has
+       * no button to press where a press could only be refused. */
+      if (t.official && !readAdminSession(t.board || origin)) {
+        open.disabled = true;
+        open.textContent = 'Official';
+        open.title = `"${t.name}" is an official track. Everybody can fly it, and only a board admin can open it in the builder.`;
+      }
       open.addEventListener('click', async () => {
         open.disabled = true;
         open.textContent = 'Opening';
@@ -4504,7 +4692,7 @@ export class App {
       const show = (official) => {
         if (official && !admin) {
           send.disabled = true;
-          note.textContent = 'This is an official track, so only a board admin can change it. Use Duplicate in More for a copy you can publish under your own name.';
+          note.textContent = 'This is an official track, so only a board admin can change it.';
         } else if (official) {
           note.textContent = 'This is an official track. You are signed in as an admin, so updating it goes through, and nobody else can.';
         } else {
@@ -4561,8 +4749,12 @@ export class App {
    *
    * One message for every wrong answer, as the board's own sign in gives
    * one, so this dialog cannot be used to ask which addresses are admins.
+   *
+   * `then` is what the pilot was doing when they were stopped at an official
+   * track (explainOfficial): it runs once, after a sign in that worked, and
+   * never after Cancel or a wrong answer.
    */
-  openAdmin() {
+  openAdmin(then = null) {
     const origin = boardOrigin();
     const body = document.createElement('div');
     const session = readAdminSession(origin);
@@ -4576,7 +4768,7 @@ export class App {
       const when = Number.isNaN(until)
         ? 'Closing this tab ends it.'
         : `It runs out at ${new Date(until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, and closing this tab ends it sooner.`;
-      who.textContent = `Signed in to the board as ${session.email || 'an admin'}. ${when} Publish has a Mark official button for any track that is on the board, and an official track opened from a link to it opens here to edit in place.`;
+      who.textContent = `Signed in to the board as ${session.email || 'an admin'}. ${when} Publish has a Mark official button for any track that is on the board, and an official track opens here to edit in place, which it does for nobody else.`;
       body.append(who);
       const out = document.createElement('button');
       out.type = 'button';
@@ -4593,7 +4785,7 @@ export class App {
     }
     const help = document.createElement('p');
     help.className = 'tb-help';
-    help.textContent = 'For the people who run the board. An admin can mark a track official, which only admins can change after that, and can still edit the official ones. Everyone else keeps publishing and flying as they always have.';
+    help.textContent = 'For the people who run the board. An admin can mark a track official. After that only admins can open it in the builder or change it, and everybody can still fly it and post a time. Everyone else keeps publishing and flying as they always have.';
     body.append(help);
     const field = (labelText, type, autocomplete) => {
       const row = document.createElement('div');
@@ -4629,6 +4821,9 @@ export class App {
         this.closeModal();
         this.toast(`Signed in to the board as ${done.email}.`);
         this.updateTopBar();
+        if (then) {
+          then();
+        }
       } catch (e) {
         go.disabled = false;
         password.value = '';
@@ -5128,7 +5323,7 @@ export class App {
       return;
     }
     try {
-      this.importText(await readFileText(file));
+      await this.importText(await readFileText(file));
     } catch (e) {
       this.toast(`Could not read the file: ${e.message}`);
     }
@@ -5142,7 +5337,7 @@ export class App {
    * said in a dialog after it opens, because a converted track that silently lost
    * a banner is worse than one that says so.
    */
-  importText(text) {
+  async importText(text) {
     if (!text || !String(text).trim()) {
       this.toast('There is nothing there to import.');
       return;
@@ -5163,9 +5358,16 @@ export class App {
       this.toast(`Could not import: ${error}`);
       return;
     }
-    this.openIncoming(doc, repairs.length
+    const said = repairs.length
       ? `Imported "${doc.name}" with ${repairs.length} repair${repairs.length === 1 ? '' : 's'}: ${repairs[0]}`
-      : `Imported "${doc.name}".`);
+      : `Imported "${doc.name}".`;
+    /* A file keeps the id the track was published under, so an export of one
+     * that has since been made official is still that track, and opens for
+     * nobody but an admin. Asked of the board (mayOpen), and skipped when this
+     * device is offline. */
+    if (await this.mayOpen(doc, { external: true, retry: () => this.openIncoming(doc, said) })) {
+      this.openIncoming(doc, said);
+    }
   }
 
   /* The import dialog: choose a file, or paste the text of one. */
@@ -5431,6 +5633,8 @@ export class App {
      * start again. */
     const undo = arriving ? '' : ' Undo starts again here, and';
     this.loadDocument(doc, `${what}${undo || ''}${undo ? ' the' : ' The'} simulator will fly ${w.flies}${want === 'freestyle' ? ' on this map' : ''}.`);
+    /* The other canvas's seat may hold a track that was made official since. */
+    this.guardOfficial();
   }
 
   /*

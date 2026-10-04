@@ -58,6 +58,12 @@ all need the board's `/api/tracks/:id/official` route and its `official` field. 
 track as not official and gets a 404 from the mark route, and nothing breaks, so the order costs a missing feature and not a wrong
 answer. The board's `schema.sql` adds the two columns on start, additively.
 
+An official track also does not open in the builder for anybody but an admin: not from a board link, not from the simulator's Edit
+or Remix, not from Load, the board picker or an import, and not as the canvas a browser reopens on. The builder asks the board
+(`GET /api/tracks/:id`, which already carries `official`), so it needs no new board route and no new order. A board that cannot be
+reached answers nothing, and the builder then opens the track as it always did, because the board's own lock on publishing is the
+rule and this is the front of it. The simulator still flies an official track.
+
 The Weight slider is the same shape of problem the other way round, and
 quieter. Since 2026-09-27 a time or a freestyle run carries the `weight` it
 was flown at, and the simulator no longer refuses one off 100. A board that

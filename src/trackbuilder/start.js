@@ -73,8 +73,13 @@ const hadTrack = new URLSearchParams(window.location.search).has('track');
 const linked = docFromLocation();
 if (linked) {
   /* Kept, not asked: a link opens that track, and what it displaces goes into
-     Load. See openIncoming in app.js. */
-  app.openIncoming(linked, `Opened "${linked.name}" from the link.`);
+     Load. See openIncoming in app.js. The one thing that is asked is the
+     board, and only whether the track is an official one, which opens for
+     nobody but an admin: see mayOpen. */
+  const said = `Opened "${linked.name}" from the link.`;
+  if (await app.mayOpen(linked, { external: true, retry: () => app.openIncoming(linked, said) })) {
+    app.openIncoming(linked, said);
+  }
 } else if (hadTrack) {
   /* A link that held nothing a track could be read from opened nothing and
      said nothing, which looks like a builder that ignored it. */
@@ -87,7 +92,14 @@ if (linked) {
 if (!linked && /(^#|&)track=/.test(window.location.hash)) {
   const shared = await docFromHash(window.location.hash);
   if (shared) {
-    app.openIncoming(duplicateTrack(shared, shared.name), 'A shared track. Editing makes your copy.');
+    /* The copy is the document that opens, but the question is about the
+       track it was made from: a copy of an official track is a way of opening
+       one. See mayOpen in app.js. */
+    const copy = duplicateTrack(shared, shared.name);
+    const said = 'A shared track. Editing makes your copy.';
+    if (await app.mayOpen(shared, { external: true, retry: () => app.openIncoming(copy, said) })) {
+      app.openIncoming(copy, said);
+    }
   } else {
     /* A link that is not one of ours, or was cut short in a chat, or was made by
        a browser that can deflate for one that cannot: the pilot pressed it and

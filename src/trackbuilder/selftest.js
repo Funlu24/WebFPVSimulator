@@ -164,10 +164,12 @@ import {
 } from '../props/letters.js';
 import { AIRFRAMES, airframeById } from '../../configs/airframes.js';
 import {
-  adminEditFor, inspectCourse, layoutFingerprint, publishCurrentCourse, publishedTags, rememberPublish,
-  suggestRemixName, tagsToSend,
+  adminEditFor, boardHolding, inspectCourse, layoutFingerprint, officialBlocksOpen, publishCurrentCourse,
+  publishedTags, rememberPublish, suggestRemixName, tagsToSend,
 } from '../share/listing.js';
-import { readBind, readEditKey, writeBind, writeBuilderIntent, takeBuilderIntent } from '../share/session.js';
+import {
+  readBind, readEditKey, writeBind, writeBuilderIntent, writeEditKey, takeBuilderIntent,
+} from '../share/session.js';
 import {
   publishTrack, partsTheBoardDoesNotKnow, unknownPartsSentence, BOARD_UNKNOWN_TYPES, TRACK_TAGS, tagsForClass,
   adminSignIn, adminVerify, fetchTrackOfficial, setTrackOfficial, postTrackGif, postShareCard,
@@ -13745,6 +13747,51 @@ async function suiteOfficial() {
       adminEditFor(stranger.id) === false && inspectCourse({ share: null, autosave: { doc: stranger } }).kind !== 'owned');
     rememberPublish(doc, { id: doc.id, name: doc.name }, board, 'Ada Rook');
     check('and the flag survives a publish, or the second update would lose it', readBind(doc.id).adminEdit === true);
+
+    /*
+     * THE DOOR: an official track does not open in the builder for anybody
+     * but an admin (the owner's rule of 2026-10-04). Which tracks are worth
+     * asking the board about, and what the board's answer closes.
+     */
+    const mine = createTrack('Mine');
+    const remixed = createTrack('Remixed');
+    const never = createTrack('Never Published');
+    check('a track this browser never published is not asked about, and nor is no track',
+      boardHolding(never.id) === '' && boardHolding('') === '' && boardHolding(undefined) === '');
+    rememberPublish(mine, { id: mine.id, name: mine.name, editKey: 'key-mine' }, board, 'Ada Rook');
+    check('one it published is, at the board it went to', boardHolding(mine.id) === board);
+    writeBind(remixed.id, { board, owned: false, sourceId: 'trk-1a2b3c4d', sourceName: 'Official Loop' });
+    check('a remix copy is not, because its id has never been sent anywhere', boardHolding(remixed.id) === '');
+    check('an admin edit is, because the track is the board\'s', boardHolding(doc.id) === board);
+    writeEditKey('trk-keyonly', 'k');
+    check('and an edit key alone is enough', boardHolding('trk-keyonly') !== '');
+
+    clearAdminSession();
+    answer = () => reply(200, { id: 'trk-1a2b3c4d', official: true, times: [] });
+    let asked = calls.length;
+    check('an official track is closed to a tab that is not an admin',
+      (await officialBlocksOpen('trk-1a2b3c4d', board)) === true && calls.length === asked + 1);
+    writeAdminSession({ token: 'tok-6', email: 'keeper@example.com', expiresUtc: future, board });
+    asked = calls.length;
+    check('and open to an admin, who is not even asked about',
+      (await officialBlocksOpen('trk-1a2b3c4d', board)) === false && calls.length === asked);
+    writeAdminSession({ token: 'tok-7', email: 'keeper@example.com', expiresUtc: future, board: 'https://elsewhere.example' });
+    check('an admin of another board is not an admin of this one',
+      (await officialBlocksOpen('trk-1a2b3c4d', board)) === true);
+    clearAdminSession();
+    answer = () => reply(200, { id: 'trk-1a2b3c4d', times: [] });
+    check('a track that is not official is open to everybody', (await officialBlocksOpen('trk-1a2b3c4d', board)) === false);
+    answer = () => reply(404, { error: 'That track is not on the board.' });
+    check('and so is one the board has never heard of', (await officialBlocksOpen('trk-00000000', board)) === false);
+    answer = () => reply(503, { error: 'down' });
+    check('a board that answers badly closes nothing, so the builder keeps working',
+      (await officialBlocksOpen('trk-1a2b3c4d', board)) === false);
+    answer = () => {
+      throw new TypeError('Failed to fetch');
+    };
+    check('and neither does one that cannot be reached at all', (await officialBlocksOpen('trk-1a2b3c4d', board)) === false);
+    asked = calls.length;
+    check('a document with no id is not asked about', (await officialBlocksOpen('', board)) === false && calls.length === asked);
   } finally {
     globalThis.fetch = hadFetch;
     globalThis.localStorage = hadLocal;

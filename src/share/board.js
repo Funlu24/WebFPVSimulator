@@ -355,9 +355,10 @@ export async function fetchTrackList(origin = boardOrigin()) {
      * document, so an older board that does not send it leaves every listing
      * reading as the field, correctly. */
     trackClass: t.trackClass === 'micro' ? 'micro' : 'full',
-    /* An admin has marked it official: only admins can change it. Read by
-     * nothing that draws yet, and carried so the courses screen can say so
-     * without another request. A board from before the mark sends none. */
+    /* An admin has marked it official: only admins can change it, and only
+     * admins can open it in the builder. The builder's board picker reads it,
+     * so it can say so on the row without another request. A board from
+     * before the mark sends none. */
     official: Boolean(t.official),
     board,
   })).filter((t) => t.id);

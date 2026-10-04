@@ -3480,8 +3480,10 @@ const uncovered = (page, selector) => page.evaluate(`(() => {
 
 /* Every request the page makes to a board's API, answered here and kept, so
  * nothing reaches a board at all: a publish is answered as the board would,
- * a list or a document as `board` says, and anything else under /api/ with an
- * empty object. A seed, so it is in place before the page's first line. */
+ * a list or a document as `board` says, a track's own summary and an admin's
+ * sign in as `board.official` and `board.admin` say, and anything else under
+ * /api/ with an empty object. A seed, so it is in place before the page's
+ * first line. */
 const BOARD_STUB = (board = {}) => `(() => {
   const real = window.fetch.bind(window);
   const board = ${JSON.stringify(board)};
@@ -3513,6 +3515,27 @@ const BOARD_STUB = (board = {}) => `(() => {
       let held = null;
       try { held = localStorage.getItem('flow-board:' + kept[1] + ':' + decodeURIComponent(kept[2])); } catch (e) {}
       if (held) return answer(200, JSON.parse(held));
+    }
+    /* An admin who can sign in, for the cases about official tracks. */
+    if (method === 'POST' && /\\/api\\/admin\\/login$/.test(url)) {
+      const sent = JSON.parse(init.body);
+      if (board.admin && sent.email === board.admin.email && sent.password === board.admin.password) {
+        return answer(200, { token: 'stub-admin-token', email: sent.email, expiresUtc: new Date(Date.now() + 3600e3).toISOString() });
+      }
+      return answer(401, { error: 'That email and password do not open this board.' });
+    }
+    if (method === 'GET' && /\\/api\\/admin\\/session$/.test(url)) {
+      return board.admin && JSON.stringify(init.headers || {}).includes('stub-admin-token')
+        ? answer(200, { email: board.admin.email })
+        : answer(401, { error: 'Not signed in.' });
+    }
+    /* One track's own summary, which is where the board says it is official.
+     * Only for the ids board.official names, so every other case still gets
+     * the 404 it always did. */
+    const one = url.match(/\\/api\\/tracks\\/([^/?]+)$/);
+    if (method === 'GET' && one && board.official && decodeURIComponent(one[1]) in board.official) {
+      const id = decodeURIComponent(one[1]);
+      return answer(200, { id, official: Boolean(board.official[id]), times: [] });
     }
     if (method === 'GET' && /\\/api\\/tracks$/.test(url)) return answer(200, { tracks: board.tracks || [] });
     const doc = url.match(/\\/api\\/tracks\\/([^/]+)\\/document$/);
@@ -5289,6 +5312,174 @@ kase('links open once', async () => {
     check('a ?share= the board could not answer stays in the address, and the toast says a reload tries again', /share=trk-shared1/.test(got.search) && /Reload to try again/.test(got.toast), JSON.stringify(got));
   } finally {
     await asleep.close();
+  }
+});
+
+/*
+ * AN OFFICIAL TRACK DOES NOT OPEN FOR ANYBODY BUT AN ADMIN (the owner's rule of
+ * 2026-10-04, after they could still open one in the builder). Every door that
+ * hands the builder a track asks the board whether it is official, a stranger and
+ * the browser that published it get the same answer and a dialog that says why,
+ * the canvas is left as it was, and an admin's sign in from that dialog opens the
+ * door it stopped at. A canvas that comes back official is taken off it with
+ * what the board lacks kept in Load. The board is BOARD_STUB, which says which
+ * tracks are official and who the admin is: nothing leaves the machine.
+ */
+kase('official tracks', async () => {
+  const BOARD = 'https://board.test';
+  const official = await fieldDoc('The Official', 2);
+  const ordinary = await fieldDoc('The Ordinary', 3);
+  const edited = { ...official, elements: [...official.elements, ...(await fieldDoc('x', 3)).elements.slice(2)] };
+  const board = {
+    official: { [official.id]: true, [ordinary.id]: false },
+    documents: {
+      [official.id]: { id: official.id, name: 'The Official', author: 'Ada', document: official },
+      [ordinary.id]: { id: ordinary.id, name: 'The Ordinary', author: 'Ada', document: ordinary },
+    },
+    tracks: [
+      { id: official.id, name: 'The Official', author: 'Ada', gates: 2, times: 0, official: true, trackClass: 'full' },
+      { id: ordinary.id, name: 'The Ordinary', author: 'Ada', gates: 3, times: 0, official: false, trackClass: 'full' },
+    ],
+    admin: { email: 'keeper@example.com', password: 'pw' },
+  };
+  const at = (query = '') => `/src/trackbuilder/index.html?class=full&board=${BOARD}${query}`;
+  const modal = (page) => page.evaluate("(() => { const m = document.getElementById('tb-modal'); return m.hidden ? '' : m.textContent; })()");
+  const dialog = (page, words) => page.until(`(() => { const m = document.getElementById('tb-modal'); return !m.hidden && m.textContent.includes(${JSON.stringify(words)}); })()`, 20000);
+  const press = (page, label) => page.evaluate(`(() => { const b = [...document.querySelectorAll('#tb-modal button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (b) b.click(); return Boolean(b); })()`);
+  const toast = (page) => page.evaluate("document.getElementById('tb-toast').textContent");
+  const booted = (page) => page.until('!!(window.trackBuilder && window.trackBuilder.doc)', 60000);
+  const asked = (page, id) => page.evaluate(`window.__api.some((c) => c === 'GET ${BOARD}/api/tracks/${id}')`);
+  /* What the pilot's browser held, before the page's first line: the library, the
+   * edit key that says this browser published the track, the canvas it left. */
+  const held = (docs, { canvas = null, key = null } = {}) => `(() => {
+    try {
+      if (sessionStorage.getItem('flow-seeded')) return;
+      sessionStorage.setItem('flow-seeded', '1');
+      localStorage.setItem('webfpv.trackbuilder.library.v1', ${JSON.stringify(JSON.stringify(Object.fromEntries(docs.map((d) => [d.id, d]))))});
+      ${key ? `localStorage.setItem('webfpv.share.editkeys.v1', ${JSON.stringify(JSON.stringify({ [key]: 'flow-key' }))});` : ''}
+      ${canvas ? `localStorage.setItem('webfpv.trackbuilder.autosave.v1', ${JSON.stringify(JSON.stringify(canvas))});` : ''}
+    } catch (e) {}
+  })()`;
+  const open = async (query, seeds = []) => {
+    const page = await openPage({ root, width: 1600, height: 900, url: at(query), seed: [BOARD_STUB(board), ...seeds] });
+    await booted(page);
+    return page;
+  };
+
+  /* A BOARD LINK, from a stranger: the answer, not a copy. And an admin signs in from the dialog. */
+  let page = await open(`&share=${official.id}`);
+  try {
+    await dialog(page, 'is an official track');
+    const said = await modal(page);
+    check('a board link to an official track says it is official and who can open it', /"The Official" is an official track\. Only a board admin can open an official track in the builder/.test(said), said);
+    check('it asked the board, and opened neither the track nor a copy of it',
+      (await asked(page, official.id)) && (await page.evaluate('window.trackBuilder.doc.id')) !== official.id && !/your copy/.test(await toast(page)));
+    check('it can still be flown, and the dialog says so', /fly it and post a time/.test(said), said);
+    await press(page, 'Board admin? Sign in');
+    await page.until("!!document.getElementById('tb-admin-email')", 5000);
+    await page.evaluate("(() => { document.getElementById('tb-admin-email').value = 'keeper@example.com'; document.getElementById('tb-admin-password').value = 'nope'; })()");
+    await press(page, 'Sign in');
+    await page.until("document.getElementById('tb-modal').textContent.includes('do not open this board')", 10000);
+    check('a wrong password is told no, in the board\'s words, and nothing opens', (await page.evaluate('window.trackBuilder.doc.id')) !== official.id);
+    await page.evaluate("document.getElementById('tb-admin-password').value = 'pw'");
+    await press(page, 'Sign in');
+    await page.until(`window.trackBuilder.doc.id === ${JSON.stringify(official.id)}`, 20000);
+    check('signing in as an admin from the dialog opens the official track in place, under its own id', true);
+    check('and the toast says it is an admin\'s edit', /as an admin/.test(await toast(page)), await toast(page));
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+
+  /* An ordinary track is a copy, as it always was, with no dialog. */
+  page = await open(`&share=${ordinary.id}`);
+  try {
+    await page.until("/your copy/.test(document.getElementById('tb-toast').textContent)", 15000);
+    check('a board link to an ordinary track still opens a copy', (await page.evaluate('window.trackBuilder.doc.id')) !== ordinary.id && (await modal(page)) === '');
+  } finally {
+    await page.close();
+  }
+
+  /* LOAD, for the browser that published it: the edit key does not get it in. */
+  page = await open('', [held([official], { key: official.id })]);
+  try {
+    const before = await page.evaluate('window.trackBuilder.doc.id');
+    await page.evaluate('window.trackBuilder.openLoad()');
+    await page.until("[...document.querySelectorAll('#tb-modal .tb-load-row')].some((r) => r.textContent.includes('The Official'))", 10000);
+    await page.evaluate("[...document.querySelectorAll('#tb-modal .tb-load-row')].find((r) => r.textContent.includes('The Official')).querySelector('button').click()");
+    await dialog(page, 'is an official track');
+    check('Open in Load on an official track the browser published is answered with why, and the canvas stays', (await page.evaluate('window.trackBuilder.doc.id')) === before);
+  } finally {
+    await page.close();
+  }
+
+  /* THE CANVAS A BROWSER REOPENS ON, official since: taken off, nothing lost. */
+  page = await open('', [held([], { canvas: official, key: official.id })]);
+  try {
+    await dialog(page, 'is an official track');
+    const library = await json(page, "Object.values(JSON.parse(localStorage.getItem('webfpv.trackbuilder.library.v1') || '{}')).map((d) => d.name)");
+    check('a reopened canvas that is now official is taken off, and the dialog says it is', (await page.evaluate('window.trackBuilder.doc.id')) !== official.id && !/Load as/.test(await modal(page)));
+    check('with nothing to keep, nothing is added to Load', library.length === 0, library.join(', '));
+  } finally {
+    await page.close();
+  }
+  page = await open('', [held([], { canvas: edited, key: official.id })]);
+  try {
+    await dialog(page, 'is an official track');
+    const library = await json(page, "Object.values(JSON.parse(localStorage.getItem('webfpv.trackbuilder.library.v1') || '{}')).map((d) => d.name + '/' + d.elements.length)");
+    check('with changes the board lacks, they go into Load as a copy, and the dialog says where', library.includes('The Official (local changes)/3') && /is in Load as "The Official \(local changes\)"/.test(await modal(page)), `${library.join(', ')} :: ${await modal(page)}`);
+    check('and the canvas is a fresh track', (await page.evaluate('window.trackBuilder.doc.id')) !== official.id && (await page.evaluate('window.trackBuilder.doc.elements.length')) === 0);
+  } finally {
+    await page.close();
+  }
+
+  /* THE SAME RELOAD, SIGNED IN AS AN ADMIN, keeps the track. */
+  const session = `(() => { try { sessionStorage.setItem('webfpv.share.admin.v1', ${JSON.stringify(JSON.stringify({ token: 'stub-admin-token', email: 'keeper@example.com', expiresUtc: new Date(Date.now() + 36e5).toISOString(), board: BOARD }))}); } catch (e) {} })()`;
+  page = await open('', [held([], { canvas: official, key: official.id }), session]);
+  try {
+    await page.sleep(2000);
+    check('an admin who reloads onto an official track keeps it, with no dialog', (await page.evaluate('window.trackBuilder.doc.id')) === official.id && (await modal(page)) === '');
+  } finally {
+    await page.close();
+  }
+
+  /* THE BOARD PICKER: the row says so and has no button to press, for a stranger. */
+  page = await open();
+  try {
+    await page.evaluate('window.trackBuilder.openBoardStarters()');
+    await page.until("document.querySelectorAll('#tb-modal .tb-load-row').length === 2", 10000);
+    const rows = await json(page, "[...document.querySelectorAll('#tb-modal .tb-load-row')].map((r) => ({ text: r.textContent, label: r.querySelector('button').textContent, off: r.querySelector('button').disabled }))");
+    const row = (name) => rows.find((r) => r.text.includes(name));
+    check('an official row says official and its button is shut', row('The Official').off === true && row('The Official').label === 'Official' && /official/.test(row('The Official').text), JSON.stringify(row('The Official')));
+    check('an ordinary row still opens a copy', row('The Ordinary').off === false && row('The Ordinary').label === 'Open a copy', JSON.stringify(row('The Ordinary')));
+    check('and the line above the list says why some are shut', /Official ones can be flown/.test(await modal(page)));
+  } finally {
+    await page.close();
+  }
+  page = await open('', [session]);
+  try {
+    await page.evaluate('window.trackBuilder.openBoardStarters()');
+    await page.until("document.querySelectorAll('#tb-modal .tb-load-row').length === 2", 10000);
+    const off = await json(page, "[...document.querySelectorAll('#tb-modal .tb-load-row button')].map((b) => b.disabled)");
+    check('signed in as an admin, every row opens', off.every((x) => x === false), JSON.stringify(off));
+  } finally {
+    await page.close();
+  }
+
+  /* AN IMPORTED FILE keeps the id it was published under. */
+  page = await open();
+  try {
+    const before = await page.evaluate('window.trackBuilder.doc.id');
+    await page.evaluate(`(async () => { const m = await import('/src/trackbuilder/model.js'); await window.trackBuilder.importText(m.serialize(m.normalize(${JSON.stringify(official)}).doc)); })()`);
+    await dialog(page, 'is an official track');
+    check('importing an official track\'s file is answered the same way, and the canvas stays', (await page.evaluate('window.trackBuilder.doc.id')) === before);
+    await page.evaluate('window.trackBuilder.closeModal()');
+    await page.evaluate(`(async () => { const m = await import('/src/trackbuilder/model.js'); await window.trackBuilder.importText(m.serialize(m.normalize(${JSON.stringify(ordinary)}).doc)); })()`);
+    await page.until(`window.trackBuilder.doc.id === ${JSON.stringify(ordinary.id)}`, 10000);
+    check('and a file that is not official imports as it always did', (await modal(page)) === '');
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
   }
 });
 

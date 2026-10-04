@@ -274,6 +274,7 @@
     'src/render/tracks.js',
     'src/render/voice.js',
     'src/render/whoopcraft.js',
+    'src/share/admin.js',
     'src/share/board.js',
     'src/share/bugs.js',
     'src/share/card.js',

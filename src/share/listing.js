@@ -32,7 +32,7 @@
 import { duplicateTrack, toPlain } from '../trackbuilder/model.js';
 import { readAutosave, writeAutosave } from '../trackbuilder/storage.js';
 import {
-  boardOrigin, fetchTrackDocument, fetchTrackList, publishTrack, TRACK_TAGS, usableTags,
+  boardOrigin, fetchTrackDocument, fetchTrackList, fetchTrackOfficial, publishTrack, TRACK_TAGS, usableTags,
 } from './board.js';
 import { readAdminSession } from './admin.js';
 import { readPilotName } from './pilot.js';
@@ -252,6 +252,52 @@ function summaryOf(doc, extra) {
 export function adminEditFor(id) {
   const bind = id ? readBind(id) : null;
   return Boolean(bind && bind.adminEdit && readAdminSession(bind.board || boardOrigin()));
+}
+
+/*
+ * THE BOARD THAT HOLDS A TRACK, as far as this browser can tell, or '' when
+ * nothing here says any does.
+ *
+ * A track is on the board from here when this browser published it (an edit
+ * key, and the bind rememberPublish wrote) or opened it as an admin's edit
+ * (the bind's adminEdit). A remix copy is not: its id has never been sent
+ * anywhere until it is published. So this is what decides whether it is worth
+ * asking the board about a track on its way into the builder, and it keeps
+ * every unpublished track, every shipped one and every offline one opening
+ * with no request and no wait.
+ */
+export function boardHolding(id) {
+  if (!id) {
+    return '';
+  }
+  const bind = readBind(id);
+  if (!readEditKey(id) && !(bind && (bind.owned || bind.adminEdit))) {
+    return '';
+  }
+  return (bind && bind.board) || boardOrigin();
+}
+
+/*
+ * WHETHER AN OFFICIAL TRACK IS CLOSED TO THIS TAB.
+ *
+ * The owner's rule of 2026-10-04: a track the board has marked official does
+ * not open in the builder for anybody but a board admin, from a link, from
+ * Load, from the board picker or from a reopened canvas. It can still be
+ * flown and a time can still be posted, so none of this touches the
+ * simulator.
+ *
+ * True only when the board says so. A board that cannot be asked answers
+ * "not closed", because the builder has to keep working offline on a pilot's
+ * own published tracks and the lock that matters is the board's own: it
+ * refuses a publish, an animation and a share card from anybody else
+ * whatever this says (OFFICIAL_LOCKED in its src/store.js). Signed in as an
+ * admin it asks nothing at all.
+ */
+export async function officialBlocksOpen(id, origin) {
+  if (!id || readAdminSession(origin)) {
+    return false;
+  }
+  return (await fetchTrackOfficial(id, origin)) === true;
 }
 
 /*
