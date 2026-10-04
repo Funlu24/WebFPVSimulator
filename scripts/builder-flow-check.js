@@ -5462,6 +5462,7 @@ kase('animation size', async () => {
     notes.push(await note());
     check('what each size costs is said under it, and says something different for each', notes.every((n) => n.length > 30) && new Set(notes).size === 3, notes.map((n) => n.slice(0, 30)).join(' | '));
     check('the box says that closing it stops the render', /closing this box stops it/.test(await boxText()));
+    check('a whoop track is flown in a room, so there is no race field to choose and no Setting', (await page.evaluate("!!document.getElementById('tb-animation-setting')")) === false);
 
     /* Standard, through to the file. */
     await choose(512);
@@ -5489,6 +5490,58 @@ kase('animation size', async () => {
     await page.sleep(25000);
     const after = await page.evaluate('window.__downloads.length');
     check('closing the box part way through stopped the render: no second file arrived', after === 1, `${after} files`);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
+/*
+ * THE SETTING OF A FIVE INCH ANIMATION. The black stage it has always been
+ * shot on, or the track on a race field with the sponsors on the grass. The
+ * field is what the bigger sizes are for, so choosing one puts it on, until
+ * the pilot has chosen for themselves, after which their choice stands at any
+ * size. Nothing is rendered here: what the field looks like is looked at, and
+ * the file name that says it is the file name rule's, which
+ * scripts/gif-selftest.js holds.
+ */
+kase('animation setting', async () => {
+  const page = await openBuilder('?class=full');
+  const choose = (id, value) => page.evaluate(`(() => {
+    const s = document.getElementById('${id}');
+    s.value = '${value}';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+    return s.value;
+  })()`);
+  const setting = () => page.evaluate("document.getElementById('tb-animation-setting').value");
+  try {
+    await page.evaluate(`(async () => {
+      const { FIVE_INCH_PRESETS } = await import('/src/trackbuilder/presets5.js');
+      window.trackBuilder.loadDocument(JSON.parse(JSON.stringify(FIVE_INCH_PRESETS[0])), '');
+      return 1;
+    })()`);
+    await menu(page, 'Export animation');
+    await page.until("!!document.getElementById('tb-animation-size')", 5000);
+    const shape = await json(page, `(() => {
+      const s = document.getElementById('tb-animation-setting');
+      const l = document.querySelector("label[for='tb-animation-setting']");
+      const n = document.getElementById('tb-animation-setting-note');
+      return { options: s ? [...s.options].map((o) => o.value) : null, chosen: s && s.value, label: l && l.textContent, described: s && s.getAttribute('aria-describedby'), note: n ? n.textContent : '' };
+    })()`);
+    check('a five inch track is offered a Setting: the black stage, or the race field', shape.options && shape.options.join() === 'stage,field', JSON.stringify(shape));
+    check('it is labelled, and what it does is tied to it for a screen reader', shape.label === 'Setting' && shape.described === 'tb-animation-setting-note' && shape.note.length > 20, JSON.stringify(shape));
+    check('at the usual size it is the stage, so the file is the one it always was', shape.chosen === 'stage', String(shape.chosen));
+    await choose('tb-animation-size', 1024);
+    check('choosing High puts it on the race field', (await setting()) === 'field');
+    await choose('tb-animation-size', 512);
+    check('and going back to Standard puts the stage back, while the pilot has not chosen', (await setting()) === 'stage');
+    await choose('tb-animation-size', 2048);
+    check('Very high is the field too', (await setting()) === 'field');
+    const noteField = await page.evaluate("document.getElementById('tb-animation-setting-note').textContent");
+    await choose('tb-animation-setting', 'stage');
+    check('the pilot choosing the stage changes what the note says', (await page.evaluate("document.getElementById('tb-animation-setting-note').textContent")) !== noteField);
+    await choose('tb-animation-size', 1024);
+    check('and their choice then stands at any size', (await setting()) === 'stage');
     check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
   } finally {
     await page.close();

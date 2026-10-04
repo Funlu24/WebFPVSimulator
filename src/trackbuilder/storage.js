@@ -363,11 +363,13 @@ export function exportFilename(doc) {
 /* The edge the animation has always been drawn at, and the one a file carries
  * no mark for. A file at any other edge says so in its name, so a sharper one
  * saved beside the standard one is not left to the browser to call "(1)" and
- * nobody has to open both to tell which is which. */
+ * nobody has to open both to tell which is which. One set on the race field
+ * says so too, because the same track on the black stage is another file. */
 export const ANIMATION_EDGE = 512;
 
-export function animationFilename(doc, edge = ANIMATION_EDGE) {
-  return edge === ANIMATION_EDGE ? `${slugOf(doc)}.gif` : `${slugOf(doc)}-${edge}px.gif`;
+export function animationFilename(doc, edge = ANIMATION_EDGE, field = false) {
+  const size = edge === ANIMATION_EDGE ? '' : `-${edge}px`;
+  return `${slugOf(doc)}${size}${field ? '-field' : ''}.gif`;
 }
 
 export function pictureFilename(doc) {

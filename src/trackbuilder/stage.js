@@ -65,9 +65,11 @@ import * as elementLib from './elements.js';
 import { ELEMENTS, KIND, FRAME_TUBE_OD, isUnbuilt, trackClassOf, virtualApertureDims } from './elements.js';
 import { PIPE_OD as RACEGOW_PIPE_OD } from './racegow.js';
 import * as modelLib from './model.js';
-import { aperturesOf, elementById, apertureCenter } from './model.js';
+import { aperturesOf, elementById, apertureCenter, logoForDecal } from './model.js';
 import { apertureFrame, apertureCorners, clamp } from './geometry.js';
 import { isRoomType, roomWorldBoxes } from '../props/room.js';
+/* The game's own turf and the game's own way of painting a sponsor on it, for the race field. */
+import { GROUND_TURF, paintGroundLogo } from '../art/banners.js';
 /* A hoop and a hex gate: the run of tubes round the hole, and a pane in its shape. */
 import { frameOutline, paneFan } from '../props/aperture.js';
 /* A letter: its pipe and its holes, by the namespace for the reason above (a letter is newer than the oldest copy a
@@ -225,6 +227,12 @@ const COL_RIBBON_CORE = 0xff6b5b;
 const COL_RIBBON_SHELL = 0xff3b2a;
 const COL_TEXT = 0xf2e3cb;
 const COL_START_PAD = 0x2a2a2e;
+/* What lies past the mown grass of the race field: dark, and green enough to be bush and not a void. */
+const COL_SURROUND = 0x0e1a10;
+const COL_FIELD_LINE = '#e6efe2';
+/* Mown run off outside the field's boundary, in metres, and a stripe's width: the game's own numbers (PITCH in render/scene.js). */
+const FIELD_MARGIN = 8;
+const FIELD_STRIPE = 5;
 
 /*
  * The pool of light, as a multiple of the track's own radius. Past its edge
@@ -512,6 +520,103 @@ function fitDistance(THREE, points, aim, eye, fovDeg, aspect) {
 }
 
 /*
+ * HOW A NAME IS SET ON THE PLATE. The plate is four times as wide as it is
+ * tall, and the name used to go on it as one line shrunk until it fitted or
+ * until it hit a floor of 28 pixels, which is where a long name was cut off
+ * at both ends: "WA State Championships 2025 Round 3 Qualifying Heat Final
+ * Series Day Two" came out as "ate Championships ... Series Da". A name
+ * is now broken at its spaces, onto as many as three lines, and set at the
+ * LARGEST size that fits, so nothing is ever cut and a long name is as big
+ * as it can be rather than as small as one line forces.
+ *
+ * ONE LINE IS PREFERRED, but only while it stays large (ONE_LINE_MIN_PX).
+ * A name that fits on one line at 48 pixels or more is set exactly as it
+ * always was, and that is every name up to about thirty letters in the
+ * typefaces this is drawn in; one that would need less is broken, because a
+ * name small enough to squint at is a worse picture than two lines of larger
+ * type. Two lines are preferred to three on the same terms. The first version
+ * of this broke at 72, which turned "WA State Champs 2025" into two lines
+ * and changed the picture of a name that had never been a problem.
+ *
+ * `measure(text, px)` is the width of a string at a size, which is the
+ * canvas's measureText in the page and any function at all in a test: this
+ * is pure so that scripts/gif-selftest.js can pin it. A single word wider
+ * than a line is broken between letters, and if even three lines at the
+ * smallest size cannot hold the name (an eighty character name in a typeface
+ * of very wide letters) the last line ends in an ellipsis. A name is never
+ * cut mid letter and never runs off the plate.
+ */
+const NAME_FILL = 0.92;
+const NAME_LEADING = 1.15;
+const NAME_MAX_PX = 132;
+const NAME_MIN_PX = 28;
+const ONE_LINE_MIN_PX = 48;
+const TWO_LINE_MIN_PX = 44;
+const NAME_MAX_LINES = 3;
+
+function wrapName(measure, text, px, maxWidth) {
+  const lines = [];
+  let line = '';
+  const push = (word) => {
+    const trial = line ? `${line} ${word}` : word;
+    if (measure(trial, px) <= maxWidth || !line) {
+      line = trial;
+      return;
+    }
+    lines.push(line);
+    line = word;
+  };
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (measure(word, px) <= maxWidth) {
+      push(word);
+      continue;
+    }
+    /* A word wider than the plate: between letters, because it has nowhere else to break. */
+    let piece = '';
+    for (const ch of word) {
+      if (piece && measure(piece + ch, px) > maxWidth) {
+        push(piece);
+        lines.push(line);
+        line = '';
+        piece = '';
+      }
+      piece += ch;
+    }
+    if (piece) {
+      push(piece);
+    }
+  }
+  if (line) {
+    lines.push(line);
+  }
+  return lines;
+}
+
+export function fitName(measure, name, maxWidth, maxHeight) {
+  const text = String(name || '').trim() || 'Untitled track';
+  const fits = (lines, px) => lines.length * px * NAME_LEADING <= maxHeight
+    && lines.every((l) => measure(l, px) <= maxWidth);
+  for (let want = 1; want <= NAME_MAX_LINES; want += 1) {
+    const floor = want === 1 ? ONE_LINE_MIN_PX : (want === 2 ? TWO_LINE_MIN_PX : NAME_MIN_PX);
+    for (let px = NAME_MAX_PX; px >= floor; px -= 4) {
+      const lines = wrapName(measure, text, px, maxWidth);
+      if (lines.length <= want && fits(lines, px)) {
+        return { px, lines };
+      }
+    }
+  }
+  /* Nothing fitted at three lines and the smallest size: keep what fits and end on an ellipsis. */
+  const px = NAME_MIN_PX;
+  const lines = wrapName(measure, text, px, maxWidth).slice(0, NAME_MAX_LINES);
+  let last = lines[lines.length - 1];
+  while (last.length > 1 && measure(`${last}\u2026`, px) > maxWidth) {
+    last = last.slice(0, -1);
+  }
+  lines[lines.length - 1] = `${last.trimEnd()}\u2026`;
+  return { px, lines };
+}
+
+/*
  * The track's name, painted into a canvas and laid on the floor.
  *
  * There is no 3D text anywhere in this repository: no FontLoader, no
@@ -525,7 +630,7 @@ function fitDistance(THREE, points, aim, eye, fovDeg, aspect) {
  * context is scaled to match, so the layout below (the fit, the centring) is
  * the same arithmetic at every size and only the pixels under it multiply.
  */
-function nameTexture(THREE, name, width = NAME_TEXTURE_W) {
+function nameTexture(THREE, name, width = NAME_TEXTURE_W, outline = false) {
   const w = NAME_TEXTURE_W;
   const h = w / 4;
   const k = width / w;
@@ -538,16 +643,24 @@ function nameTexture(THREE, name, width = NAME_TEXTURE_W) {
   ctx.fillStyle = `#${COL_TEXT.toString(16).padStart(6, '0')}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  let px = 132;
   const text = String(name || 'Untitled track');
-  for (;;) {
-    ctx.font = `600 ${px}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-    if (ctx.measureText(text).width <= w * 0.92 || px <= 28) {
-      break;
+  const font = (px) => `600 ${px}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  const fit = fitName((t, px) => {
+    ctx.font = font(px);
+    return ctx.measureText(t).width;
+  }, text, w * NAME_FILL, h * NAME_FILL);
+  ctx.font = font(fit.px);
+  /* On grass the cream needs an edge of its own, or the lettering is pale on mid green. */
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = fit.px * 0.14;
+  ctx.strokeStyle = 'rgba(10, 20, 12, 0.85)';
+  fit.lines.forEach((line, i) => {
+    const y = h / 2 + (i - (fit.lines.length - 1) / 2) * fit.px * NAME_LEADING;
+    if (outline) {
+      ctx.strokeText(line, w / 2, y);
     }
-    px -= 4;
-  }
-  ctx.fillText(text, w / 2, h / 2);
+    ctx.fillText(line, w / 2, y);
+  });
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   /*
@@ -659,6 +772,118 @@ function shapeOfEl(el) {
   return typeof elementLib.apertureShapeOf === 'function' ? elementLib.apertureShapeOf(el) : 'square';
 }
 
+/*
+ * THE RACE FIELD, for an export that is asked to be set on one: the ground a
+ * five inch track is flown on, seen the way the game paints it, in place of
+ * the black stage and its pool of light.
+ *
+ * WHAT IS THE GAME'S AND NOT NEW HERE. The turf's two greens (GROUND_TURF), the
+ * stripes (a mower's pairs, five metres across, down the long axis), the white
+ * line on the boundary the author drew with eight metres of run off outside it,
+ * and the way a sponsor is painted on it (paintGroundLogo), all as
+ * src/render/scene.js lays them in the world, so the export is a picture of
+ * the field a pilot flies and not a second design of it.
+ *
+ * THE SPONSORS ARE THE DOCUMENT'S GROUND LOGOS, one plane each. The decal
+ * elements the author placed (KIND.DECAL, 'groundLogo'), each wearing the
+ * logo it names, at its place and heading and in its footprint. One plane
+ * per decal and not one canvas stamped over the whole field, because a ten
+ * metre logo on a field a hundred and thirty across is a few dozen pixels of
+ * a canvas that has to cover all of it, and at 2048 it would be the one thing
+ * in the picture that was soft. Each has a canvas of its own, sized to the
+ * picture like the name. A decal with no logo, or whose picture would not
+ * decode, is left out, never outlined: an empty box on the grass is worse
+ * than turf, which is the game's own rule.
+ *
+ * Authored in DOCUMENT coordinates: the field is 0 to width by 0 to depth,
+ * which is how the document holds every position, and the group goes into
+ * the same root as the track. A canvas has its y down and the document's y is
+ * up the field, so a canvas row is counted from the top edge, and a decal's
+ * heading, which is counter clockwise on the field, is the canvas's clockwise.
+ */
+function fieldGroup(THREE, doc, logos, sizes, keep) {
+  const group = new THREE.Group();
+  const W = Math.max(1, doc.field.width);
+  const D = Math.max(1, doc.field.depth);
+  const spanW = W + 2 * FIELD_MARGIN;
+  const spanD = D + 2 * FIELD_MARGIN;
+
+  /* The turf, as pixels per metre chosen so the long side is as wide as this
+   * picture can use: 1024 at the standard size, 4096 at the largest. */
+  const longPx = Math.min(4096, sizes.poolSize * 2);
+  const ppm = longPx / Math.max(spanW, spanD);
+  const cw = Math.max(2, Math.round(spanW * ppm));
+  const ch = Math.max(2, Math.round(spanD * ppm));
+  const cv = document.createElement('canvas');
+  cv.width = cw;
+  cv.height = ch;
+  const ctx = cv.getContext('2d');
+  const stripe = FIELD_STRIPE * ppm;
+  const alongX = W >= D;
+  const span = alongX ? ch : cw;
+  for (let i = 0; i * stripe < span; i += 1) {
+    ctx.fillStyle = i % 2 === 0 ? GROUND_TURF.light : GROUND_TURF.dark;
+    if (alongX) {
+      ctx.fillRect(0, i * stripe, cw, stripe);
+    } else {
+      ctx.fillRect(i * stripe, 0, stripe, ch);
+    }
+  }
+  ctx.strokeStyle = COL_FIELD_LINE;
+  ctx.lineWidth = Math.max(2, 0.3 * ppm);
+  const inset = FIELD_MARGIN * ppm;
+  ctx.strokeRect(inset, inset, cw - 2 * inset, ch - 2 * inset);
+  const turf = keep(new THREE.CanvasTexture(cv));
+  turf.colorSpace = THREE.SRGBColorSpace;
+  turf.anisotropy = 16;
+  const floorGeo = keep(new THREE.PlaneGeometry(spanW, spanD));
+  const floorMat = keep(new THREE.MeshStandardMaterial({ map: turf, roughness: 1, metalness: 0 }));
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.position.set(W / 2, D / 2, 0);
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  /* The sponsors. */
+  const decalPx = Math.min(2048, 512 * (sizes.nameWidth / NAME_TEXTURE_W));
+  for (const el of doc.elements) {
+    if (ELEMENTS[el.type]?.kind !== KIND.DECAL) {
+      continue;
+    }
+    const mark = logoForDecal(doc, el);
+    const image = mark && logos ? logos.get(mark.id) : null;
+    if (!image) {
+      continue;
+    }
+    const w = Math.max(0.1, el.dims.width);
+    const d = Math.max(0.1, el.dims.depth);
+    const long = Math.max(w, d);
+    const dw = Math.max(8, Math.round((w / long) * decalPx));
+    const dh = Math.max(8, Math.round((d / long) * decalPx));
+    const dc = document.createElement('canvas');
+    dc.width = dw;
+    dc.height = dh;
+    paintGroundLogo(dc.getContext('2d'), dw, dh, { logo: image });
+    const tex = keep(new THREE.CanvasTexture(dc));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 16;
+    const geo = keep(new THREE.PlaneGeometry(w, d));
+    /* Paint is over the grass and never fights it for depth: a field a
+     * hundred metres away is shot from far enough that a couple of
+     * centimetres is under the depth buffer's resolution. */
+    const mat = keep(new THREE.MeshStandardMaterial({
+      map: tex, roughness: 1, metalness: 0, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(el.position.x, el.position.y, 0.03);
+    mesh.rotation.z = el.yaw || 0;
+    mesh.renderOrder = 1;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  return group;
+}
+
 export function buildStage(THREE, doc, path, {
   size = 512, width = size, height = size, camera: fixed = null,
   /*
@@ -681,6 +906,15 @@ export function buildStage(THREE, doc, path, {
    * which is right for any card that can hold a 4096 texture.
    */
   detail = null,
+  /*
+   * SET ON A RACE FIELD, with the sponsors on the grass, instead of on the
+   * black stage. `logos` is a Map from a logo's id to a decoded image, which
+   * the caller loads because this is synchronous: see fieldGroup and
+   * loadLogos in animate.js. A track with no logos gets the field and no
+   * sponsors, which is what its field is.
+   */
+  field = false,
+  logos = null,
 } = {}) {
   const sizes = detail || detailOf(width, height);
   const trash = [];
@@ -724,7 +958,7 @@ export function buildStage(THREE, doc, path, {
   const jointR = tubeR * JOINT_SCALE;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(COL_FLOOR);
+  scene.background = new THREE.Color(field ? COL_SURROUND : COL_FLOOR);
 
   /* The one conversion. Document is Z up, Three is Y up. */
   const root = new THREE.Group();
@@ -1078,22 +1312,30 @@ export function buildStage(THREE, doc, path, {
   }
   const azimuth = theta + AZIMUTH_OFF_AXIS;
 
-  /* The floor. Large enough that its edge is never in shot, and black past
-   * the pool so the track stands on nothing. The pool is sized against the
-   * track, so the two are independent. */
-  const floorSpan = Math.max(doc.field.width, doc.field.depth, radius * 6) * 2;
-  const poolFrac = clamp((radius * POOL_RADII) / (floorSpan / 2), 0.04, 0.95);
-  const floorTex = keep(poolTexture(THREE, poolFrac, sizes.poolSize));
-  const floorGeo = keep(new THREE.PlaneGeometry(floorSpan, floorSpan));
-  const floorMat = keep(new THREE.MeshStandardMaterial({
-    map: floorTex, roughness: 1, metalness: 0,
-  }));
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  /* Authored in document coordinates like everything else, so the plane is
-   * already in the floor plane and only needs moving under the track. */
-  floor.position.set(centre.x, -centre.z, box.min.y - 0.001);
-  floor.receiveShadow = true;
-  root.add(floor);
+  const floorZ = box.min.y - 0.001;
+  if (field) {
+    /* The race field, in document coordinates, under the track. */
+    const turf = fieldGroup(THREE, doc, logos, sizes, keep);
+    turf.position.z = floorZ;
+    root.add(turf);
+  } else {
+    /* The floor. Large enough that its edge is never in shot, and black past
+     * the pool so the track stands on nothing. The pool is sized against the
+     * track, so the two are independent. */
+    const floorSpan = Math.max(doc.field.width, doc.field.depth, radius * 6) * 2;
+    const poolFrac = clamp((radius * POOL_RADII) / (floorSpan / 2), 0.04, 0.95);
+    const floorTex = keep(poolTexture(THREE, poolFrac, sizes.poolSize));
+    const floorGeo = keep(new THREE.PlaneGeometry(floorSpan, floorSpan));
+    const floorMat = keep(new THREE.MeshStandardMaterial({
+      map: floorTex, roughness: 1, metalness: 0,
+    }));
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    /* Authored in document coordinates like everything else, so the plane is
+     * already in the floor plane and only needs moving under the track. */
+    floor.position.set(centre.x, -centre.z, box.min.y - 0.001);
+    floor.receiveShadow = true;
+    root.add(floor);
+  }
 
   /*
    * THE NAME, laid in the floor plane in front of the track, turned so it
@@ -1107,7 +1349,7 @@ export function buildStage(THREE, doc, path, {
    */
   const nameCorners = [];
   if (nameplate) {
-    const nameTex = keep(nameTexture(THREE, doc.name, sizes.nameWidth));
+    const nameTex = keep(nameTexture(THREE, doc.name, sizes.nameWidth, field));
     const nameW = radius * 1.1;
     const nameH = nameW * 0.25;
     const nameGeo = keep(new THREE.PlaneGeometry(nameW, nameH));
@@ -1243,7 +1485,12 @@ export function buildStage(THREE, doc, path, {
   key.shadow.normalBias = tubeR;
   scene.add(key);
   scene.add(key.target);
-  scene.add(new THREE.HemisphereLight(0xaeb6c0, 0x08080c, 0.24));
+  /* The stage is lit to leave its shadows nearly black on a black floor. Grass
+   * lit that way is a dark green with black shadows, so a field gets a sky and
+   * a ground to bounce off, which is what the game's hemisphere is. */
+  scene.add(field
+    ? new THREE.HemisphereLight(0xdfeadf, 0x2c4a2a, 0.85)
+    : new THREE.HemisphereLight(0xaeb6c0, 0x08080c, 0.24));
 
   /*
    * THE PANE. One quad, moved, rather than one per gate lit in turn. Its
@@ -1287,7 +1534,7 @@ export function buildStage(THREE, doc, path, {
     (MIN_RIBBON_PX * worldPerPx) / 2,
   );
   const coreMat = keep(new THREE.MeshBasicMaterial({
-    color: COL_RIBBON_CORE, vertexColors: true,
+    color: COL_RIBBON_CORE, vertexColors: true, transparent: field, depthWrite: !field,
   }));
   const shellMat = keep(new THREE.MeshBasicMaterial({
     color: COL_RIBBON_SHELL,
@@ -1369,7 +1616,7 @@ export function buildStage(THREE, doc, path, {
     return pts;
   };
 
-  const setTube = (mesh, pts, radius) => {
+  const setTube = (mesh, pts, radius, fadeOut = false) => {
     if (mesh.geometry) {
       mesh.geometry.dispose();
     }
@@ -1391,16 +1638,26 @@ export function buildStage(THREE, doc, path, {
     const rings = segs + 1;
     const perRing = RIBBON_RADIAL_SEGMENTS + 1;
     const count = geo.getAttribute('position').count;
-    const colors = new Float32Array(count * 3);
+    /*
+     * On the black stage the taper is black, and black on black is nothing.
+     * On grass it is a black streak at the tail of the line, so a field
+     * fades the tail OUT instead: full colour with a falling alpha, which
+     * needs a four component colour and a material that is transparent.
+     */
+    const parts = fadeOut ? 4 : 3;
+    const colors = new Float32Array(count * parts);
     for (let i = 0; i < count; i += 1) {
       const ring = Math.min(rings - 1, Math.floor(i / perRing));
       const t = rings > 1 ? ring / (rings - 1) : 1;
       const f = t * t;
-      colors[i * 3] = f;
-      colors[i * 3 + 1] = f;
-      colors[i * 3 + 2] = f;
+      colors[i * parts] = fadeOut ? 1 : f;
+      colors[i * parts + 1] = fadeOut ? 1 : f;
+      colors[i * parts + 2] = fadeOut ? 1 : f;
+      if (fadeOut) {
+        colors[i * parts + 3] = f;
+      }
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, parts));
     mesh.geometry = geo;
   };
 
@@ -1478,7 +1735,7 @@ export function buildStage(THREE, doc, path, {
      */
     const s = total > 0 ? ((i % frames) / frames) * total : 0;
     const pts = windowPoints(s);
-    setTube(core, pts, ribbonR);
+    setTube(core, pts, ribbonR, field);
     setTube(shell, pts, ribbonR * RIBBON_SHELL_SCALE);
     const headIdx = sampleAt(s);
     setPane(paneKnotIndex(path, samples[headIdx].segment));

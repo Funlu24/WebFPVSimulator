@@ -132,6 +132,23 @@ function flipRows(src, dst, width, height) {
 }
 
 /*
+ * THE DOCUMENT'S LOGOS AS DECODED IMAGES, keyed by the logo's id, for a race
+ * field to paint on the grass. Loaded here because the stage is built
+ * synchronously and a data URL is not an image until the browser has decoded
+ * it. A logo that will not decode is left out of the map, and the field
+ * leaves its decals out: see fieldGroup in stage.js.
+ */
+function loadLogos(doc) {
+  const list = (doc && doc.branding && doc.branding.logos) || [];
+  return Promise.all(list.map((logo) => new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve([logo.id, image]);
+    image.onerror = () => resolve([logo.id, null]);
+    image.src = logo.image;
+  }))).then((pairs) => new Map(pairs.filter(([, image]) => image)));
+}
+
+/*
  * doc is a track document. The returned bytes are a complete .gif.
  *
  * onProgress(done, total) is called after every rendered frame of both
@@ -156,6 +173,10 @@ function flipRows(src, dst, width, height) {
  * time, which goes with the pixels, and memory, which is a frame and the
  * encoder's tables rather than anything that grows with the length of the lap.
  *
+ * field, when true, sets the track on a race field with its sponsors' logos on
+ * the grass in place of the black stage. It is for a five inch track: a whoop
+ * track is flown in a room, which this does not draw.
+ *
  * signal is an AbortSignal. Aborting it stops the render at the next frame,
  * frees the card, and rejects with an error named AbortError, which a caller
  * that asked for the stop should treat as an answer and not as a failure. It
@@ -165,7 +186,7 @@ function flipRows(src, dst, width, height) {
 export async function exportTrackGif(doc, {
   size = 512, width = size, height = size,
   frames = null, delayCs = 4, onProgress = null, camera = null, nameplate = true,
-  signal = null,
+  signal = null, field = false,
 } = {}) {
   if (!Number.isInteger(width) || !Number.isInteger(height)
     || Math.min(width, height) < MIN_EDGE || Math.max(width, height) > MAX_EDGE) {
@@ -183,6 +204,8 @@ export async function exportTrackGif(doc, {
   };
   stopIfAsked();
   const THREE = await import('three');
+  const logos = field ? await loadLogos(doc) : null;
+  stopIfAsked();
 
   /*
    * The lap closes on the first gate flown, whether or not the author placed
@@ -263,6 +286,7 @@ export async function exportTrackGif(doc, {
     stage = buildStage(THREE, doc, path, {
       width, height, camera, nameplate,
       detail: detailOf(width, height, renderer.capabilities.maxTextureSize),
+      field, logos,
     });
 
     const raw = new Uint8Array(width * height * 4);
