@@ -173,62 +173,76 @@ function flatBackPilot() {
  * must still disagree about them; `expect` pins an anchor's verdict. A
  * flight runs to `after` ms past its first contact, or to its verdict.
  * The wall is the face x = 0, looking down -x.
+ *
+ * RE-AIMED ON 2026-10-04, with the owner's word, when the five inch's drag
+ * changed (src/native/plant.c, cda_front, cda_side and k_rotor_drag) and
+ * every flight here arrived somewhere slightly different. Flown as they
+ * were, four of the five edge scenarios came to a different verdict and
+ * three were no longer on an edge, so each was swept again on its approach
+ * speed, the one number changed, until it was the flight its name
+ * describes, with the verdict it had before, and sat on an edge again. The
+ * comments below give the new flights' numbers. The check itself, one
+ * verdict at every pacing, passed throughout.
  * ------------------------------------------------------------------ */
 
 const WALL_BOX = [0, -20, -1, 1, 20, 30];
 
 export const SCENARIOS = [
-  /* A tap 4.2 m/s closing with the belly about 50 degrees off the wall:
+  /* A tap 4.1 m/s closing with the belly about 50 degrees off the wall:
    * the step it touches is outside the cone, and the craft goes on turning
    * its belly onto the wall, so a frame that ends later reads it inside. */
   {
     name: 'belly cone edge: a tap the step it lands on calls a crash',
     edge: true,
     world: [WALL_BOX], pose: [-14, 0, 4], ms: 9000, after: 300,
-    pilot: () => flipPilot(5, 1.3, 46, 0.05),
+    pilot: () => flipPilot(5.2, 1.3, 46, 0.05),
   },
-  /* Shallower, the belly about 63 degrees off the wall: the props meet it
-   * first, closing at 4.0 m/s, and the frame 3 ms later at 3.5. No one step
+  /* Shallower, the belly about 64 degrees off the wall: the props meet it
+   * first, closing at 4.04 m/s, and the frame 3 ms later at 3.55. No one step
    * both closes at a smack's speed and touches with the frame, but a frame
    * whose report sums the two steps does. */
   {
     name: 'belly cone edge: a tap no one step calls a crash',
     edge: true,
     world: [WALL_BOX], pose: [-14, 0, 4], ms: 9000, after: 300,
-    pilot: () => flipPilot(4.5, 1.0, 34, 0.05),
+    pilot: () => flipPilot(4.8, 1.0, 34, 0.05),
   },
-  /* A belly skim at 6.6 m/s, then touches of the grass at 145, 176 and
-   * 186 ms as it rolls onto its side, body up 0.75, 0.70 and 0.69: step by
-   * step the one at 186 is the first past the cooldown, at 4.7 m/s, and a
-   * crash. A frame that ends just past the cooldown judges the touch at 176
+  /* A belly skim at 6.6 m/s, then touches of the grass at 144, 172 and
+   * 185 ms as it rolls onto its side, body up 0.75, 0.71 and 0.69: step by
+   * step the one at 185 is the first past the cooldown, at 4.6 m/s, and a
+   * crash. A frame that ends just past the cooldown judges the touch at 172
    * instead, on the belly by a hair, and the cooldown that starts hides the
    * rest. */
   {
     name: 'the ground: a side touch just past the cooldown after a skim',
     edge: true,
     world: [], pose: [-12, 0, 0.2], ms: 9000, after: 700,
-    pilot: () => skimPilot(7, 0.2, 100, 170, 70, 0.15, 0.2),
+    pilot: () => skimPilot(7.15, 0.2, 100, 170, 70, 0.15, 0.2),
   },
-  /* A skim, a touch 133 ms later on the belly, and touches on the side at
-   * 172 and 185 ms: step by step the one at 185 is the first past the
-   * cooldown, and a crash. A stutter frame runs the wall clock ahead of the
-   * sim clock, the cooldown ends early, the belly touch at 133 ms is judged
-   * (a bump), and the cooldown it starts hides the side touches. */
+  /* A skim, a touch 117 ms later on the belly, one at 159 on the belly by a
+   * hair, and touches on the side at 175 and 185 ms: step by step the one at
+   * 185 is the first past the cooldown, and a crash. A stutter frame runs the
+   * wall clock ahead of the sim clock, the cooldown ends early, a belly touch
+   * (117 or 159 ms, or the skim's own tail) is judged, a bump, and the
+   * cooldown it starts hides the side touches. */
   {
     name: 'the ground: a touch inside the cooldown, and a stutter',
     edge: true,
     world: [], pose: [-12, 0, 0.2], ms: 9000, after: 700,
-    pilot: () => skimPilot(7, 0.2, 80, 220, 70, 0, 0.2),
+    pilot: () => skimPilot(7.4, 0.2, 80, 220, 70, 0, 0.2),
   },
-  /* A skim, then the side 174 ms later at 5 m/s, inside the cooldown, and
-   * the grass stops it: by the first step past the cooldown it is down to
-   * 1.1 m/s, under a smack. A frame that straddles the end of the cooldown
-   * judges the touch on its fastest step instead. */
+  /* A skim, then side touches through the end of the cooldown as the craft
+   * slows through a smack's speed: the last one inside the cooldown, at
+   * 178 ms, is at 4.02 m/s, and by the first step past it, at 182 ms, it is
+   * down to 3.99, under a smack. A frame that straddles the end of the
+   * cooldown judges the touch on its fastest step instead. Until 2026-10-04
+   * the grass stopped it outright, 1.1 m/s by the end of the cooldown; the
+   * drag change took that flight away and this is the nearest one left. */
   {
     name: 'the ground: side touches no one step calls a crash',
     edge: true,
     world: [], pose: [-12, 0, 0.2], ms: 9000, after: 700,
-    pilot: () => skimPilot(7, 0.2, 80, 190, 70, 0.15, 0.2),
+    pilot: () => skimPilot(6.9, 0.2, 80, 190, 70, 0.15, 0.2),
   },
   {
     name: 'anchor: a steep nose first hit is a crash',

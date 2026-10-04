@@ -135,6 +135,20 @@
    "afterMs": 2000
   },
   {
+   "name": "head-on 10 m/s, hand still on the sticks",
+   "kind": "held",
+   "from": [-2,2.5,29.3],
+   "to": [7.5,2.5,29.3],
+   "secs": 1.8,
+   "vEnd": 10,
+   "heading": 1.5708,
+   "pushMs": 100,
+   "held": [0.5,-0.5,0.3,0.7],
+   "heldMs": 2200,
+   "after": 0.7,
+   "afterMs": 2500
+  },
+  {
    "name": "head-on 10 m/s, throttle cut, left alone",
    "kind": "stuck",
    "from": [-2,2.5,29.3],

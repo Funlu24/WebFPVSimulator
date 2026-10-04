@@ -65925,3 +65925,119 @@ again. Board times flown before this are not marked as from an older plant; the 
 
 Nothing broke. The first closed loop probe reported turns of minus 300 degrees: the heading was not unwrapped, fixed before any
 number here was read.
+
+## 2026-10-04 | plant | The grip change re-recorded and re-aimed for main (the owner's word)
+
+Follows the entry above. Everything the owner approved for the push is done and verify is 18 of 18. The push to main itself
+waits on one more answer, because two checks outside verify came back newly red (below).
+
+### The owner's word, as given
+
+- 11:08 UTC. Asked "Put the low and mid throttle grip change live for every pilot?", the owner chose "Push to main", whose
+  text was "I re-record the recordings, re-aim the crash scenarios, rerun verify and push. Every pilot gets the new feel."
+  It covers rewriting tests/goldens/plant.json and tests/goldens/world.json, re-aiming the crash-pacing scenarios, and the
+  push. The recommendation had been to fly it first.
+- 11:11 UTC. The owner asked: "will re exporting it, regress any recent changes?" The answer given: no. Re-exporting
+  rewrites two test files, the town fixture and the world recording, and no game code. The cost is on the test side: the
+  world check stops flagging two older moves and takes them as the new normal, crash-check's paths (edited 2026-10-03) and
+  the map of one of everything (grown with the builder's new pieces), and the check of 2026-10-03 had found the other 33
+  world runs bit identical.
+- 11:12 UTC. Asked "Re-export the town test fixture so the world recording can be re-recorded too?", the owner chose
+  "Re-export it": "I re-export the town fixture, re-record the world recording, and the world check goes green for the
+  first time since 3 October." Before anything was written, today's town was compared with the fixture: none of its
+  19,515 solids had moved.
+- 11:35 UTC. Put to the owner: "Push the grip change to main with two side tests newly red?", with three options: push
+  and write both up here (recommended), re-aim them first, or hold. Waiting on the answer when this was written.
+
+### What was re-recorded
+
+tests/goldens/plant.json, `node scripts/plant-golden.js --write`: 16 of 23 scenarios moved, every five inch one. The seven
+whoop scenarios are bit identical ("whoop, free air acro" stays 0244aeb4d20001c1). The module it names goes from b0f89e9a,
+which it was last written against, to 0a1f60b4.
+
+tests/fixtures/town-crash.json, `node scripts/world-golden.js --export-town`: the same town, 19,515 shapes, 650 kept, 12
+paths, and the same SHA-256 of the export. The one change is the crash-check scenario added on 2026-10-03 (a91623d), "head-on
+10 m/s, hand still on the sticks", along a line the fixture already had.
+
+tests/goldens/world.json, `node scripts/world-golden.js --write`: 35 runs to 36, the new one being that scenario. The two
+whoop runs are bit identical ("world-check: whoop, wall head-on, 5 m/s" and "movers: a whoop rides beside a van as it pulls
+away"). The other 33 are five inch flights and every one moved, which is the physics change. The map of one of everything
+also hands the plant a different world now (its inputs 8064b4a4 to 20871ea5, 1420 capsules to 1538), because the hollow
+chimney and the wind turbine joined the element table after 2026-09-29; the starter's inputs did not move (c3c1f3b6).
+Compare and selftest pass, and `npm run check:world-town` passes, which it had not since 2026-10-03.
+
+scripts/crash-pacing.js: flown as they were on the new plant, four of the five edge scenarios came to a different verdict
+at one step a frame, and three were no longer on an edge:
+
+    scenario                                          main      new plant, as was   re-aimed
+    belly cone edge: a tap the step it lands on...    solid 3303   no crash            solid 3304
+    belly cone edge: a tap no one step calls...       no crash     no crash            no crash
+    the ground: a side touch just past the cooldown   ground 2934  no crash            ground 2947
+    the ground: a touch inside the cooldown, stutter  ground 3015  no crash            ground 3006
+    the ground: side touches no one step calls...     no crash     ground 3017         no crash
+
+Each was swept again on its approach speed alone, the one number changed, until it had its old verdict and sat on an edge
+again: flipPilot 5 to 5.2 and 4.5 to 4.8, skimPilot 7 to 7.15, 7 to 7.4 and 7 to 6.9. The comments over each give the new
+flight's numbers. The last one's old flight, the grass stopping the craft outright at 1.1 m/s by the end of the cooldown,
+is gone on the new plant; the nearest is one slowing through a smack's speed across the end of the cooldown, 4.02 m/s on
+the last step inside it and 3.99 on the first past it. One number in the comments was checked and left alone: "a belly
+skim at 6.6 m/s" is the speed just before the skim touches, 6.62 on main and 6.64 on the re-aimed flight. Nothing in the
+check itself changed, and `npm run check:crash-pacing` is 48 of 48.
+
+### The other checks that fly the module, and what came back red
+
+Run one after another on the new module, 29 npm scripts outside verify. 26 pass: check:world-town, replay:test (9 of 9,
+in Chromium), replay:selftest, contact:selftest, ghost:selftest, predict:selftest, input:selftest, check:world,
+check:world-engines, check:room, check:counter, check:chase, check:roads, check:path, check:craft, check:seat,
+seat:selftest, lint:fc, lint:presets, lint:catalog, lint:frame, score:selftest, autoscale:selftest, whoop:gates,
+micro:check and trick:sweep. Each red one was then run again on main's module (5408b3e2), from a scratch copy of the tree
+with main's module in its dist/ or with dist/sim.wasm swapped and put back (0a1f60b4 checked after).
+
+- check:crash, 1 guard: "wall head-on, 10 m/s: no frame moves further than its speed allows", worst excess 0.796 m. The
+  same line fails on main's module, at 0.765 m. Not this change's.
+- check:wall: 49 passed and 8 failed on main's module, 53 and 4 on the new one. Five of main's failures pass now (yaw 90 at
+  3 m/s comes off the face, the three 9 m/s "the contact throws it clear and the pilot flies out" at yaws 0, 90 and 180,
+  and "below the knee the rebound is the law's own saturated value"). One is new: "yaw 180 deg at 6 m/s: three seconds of
+  nothing and the craft is off the face", climbed to 4.53 m and ended at 4.53, gap 0.307 m against the 0.564 the second
+  clause needs. Traced every 150 ms on both modules. On main's, the craft is on the face from 300 ms to about 2250, wound
+  about 12 degrees into it, slides down to the ground and lifts off again at the held 0.345 throttle, 1.6 m up and climbing
+  at 2.8 m/s by the end, a drop of 2.49 m from its peak on the face. On the new plant it is wound about 16 degrees into the
+  face, slides down sooner (on the ground at about 1950 ms), lifts off harder and is climbing at 4.8 m/s past its peak on
+  the face by 3000 ms, 0.31 m off the face with no contact after about 2.3 s. The craft is not hanging. The measure, a
+  drop of two metres from the peak or a gap of four reaches at the end, reads a craft that came down the face and went back
+  up beside it as one that never left. All four 6 m/s yaws now end with less than 2 m of drop, and three pass on the gap.
+  Not changed, because a measure is not moved to make a check pass. The comment over check 6 did not match main already: it
+  says the craft is "on the ground at 0.10 to 0.13 m inside three seconds", and on main's module the four 6 m/s flights end
+  at 0.64 to 1.68 m, climbing again.
+- check:props, 1 line, green on main's module: "from the point, inside the lattice, a climb straight up meets the pylon: the
+  trap, seen", now 1929 steps in contact and up to 35.075 m, on main 3390 steps and up to 27.631 m. Traced: the two climbs
+  are the same to within a millimetre up to 27.5 m, where both meet the peak, four rods 6 cm in radius from the tops of the
+  legs at 25.76 m to the apex at 28 m, with the faces between them open. On main's module the craft bumps about under the
+  apex for the rest of the nine seconds. On the new plant it works out sideways to about 0.75 m off the axis and at about
+  7.6 s rises out through the open face between two rods, about a quarter of a metre from the nearer, and climbs to the
+  34 m it is held to. The contact solver is untouched and the way out is open geometry, so this is the flight changing, not
+  the craft passing through a solid. The check this line is the control for, "from the start, a climb straight up to 34 m,
+  over the peak, touches nothing", passes. Not changed, for the same reason.
+
+### RUN LOG
+
+- `npm run verify`: 18 of 18. Check 1 build exit 0, vendor diff empty, dist/sim.wasm 0a1f60b4 again. Checks 2 to 4 trace
+  4cadc5ef7d6e in Node and Chromium and at every rate. Check 17 36 of 36 runs bit identical, 63 flights, 268,100 steps each
+  flown twice. Check 18 48 of 48. Checks 5 to 12 as in the entry above.
+- `npm run check:crash-pacing` once more after the comment over the scenarios was made exact: all passed.
+- The 29 other scripts, and the three red ones on main's module, as above.
+
+### For the owner
+
+The push to main is the one thing left, and it waits on the answer to the 11:35 question. The two red lines above are not
+re-aimed or re-measured here; both need the owner's word first, as the crash-pacing ones did. Board times flown before
+this were flown on the old feel, and nothing marks them.
+
+### What went wrong
+
+- The reply on what the re-export would change said the map of one of everything had grown with "the chimney, the wind
+  turbine, letters and invisible gates". Checked against the prop catalogue, it is the hollow chimney and the wind turbine
+  only; letters and invisible gates are gate pieces and are not on that map. The reply was corrected in place, struck
+  through with a note.
+- The promise in the thread was to push to main only if everything came back green. Two checks outside verify came back
+  newly red, so the push stopped there and went back to the owner.
