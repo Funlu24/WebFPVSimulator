@@ -65610,3 +65610,21 @@ the ABI or the build), a phone viewport, and anything against the live board.
 What went wrong. My first builder test failed because it forgot to clear the admin session before asserting signed out behaviour,
 which was the test's fault. Starting a scratch Postgres as another user failed on directory permissions twice before it worked. The
 disabled Update button in the locked dialog is dark on dark; it is the builder's existing disabled style and I left it.
+
+## 2026-10-04: builder's 3D view waited on Three.js
+
+Report: opening 3D mode in the builder, the track does not render straight away. The five inch and the whoop open in 3D, so this is
+the first frame of the page. Cause, from reading the code and not from a timing: `src/trackbuilder/index.html` has no
+`data-preload`, so Three.js is not modulepreloaded the way the simulator's boot does it, and view3d.js began `import('three')` only
+in `setEnabled`, after App was built and behind the whole module graph. Until it arrived the canvas was an empty frame. It is not
+the admin work: that commit only added `admin.js` to the boot graph and touches nothing in view3d.js or the draw path.
+
+Change: view3d.js starts the Three.js download when the module is evaluated (browser only). One call, no behaviour change when it
+arrives, the failure path is the same cached promise. Checked: `src/trackbuilder/selftest.js` 2457 passed, `lint:shell` and
+`lint:boot` pass. Headless Chromium through the shots harness: the builder opens, and a track of five gates draws in 3D and again
+after 2D to 3D. Not shown: a measured before and after, because the harness serves the CDN through Node with a cache and so cannot
+reproduce a slow network. A real cold load on a slow connection is the thing to look at. Not run: `npm run verify`, nothing here
+touches physics.
+
+What went wrong. I could not reproduce the delay locally, so the cause is a reading of the code and the fix is a safe early start,
+not a proven cure. If the empty frame is still there on a cold load, the next step is a builder preload list in gen-preload.js.
