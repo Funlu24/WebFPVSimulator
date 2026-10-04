@@ -65748,3 +65748,9 @@ passed or failed by timing, and now waits on a marker on the old document; its n
 on the canvas?" question that a non-empty canvas gets, which is the existing behaviour and not mine. The first `check:builder` run
 was cut off by my own 580 second timeout after 9 minutes 40 seconds, so I ran it again to the end in the background rather than
 report a half run.
+
+Shipping. The owner approved pushing this to `main` on 2026-10-04, choosing "Push, then fly it" on the decision card over running
+`npm run verify` first or holding the push, so it goes out with the checks above and nothing more. They will fly it signed out and as
+an admin. Wrong would be anything that puts an official track on the canvas while signed out: from a board link, from Load or a
+reload (for a track that browser published), from an import, or from a `?track=` link. The board is unchanged and already live, so
+there is no deploy order for this change. Not checked: that the host has deployed.
