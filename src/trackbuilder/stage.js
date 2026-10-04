@@ -235,14 +235,75 @@ const POOL_RADII = 1.15;
  * SHADOW MAP SIZE. 1024, not 2048. The headless harness runs Chromium on
  * SwiftShader, a software rasteriser, and the shadow pass is drawn once per
  * frame for three hundred frames. 2048 is four times the fill for a
- * difference nobody can see at 512 by 512.
+ * difference nobody can see at 512 by 512. That is the size at 512 and under:
+ * a bigger picture gets a bigger map, see detailOf.
  */
 const SHADOW_MAP = 1024;
 
+/* The two images the scene paints from canvases, at the size they have always
+ * been. The name is four times as wide as it is tall; the pool is square. */
+const NAME_TEXTURE_W = 1024;
+const POOL_TEXTURE = 512;
+
 /*
- * The narrowest a pipe is allowed to be on screen, in pixels. Below about
- * this a thin diagonal cylinder stops being a shape and becomes intermittent
- * aliasing, and 256 palette entries cannot rescue it.
+ * THE REFERENCE EDGE. Every number in this file that is counted in pixels, a
+ * pipe's readable minimum and the ribbon's, was tuned by eye on a picture 512
+ * on a side. A bigger picture is meant to be that picture with more pixels in
+ * it, not a thinner one. Left alone, MIN_PIPE_PX at 2048 is a quarter of the
+ * weight it has at 512, and a full sized course comes out as hairlines that
+ * vanish the moment the file is shown at the size of a screen: that was
+ * measured on the 2025 WA States course before this existed.
+ *
+ * So those minimums are worked out against this edge, or against the
+ * picture's own short edge when that is smaller. At 512 and under the two are
+ * the same number and nothing changes, which is what keeps the 384 by 240
+ * cards and the standard export exactly as they were. Above it a pipe is
+ * drawn as thick in the world as it was at 512 and lands on more pixels.
+ */
+const REFERENCE_EDGE = 512;
+
+/*
+ * WHAT GROWS WITH THE PICTURE, which is every image the scene is made from,
+ * because each was sized for 512. At 2048, before this, the name (a texture
+ * 1024 wide) came out with scan lines through every letter, and the pool of
+ * light (a 512 square gradient laid over a floor many times its width, so
+ * about a hundred texels across the lit part) came out as flat steps with the
+ * ring edges twenty pixels to the stair. At 512 neither could be seen, which
+ * is why nobody needed this.
+ *
+ * The shadow map is the one that depends on the course. On a full sized field
+ * it made no visible difference at 2048, because the floor is nearly black
+ * and the pipe is drawn thick. On the micro living room, where the pipe is its
+ * real 27 mm, a 1024 map drew the shadow of a pipe as a soft smear and the
+ * shadow on the pipe itself as a mottled blotch, and 4096 drew both as clean
+ * edges, so it grows with everything else rather than being argued per track.
+ *
+ * Whole doublings, because a texture or a shadow map is cheapest at a power of
+ * two and a 700 pixel picture taking the next size up is simpler than taking
+ * one between. Capped at 4096 and at what the graphics card says it can hold
+ * (maxTexture, from the renderer), so a small card gets the biggest picture it
+ * can draw instead of a texture that fails to upload.
+ *
+ * Pure arithmetic with no GL in it, so scripts/gif-selftest.js can pin it.
+ * AT 512 AND UNDER NOTHING GROWS: steps is nought and every size is the one
+ * it was before this function existed.
+ */
+export function detailOf(width, height, maxTexture = 4096) {
+  const shortEdge = Math.max(64, Math.min(width, height));
+  const steps = Math.max(0, Math.ceil(Math.log2(shortEdge / REFERENCE_EDGE)));
+  const grow = (base) => Math.max(base, Math.min(base * 2 ** steps, 4096, maxTexture));
+  return {
+    shadowMap: grow(SHADOW_MAP),
+    nameWidth: grow(NAME_TEXTURE_W),
+    poolSize: grow(POOL_TEXTURE),
+  };
+}
+
+/*
+ * The narrowest a pipe is allowed to be on screen, in pixels, on a picture
+ * REFERENCE_EDGE across. Below about this a thin diagonal cylinder stops being
+ * a shape and becomes intermittent aliasing, and 256 palette entries cannot
+ * rescue it.
  */
 const MIN_PIPE_PX = 1.7;
 
@@ -378,9 +439,10 @@ function dim(hex, f) {
 
 /* A radial fall off painted into a texture, which is cheaper and steadier
  * than a light with a distance decay and cannot leak onto the pipes. `frac`
- * is where the pool reaches as a fraction of the texture's half width. */
-function poolTexture(THREE, frac) {
-  const size = 512;
+ * is where the pool reaches as a fraction of the texture's half width. `size`
+ * is the canvas edge: 512 is plenty for a picture 512 across, and detailOf
+ * hands a bigger one to a bigger picture. */
+function poolTexture(THREE, frac, size = POOL_TEXTURE) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -446,14 +508,21 @@ function fitDistance(THREE, points, aim, eye, fovDeg, aspect) {
  * plane lying in the floor plane reads in perspective exactly like extruded
  * type does at this size, and it costs a texture rather than a dependency
  * and a typeface licence.
+ *
+ * DRAWN IN 1024 BY 256 UNITS WHATEVER THE TEXTURE'S SIZE. `width` is the
+ * canvas's real width, which detailOf raises for a bigger picture, and the
+ * context is scaled to match, so the layout below (the fit, the centring) is
+ * the same arithmetic at every size and only the pixels under it multiply.
  */
-function nameTexture(THREE, name) {
-  const w = 1024;
-  const h = 256;
+function nameTexture(THREE, name, width = NAME_TEXTURE_W) {
+  const w = NAME_TEXTURE_W;
+  const h = w / 4;
+  const k = width / w;
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w * k;
+  canvas.height = h * k;
   const ctx = canvas.getContext('2d');
+  ctx.scale(k, k);
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = `#${COL_TEXT.toString(16).padStart(6, '0')}`;
   ctx.textAlign = 'center';
@@ -470,6 +539,23 @@ function nameTexture(THREE, name) {
   ctx.fillText(text, w / 2, h / 2);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  /*
+   * ANISOTROPIC, which the name was not at first, and it was softer than it
+   * needed to be for that even at 512. The plate lies in the floor and the
+   * camera looks down at it 40 degrees, so a texel is about a third narrower
+   * on the screen up and down than it is across. Plain trilinear filtering
+   * picks the blur level from the longer side of that footprint and applies it
+   * both ways, so the letters lose width they did not need to lose. Sixteen
+   * is a request: three clamps it to what the card supports, and a card with
+   * no support draws it as before.
+   *
+   * This is the one thing in this file that changes a 512 picture. With it
+   * switched off a 512 export of the 2025 WA States course is the same file,
+   * byte for byte, as it was before the bigger sizes existed. With it on, the
+   * name is sharper and the 256 colours are shared out a little differently,
+   * so edges elsewhere can move by a shade.
+   */
+  tex.anisotropy = 16;
   return tex;
 }
 
@@ -577,7 +663,15 @@ export function buildStage(THREE, doc, path, {
    * gets the track instead of the caption. See CARD_GIF in animate.js.
    */
   nameplate = true,
+  /*
+   * THE SIZES OF THE IMAGES THE SCENE IS PAINTED FROM, as detailOf works them
+   * out. The caller that owns the renderer passes its own, with the card's
+   * texture limit in it; a caller with no renderer to ask gets the default,
+   * which is right for any card that can hold a 4096 texture.
+   */
+  detail = null,
 } = {}) {
+  const sizes = detail || detailOf(width, height);
   const trash = [];
   const keep = (x) => {
     trash.push(x);
@@ -608,9 +702,12 @@ export function buildStage(THREE, doc, path, {
   const spanR = estimateRadius(doc, path);
   /* The SHORT edge, because that is the one the frame is fitted to and so
    * the one a pipe's readable minimum has to be measured against. On a
-   * square export the two are the same number, which is what this was. */
+   * square export the two are the same number, which is what this was.
+   * Measured against REFERENCE_EDGE when the picture is bigger than that, so
+   * a minimum of so many pixels is so many pixels of a 512 picture and not of
+   * whatever size this one is drawn at: see REFERENCE_EDGE. */
   const shortEdge = Math.max(64, Math.min(width, height));
-  const worldPerPx = (2.2 * spanR) / shortEdge;
+  const worldPerPx = (2.2 * spanR) / Math.min(shortEdge, REFERENCE_EDGE);
   const minDrawR = (MIN_PIPE_PX * worldPerPx) / 2;
   const tubeR = Math.max(tubeOD / 2, minDrawR);
   const jointR = tubeR * JOINT_SCALE;
@@ -953,7 +1050,7 @@ export function buildStage(THREE, doc, path, {
    * track, so the two are independent. */
   const floorSpan = Math.max(doc.field.width, doc.field.depth, radius * 6) * 2;
   const poolFrac = clamp((radius * POOL_RADII) / (floorSpan / 2), 0.04, 0.95);
-  const floorTex = keep(poolTexture(THREE, poolFrac));
+  const floorTex = keep(poolTexture(THREE, poolFrac, sizes.poolSize));
   const floorGeo = keep(new THREE.PlaneGeometry(floorSpan, floorSpan));
   const floorMat = keep(new THREE.MeshStandardMaterial({
     map: floorTex, roughness: 1, metalness: 0,
@@ -977,7 +1074,7 @@ export function buildStage(THREE, doc, path, {
    */
   const nameCorners = [];
   if (nameplate) {
-    const nameTex = keep(nameTexture(THREE, doc.name));
+    const nameTex = keep(nameTexture(THREE, doc.name, sizes.nameWidth));
     const nameW = radius * 1.1;
     const nameH = nameW * 0.25;
     const nameGeo = keep(new THREE.PlaneGeometry(nameW, nameH));
@@ -1101,7 +1198,7 @@ export function buildStage(THREE, doc, path, {
   );
   key.target.position.copy(aim);
   key.castShadow = true;
-  key.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+  key.shadow.mapSize.set(sizes.shadowMap, sizes.shadowMap);
   key.shadow.camera.near = 0.1;
   key.shadow.camera.far = keyDist * 2.4;
   const half = fitR * 1.4;

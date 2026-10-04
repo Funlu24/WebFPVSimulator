@@ -5384,6 +5384,117 @@ kase('phone', async () => {
   }
 });
 
+/*
+ * THE ANIMATION'S SIZE IS A CHOICE. Export animation drew every file at 512
+ * and offered no way to ask for more, so a field with forty gates came out as
+ * a few pixels of grey a gate under a name nobody could read. The box has a
+ * Size now, and this holds the part of it a pilot meets: three sizes with the
+ * usual one chosen, what each costs said under it and tied to it for a screen
+ * reader, a render that saves the file the pilot always got, and a box that
+ * can be walked away from, which stops the render. That last one is here
+ * because a render at the top size is minutes, and a box that cannot be closed
+ * for minutes is one people close the tab on.
+ *
+ * The downloads are caught in the page and not made. Standard is followed
+ * through to the file. The bigger sizes' names are the file name rule's, which
+ * scripts/gif-selftest.js holds, and what they draw is checked by looking at
+ * them, so a render at 1024 is not what this is for.
+ *
+ * THE WAIT AFTER THE CLOSE is the one soft thing in it: nothing in the page
+ * says a render has stopped, so it waits well past the time the rest of the
+ * render would have taken and checks that no file arrived. A machine slower
+ * than this one's software rasteriser can only make that pass when it should
+ * not, never fail when it should not.
+ */
+kase('animation size', async () => {
+  const page = await openBuilder();
+  const press = (label) => page.evaluate(`(() => {
+    const b = [...document.querySelectorAll('.tb-modal button')].find((x) => x.textContent === ${JSON.stringify(label)});
+    if (!b) return false;
+    b.click();
+    return true;
+  })()`);
+  const choose = (edge) => page.evaluate(`(() => {
+    const s = document.getElementById('tb-animation-size');
+    s.value = '${edge}';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+    return s.value;
+  })()`);
+  const note = () => page.evaluate("document.getElementById('tb-animation-size-note').textContent");
+  const boxText = () => page.evaluate("(document.querySelector('.tb-modal') || { textContent: '' }).textContent");
+  try {
+    await page.evaluate(`(() => {
+      window.__downloads = [];
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () {
+        if (this.download) {
+          const rec = { name: this.download, bytes: -1 };
+          window.__downloads.push(rec);
+          fetch(this.href).then((r) => r.blob()).then((b) => { rec.bytes = b.size; });
+          return undefined;
+        }
+        return click.call(this);
+      };
+      return 1;
+    })()`);
+    await loadPreset(page, 'racegow5-track1');
+    await menu(page, 'Export animation');
+    await page.until("!!document.getElementById('tb-animation-size')", 5000);
+
+    const shape = await json(page, `(() => {
+      const s = document.getElementById('tb-animation-size');
+      const l = document.querySelector("label[for='tb-animation-size']");
+      return {
+        options: [...s.options].map((o) => o.value),
+        chosen: s.value,
+        label: l ? l.textContent : null,
+        described: s.getAttribute('aria-describedby'),
+        noteId: document.getElementById('tb-animation-size-note') ? 'tb-animation-size-note' : null,
+      };
+    })()`);
+    check('Export animation offers three sizes, the usual first, then 1024 and 2048', shape.options.join() === '512,1024,2048', shape.options.join());
+    check('and the usual one is chosen when the box opens, so doing nothing gets the file it always did', shape.chosen === '512', shape.chosen);
+    check('the choice has a label, and what it costs is tied to it for a screen reader', shape.label === 'Size' && shape.described && shape.described === shape.noteId, JSON.stringify(shape));
+    const notes = [await note()];
+    await choose(1024);
+    notes.push(await note());
+    await choose(2048);
+    notes.push(await note());
+    check('what each size costs is said under it, and says something different for each', notes.every((n) => n.length > 30) && new Set(notes).size === 3, notes.map((n) => n.slice(0, 30)).join(' | '));
+    check('the box says that closing it stops the render', /closing this box stops it/.test(await boxText()));
+
+    /* Standard, through to the file. */
+    await choose(512);
+    check('Render the animation was pressed', await press('Render the animation'));
+    await page.until("/Frame \\d+ of \\d+/.test(((document.querySelector('.tb-modal') || {}).textContent) || '')", 60000);
+    check('the size cannot be changed while it renders', await page.evaluate("document.getElementById('tb-animation-size').disabled") === true);
+    await page.until("/Done\\./.test(((document.querySelector('.tb-modal') || {}).textContent) || '')", 240000);
+    await page.sleep(800);
+    const done = await json(page, `({
+      files: window.__downloads,
+      locked: document.getElementById('tb-animation-size').disabled,
+      buttons: [...document.querySelectorAll('.tb-modal button')].map((b) => b.textContent),
+    })`);
+    check('one file was saved, and at the usual size it has the name it always had', done.files.length === 1 && done.files[0].name === 'racegow5-track-1.gif', JSON.stringify(done.files));
+    check('and it is a real animation, not an empty file', done.files[0] && done.files[0].bytes > 20000, String(done.files[0] && done.files[0].bytes));
+    check('then the size can be changed again, and the button offers another go', done.locked === false && done.buttons.includes('Render it again'), JSON.stringify(done));
+
+    /* The box closed part way through a render stops it. */
+    check('the box closed', await press('Close'));
+    await menu(page, 'Export animation');
+    await page.until("!!document.getElementById('tb-animation-size')", 5000);
+    await press('Render the animation');
+    await page.until("/Frame [3-9]/.test(((document.querySelector('.tb-modal') || {}).textContent) || '')", 60000);
+    check('and the box was closed with the render under way', await press('Close'));
+    await page.sleep(25000);
+    const after = await page.evaluate('window.__downloads.length');
+    check('closing the box part way through stopped the render: no second file arrived', after === 1, `${after} files`);
+    check('the page reported no error of its own', ownErrors(page).length === 0, ownErrors(page).join(' | '));
+  } finally {
+    await page.close();
+  }
+});
+
 async function main() {
   console.log(`builder flow check${rootArg ? ` (against ${root})` : ''}\n`);
   for (const [name, fn] of CASES) {

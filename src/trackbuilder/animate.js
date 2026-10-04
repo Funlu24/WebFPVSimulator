@@ -16,9 +16,11 @@
  * written, and choosing it well means looking at more than the first frame,
  * because the ribbon lights different parts of the track as it goes. Holding
  * every frame to do that would be 300 MB at 512 by 512. So the first pass
- * renders a sixteenth of the frames and keeps those, and the second pass
- * renders all of them and feeds each straight to the encoder. Peak memory is
- * the sample, about 19 MB, rather than the animation.
+ * renders a sixteenth of the frames and counts their colours into a histogram
+ * without keeping them, and the second pass renders all of them and feeds
+ * each straight to the encoder. Peak memory is one frame and the histogram,
+ * rather than the animation, and rather than the sample, which was 19 MB at
+ * 512 and would be 300 MB and more at 2048.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -38,8 +40,29 @@
 
 import { buildPath } from './path.js';
 import { trackClassOf } from './elements.js';
-import { buildStage, lapFrames } from './stage.js';
-import { buildPalette, GifEncoder } from './gif.js';
+import { buildStage, detailOf, lapFrames } from './stage.js';
+import { PaletteHistogram, GifEncoder } from './gif.js';
+
+/*
+ * THE LIMITS OF A PICTURE, in pixels along an edge. scripts/trackgif.js reads
+ * these two numbers rather than keeping a copy. The builder's size choice
+ * (ANIMATION_SIZES in app.js) cannot, because the builder does not load this
+ * file until somebody asks for an animation, so it keeps its edges inside
+ * them by hand and a size that went over would be refused below with a
+ * sentence.
+ *
+ * 2048 is the top because it is the biggest that is safe to ask of an ordinary
+ * card, not the biggest one can draw. A frame is drawn into a four sample
+ * target, four colour and four depth values for every pixel, which is about
+ * 150 MB at 2048 and four times that at 4096, with two readback buffers and
+ * the textures on top. It is also the size WebGL 2 promises every card can
+ * hold as a texture and as a render buffer, and the four sample target needs
+ * WebGL 2 already, so it is the largest a sentence can stand behind without
+ * asking the card first. The card is asked anyway, below, because a promise
+ * about size says nothing about how much memory is free.
+ */
+export const MIN_EDGE = 16;
+export const MAX_EDGE = 2048;
 
 /*
  * THE CARD ANIMATION, written once because four callers have to agree on
@@ -89,8 +112,12 @@ const PALETTE_STRIDE = 16;
 
 /* How often to let the page breathe. Every fifth frame: often enough that a
  * status line repaints while a minute of rendering goes by, rare enough that
- * the yielding is not itself the cost. */
+ * the yielding is not itself the cost. A frame bigger than a standard one is a
+ * tenth of a second or more, so five of them is a status line frozen long
+ * enough to look hung, and those yield after every frame instead, which costs
+ * a few milliseconds against a hundred. */
 const YIELD_EVERY = 5;
+const STANDARD_PIXELS = 512 * 512;
 
 const nextTick = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
@@ -121,11 +148,40 @@ function flipRows(src, dst, width, height) {
  * top of the track to a crop. Everything downstream of the two numbers is
  * the same code, so a 16 by 10 export and a square one differ only in how
  * much of the floor is in shot.
+ *
+ * A BIGGER PICTURE IS THE SAME PICTURE WITH MORE PIXELS IN IT. The builder
+ * offers 512, 1024 and 2048 for a file that is going to be looked at closely
+ * rather than pasted into a chat, up to MAX_EDGE. What that asks of the stage
+ * is in stage.js (detailOf and REFERENCE_EDGE); what it asks of the machine is
+ * time, which goes with the pixels, and memory, which is a frame and the
+ * encoder's tables rather than anything that grows with the length of the lap.
+ *
+ * signal is an AbortSignal. Aborting it stops the render at the next frame,
+ * frees the card, and rejects with an error named AbortError, which a caller
+ * that asked for the stop should treat as an answer and not as a failure. It
+ * is there because a 2048 picture is minutes of work, and a dialog that
+ * cannot be walked away from for minutes is a dialog people close the tab on.
  */
 export async function exportTrackGif(doc, {
   size = 512, width = size, height = size,
   frames = null, delayCs = 4, onProgress = null, camera = null, nameplate = true,
+  signal = null,
 } = {}) {
+  if (!Number.isInteger(width) || !Number.isInteger(height)
+    || Math.min(width, height) < MIN_EDGE || Math.max(width, height) > MAX_EDGE) {
+    throw new Error(
+      `A picture can be from ${MIN_EDGE} to ${MAX_EDGE} pixels on a side, and ${width} by ${height} is outside that.`,
+    );
+  }
+  /* Checked between frames, which is as often as there is anything to stop. */
+  const stopIfAsked = () => {
+    if (signal && signal.aborted) {
+      const stopped = new Error('Stopped.');
+      stopped.name = 'AbortError';
+      throw stopped;
+    }
+  };
+  stopIfAsked();
   const THREE = await import('three');
 
   /*
@@ -168,6 +224,26 @@ export async function exportTrackGif(doc, {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     /*
+     * ASK THE CARD BEFORE ALLOCATING ANYTHING BIG. Every limit that bounds the
+     * frame, because a card can be generous on one and stingy on another, and
+     * an allocation past any of them does not throw: it leaves a target that
+     * is not complete and a readback of zeros, which is minutes of work that
+     * ends in a black file. Said as a sentence the dialog can show.
+     */
+    const gl = renderer.getContext();
+    const drawable = Math.min(
+      gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+      ...gl.getParameter(gl.MAX_VIEWPORT_DIMS),
+    );
+    if (Math.max(width, height) > drawable) {
+      throw new Error(
+        `This graphics card can draw a picture up to ${drawable} pixels on a side, `
+        + `and this one is ${Math.max(width, height)}. Choose a smaller size.`,
+      );
+    }
+
+    /*
      * Rendered into a target rather than onto the canvas, so the pixels can
      * be read back without asking for preserveDrawingBuffer, which forces
      * the browser to keep a second copy of every frame. Four samples of
@@ -182,39 +258,73 @@ export async function exportTrackGif(doc, {
     });
     target.texture.colorSpace = THREE.SRGBColorSpace;
 
+    /* The sizes of the textures and the shadow map, with this card's own
+     * texture limit in them. Standard and smaller get what they always had. */
     stage = buildStage(THREE, doc, path, {
       width, height, camera, nameplate,
+      detail: detailOf(width, height, renderer.capabilities.maxTextureSize),
     });
 
     const raw = new Uint8Array(width * height * 4);
     const rgba = new Uint8Array(width * height * 4);
     const total = shots + Math.ceil(shots / PALETTE_STRIDE);
+    const yieldEvery = width * height > STANDARD_PIXELS ? 1 : YIELD_EVERY;
     let done = 0;
 
+    /* A frame with nothing in it at all, which is what a card that ran out of
+     * memory hands back instead of an error. A real frame has a floor, so it
+     * is never all zeros, alpha included, and the first word settles it. */
+    const blank = () => {
+      const words = new Uint32Array(rgba.buffer, rgba.byteOffset, rgba.length >> 2);
+      for (let i = 0; i < words.length; i += 1) {
+        if (words[i] !== 0) {
+          return false;
+        }
+      }
+      return true;
+    };
+    let first = true;
+
     const shoot = (i) => {
+      stopIfAsked();
       stage.setFrame(i, shots);
       renderer.setRenderTarget(target);
       renderer.render(stage.scene, stage.camera);
       renderer.readRenderTargetPixels(target, 0, 0, width, height, raw);
       renderer.setRenderTarget(null);
+      if (gl.isContextLost()) {
+        throw new Error(
+          'The browser took the graphics card away while it was drawing, which is nearly '
+          + 'always memory. Choose a smaller size.',
+        );
+      }
       flipRows(raw, rgba, width, height);
+      if (first) {
+        first = false;
+        if (blank()) {
+          throw new Error(
+            'The graphics card drew nothing at this size, which usually means it ran out '
+            + 'of memory. Choose a smaller size.',
+          );
+        }
+      }
     };
 
-    /* Pass one: a sample of the animation, kept, to choose the palette. */
-    const sample = [];
+    /* Pass one: a sample of the animation, counted into the palette's
+     * histogram and let go, to choose the palette. */
+    const histogram = new PaletteHistogram();
     for (let i = 0; i < shots; i += PALETTE_STRIDE) {
       shoot(i);
-      sample.push(rgba.slice());
+      histogram.add(rgba);
       done += 1;
       if (onProgress) { onProgress(done, total); }
-      if (done % YIELD_EVERY === 0) {
+      if (done % yieldEvery === 0) {
         // eslint-disable-next-line no-await-in-loop
         await nextTick();
       }
     }
 
-    const palette = buildPalette(sample, { colors: 256 });
-    sample.length = 0;
+    const palette = histogram.palette({ colors: 256 });
 
     /* Pass two: every frame, straight into the encoder. */
     const gif = new GifEncoder({ width, height, palette, loop: 0 });
@@ -223,7 +333,7 @@ export async function exportTrackGif(doc, {
       gif.addFrame(rgba, delayCs);
       done += 1;
       if (onProgress) { onProgress(done, total); }
-      if (done % YIELD_EVERY === 0) {
+      if (done % yieldEvery === 0) {
         // eslint-disable-next-line no-await-in-loop
         await nextTick();
       }

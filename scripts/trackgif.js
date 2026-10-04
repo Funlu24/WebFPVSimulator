@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 import { openPage } from '../tests/lib/page.js';
 import { buildPath } from '../src/trackbuilder/path.js';
 import { lapFrames } from '../src/trackbuilder/stage.js';
+import { MAX_EDGE, MIN_EDGE } from '../src/trackbuilder/animate.js';
 import { trackClassOf } from '../src/trackbuilder/elements.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -54,7 +55,9 @@ const WARN_BYTES = 4 * 1024 * 1024;
 function usage() {
   console.log('usage: node scripts/trackgif.js <track.json> [options]');
   console.log('  --out <file.gif>   where to write, default <slug>.gif beside the input');
-  console.log('  --size <px>        square edge, default 512');
+  console.log(`  --size <px>        square edge, default 512, up to ${MAX_EDGE}. Above 512 the picture is`);
+  console.log('                     the same one with more pixels in it: sharper, not thinner, and');
+  console.log('                     a bigger file that takes longer. See detailOf in stage.js.');
   console.log('  --shape <w>x<h>    a rectangle instead of a square, in pixels, for a');
   console.log('                     frame that has to fit something. The board\'s card');
   console.log('                     grid is 16 by 10, and that is what --shape 384x240 is');
@@ -121,16 +124,18 @@ function parseArgs(argv) {
   if (!opts.input) {
     return null;
   }
-  if (!Number.isFinite(opts.size) || opts.size < 16 || opts.size > 2048) {
-    throw new Error('--size must be between 16 and 2048');
+  /* The limits are the exporter's own, so a size this script accepts is one
+   * the page will draw, and the builder's biggest choice is the largest here. */
+  if (!Number.isInteger(opts.size) || opts.size < MIN_EDGE || opts.size > MAX_EDGE) {
+    throw new Error(`--size must be a whole number from ${MIN_EDGE} to ${MAX_EDGE}`);
   }
   if (!opts.width) {
     opts.width = opts.size;
     opts.height = opts.size;
   }
   for (const n of [opts.width, opts.height]) {
-    if (!Number.isFinite(n) || n < 16 || n > 2048) {
-      throw new Error('--shape wants each edge between 16 and 2048');
+    if (!Number.isInteger(n) || n < MIN_EDGE || n > MAX_EDGE) {
+      throw new Error(`--shape wants each edge a whole number from ${MIN_EDGE} to ${MAX_EDGE}`);
     }
   }
   if (opts.frames != null && (!Number.isFinite(opts.frames) || opts.frames < 2 || opts.frames > 2000)) {
