@@ -174,7 +174,7 @@ function loadLogos(doc) {
  * encoder's tables rather than anything that grows with the length of the lap.
  *
  * field, when true, sets the track on a race field with its sponsors' logos on
- * the grass in place of the black stage. It is for a five inch track: a whoop
+ * the grass in place of the black stage, and leaves the name off it. It is for a five inch track: a whoop
  * track is flown in a room, which this does not draw.
  *
  * signal is an AbortSignal. Aborting it stops the render at the next frame,
@@ -284,7 +284,10 @@ export async function exportTrackGif(doc, {
     /* The sizes of the textures and the shadow map, with this card's own
      * texture limit in them. Standard and smaller get what they always had. */
     stage = buildStage(THREE, doc, path, {
-      width, height, camera, nameplate,
+      width, height, camera,
+      /* The race field has no name on it: the owner's ask, 2026-10-04. The
+       * camera then frames the track alone, so it is bigger in the picture. */
+      nameplate: nameplate && !field,
       detail: detailOf(width, height, renderer.capabilities.maxTextureSize),
       field, logos,
     });

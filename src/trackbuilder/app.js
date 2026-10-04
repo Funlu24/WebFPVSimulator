@@ -598,7 +598,7 @@ const ANIMATION_SETTINGS = [
     id: 'field',
     label: 'Race field, sponsors on the grass',
     note: 'The track on striped grass, the way the game shows it, with the sponsors\' logos '
-      + 'painted where you put them. The file is bigger, because the grass is not black.',
+      + 'painted where you put them, and no name on it. The file is bigger, because the grass is not black.',
   },
 ];
 

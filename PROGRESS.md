@@ -65265,3 +65265,12 @@ ones I drew for it.
    pitch the game puts a designed course on, which is the part a track and its sponsors live on.
 3. **Gates and flags are not dressed in sponsor logos in the export**, only the grass. The document dresses them (`dressOrder`);
    the stage's pipe gates have no panels to dress. Say if you want the flags in it.
+
+## 2026-10-04 | builder | No name on the race field (the owner's ask)
+
+The owner, looking at a field export: "better, but remove the file name." Taken to mean the track's name on the plate, and taken
+only for the race field: on the black stage the name stays, because the name was what the owner had just asked to have fixed there.
+`exportTrackGif` now passes `nameplate: nameplate && !field`, and the dialog's note for the field says so. With no plate the camera
+frames the track alone, so it is larger in the picture. Checked by rendering the field at 1024 and looking at it, and by
+`gif:selftest` (81) and the "animation setting" browser case, which do not see the plate; nothing automated asserts it is absent.
+If "file name" meant the downloaded file's name, that is a different thing and was not touched.
