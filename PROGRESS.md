@@ -65660,3 +65660,81 @@ heading of its own is decoration and decoration gives way.
 Checked: `node --check`, `lint:fc` 33 of 33, `lint:presets` 4 of 4. `lint:catalog` cannot run in this container (vendor/betaflight is
 not checked out). `lint:shell` FAILS: rates overflow grew from 338 to 382 px, which is one 44 px row. I did not touch the
 baseline: it is a recorded number and moving it is the owner's call. Not run: `npm run verify`, nothing here touches physics.
+
+## 2026-10-04 | builder | An official track does not open in the builder for anybody but an admin (the owner's ask)
+
+The owner tried the first build and reported that they could still open an official track in the builder. That was a gap against
+what they meant: the first build treated an official track like any other the builder opens, so a stranger got a remix copy and the
+browser that had published it got the original in place, editable, with only Publish switched off. I put the choice to them on a
+decision card ("What should a non-admin get when they open an official track in the builder?") and they chose "Block opening":
+non-admins cannot open an official track in the builder at all, from a link or from Load, and can still fly it. Admins keep editing
+in place. Recorded here with its date because it is the owner's decision and not mine. It changes no physics, no module ABI and no
+build, so the owner's gate for those does not apply.
+
+The rule is one question, asked at every door: is the board saying this track is official, and is this tab not an admin.
+`officialBlocksOpen` and `boardHolding` in `src/share/listing.js` answer it, and `src/trackbuilder/app.js` wires them to the doors.
+
+- **A board link, and the simulator's Edit and Remix.** `adoptIncomingShare` now only gathers what was asked for, and the new
+  `openShared` does it, after asking the board. Official and not an admin: a dialog (`explainOfficial`) and nothing opens, the
+  publisher's own browser included. The dialog has a "Board admin? Sign in" button, and `openAdmin(then)` runs the door the pilot
+  was stopped at once the sign in works, so an admin who hits it is not sent back to find the link, which is already out of the
+  address. A shipped track is not on the board and is not asked about.
+- **Load.** Open asks the board, but only for a track this browser put on the board (an edit key, a bind written by a publish, or
+  an admin's edit bind: `boardHolding`). Every other row, shipped rows included, opens with no request, offline included.
+- **The board picker** ("Start from a track on the board"). The list already carries `official`, so an official row says so, has a
+  disabled "Official" button, and the line above the list says why. An admin sees every row open.
+- **An imported file, a `?track=` link and a `#track=` link.** They carry the id the track was published under, so a copy of an
+  official track is a way of opening one. They are asked about unconditionally (`external`), because nothing local can be said
+  about them. A file from the FPV Events designer has a fresh id and is not asked about.
+- **The canvas a browser reopens on, and the canvas a canvas switch comes back to.** These are installed at once, because a canvas
+  cannot wait for a request, so `guardOfficial` asks afterwards and takes an official track off the canvas when the board answers.
+  Nothing is lost to it: when the board's version differs from the canvas in layout, name or logos (`localDrift`, the test
+  `adoptIncomingShare` already keeps local edits by), the canvas goes into Load as "<name> (local changes)" first, and when that
+  cannot be kept the canvas is left alone and the toast says to export. An unchanged track leaves no copy.
+
+Two choices the owner can reverse. A board that cannot be reached, or an offline device, answers "not closed", so the builder
+keeps working on a pilot's own tracks with no connection; the board's own lock still refuses the publish, the animation and the
+share card whatever the builder let through. And the admin check at these doors reads the remembered session and does not ask the
+board to verify it, because that request clears the session on any failure and would sign an admin out whenever their connection
+stumbled while they opened their own track. The one place that does verify is the admin's in place edit, where the answer decides
+what gets built (`adminSignedIn`, which replaces `adminMayEditOfficial`).
+
+Also: the Publish dialog no longer tells a locked pilot to use Duplicate for a copy, which contradicted the rule; the Admin dialog
+says what an admin can do now; `DEPLOY.md` says there is no new deploy order, because the builder reads the `official` field the
+last change already put on `GET /api/tracks/:id`.
+
+Not done, and worth the owner's word. The board's own page still shows "Open in the builder" on an official track to everybody; a
+non-admin who presses it lands on the explanation. Hiding it there is a change in the other repository. The simulator's Edit and
+Remix buttons are the same: they lead to the explanation rather than being hidden, because the simulator does not know which
+tracks are official.
+
+Checked, this turn. `check:clip` 2470 passed, up from 2457 on main, so 13 of them are new. They cover which tracks this browser
+would ask the board about (never published, published, a remix copy, an admin's edit, an edit key alone, no id) and what the board's
+answer closes: official and not an admin, official and an admin who is not even asked, an admin of another board, not official, a
+404, a 503, a board that cannot be reached. `lint:boot`, `lint:frame`, `lint:partners`, `lint:preload` and `check:fresh` pass.
+`check:builder` ran to the end and passed, 790 checks, against the app as committed; the new case below was added to the script
+after that run started, so it was run on its own. `builder-flow-check.js` gains an `official tracks` case, 21 checks in 16 seconds,
+and the board stub learns official tracks and an admin's sign in: a board link to an official track and to an ordinary one, the
+wrong password then the right one from the dialog opening the track in place, Load's Open for a track the browser published, a
+reopened canvas with nothing to keep and with changes to keep, an admin's reload keeping the track, the picker for a stranger and for
+an admin, and an imported official file and an ordinary one. Run against the code as it stood before this change (`--root` at
+0876d35) it fails at its first assertion, which is the dialog never appearing, so it sees what changed. A second, wider scripted run
+drove the real builder against a real board with the board's own server, 34 steps, all passing, including an admin's Update landing
+with no edit key and the publisher kept, the simulator's Remix and Edit, and a shipped track still opening as a copy. I looked at
+the screenshots of the dialog, with and without the local changes line, and the picker. Not run: `npm run verify`, a phone
+viewport for the new dialog, and anything against the live board.
+
+`lint:shell` FAILS, and it is not this change. After merging main it reports pilot 634 to 678 px and rates 338 to 382 px. It fails
+the same way on a clean checkout of `origin/main` at 731c424, so it came in with the Show FPS toggle and the Camera angle row on the
+Rates screen, and the entry above this one already reports the rates number. I did not touch the baseline.
+
+What went wrong. `lint:preload` was already stale on `main`: "Admin sign in and official tracks" says I regenerated `src/fresh.js`
+for `admin.js`, and I did, but `gen:preload` builds `MODULES` from the files git tracks, and `admin.js` was new and not yet added, so
+it landed in the boot preload and not in `MODULES`. Until now `admin.js` would have loaded at its bare address and not at the deploy's. Regenerated
+here, so the lint is clean, and the lesson is to run `gen:preload` after `git add` of a new module. My first draft kept a copy of a
+taken-off canvas by comparing the bind's layout fingerprint, which leaves logos out and would have dropped a logo edit; I replaced it
+with `localDrift`, which does not. My first browser script answered "booted" from the page that was about to be reloaded, which
+passed or failed by timing, and now waits on a marker on the old document; its next failures were the ordinary "replace the track
+on the canvas?" question that a non-empty canvas gets, which is the existing behaviour and not mine. The first `check:builder` run
+was cut off by my own 580 second timeout after 9 minutes 40 seconds, so I ran it again to the end in the background rather than
+report a half run.
