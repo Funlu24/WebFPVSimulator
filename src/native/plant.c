@@ -181,8 +181,20 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
    * inside that physical range against the P5 max level speed procedure in
    * scripts/gates.js, which reads 128 km/h against a band of 120 to 165 and
    * 139 before this change.
+   *
+   * 0.0104, four fifths of that, on 2026-10-04, off a pilot's report that the
+   * low throttle had a little too much grip in the air and the mid throttle
+   * was a little soft. Of the two drags that brake this craft, this one does
+   * not care where the throttle is: with the motors at idle it is nearly all
+   * of the braking there is, and that is the grip the report named. The
+   * rotor drag below grows with thrust, so the grip came off this term and
+   * went onto that one, and the two were moved together until full throttle
+   * level speed came out where it was. 0.0104 is the same 0.011 m squared at
+   * a Cd near 0.95, still a bluff body. Measured at the shell's 1.62 g,
+   * levelled at idle from 20 m/s: 4.14 s to lose half the speed before, 4.97
+   * after. See PROGRESS.md under the same date.
    */
-  .cda_front = 0.0130,
+  .cda_front = 0.0104,
   /*
    * Side is not the same as front, and copying the frontal figure across was
    * wrong rather than approximate. An X frame is nearly symmetric in the
@@ -195,8 +207,11 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
    * This is a small correction and it is NOT the fix for a banked turn
    * washing out; that is mostly correct acro behaviour, since nothing turns
    * the nose without rudder. See PROGRESS.md.
+   *
+   * Scaled by the same four fifths as cda_front on 2026-10-04, so the front
+   * to side ratio, which is the pack, is kept.
    */
-  .cda_side = 0.0147,
+  .cda_side = 0.01176,
   /*
    * Cross flow side lift area. A body at a small sideslip carries a side
    * force LINEAR in the sideslip component at flight speed, the slender
@@ -236,7 +251,19 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
    */
   .k_propwash = 0.15,
   .prop_r = 0.0635,
-  .k_rotor_drag = 0.43842,
+  /*
+   * 0.55, up from the 0.43842 the block at 3b derives, on 2026-10-04 and
+   * together with cda_front. The derivation anchors k on one published total
+   * linear drag fit and says itself that the split between this and body
+   * drag is not measured; the pilot's report is a measurement of that split.
+   * This term is the throttle's grip on the air: it goes as the induced
+   * velocity, so it is nearly nothing at idle and grows with thrust, which is
+   * where the report wanted more. Hover, punch, climb, descent and every
+   * rate figure cannot see it, because it is in plane only. What it does
+   * move: the nose up couple at speed and the small yaw damping, both by the
+   * same quarter. See PROGRESS.md under the same date.
+   */
+  .k_rotor_drag = 0.55,
   /*
    * ZERO, AND THAT IS NOT AN OMISSION.
    *

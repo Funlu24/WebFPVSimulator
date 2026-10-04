@@ -65820,3 +65820,78 @@ the whoop size, finite height, round trip). `lint:shell`, `lint:boot` and `gen-p
 physics, plant, ABI or build change) and `node scripts/shots.js`. Not looked at: the whoop palette and the room in a browser.
 
 Approval. On 2026-10-04 the owner said "push to main" in the thread, after the draft PR (#29) was up and the verification choices had been put to them. That covers this change only, pushed to main as a fast forward with no force.
+
+## 2026-10-04 | plant | Less grip at low throttle, more at mid (a pilot's report, the owner's ask)
+
+Request, the owner's, from a pilot: "the low throttle grip is a little too much (or the mass doesnt carry enough) and the mid
+throttle is a little soft ... low throttle needs less grip in the air, and mid needs more". Asked for a small, careful change.
+
+### What was found
+
+Two drags brake the five inch in plane. Body drag (cda_front, cda_side) does not care where the throttle is. Rotor drag, the H
+force in 3b (k_rotor_drag), goes as each rotor's induced velocity, so it is nearly nothing at idle and grows with thrust. Measured
+with every rotor held at the steady speed of a duty, body level, 20 m/s: the in plane braking is 4.62 m/s^2 at idle and nearly all
+of it is body drag (0.5 rho 0.013 20^2 / 0.71 is 4.49). So the grip a pilot meets with the throttle off is the body term, and the
+grip that should grow with throttle is the rotor term. The report asks to move grip from the first to the second.
+
+Also found, and not changed: the shell flies the five inch at gravity 1.62 (configs/airframes.js gravityBase) with the mass left at
+0.71 kg, so it weighs like a 1.15 kg machine and carries momentum against the air like a 0.71 kg one. That is the "mass doesnt carry
+enough" half of the report, and it is why body drag is felt so strongly. Scaling the translating mass with the Weight slider would
+be a change to the model's shape and a softer punch, so it is written down here for the owner rather than done.
+
+Ruled out: the static thrust curve (39 percent of full thrust at half duty, 11.5 at a quarter, in line with a 2207 1900 kV thrust
+stand), and k_inflow, the effective pitch (1.15 times it moved the mid throttle push at 20 m/s by 11 percent, raised top speed and
+cuts the aerodynamic rate damping, which is more reach than the report asked for).
+
+### What changed
+
+Two constants on the five inch only, in src/native/plant.c. Body drag down by a fifth: cda_front 0.0130 to 0.0104, cda_side 0.0147
+to 0.01176 (same ratio, still a bluff body at Cd near 0.95). Rotor drag up: k_rotor_drag 0.43842 to 0.55. The pair was chosen so
+full throttle level speed stays where it was. The whoop's entry is untouched and its seven golden scenarios are bit identical.
+
+### What it does, measured
+
+Open loop (the plant alone, rotors at the steady speed of each duty, 4.0 V a cell), in plane braking in m/s^2, body level:
+
+    duty           idle   0.15   0.30   0.45   0.60   0.80   1.00
+    10 m/s before  1.26   1.98   3.51   4.93   6.16   7.56   8.72
+    10 m/s after   1.07   1.97   3.90   5.68   7.22   8.98  10.43
+    20 m/s before  4.62   5.42   7.59  10.17  12.71  15.72  18.20
+    20 m/s after   3.76   4.76   7.48  10.72  13.91  17.69  20.79
+
+Idle at 20 m/s loses a fifth of its grip; from 0.45 up it gains 5 to 14 percent. Levelled at idle and coasting 20 to 10 m/s: 4.14 s
+and 57.6 m before, 4.97 s and 69.4 m after. Full throttle level speed at the shell's 1.62: 151.1 km/h before, 149.7 after.
+
+Closed loop through the module, angle mode, 1.62 g, levelled from about 30 m/s and held 2 s: at idle 17.9 m/s left before, 19.6
+after (46.1 m to 48.6 m flown); at 0.45 throttle 11.9 before, 11.4 after; at 0.60, 11.0 before, 10.1 after. A full bank and pull
+for 1.5 s turns the velocity the same within a degree at every throttle (thrust does the turning), and keeps 22.0 m/s instead of
+20.7 at 0.15 throttle.
+
+flight-report.js: hover, roll, pitch and punch unchanged; yaw rise90 165 to 167 ms; reverse after release 15 to 13 deg/s on roll;
+the forward flight probe 8.0 to 8.3 m/s. flightcheck.js: unchanged in every row (vertical flight cannot see either term).
+
+### RUN LOG
+
+- `npm run build:wasm` exit 0, vendor diff empty. dist/sim.wasm 5408b3e2 before, 0a1f60b4 after; the old source rebuilt to the
+  same 5408b3e2, so the build is reproducible here (emsdk 3.1.61 installed at /opt/emsdk for this run).
+- `npm run verify` on main before the change: 17 of 18, check 17 world-golden red already (2 of 35 runs differ: "crash-check.js's
+  scenarios changed since the town fixture was exported").
+- `npm run verify` after: 16 of 18. Trace hash de0401cd4266 to 4cadc5ef7d6e, and checks 2, 3 and 4 agree on the new one. Check 5
+  0.2793, 6 80.0 m, 7 31.0 m/s, 8 26 ms, 10 -0.10 deg, 11 11.14 percent: all identical to before. Check 9 671.7 to 672.2 deg/s, 12
+  1.2472 to 1.2454. Check 17: 34 of 35 runs now differ, because the physics changed and the world golden pins it. Check 18
+  crash-pacing: 45 of 48, the three red lines are the GUARD that says three edge scenarios still sit on their edge; the check itself,
+  the same verdict at every pacing, passes on all eight. The flights moved off the edges they were swept for.
+- `npm run check:plant`: 16 of 23 scenarios differ, every five inch one, as they must; the seven whoop ones pass.
+- `npm run gates`: P5 max level 127 to 125 km/h (band 120 to 165). Everything else identical, including the P4 and P5 rows that were
+  already red.
+
+### For the owner
+
+Nothing here is pushed to main. Three things wait on the owner's word, none of them a threshold: rewriting tests/goldens/plant.json
+and tests/goldens/world.json for this change (--write), and re-sweeping the three crash-pacing edge scenarios so they sit on an edge
+again. Board times flown before this are not marked as from an older plant; the change is small, but corner exits and coasts move.
+
+### What went wrong
+
+Nothing broke. The first closed loop probe reported turns of minus 300 degrees: the heading was not unwrapped, fixed before any
+number here was read.
