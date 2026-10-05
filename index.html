@@ -2720,8 +2720,12 @@
       /* ---- SUPPORT PROMPT ----------------------------------------------
          Soft support prompt shown at good moments (new PB, 20 min session,
          map publish). Dismissible, at most once a week. ------------------- */
+      /* On the body, never in a screen: a screen is pointer-events none and
+         its children inherit it, which made every button on the prompt a
+         hole to the page behind (src/share/supportprompt.js). The builder's
+         page carries a copy of these rules for its own prompt. */
       .support-prompt {
-        position: fixed; z-index: 1000;
+        position: fixed; z-index: 1000; pointer-events: auto;
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         max-width: 420px; width: calc(100% - 40px);

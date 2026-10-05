@@ -1240,6 +1240,11 @@ const DEFAULTS = {
   /* Record the flight for download as a blackbox CSV. Off by default: it
    * holds every frame of the run in memory. */
   flightLog: false,
+  /* Settings > Advanced > Support prompts, and src/share/supportprompt.js
+   * reads it for the builder. Declared here because loadSettings keeps only
+   * a key with a default: the switch went in on 2026-10-05 without one, so
+   * Off was dropped by the next page load and the prompts came back. */
+  supportPrompts: true,
   /* Named preset, not a bag of sliders. 'high' is the authored look and
    * the default on a first run that is not a Steam Deck; see
    * src/render/quality.js. A string so loadSettings' typeof gate accepts

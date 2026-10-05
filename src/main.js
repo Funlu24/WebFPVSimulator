@@ -731,7 +731,39 @@ export async function boot({ loading, bootStart, mapId }) {
   let sessionFlightTimeMs = 0;
   let lastFlightTick = 0;
   let sessionTimePromptShown = false;
+  /* Set in the air when the clock passes the line, and spent on the next
+   * pause or results screen, which is where the prompt is shown. */
+  let sessionTimePromptDue = false;
   const SESSION_TIME_PROMPT_MS = 20 * 60 * 1000; /* 20 minutes */
+  /*
+   * THE PROMPT ON SCREEN, and the screen it was shown on. It goes the
+   * moment that screen is left: "never during a run", and a pilot on a
+   * radio or a pad has no pointer to close it with, so a prompt left up
+   * over the flight would stay there. Settings on it opens the Advanced
+   * room, where the switch for these is. A prompt that fails says nothing
+   * and stops nothing: it is shown from the frame loop and from the post
+   * path, and a throw in either is a fault or a lap reported as not posted.
+   */
+  let supportPrompt = null;
+  let supportPromptScreen = null;
+  const offerSupport = (trigger) => {
+    /* A lap posts while the pilot may already be flying again. */
+    if (ui.settings.supportPrompts === false || ui.screen === 'flight') {
+      return;
+    }
+    try {
+      const prompt = showSupportPrompt(trigger, { onSettings: () => { ui.act('advanced'); } });
+      if (prompt) {
+        if (supportPrompt) {
+          supportPrompt.remove();
+        }
+        supportPrompt = prompt;
+        supportPromptScreen = ui.screen;
+      }
+    } catch (promptError) {
+      console.warn('support prompt', promptError);
+    }
+  };
   /*
    * The last flush, sent when the page goes away. pagehide rather than
    * unload, because a browser that put this tab in its back/forward cache
@@ -5812,20 +5844,10 @@ export async function boot({ loading, bootStart, mapId }) {
       };
       ui.markTimePosted(posted);
       /* Show support prompt on new personal best, if enabled. The lap is on
-       * the board by here, so a prompt that fails says nothing: the catch
-       * below would tell the pilot the time had not posted. */
-      if (newBest && ui.settings.supportPrompts !== false) {
-        try {
-          const container = document.querySelector('.screen-results') || document.body;
-          const prompt = showSupportPrompt('pb', container);
-          if (prompt) {
-            prompt.onSettingsClick = () => {
-              ui.act('advanced');
-            };
-          }
-        } catch (promptError) {
-          console.warn('support prompt', promptError);
-        }
+       * the board by here, so a prompt that fails says nothing (offerSupport):
+       * the catch below would tell the pilot the time had not posted. */
+      if (newBest) {
+        offerSupport('pb');
       }
     } catch (e) {
       notice = { text: `Could not post that time.\n${e.message ?? e}`, untilMs: performance.now() + 3600 };
@@ -7563,8 +7585,9 @@ export async function boot({ loading, bootStart, mapId }) {
         laps: race.laps.length,
       });
       
-      /* Track session flight time for support prompt at 20 minutes */
-      if (flownThisRun && !landed && !turtleWait && !turtleRecover) {
+      /* Track session flight time for support prompt at 20 minutes. In
+       * flight: a pause holds the craft in the air, and was counted. */
+      if (flownThisRun && !landed && !turtleWait && !turtleRecover && ui.screen === 'flight') {
         const was = lastFlightTick;
         lastFlightTick = nowWall;
         if (was > 0 && nowWall > was) {
@@ -7580,23 +7603,21 @@ export async function boot({ loading, bootStart, mapId }) {
               && ui.settings.supportPrompts !== false
               && ui.screen === 'flight') {
             sessionTimePromptShown = true;
-            /* Wait until the next pause or results screen to show the prompt */
-            const showPromptOnPause = () => {
-              if (ui.screen === 'paused' || ui.screen === 'results') {
-                const container = document.querySelector('.screen-paused, .screen-results') || document.body;
-                const prompt = showSupportPrompt('time', container);
-                if (prompt) {
-                  prompt.onSettingsClick = () => {
-                    ui.act('advanced');
-                  };
-                }
-              }
-            };
-            /* Check on the next frame */
-            setTimeout(showPromptOnPause, 100);
+            sessionTimePromptDue = true;
           }
         }
       }
+      /* Shown when the pilot next stops. It used to look once, 100 ms
+       * after the line, when the pilot was still flying, so it never showed. */
+      if (sessionTimePromptDue && (ui.screen === 'paused' || ui.screen === 'results')) {
+        sessionTimePromptDue = false;
+        offerSupport('time');
+      }
+    }
+    if (supportPrompt && (ui.screen !== supportPromptScreen || !supportPrompt.isConnected)) {
+      supportPrompt.remove();
+      supportPrompt = null;
+      supportPromptScreen = null;
     }
 
     /* The seated world's note, released on the first frame of a flight and
@@ -9912,7 +9933,10 @@ export async function boot({ loading, bootStart, mapId }) {
     if (Number.isFinite(ms)) {
       sessionFlightTimeMs = ms;
     }
-    return { ms: sessionFlightTimeMs, shown: sessionTimePromptShown, thresholdMs: SESSION_TIME_PROMPT_MS };
+    return {
+      ms: sessionFlightTimeMs, shown: sessionTimePromptShown, due: sessionTimePromptDue,
+      thresholdMs: SESSION_TIME_PROMPT_MS, prompt: supportPrompt ? supportPromptScreen : null,
+    };
   };
   /* P12 and P13 are audio budgets, and neither can be read while the audio
    * context is null: update() returns immediately and reports a cost of

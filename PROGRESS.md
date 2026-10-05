@@ -66435,3 +66435,234 @@ Flight feel is unverified: what a pilot sees on a gentle takeoff is the thing th
 The owner's word, 2026-10-05 10:28Z, in the project thread: "push to masin" (main), after the draft PR (#36) with its
 CI green. Covers this entry only: the parked lift change in src/main.js and scripts/takeoff-check.js. Fast forward,
 main had not moved since the branch was cut (72b6dbb).
+
+## 2026-10-05 | shell | "The simulator hit a fault" after twenty minutes in the air, and laps reported as not posted (three tickets, the owner's ask)
+
+### The tickets
+
+Three in ten minutes on the afternoon of 5 October, bug-03ae2f2a (13:11 UTC, "system fault randomly happened"),
+bug-551a5c32 (13:14, "The simulator hit a fault and stopped flying") and bug-7f783182 (13:20, "on posting scores fault
+and stopped flying"), and the owner's own console at 13:24, all carried one fault from the live shell (main.js?d=tmfjtm):
+
+    ReferenceError: settings is not defined
+        at frameBody (main.js:7561:18)
+        at runFrame (main.js:7483:7)
+        at frame (main.js:7377:5)   (frameTimer on the third, a Low machine pacing on the timer)
+
+Each was flying acro on a radio, 37, 42 and 85 minutes into the page. The owner: "it keeps crashing" after R.
+
+### Cause
+
+1415c94 (PR #34, the support prompts, on main 2026-10-05 00:09 UTC) added three names that do not exist where it used
+them, all in src/main.js:
+
+- `settings.supportPrompts` in frameBody. The shell's settings are `ui.settings`; there is no `settings` in that scope.
+  The prompt counts a session's time in the air, and once it passes twenty minutes the condition reads the name, so
+  every frame in the air threw. runFrame turns a throw into the banner, and after R the first frame in the air reaches
+  the same line, because the clock does not go back and the prompt's shown flag was never set. That is "it keeps
+  crashing".
+- `settings.supportPrompts` again in submitBoardTime, after a lap is posted.
+- `readPostedBest(trackIdNow)` in submitBoardTime, never imported. It runs after the board has taken the lap, so it
+  threw into the catch: the pilot was told "Could not post that time. readPostedBest is not defined", the lap stayed
+  pending and was offered for upload again, and markTimePosted never ran. The time was on the board. This is
+  bug-7f783182's "on posting scores".
+
+And one that only throws on a click: the prompts' Settings button called `ui.openMenu('advanced')`, which is not a
+method of Ui. And `isNewBest` was writePostedBest's answer, which is true for a lap stored AND for one the stored best
+already beats, so a "new personal best" prompt would have shown on every post with a best behind it. Neither had ever
+run, because the line before each one threw.
+
+### Fix (src/main.js)
+
+- `ui.settings.supportPrompts` in both places, and `readPostedBest` imported from ./share/session.js.
+- A new best is a lap that beat the stored one: `prevBest != null && Math.round(fastest) < prevBest`.
+- The best lap prompt is in a try of its own, so a prompt that fails cannot tell a pilot a posted lap did not post.
+- Settings on a prompt opens the Advanced room with `ui.act('advanced')`, the same action as the menu row.
+- `window.__sessionFlight(ms)` reads and sets the session clock, for the check below.
+
+### The check
+
+scripts/longflight-check.js, `npm run check:longflight`: the five inch on the field takes off, the session clock is set
+half a second short of twenty minutes, and it flies 2.5 s across the line. Asserted: no frame faulted, more than 30
+frames drawn past the line (a frame that throws never reaches the count at the end of frameBody), the clock crossed
+the line, and the prompt's trigger fired. With the fix: all pass, 124 frames past the line. With the bare `settings`
+put back in a scratch worktree: 3 failed, on the pilots' own ReferenceError at frameBody, 0 frames past the line.
+
+### The audit
+
+Every module under src/ (250) parsed with espree and scoped with eslint-scope, the copies this container has
+installed globally for ESLint, not added to the repository, and every name no scope declares checked against the
+982 globals of Chromium's window. Before the fix: the three above (readPostedBest, settings twice) and Node's Buffer and
+process in src/trackbuilder/selftest.js, which is a Node script. After: only the selftest's. A standing check of this
+kind would have caught 1415c94 before main, but it needs a parser, which is a dependency, and that is the owner's call
+(see For the owner in the next entry).
+
+### RUN LOG
+
+    check:longflight     all pass, 124 frames past the line; the control with `settings` put back: 3 failed, 0 frames
+    support:selftest     17 of 17 checks clean
+    lint:frame           34 passed, 0 failed
+    lint:boot            9 of 9 checks clean
+    check:takeoff        all pass
+    lint:shell           1 problem, "fold at 844x390 touch: credits: the list hangs 30 px under the command bar, was 0
+                         px", the same on 7b06722 with this change absent (the next entry finds where it came from)
+    npm run verify       not run: no physics, plant, module ABI or build change
+
+Live from 13:32:49 UTC: the page's stamped https://webfpv.org/sim/src/main.js?d=tmfsap has the committed file's SHA-256.
+
+### To main
+
+The owner's word, 2026-10-05 13:31 UTC, in the project thread: "push suspected fix to main first, then continue
+testing, you can always roll back with corrected fix, its broken onw, peoplea re waiting". Pushed 2e34c05 as a fast
+forward from 7b06722 before every check above had finished, as asked. This entry follows it.
+
+### What went wrong
+
+- The new check's frame count was first taken over the whole flight, and the broken shell drew 30 frames before the
+  line, exactly on the threshold. It now counts from the first frame that sees the clock past the line: 0 when broken.
+- Nothing ran the support prompts' paths before they reached main: every flight in the checks is seconds long, no
+  check posts a lap, and nothing reads the shell for undeclared names.
+
+## 2026-10-05 | shell, builder, board | The rest of the support prompts, and a sweep for what else broke (the owner's ask)
+
+The owner, 13:34 UTC: "please check for any remaining regressions or bugs".
+
+### What was swept
+
+- Every ticket on the board since 3 October (44), for any other fault: none. The only faults are the three above.
+- Every commit on main since 4 October read again. 72b6dbb (Patreon address) and 46a58cb (the takeoff camera) are sound.
+  1415c94 had more, below.
+- The undeclared name audit of the entry above, widened: every module and every page's inline scripts here (254 and the
+  five pages), and the board's page and server. Here: clean after 2e34c05. The board: one, below.
+- Every npm script on main at 2e34c05, one after another, in a checkout of its own (RUN LOG). Each red one was run
+  again on a27df1c, yesterday's main before 1415c94, to tell today's from older.
+
+### Found, and fixed here (all from 1415c94)
+
+1. **The best lap prompt could not be clicked or closed.** 2e34c05 made its path run for the first time. It was put
+   inside .screen-results, and a screen is pointer-events none, which its children inherit, so the close button and
+   both links were holes to the page behind (a probe's elementFromPoint at the close button returned BODY). It was
+   hidden with the results screen and came back on the next one. Now src/share/supportprompt.js puts the prompt on the
+   body, the stylesheet gives it pointer events of its own, and main.js takes it away the moment the screen it was
+   shown on is left, so it is never over a flight, which matters most to a pilot on a radio with no pointer.
+2. **Its Patreon link had two question marks**: PATREON_JOIN_URL already carries `?rid=29740590`, and the prompt
+   appended `?utm_source=...`, so the tier id read `29740590?utm_source=sim-prompt`. Both links are built with URL now.
+3. **The twenty minute prompt never showed.** It looked for a pause once, 100 ms after the line, while the pilot was
+   still flying. It is now due from the line and shown on the next pause or results screen. Paused time no longer
+   counts toward the twenty minutes: a pause holds the craft in the air and was counted as flying.
+4. **Off in Settings was forgotten on reload.** `supportPrompts` had no default in DEFAULTS, and loadSettings keeps only
+   a key that has one. It has one now.
+5. **The builder's prompt** went inside the publish dialog with none of the prompt's styles, which live in the shell's
+   index.html: bare text and links. It read `this.readSettings` and `this.openSettings`, which TrackBuilder never had,
+   so it ignored Off, and its Settings button only closed it. The builder's page carries a copy of the styles now, the
+   prompt module reads the shell's Off itself, and a prompt with nowhere to send Settings has no Settings button.
+6. **The prompts' clicks were never counted.** The board takes a support click from 'sim' or 'landing' and refuses any
+   other source (SUPPORT_SOURCES in its src/validate.js); the prompt sent 'sim-prompt-pb'. It sends 'sim' now. Which
+   prompt it was still rides on the links, as ref and client_reference_id.
+7. **src/fresh.js was stale** (lint:preload red since 1415c94): supportprompt.js was not in the deploy's stamped
+   addresses, so it was served at its bare address, which a browser may keep for four hours, and a change to it would
+   reach a returning pilot late, beside a main.js that expects the new one. Regenerated with gen-preload.
+
+### Found, and fixed on the board's branch, not on its main
+
+ae9e7e1 on the board (PR #5, the patron badges, the same morning) called `patronBadge()`, which did not exist. Nothing
+broke only because no row was marked: on Postgres, which the live board runs on, getTrack never set `patron` at all.
+Served from a scratch file store with a patron's time, the board's main throws "patronBadge is not defined" and the
+home page draws no times. Its stats panel's Support clicks group printed "Simulator69 / 42%" with no bar, from classes
+the page has no styles for. Fixed on the board's claude/throttle-feel-tune-m87noj, bc7bff5, with its npm test green;
+not on its main without the owner's word.
+
+### Found, and not changed
+
+- **The credits room on a phone held sideways**: the battery row 1415c94 added makes the list hang 30 px under the
+  command bar at 844 by 390 (lint:shell, a budget that fails when a screen gets worse; it passes on a27df1c). The bar's
+  Back button stays in sight. Re-recording the budget or moving the row is the owner's call, not this entry's.
+- The prompt's "shown" beacon (`kind: 'support_prompt_shown'`) is refused by the board, which has no such kind. Harmless,
+  once a week at most; counting it needs the board to take it first.
+
+### Red, and older than today
+
+- check:builder, "with the card up, the second finger on it still joins: the pair zooms": bfa7492's, 4 October. Fixed
+  in the next entry.
+
+- lint:input, "a key pressed at the question does nothing behind it": the race recorded on 2 October (the builder's
+  room opening behind the question).
+- lint:devices, two whoop room tablet problems ("the card is 302 px of a 581 px drawing"): the same two fail on a27df1c.
+
+### For the owner
+
+- A static lint for undeclared names over src/ and the pages (espree and eslint-scope, or ESLint's no-undef, as dev
+  dependencies). Seconds to run, and it would have caught all three names of 1415c94 and the board's patronBadge. Not
+  added: a dependency needs an argument first.
+- The credits row, above.
+- The board's fix to its main.
+
+### What changed
+
+- src/share/supportprompt.js: on the body; links built with URL; Off read from the shell's settings too; a click sent as
+  'sim'; Settings only when the caller has somewhere to send it.
+- src/main.js: one `offerSupport`, the twenty minute prompt due until the next stop, the prompt taken away when its
+  screen is left, paused time not counted; `__sessionFlight` also reports `due` and the prompt's screen.
+- src/ui/ui.js: `supportPrompts: true` in DEFAULTS.
+- index.html: the prompt has pointer events of its own. src/trackbuilder/index.html: the prompt's styles.
+- src/trackbuilder/app.js: the publish prompt calls the module and nothing that does not exist.
+- src/fresh.js: regenerated.
+- scripts/longflight-check.js: after the line, nothing over the flight; Escape pauses and the prompt is up, on the body,
+  its close button and link what a click lands on, the tier id whole; Escape resumes and it is gone; in a second session
+  its Settings button opens the Advanced room; a stored Off is read back as Off by loadSettings and by the prompt module.
+
+### RUN LOG
+
+On this tree:
+
+    check:longflight     all pass, 17 checks, the last of them in a second session (the page again) where the
+                         prompt's Settings button opens the Advanced room. The first version of the new check, 16 checks
+                         without that one, on 2e34c05 (main as it was): 9 failed, among them no prompt up on the pause,
+                         and a stored Off read back as unset by the shell and as On by the prompt module
+    the prompt on 2e34c05, a probe   inside .screen-results, pointer-events none; elementFromPoint at its close button
+                         and at its Patreon link: BODY; hidden on the title and back on the next results; the link
+                         https://www.patreon.com/checkout/webfpv?rid=29740590?utm_source=sim-prompt&ref=sim-prompt
+    the builder, a probe on the body, fixed, pointer events auto; its close button and link take the click; the
+                         buttons are the close, Patreon $3/mo and One-off $5, no Settings; it closes; with a stored Off
+                         it is not shown, with On it is
+    support:selftest     17 of 17 checks clean
+    lint:preload         up to date, boot 130 modules, city 76, built 34; 254 served
+    lint:frame           34 passed, 0 failed
+    lint:boot            9 of 9 checks clean
+    check:takeoff        all pass, run alone (107, 66, 115 and 53 frames). Run beside the sweep it failed only its "the
+                         page drew the flight" line, 21 and 22 frames on the two punches, which the sweep's own run of
+                         main drew 60 of
+    lint:shell           1 problem, the credits fold, the same as main (above)
+    the name audit       254 modules and the five pages: 0 undeclared names
+    npm run verify       not run: no physics, plant, module ABI or build change
+
+The board, bc7bff5 on its branch: npm test all passed; lint:licence and lint:nouns clean; served from a scratch file
+store with BOARD_PATRONS naming one pilot, read in Chromium: the badge drawn beside that pilot, no page error, and the
+support group as two bars (the board's main on the same store: "patronBadge is not defined", no times drawn, and
+"Simulator3 / 60%"); getTrack on Postgres, through a stand-in driver, marks the patron's row and not the other.
+
+The sweep, main at 2e34c05, each npm script alone in its own checkout:
+
+    green   lint:presets, lint:catalog, lint:partners (65), lint:quality (71), lint:boot (9), lint:memory, lint:fc (33),
+            lint:frame (34), lint:nouns, lint:arcade, lint:responsive, lint:scale, lint:board (skip: no board here),
+            lint:attract, check:wall (78; targets 1 met, 3 not), check:plant and its selftest, check:crash-pacing,
+            check:takeoff, check:longflight, check:world, check:world-golden and its selftest, check:world-town,
+            check:world-engines and its selftest, check:chase, check:counter, check:props, check:room (71),
+            check:roads, check:clip (2559)
+    red     lint:preload and lint:shell, 1415c94's, above; lint:input (222 of 223) and lint:devices (2 problems), older,
+            above; check:builder, 808 of 811: the pinch of the next entry, and two recorded on 4 October as timing
+    running from check:town-patrons to gates when this was committed; the next entry has them
+
+### What went wrong
+
+- The fault entry's own lint:shell line called the credits problem not this change's, which was true, and stopped
+  there. So did the takeoff camera entry before it. It was 1415c94's, and finding that took one run on a27df1c.
+- check:takeoff on this tree failed its "the page drew the flight" sanity line twice (21 and 22 frames, needs more than
+  30) while the sweep ran a browser beside it; the sweep's own run on main drew 60. Run again alone, above: all pass.
+
+### To main
+
+The owner's word of 13:31 UTC, the fault entry's: "push suspected fix to main first, then continue testing, you can
+always roll back with corrected fix". This is the corrected fix: every change here is to the support prompts that
+caused the fault, or to what 2e34c05 made live (the best lap prompt that could not be closed). Pushed as a fast forward
+from 2e34c05. Not covered, so not on main: the board's fix, the credits row, and the builder pinch of the next entry.
