@@ -66743,3 +66743,59 @@ tree as the first half, each npm script alone and one after another.
   same undeclared name audit: none. Its support click is sent as source 'landing', which the board takes.
 - The live simulator: index.html, src/main.js, src/share/supportprompt.js, src/fresh.js, src/ui/ui.js and the builder's
   index.html and app.js are byte for byte ee5be65's.
+
+## 2026-10-05 | tests, board | The training park before and after the grip change, and the patron fix live
+
+### The training park
+
+park:fly at three reps, one tree after the other with nothing else running:
+
+    b58d21a   main before 37a7f65, the grip change        10 of 20
+    aafcc38   the grip change and today's fixes in        10 of 20
+
+The same ten cases pass on both and the same ten fail, each 3 of 3 or 0 of 3. The grip change moved nothing here.
+
+The 12 of 20 recorded on 24 September (11ba560), flown again on that commit today, reads 11 of 20. Against today one case
+differs: "1 Trippy Spin (mast)", passing then and 0 of 3 now. Bisected on that case alone, two reps a step: the first
+commit that loses it is b139395 (24 September, "Tumble flat, always", the owner's "yes make it tumble flat always").
+
+It is the rig, not a regression. The case flies one inverted lap of the mast with a fall of 11.4 m/s2 added (__drop),
+from a centre 24 m up, over 2.3 s, so its planned path reaches the grass at 88 percent of the lap and ends 6 m under it.
+Measured with a scratch copy of the case that keeps the lowest point (not committed): on 11ba560 the craft reached
+0.85 m (the grass is at 0.75) at 99 percent of the lap, never landed, and finished the lap skimming on its back; on
+aafcc38 it reached the grass at 90 percent and was landed for 15 of 138 frames, because an inverted craft that is not
+near flat now stands on its corner and goes over, as b139395 intends. The lap ends where its plan goes underground. A
+higher centre or a gentler fall would give the recogniser its lap back. Not changed here: park:fly is a manual driver
+nobody asked to touch, and changing a case so that it passes is the owner's call.
+
+### Live
+
+- The builder's ui.js and the board's app.js and stats.js served from webfpv.org were byte for byte the pushed ones from
+  14:43 UTC.
+- The live board's track sheets carry `patron` on every time now, Postgres included: 447 times on 44 tracks, none marked.
+  So BOARD_PATRONS on the host names nobody who has posted, or is unset, and no heart shows until it does.
+- Served from a scratch file store with one patron (bc7bff5, Chromium): the heart on the card's podium row, in the
+  Lately feed and on the sheet's record, and no page error.
+
+### Looked at, and not a bug
+
+`best`, which a card is first drawn from, carries no `patron` in either store, so a patron's record looked unmarked on
+the cards. A change adding it in both stores was written and served: the card's holder line and podium are drawn again
+from the track's times once they arrive, and those carry the mark, so the change altered nothing a reader sees and left
+the holder line an empty element with a stale has-patron class whenever a podium took its name. Reverted, not committed.
+
+### RUN LOG
+
+    park:fly --reps=3         b58d21a 10 of 20; aafcc38 10 of 20, the same cases, each 3 of 3 or 0 of 3
+    park:fly                  11ba560, one rep: 11 of 20, "1 Trippy Spin (mast)" passing
+    git bisect run            --only="Trippy Spin (mast)" --reps=2 a step, 11ba560 good, b58d21a bad: b139395
+    the board                 the patron probe above; for the reverted change, npm test all passed, and a stand-in pg
+                              driver showed `best.patron` in the list and on the sheet, where bc7bff5 has none
+    not run                   npm run verify: no physics, plant, ABI or build change in this entry
+
+### What went wrong
+
+- The change to `best` was written before reading how a card is painted once its times arrive. A served page showed it
+  was not needed; it cost one probe and was never committed.
+- The 12 of 20 of 24 September is 11 of 20 when its own commit is flown today, so a count recorded in one container is
+  not exact enough to compare with another's by one or two cases. A case by case run on both trees is.
