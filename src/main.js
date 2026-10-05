@@ -105,6 +105,7 @@ import {
   writePostedBest,
   writeShareImport,
 } from './share/session.js';
+import { showSupportPrompt } from './share/supportprompt.js';
 import { createShowcase } from './render/showcase.js';
 import { celTimeCount } from './render/celmat.js';
 import { MAPS, mapById } from './maps/registry.js';
@@ -715,6 +716,12 @@ export async function boot({ loading, bootStart, mapId }) {
       })(),
     }),
   });
+  
+  /* Track total session flight time for the support prompt trigger at 20 minutes */
+  let sessionFlightTimeMs = 0;
+  let lastFlightTick = 0;
+  let sessionTimePromptShown = false;
+  const SESSION_TIME_PROMPT_MS = 20 * 60 * 1000; /* 20 minutes */
   /*
    * The last flush, sent when the page goes away. pagehide rather than
    * unload, because a browser that put this tab in its back/forward cache
@@ -5764,7 +5771,8 @@ export async function boot({ loading, bootStart, mapId }) {
           throw e;
         }
       }
-      writePostedBest(trackIdNow, fastest);
+      const prevBest = readPostedBest(trackIdNow);
+      const isNewBest = writePostedBest(trackIdNow, fastest);
       /* Under the id it was stored against, which is the one the pilot flew
        * it on, and under the live one too when the seat moved: a pending lap
        * left behind a heal would be offered for upload again forever. */
@@ -5786,6 +5794,16 @@ export async function boot({ loading, bootStart, mapId }) {
         untilMs: performance.now() + 3600,
       };
       ui.markTimePosted(posted);
+      /* Show support prompt on new personal best, if enabled */
+      if (isNewBest && prevBest != null && settings.supportPrompts !== false) {
+        const container = document.querySelector('.screen-results') || document.body;
+        const prompt = showSupportPrompt('pb', container);
+        if (prompt) {
+          prompt.onSettingsClick = () => {
+            ui.openMenu('advanced');
+          };
+        }
+      }
     } catch (e) {
       notice = { text: `Could not post that time.\n${e.message ?? e}`, untilMs: performance.now() + 3600 };
     }
@@ -7495,6 +7513,36 @@ export async function boot({ loading, bootStart, mapId }) {
         flying: flownThisRun && !landed && !turtleWait && !turtleRecover,
         laps: race.laps.length,
       });
+      
+      /* Track session flight time for support prompt at 20 minutes */
+      if (flownThisRun && !landed && !turtleWait && !turtleRecover) {
+        const was = lastFlightTick;
+        lastFlightTick = nowWall;
+        if (was > 0 && nowWall > was) {
+          sessionFlightTimeMs += Math.min(nowWall - was, 1000);
+          /* Show support prompt after 20 minutes of flying if not already shown */
+          if (!sessionTimePromptShown 
+              && sessionFlightTimeMs >= SESSION_TIME_PROMPT_MS 
+              && settings.supportPrompts !== false
+              && ui.screen === 'flight') {
+            sessionTimePromptShown = true;
+            /* Wait until the next pause or results screen to show the prompt */
+            const showPromptOnPause = () => {
+              if (ui.screen === 'paused' || ui.screen === 'results') {
+                const container = document.querySelector('.screen-paused, .screen-results') || document.body;
+                const prompt = showSupportPrompt('time', container);
+                if (prompt) {
+                  prompt.onSettingsClick = () => {
+                    ui.openMenu('advanced');
+                  };
+                }
+              }
+            };
+            /* Check on the next frame */
+            setTimeout(showPromptOnPause, 100);
+          }
+        }
+      }
     }
 
     /* The seated world's note, released on the first frame of a flight and

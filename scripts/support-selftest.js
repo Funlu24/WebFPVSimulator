@@ -63,7 +63,7 @@ check('$3, $8 and $20 USD a month, no GST', /\$3\..*\$8\..*\$20\. USD a month\.$
 /* The anchor under the wordmark and in the builder. */
 const a = { dataset: {}, setAttribute() {} };
 bindPatreon(a);
-check('Patreon link: href', a.href === PAGE, a.href);
+check('Patreon link: href', a.href === `${PAGE}?utm_source=sim&ref=sim`, a.href);
 check('Patreon link: target', a.target === '_blank', a.target);
 check('Patreon link: rel', a.rel === 'noopener noreferrer', a.rel);
 
@@ -73,13 +73,13 @@ const o = opened[0] || {};
 const b = beacons[0] || {};
 const body = b.blob ? await b.blob.text() : '';
 check('Support: one tab', opened.length === 1, `${opened.length} opened`);
-check('Support: href', o.url === PAGE, o.url);
+check('Support: href', o.url === `${PAGE}?utm_source=sim&ref=sim`, o.url);
 check('Support: target', o.target === '_blank', o.target);
 check('Support: rel, as window features', o.features === 'noopener,noreferrer', o.features);
 check('Support: opener nulled', Boolean(o.tab) && o.tab.opener === null, o.tab && o.tab.opener);
 check('beacon: one a press', beacons.length === 1, `${beacons.length} sent`);
 check('beacon: the visit ping endpoint', b.url === 'https://webfpv.org/board/api/stats/events', b.url);
-check('beacon: body', body === '{"v":1,"kind":"support_click","source":"sim"}', body);
+check('beacon: body', body === '{"v":1,"kind":"support_click","source":"sim","target":"patreon"}', body);
 check('beacon: text/plain', /^text\/plain(;|$)/.test(b.blob && b.blob.type), b.blob && b.blob.type);
 
 nav.globalPrivacyControl = true;

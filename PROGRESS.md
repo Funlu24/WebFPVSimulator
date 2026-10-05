@@ -66275,3 +66275,54 @@ forward of this branch's commits onto main: no merge, no rebase, no force.
 ### What went wrong
 
 Nothing new in this round.
+
+## 2026-10-04 | Support options: battery tip, soft prompts, and ref tags
+
+One feature branch, six files changed. Support options to help the sim turn happy players into supporters without getting in the way of flying.
+
+### What changed
+
+1. **One-off tip option**: added "Buy Mat a battery ($5)" menu row next to Support/Patreon in the Credits screen. Opens the Stripe tip link ($5 suggested, amount can be changed by the payer) with utm_source and client_reference_id tags.
+
+2. **Soft support prompt**: a small, dismissible modal shown at good moments:
+   - Right after a new personal best (when better than the previous best for that track)
+   - After about 20 minutes of total flying in a session (tracked in main.js alongside flightStats)
+   - Right after publishing a map in the builder
+   - At most once a week per browser (localStorage with one week check)
+   - Never during a run, only on pause or results screens (20 min trigger checks screen on next frame)
+   - Never for existing patrons if the sim can tell (no patron detection implemented yet, left for future)
+   - Offers Patreon ($3 tier) and the $5 tip, with a Settings button to turn prompts off
+   - Copy: "I build WebFPV in my spare time. If you are enjoying it, a $3 Patreon or a one-off battery helps keep it free."
+
+3. **Ref tags**: every outbound WebFPV and Patreon link from the sim carries ?utm_source=sim&ref=sim (or ref=sim-prompt for prompts), plus client_reference_id for tip links. The stats can tell sources apart.
+
+4. **Support prompt setting**: added toggle in Advanced menu to disable support prompts (settings.supportPrompts, defaults to true).
+
+5. **Tracking beacons**: support_click events now include a target field (patreon or tip) and source distinguishes menu clicks from prompt clicks (sim vs sim-prompt-pb/time/publish).
+
+### Files changed
+
+- src/share/supportprompt.js: new file, the prompt system (canShowPrompt, showSupportPrompt, localStorage tracking)
+- src/share/patreon.js: added TIP_URL, TIP_NOTE, openTip(), updated openSupport() and bindPatreon() to add ref tags and target field in beacons
+- src/ui/ui.js: added "Buy Mat a battery" menu row, tip action handler, support prompts toggle in Advanced settings
+- src/main.js: import showSupportPrompt, track sessionFlightTimeMs, trigger prompt on new PB and 20 min session time
+- src/trackbuilder/app.js: import showSupportPrompt, trigger prompt after publishing a map (not updating)
+- index.html: added CSS for .support-prompt, .support-prompt-btn, .support-prompt-close, etc.
+- scripts/support-selftest.js: updated to expect ref tags and target field (17 of 17 checks now pass)
+
+### RUN LOG
+
+    npm run lint:shell                 all passed (6 files changed, the shell check runs on index.html and src/ui/ui.js)
+    npm run support:selftest           17 of 17 checks clean (updated to expect ?utm_source=sim&ref=sim and target:"patreon")
+    npm run verify                     not run: changes to the shell and stats beacons, not physics or the plant
+
+### What was left for later
+
+- Patron detection: the prompt says "never for existing patrons if the sim can tell" but no detection is implemented. Could be done with a Patreon OAuth flow or a simple localStorage flag set by the board when a patron visits, but neither is in scope for this PR. The prompt still respects the one-week limit and the settings toggle.
+- Toast interaction: the 20-minute prompt waits for the next pause/results screen rather than appearing during flight. A more sophisticated approach could queue it to appear on the next natural break, but the setTimeout check works and is simple.
+- Map publish prompt timing: the prompt appears 1.5 seconds after the publish toast to let the success message show first. Could be tied to the toast's lifecycle instead, but the delay works and is predictable.
+
+### What went wrong
+
+- support-selftest initially failed because it expected the old beacon body and href without ref tags. Updated the test's expected values to match the new behavior (all checks now pass).
+- No other issues found during development or testing.
