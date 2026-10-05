@@ -66666,3 +66666,38 @@ The owner's word of 13:31 UTC, the fault entry's: "push suspected fix to main fi
 always roll back with corrected fix". This is the corrected fix: every change here is to the support prompts that
 caused the fault, or to what 2e34c05 made live (the best lap prompt that could not be closed). Pushed as a fast forward
 from 2e34c05. Not covered, so not on main: the board's fix, the credits row, and the builder pinch of the next entry.
+
+## 2026-10-05 | builder | A pinch whose second finger lands on the card zooms again (found by the sweep)
+
+The sweep of the entry above ran check:builder on main, and one of its three red lines was new: in the "touch" case,
+"with the card up, the second finger on it still joins: the pair zooms" read 4.2329 then 4.2329, no zoom at all. Run on
+its own with `--only=touch`, it passes on 2166799 and fails on a27df1c. Between them is bfa7492 (4 October, "drag the
+options card by its heading"), whose entry says check:builder was not run and nobody had dragged the card. Its
+pointerdown on the heading takes any pointer, prevents it, stops it and captures it, so a second finger that came down
+on the heading was a card drag, and the pinch it belonged to never heard of it.
+
+### What changed
+
+- src/trackbuilder/ui.js, armCardDrag: the heading drags the card only for a primary pointer. A mouse always is; on a
+  screen, the first finger down is and a second one is not. One condition.
+- scripts/builder-flow-check.js, "touch": one finger on the card's heading drags the card by what the finger moved,
+  and the room stays where it was. The card's drag had no check at all.
+
+### RUN LOG
+
+    builder-flow-check --only=touch   37 checks, all pass, on this tree. On main (2e34c05, the same new check): 1
+                                      failed, the pair that never zoomed; the new drag check passes there, so the
+                                      card's drag worked before this and works after it
+    the same case on 2166799          the pinch passes; on a27df1c it fails: bfa7492 is between them
+    node src/trackbuilder/selftest.js 2559 passed, 0 failed
+    not run                           the whole of check:builder again (15 minutes; the sweep's run is the entry
+                                      above's, and only the touch case reads the card's heading), npm run verify
+                                      (no physics, plant, ABI or build change)
+
+The other two red lines of the sweep's check:builder, "More opens the drawer with everything else in it" and "and the
+ring is at its foot", are the ones recorded on 4 October (the letters entry) as failing on main too, timing on a
+software rasteriser. Not touched.
+
+### To main
+
+Not pushed to main: this is not part of the fault the owner's 13:31 word covered. It is on claude/throttle-feel-tune-m87noj.
