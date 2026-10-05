@@ -101,6 +101,7 @@ import {
   clearPendingTime,
   readEditKey,
   readPendingTime,
+  readPostedBest,
   writePendingTime,
   writePostedBest,
   writeShareImport,
@@ -5780,8 +5781,15 @@ export async function boot({ loading, bootStart, mapId }) {
           throw e;
         }
       }
+      /* Read before the write replaces it. writePostedBest answers true for
+       * a lap stored AND for one the stored best already beats, so whether
+       * this lap beat the pilot's own posted best is worked out here. Until
+       * 2026-10-05 readPostedBest was not imported, so this line threw with
+       * the lap already on the board and the pilot was told it had not
+       * posted (bug-7f783182). */
       const prevBest = readPostedBest(trackIdNow);
-      const isNewBest = writePostedBest(trackIdNow, fastest);
+      writePostedBest(trackIdNow, fastest);
+      const newBest = prevBest != null && Math.round(fastest) < prevBest;
       /* Under the id it was stored against, which is the one the pilot flew
        * it on, and under the live one too when the seat moved: a pending lap
        * left behind a heal would be offered for upload again forever. */
@@ -5803,14 +5811,20 @@ export async function boot({ loading, bootStart, mapId }) {
         untilMs: performance.now() + 3600,
       };
       ui.markTimePosted(posted);
-      /* Show support prompt on new personal best, if enabled */
-      if (isNewBest && prevBest != null && settings.supportPrompts !== false) {
-        const container = document.querySelector('.screen-results') || document.body;
-        const prompt = showSupportPrompt('pb', container);
-        if (prompt) {
-          prompt.onSettingsClick = () => {
-            ui.openMenu('advanced');
-          };
+      /* Show support prompt on new personal best, if enabled. The lap is on
+       * the board by here, so a prompt that fails says nothing: the catch
+       * below would tell the pilot the time had not posted. */
+      if (newBest && ui.settings.supportPrompts !== false) {
+        try {
+          const container = document.querySelector('.screen-results') || document.body;
+          const prompt = showSupportPrompt('pb', container);
+          if (prompt) {
+            prompt.onSettingsClick = () => {
+              ui.act('advanced');
+            };
+          }
+        } catch (promptError) {
+          console.warn('support prompt', promptError);
         }
       }
     } catch (e) {
@@ -7555,10 +7569,15 @@ export async function boot({ loading, bootStart, mapId }) {
         lastFlightTick = nowWall;
         if (was > 0 && nowWall > was) {
           sessionFlightTimeMs += Math.min(nowWall - was, 1000);
-          /* Show support prompt after 20 minutes of flying if not already shown */
-          if (!sessionTimePromptShown 
-              && sessionFlightTimeMs >= SESSION_TIME_PROMPT_MS 
-              && settings.supportPrompts !== false
+          /* Show support prompt after 20 minutes of flying if not already
+           * shown. This read was a bare `settings` until 2026-10-05, which
+           * is not a name in this scope: every frame in the air after twenty
+           * minutes threw, and the fault came back the moment the craft was
+           * flying again after R (bug-7f783182, bug-551a5c32, bug-03ae2f2a).
+           * scripts/longflight-check.js flies past the line. */
+          if (!sessionTimePromptShown
+              && sessionFlightTimeMs >= SESSION_TIME_PROMPT_MS
+              && ui.settings.supportPrompts !== false
               && ui.screen === 'flight') {
             sessionTimePromptShown = true;
             /* Wait until the next pause or results screen to show the prompt */
@@ -7568,7 +7587,7 @@ export async function boot({ loading, bootStart, mapId }) {
                 const prompt = showSupportPrompt('time', container);
                 if (prompt) {
                   prompt.onSettingsClick = () => {
-                    ui.openMenu('advanced');
+                    ui.act('advanced');
                   };
                 }
               }
@@ -9885,6 +9904,16 @@ export async function boot({ loading, bootStart, mapId }) {
    * `race` at call time; this one captured the object identity at boot, so
    * after a map swap it answered with the previous map's race. */
   window.__race = () => race;
+  /* The support prompt's session clock, read and set. A check cannot fly
+   * for twenty minutes to reach the line that faulted every frame on
+   * 2026-10-05, so scripts/longflight-check.js sets the clock just short of
+   * it and flies across. Nothing in the shell calls it. */
+  window.__sessionFlight = (ms) => {
+    if (Number.isFinite(ms)) {
+      sessionFlightTimeMs = ms;
+    }
+    return { ms: sessionFlightTimeMs, shown: sessionTimePromptShown, thresholdMs: SESSION_TIME_PROMPT_MS };
+  };
   /* P12 and P13 are audio budgets, and neither can be read while the audio
    * context is null: update() returns immediately and reports a cost of
    * nothing. A capture run has to click the page to satisfy the browser's

@@ -34,6 +34,7 @@
     "check:crash": "node scripts/crash-check.js",
     "check:crash-pacing": "node scripts/crash-pacing.js",
     "check:takeoff": "node scripts/takeoff-check.js",
+    "check:longflight": "node scripts/longflight-check.js",
     "check:world": "node scripts/world-check.js",
     "check:world-golden": "node scripts/world-golden.js",
     "check:world-golden:selftest": "node scripts/world-golden.js --selftest",
