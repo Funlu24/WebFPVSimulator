@@ -24,7 +24,7 @@
 import { execFileSync } from 'node:child_process';
 import { PATREON_NOTE, PATREON_URL, bindPatreon, openSupport } from '../src/share/patreon.js';
 
-const PAGE = 'https://www.patreon.com/cw/webfpv';
+const PAGE = 'https://www.patreon.com/cw/webfpv/membership';
 const rows = [];
 let failed = 0;
 
