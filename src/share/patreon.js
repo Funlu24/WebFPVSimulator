@@ -33,7 +33,7 @@
 import { counting, eventsUrl } from './stats.js';
 
 /* The public page. Same address in the landing config and the board app. */
-export const PATREON_URL = 'https://www.patreon.com/cw/webfpv';
+export const PATREON_URL = 'https://www.patreon.com/cw/webfpv/membership';
 
 /* Stripe tip link for one-off donations */
 export const TIP_URL = 'https://donate.stripe.com/7sY4gzaAC2Eu3aOews8so0g';

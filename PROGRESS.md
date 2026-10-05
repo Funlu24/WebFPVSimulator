@@ -66326,3 +66326,28 @@ One feature branch, six files changed. Support options to help the sim turn happ
 
 - support-selftest initially failed because it expected the old beacon body and href without ref tags. Updated the test's expected values to match the new behavior (all checks now pass).
 - No other issues found during development or testing.
+
+---
+
+## 2026-10-05: Patreon membership URL update
+
+**Branch**: cursor/patreon-membership-url-b825
+
+Changed all Patreon support links from the bare https://www.patreon.com/cw/webfpv page to the /membership URL (https://www.patreon.com/cw/webfpv/membership). On mobile devices, the bare page defaults to "Join for free" and hides paid membership tiers, making it harder for supporters to find the $3/$8/$20 options.
+
+### What changed
+
+1. **PATREON_URL** in src/share/patreon.js: updated from '/cw/webfpv' to '/cw/webfpv/membership'
+2. **PAGE constant** in scripts/support-selftest.js: updated to match
+
+All existing ?ref= and utm tags, target=_blank, and rel="noopener noreferrer" attributes preserved. PATREON_NOTE unchanged: still lists $3/$8/$20 USD a month with no GST mention.
+
+### Checks
+
+- `git grep` for bare /cw/webfpv hrefs: clean (no bare URLs remain)
+- `npm run support:selftest`: 17 of 17 checks passed
+- `npm run lint:shell`: failed with 11 pre-existing layout issues (overflow/fold problems on pilot, rates, pids, fc, tricks, advanced, paused, stickhelp, howto, credits screens). These are unrelated to the URL constant change and were present before this PR.
+
+### What went wrong
+
+None. The URL change is working as expected. The lint:shell failures are pre-existing shell layout issues that need separate investigation and are outside the scope of this URL update.
