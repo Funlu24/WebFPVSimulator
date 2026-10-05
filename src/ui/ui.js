@@ -182,7 +182,7 @@ import { formatScore } from '../game/score.js';
 import { PRACTICE_LAPS } from '../game/race.js';
 import { JOKE_MS, quotedJoke } from './loading.js';
 import { fillCredits } from './credits.js';
-import { PATREON_NOTE, openSupport, patreonAnchor } from '../share/patreon.js';
+import { PATREON_NOTE, TIP_NOTE, openSupport, openTip, patreonAnchor } from '../share/patreon.js';
 import { mountRatesPanel } from './ratespanel.js';
 import { mountPidsPanel } from './pidspanel.js';
 import { touchWanted } from '../input/touchsticks.js';
@@ -7659,6 +7659,7 @@ export class Ui {
           note: `${PARTNERS.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Opens their page on the board in a new tab.`,
         },
         { label: 'Support', action: 'support', note: PATREON_NOTE },
+        { label: 'Buy Mat a battery ($5)', action: 'tip', note: TIP_NOTE },
         {
           label: 'FPV wiki',
           action: 'wiki',
@@ -8425,6 +8426,14 @@ export class Ui {
           'Record the run for download as a Betaflight blackbox CSV. Holds the whole flight in memory.',
           s.flightLog,
           (v) => { s.flightLog = v; },
+        ),
+        toggle(
+          'Support prompts',
+          s.supportPrompts !== false
+            ? 'On: show a small support prompt at good moments (new personal best, after about 20 minutes of flying, or after publishing a map). At most once a week.'
+            : 'Off: never show support prompts.',
+          s.supportPrompts !== false,
+          (v) => { s.supportPrompts = v; },
         ),
         {
           label: 'Download flight log',
@@ -16595,6 +16604,11 @@ export class Ui {
     /* Patreon, which is not one of our sites, so not a named tab. */
     if (action === 'support') {
       openSupport();
+      return;
+    }
+    /* Stripe tip link for one-off battery donation */
+    if (action === 'tip') {
+      openTip();
       return;
     }
     /* The board's partners page, which is one of our sites, in the board's

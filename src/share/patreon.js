@@ -35,7 +35,12 @@ import { counting, eventsUrl } from './stats.js';
 /* The public page. Same address in the landing config and the board app. */
 export const PATREON_URL = 'https://www.patreon.com/cw/webfpv';
 
+/* Stripe tip link for one-off donations */
+export const TIP_URL = 'https://donate.stripe.com/7sY4gzaAC2Eu3aOews8so0g';
+
 export const PATREON_NOTE = 'Support WebFPV on Patreon. Keep the lights on, $3. Hosting + runway, $8. Build the sim, $20. USD a month.';
+
+export const TIP_NOTE = 'Buy Mat a battery with a one-off $5 tip. Opens Stripe, amount can be changed.';
 
 /* Patreon's symbol. Do not restyle the path. */
 const MARK = 'M15.386.524c-4.764 0-8.64 3.876-8.64 8.64 0 4.75 3.876 8.613 8.64 8.613 4.75 0 8.614-3.864 8.614-8.613C24 4.4 20.136.524 15.386.524M.003 23.537h4.22V.524H.003';
@@ -44,7 +49,7 @@ export function bindPatreon(anchor) {
   anchor.title = PATREON_NOTE;
   anchor.setAttribute('aria-label', PATREON_NOTE);
   if (PATREON_URL) {
-    anchor.href = PATREON_URL;
+    anchor.href = `${PATREON_URL}?utm_source=sim&ref=sim`;
     anchor.target = '_blank';
     anchor.rel = 'noopener noreferrer';
     delete anchor.dataset.patreonPending;
@@ -89,17 +94,37 @@ export function patreonAnchor() {
  * Global Privacy Control or with counting switched off, as for every event.
  */
 export function openSupport() {
-  const tab = window.open(PATREON_URL, '_blank', 'noopener,noreferrer');
+  const url = `${PATREON_URL}?utm_source=sim&ref=sim`;
+  const tab = window.open(url, '_blank', 'noopener,noreferrer');
   if (tab) {
     /* Only a browser that ignored noopener hands the tab back. */
     tab.opener = null;
   }
   try {
     if (counting()) {
-      const body = JSON.stringify({ v: 1, kind: 'support_click', source: 'sim' });
+      const body = JSON.stringify({ v: 1, kind: 'support_click', source: 'sim', target: 'patreon' });
       navigator.sendBeacon(eventsUrl(), new Blob([body], { type: 'text/plain;charset=UTF-8' }));
     }
   } catch (e) {
     /* No beacon in this browser, or it refused. The page is already open. */
+  }
+}
+
+/*
+ * Open the Stripe tip link for a one-off battery donation.
+ */
+export function openTip() {
+  const url = `${TIP_URL}?utm_source=sim&client_reference_id=menu&ref=sim`;
+  const tab = window.open(url, '_blank', 'noopener,noreferrer');
+  if (tab) {
+    tab.opener = null;
+  }
+  try {
+    if (counting()) {
+      const body = JSON.stringify({ v: 1, kind: 'support_click', source: 'sim', target: 'tip' });
+      navigator.sendBeacon(eventsUrl(), new Blob([body], { type: 'text/plain;charset=UTF-8' }));
+    }
+  } catch (e) {
+    /* No beacon */
   }
 }
