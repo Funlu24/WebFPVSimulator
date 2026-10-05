@@ -269,6 +269,15 @@ const SURFACE_BIAS = 0.40;
  */
 const PARKED_LIFT = 0.30;
 /*
+ * How fast the parked lift goes once the craft is moving across the ground
+ * rather than up off it: metres of lift per metre of horizontal travel, so
+ * the whole 0.30 m is gone 0.6 m from where the craft took off. Render only,
+ * like PARKED_LIFT. Short enough that a low skim away from the pad is flown
+ * through its own lens within a craft length or two, long enough that the
+ * bleed is a slope the eye reads as part of the move and not a drop.
+ */
+const LIFT_TRAVEL_BLEED = 0.5;
+/*
  * Opening shot when a run starts: orbit the quad on the pad, settle
  * behind it, then dolly into the FPV camera. The three spans are wall
  * milliseconds of the same 1 ms accumulator the frame already uses, so
@@ -6901,9 +6910,35 @@ export async function boot({ loading, bootStart, mapId }) {
     const finishFpvQuat = new THREE.Quaternion();
     /* -1: not on the finish shot. 0+: milliseconds into the pull-out. */
     let finishCamMs = -1;
-  /* Eased toward PARKED_LIFT while the craft is down and toward zero once it
-   * is flying, so the view rises off the pad rather than jumping. */
+  /* Eased toward PARKED_LIFT while the craft is down, so the view rises off
+   * the grass rather than jumping. Once the craft is up it is let go by the
+   * climb and the travel, never by the clock: see liftFloorY. */
   let parkedLift = PARKED_LIFT;
+  /*
+   * THE VIEW DOES NOT SINK BEFORE THE CRAFT LIFTS (bug-2d0907fa, "the quad
+   * starts sinking into the ground first before it gets lift"; bug-eaae5428,
+   * "pushed down when taking off").
+   *
+   * The lift used to ease to zero, with a time constant of about 170 ms, the
+   * frame `landed` went false, and `landed` goes false at TAKEOFF_THROTTLE,
+   * 25 percent. The craft hovers at about 40, so a pilot rolling the throttle
+   * on gently spent the gap between the two with the craft sitting on the
+   * grass and the lens dropping 30 cm toward it: measured on the field with
+   * the 65 mm whoop and a four second ramp, the camera went from 0.363 m to
+   * 0.061 m while the plant still reported four hull points on the ground,
+   * and only then climbed. The plant was never pulling anything down; the
+   * picture was.
+   *
+   * So when the craft is released, the camera's height at that moment is
+   * kept as a floor, and the lift is whatever holds the lens up to it: it
+   * goes as the craft climbs, so the view only ever rises on a takeoff, and
+   * it goes with horizontal travel, LIFT_TRAVEL_BLEED metres of lift per
+   * metre, so a craft that skims away low does not carry a lens 30 cm over
+   * its own for long. It never grows again in the air. Null while down.
+   */
+  let liftFloorY = null;
+  let liftAnchorX = 0;
+  let liftAnchorZ = 0;
 
   /*
    * World contact, already spawn-offset, back into plant metres. Inverse of
@@ -8538,10 +8573,23 @@ export async function boot({ loading, bootStart, mapId }) {
       lastCamFwdY = camFwd.y;
       lastCamUpY = camUp.y;
     }
-    const wantLift = (landed || launchStaging || turtleWait || turtleFlip.active) && !poseLock
-      ? PARKED_LIFT
-      : 0;
-    parkedLift += (wantLift - parkedLift) * Math.min(1, dt * 0.006);
+    const parked = (landed || launchStaging || turtleWait || turtleFlip.active) && !poseLock;
+    if (parked) {
+      liftFloorY = null;
+      parkedLift += (PARKED_LIFT - parkedLift) * Math.min(1, dt * 0.006);
+    } else if (poseLock) {
+      liftFloorY = null;
+      parkedLift += (0 - parkedLift) * Math.min(1, dt * 0.006);
+    } else {
+      if (liftFloorY === null) {
+        liftFloorY = fpvPos.y + parkedLift;
+        liftAnchorX = pCurr.x;
+        liftAnchorZ = pCurr.z;
+      }
+      const travel = Math.hypot(pCurr.x - liftAnchorX, pCurr.z - liftAnchorZ);
+      const hold = liftFloorY - fpvPos.y - LIFT_TRAVEL_BLEED * travel;
+      parkedLift = Math.min(parkedLift, hold > 0 ? hold : 0);
+    }
     if (parkedLift > 0.001) {
       fpvPos.y += parkedLift;
     }
@@ -10721,6 +10769,7 @@ export async function boot({ loading, bootStart, mapId }) {
     /* Same reason as __placeCraft: a seat is a teleport. */
     haveRecoverFrom = false;
     parkedLift = 0;
+    liftFloorY = null;
     adoptSimClock();
     acc = 0;
     groundY = hy;

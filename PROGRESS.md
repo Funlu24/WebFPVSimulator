@@ -66351,3 +66351,81 @@ All existing ?ref= and utm tags, target=_blank, and rel="noopener noreferrer" at
 ### What went wrong
 
 None. The URL change is working as expected. The lint:shell failures are pre-existing shell layout issues that need separate investigation and are outside the scope of this URL update.
+
+---
+
+## 2026-10-05 | shell, camera | "Sucked to the ground" on takeoff was the camera, not the plant
+
+The owner's ask: find the tickets about being sucked down to the ground when throttling up, or stuck to it, replicate,
+root cause and fix. Nothing in the plant, the module ABI or the build changed in this entry.
+
+### The tickets
+
+Read with the board admin token the owner supplied, read only, nothing written. Of the 37 open tickets and every ticket
+filed since 2 October, two match:
+
+    bug-2d0907fa  2026-10-05 00:33Z  "Quad sucks to ground on small throttle input": "When I want to take off smoothly
+                  the quad starts sinking into the ground first before it gets lift." 65 mm whoop, custom track
+                  (RaceGOW6 Track1), acro, weight 100 (gravity 2.025), Firefox 157, 75 fps, link perfect.
+    bug-eaae5428  2026-10-04 15:54Z  "pushed down when taking off": "my drone is being pushed down and angled until it
+                  finally takes off, but is angled". 65 mm whoop on the field, acro, a radio, roll resting at -0.04,
+                  weight 100, Firefox 158, 120 fps, link perfect.
+
+What they share: the whoop (the five inch's plant at gravity 2.025), weight 100, the throttle mapping "cap 100, no expo,
+hover near 39.9", flat ground, and a GENTLE throttle. Both were filed after the grip change went to main
+(2026-10-04 12:57Z), but that change is innocent: the same slow ramp on dist/sim.wasm before it (98580b4) and after it
+gives the same takeoff to the tenth of a millimetre. The older "stuck" tickets (bug-ad038907, bug-d7247563 and the wall
+ones) are a different thing and already have their own entries.
+
+### The cause
+
+The plant never pulls the craft down. From rest on a plane at gravity 2.025, a throttle ramp of 0 to 0.6 over 4 s holds
+the craft at -2.0 mm (the contact slop) until 41 percent and then only climbs.
+
+The CAMERA does. While the craft sits on the ground the lens is raised PARKED_LIFT, 0.30 m, so the near plane does not
+clip the grass. That lift was eased to zero, with a time constant of about 170 ms, from the frame `landed` went false,
+and `landed` goes false at TAKEOFF_THROTTLE, 25 percent. The craft lifts at about 42. So a pilot rolling the throttle on
+gently spent the gap between the two watching the view drop 30 cm toward the grass with the craft still sitting on it.
+Measured in the real shell on the field, whoop, 4 s ramp: lens 0.363 m to 0.061 m while the plant reported four hull
+points on the ground, then the climb. A punch sank it 14 to 20 cm, because the lens fell faster than the craft rose.
+That is "sinking into the ground first before it gets lift".
+
+The "angled" half of bug-eaae5428 is Betaflight, not a defect here: in acro, a radio resting at -0.04 of roll asks for
+a slow roll, and while the craft sits on the grass between 25 and 42 percent the I term winds against the contact, so it
+leaves the ground leaning (measured about 9 degrees). A real quad does the same, which is why pilots punch off the pad.
+Not changed.
+
+### What changed
+
+**src/main.js, the parked lift.** When the craft is released, the lens height at that moment is kept as a floor
+(`liftFloorY`), and the lift is whatever holds the lens up to it. It goes as the craft climbs, so a vertical takeoff is
+a picture that only rises, and it goes with horizontal travel at LIFT_TRAVEL_BLEED, 0.5 m of lift per metre, so a craft
+that skims away low is through its own lens within 0.6 m. It never grows again in the air, and it is never let go by the
+clock. Parked, it eases up to PARKED_LIFT as before; under poseLock it eases to zero as before. Render only.
+
+**scripts/takeoff-check.js (`npm run check:takeoff`), new.** Headless Chromium, the field, the five inch and the whoop,
+a 4 s ramp to 0.6 and a 0.3 s punch to 0.8, one page per case. It reads the lens mount (`fpvY`), not the drawn camera,
+because the predicted view leads the mount by a centimetre or two while the craft accelerates and that is not this
+check's. Asserted: the lens never drops more than 1 cm below its highest since the throttle came up, until the craft is
+a metre up; a metre up, the lift is gone (lens within 0.10 m of the centre); the craft did reach a metre.
+
+Without the fix it fails all four sink assertions (0.298, 0.137, 0.302 and 0.205 m, the two ramps with four hull points
+down). With it, worst 0.002 m.
+
+### Checks
+
+    node scripts/takeoff-check.js    with the fix: all pass. Without it (src/main.js stashed): 4 failed, as above.
+    npm run lint:frame               34 passed, 0 failed
+    npm run lint:shell               1 problem, "fold at 844x390 touch: credits: the list hangs 30 px under the command
+                                     bar", and the same one on main with this change stashed, so it is not this change's
+    npm run verify                   not run: no physics, plant, module ABI or build change, and verify never loads
+                                     main.js. The plant probe above was run on the module directly instead.
+
+Flight feel is unverified: what a pilot sees on a gentle takeoff is the thing this changed, and only a flight shows it.
+
+### What went wrong
+
+- The first probe sampled the drawn camera and read the predicted view's lead as a 2 cm sink after liftoff. The check
+  reads the mount instead.
+- A second run on the same page started with no frames drawn and the airframe did not change between runs, so the
+  check opens a page per case and asserts that frames were drawn.
