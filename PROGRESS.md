@@ -66701,3 +66701,45 @@ software rasteriser. Not touched.
 ### To main
 
 Not pushed to main: this is not part of the fault the owner's 13:31 word covered. It is on claude/throttle-feel-tune-m87noj.
+
+## 2026-10-05 | builder, board, tests | The pinch and patron fixes to main (the owner's word), and the sweep's second half
+
+### To main
+
+The owner's word, 2026-10-05 14:40 UTC, on the decision card "Push the board's patron badge fix and the builder's pinch
+zoom fix to main?": "Push both". It covers those two and nothing else: the builder's pinch (aafcc38, the entry above) and
+the board's patron badge and stats panel (bc7bff5 on the board's claude/throttle-feel-tune-m87noj, the sweep entry's
+"Found, and fixed on the board's branch"). Both pushed as fast forwards, this repository's main from ee5be65 and the
+board's from ae9e7e1. Not covered, so not changed: the credits row, which is still the owner's call.
+
+Run before the push, in the same turn: the board's npm test, all passed on bc7bff5; here, lint:preload up to date and
+src/trackbuilder/selftest.js 2559 passed on aafcc38. Not run again: builder-flow-check --only=touch, which passed when
+aafcc38 was committed, because the training park comparison below was flying in a browser and a second browser beside it
+would have disturbed it.
+
+### The sweep's second half
+
+The sweep entry was committed while its second half was still running. This is that half: main at 2e34c05, the same
+tree as the first half, each npm script alone and one after another.
+
+    green   check:town-patrons (24) and its selftest (14 of 14 planted faults caught), check:orbit (17), check:path (12),
+            check:fresh (18), check:craft (20 of 20), check:seat (10 of 10), check:crash (0 guards failed),
+            gif:selftest (81), ghost:selftest, contact:selftest, score:selftest, replay:test (9 of 9), replay:selftest,
+            link:selftest, input:selftest (380), autoscale:selftest (52), predict:selftest (11), music:selftest,
+            stats:selftest (79), support:selftest (17 of 17), seat:selftest (25 of 25), test:edge, micro:check,
+            whoop:gates (21 of 21), trick:sweep
+    red     gates: 2 of 20 (P1 and P2), the same rows the grip change's entry recorded, P5's max level of 125 km/h
+            included. The roadmap gates that are not built. Not a regression.
+            park:fly: 10 of 20 at one rep, where the last recorded count is 12 of 20 (24 September). Wall Tap passed.
+            Running when this was committed: the training park flown three times over on b58d21a, yesterday's main
+            before the grip change (37a7f65), and on aafcc38, to tell the grip change from what came before it. The next
+            entry has it.
+
+### Also read again
+
+- The board's tickets at 14:30 UTC. One new since the sweep: bug-2553e6c7 (14:27), a flight feel report, "about right",
+  no error in it. The three fault tickets read fixed on the board, marked at 13:40 UTC, not by this thread.
+- The live landing page (webfpv.org, last modified 01:05 UTC): its module graph, 27 modules and the page, through the
+  same undeclared name audit: none. Its support click is sent as source 'landing', which the board takes.
+- The live simulator: index.html, src/main.js, src/share/supportprompt.js, src/fresh.js, src/ui/ui.js and the builder's
+  index.html and app.js are byte for byte ee5be65's.
