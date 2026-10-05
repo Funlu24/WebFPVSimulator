@@ -66429,3 +66429,9 @@ Flight feel is unverified: what a pilot sees on a gentle takeoff is the thing th
   reads the mount instead.
 - A second run on the same page started with no frames drawn and the airframe did not change between runs, so the
   check opens a page per case and asserts that frames were drawn.
+
+### To main
+
+The owner's word, 2026-10-05 10:28Z, in the project thread: "push to masin" (main), after the draft PR (#36) with its
+CI green. Covers this entry only: the parked lift change in src/main.js and scripts/takeoff-check.js. Fast forward,
+main had not moved since the branch was cut (72b6dbb).
