@@ -8348,7 +8348,7 @@ export class Ui {
         toggle(
           'Stick overlay',
           s.stickOverlay
-            ? 'On: two small boxes at the bottom of the flight picture, a dot on each following your sticks. Left is yaw and throttle, right is roll and pitch, in your stick mode. Not drawn on a phone with the thumb sticks, which are the sticks.'
+            ? 'On: two small boxes at the bottom of the flight picture, a dot in each following your sticks, laid out by your Stick mode. Drawn for a radio, a gamepad and the keys; hidden while you fly on the thumb sticks, which are already on screen.'
             : 'Off: no stick boxes on the flight picture. Turn it on to see what your sticks are telling the quad.',
           s.stickOverlay,
           (v) => { s.stickOverlay = v; },
@@ -14654,11 +14654,13 @@ export class Ui {
   }
 
   /*
-   * Keyboard stick ghost. Mode 2: left is yaw (x) and throttle (y, idle
-   * at the bottom), right is roll (x) and pitch (y, stick forward is up,
-   * matching the radio and the up arrow). Drawn for every stick source
-   * while the Stick overlay setting is on, which it is by default; it was
-   * the keyboard's alone until 2026-10-06. Hidden on thumb sticks.
+   * The stick overlay, which began as the keyboard's stick ghost. Mode 2:
+   * left is yaw (x) and throttle (y, idle at the bottom), right is roll (x)
+   * and pitch (y, stick forward is up, matching the radio and the up arrow).
+   * Drawn for every stick source while the Stick overlay setting is on,
+   * which it is by default; it was the keyboard's alone until 2026-10-06.
+   * Hidden on thumb sticks. The shell decides `show` in stickOverlayUp in
+   * main.js, the one test the gate mark's bottom margin reads too.
    *
    * `show` now hides the two GIMBALS rather than the block they sit in,
    * because the air slider sits between them and is not the keyboard's.

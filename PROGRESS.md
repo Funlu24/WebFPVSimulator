@@ -66758,3 +66758,62 @@ Checked: `node --check` on both files, `lint:boot` 9 of 9, `lint:nouns` pass. `l
 `npm run verify` (no physics, ABI or build change), `shots.js`, `lint:input` (timed out at 280 s here). Not seen on screen.
 
 What went wrong. Nothing broke, but a radio's channels are shown as the dots, and I have not seen that against a real radio.
+
+## 2026-10-06: Stick overlay, reviewed, the gate mark fixed, and checks for it
+
+Request, Mat in the thread: "ensure there are tests to cover this new functionality and review sonnets work". The review was
+the owner's ask, so its findings are written here whether or not they were acted on.
+
+Findings.
+1. Fixed. The gate mark still parked for the keyboard alone. `updateTargetLock` sized its bottom band on
+   `input.isKeyboardPrimary() || input.isTouchPrimary()`, which was the old test for "the gimbals are up". The first build moved
+   the drawing to "the setting is on and the thumbs are not flying" and left the band where it was, so for a radio or gamepad
+   pilot the chevron parked in the corner instruments' 108 px band, under the top of the plates. Measured on a TX15 race at 1600
+   by 900: the chevron's centre at y 792 against the plates' top at 776, which is the bug `AIM_MARGIN_BOTTOM`'s note records.
+   Read from the code, the reverse case, keys with the overlay off, parked 22 px higher than anything there needs. Both now read
+   one function, `stickOverlayUp()` in main.js. After: 770 against 776 with the overlay on, 792 with it off.
+2. Fixed. The row's note said "Left is yaw and throttle, right is roll and pitch, in your stick mode", which is Mode 2's layout
+   stated as every mode's. It now says the boxes are laid out by Stick mode, which the captions under them already name, and
+   that they are drawn for a radio, a gamepad and the keys and hidden on the thumb sticks, which is what Mat asked in the thread.
+3. Fixed. `setStickOverlay`'s comment still opened "Keyboard stick ghost".
+4. Declined. A board replay (`?replay=tm-...`) runs in flight mode, so the overlay draws the viewer's own resting sticks under
+   somebody else's lap. The keyboard ghost already did this before the setting; now a viewer with a radio plugged in gets it too.
+   `clean=1` captures hide the whole UI and are unaffected. Not changed because it predates this work for the keys and nothing
+   here can drive a replay without the board. Adding `!replayMode` to `stickOverlayUp` is the fix if the owner wants it. Read from
+   the code, not seen.
+5. Noted, not changed. A Mode 1 radio pilot who has never set Stick mode sees Mode 2's layout, because the page cannot see the
+   radio's own mode. Same convention as the calibrate screen's gimbals; Stick mode is on Settings and on Check sticks.
+6. Noted, not changed. On a touch device the frame that brings the thumb plates back still draws the boxes for that one frame,
+   because the frame loop decides the boxes before it raises the plates. The keyboard ghost did the same at a hand over before the
+   setting. The new check waits for the boxes to go rather than sampling that frame.
+7. The first build's record above is accurate: lint:shell fails the same 8 on main and the row adds 45 px to Pilot. Its
+   `lint:input` was not run then, and is now.
+
+Checks added, 23, all in `scripts/input-check.js` (lint:input).
+- A new page, a TX15 on the keyboard pilot's whoop race, 15: on for a pilot who never set it; both boxes drawn for the radio; at
+  rest in Mode 2 the dots are centred with idle throttle at the bottom; roll right and yaw left move the right and left dots;
+  let go they centre; the chevron, pinned to the bottom edge by parking the camera 200 m over the start, sits above the plates;
+  paused mid race, the row is beside Show FPS and reads On; Enter on it is Off in the row, the settings and storage; a reload
+  keeps it off; off, no boxes and the Weight slider stays; off, the chevron parks lower; Enter again is On and stored; the boxes
+  come back; no uncaught exception.
+- The keyboard page, 5: boxes up on the keys; the chevron above the plates; Off takes the keys' boxes away; the chevron comes
+  down; On brings them back.
+- The touchscreen laptop page, 3: no boxes with the thumb plates up; boxes up when the keys take the sticks; a finger on the
+  glass takes them away again.
+
+Proof they see the change. The radio page alone, run against main (e2b8e2a): 12 of 15 fail. Against the first build (db7f17d):
+2 of 15 fail, the two chevron checks, y 792 against 776. Against this commit: 15 of 15 pass.
+
+Checked: full `lint:input`, 245 passed and 1 failed. The failure is the builder chooser's "a key pressed at the question does
+nothing behind it: no tool armed, no 3D view", which fails the same way on main (e2b8e2a, 222 passed, 1 failed) and on the first
+build (222 and 1), so it predates this. `lint:shell` fails the same 8 problems as on main and on the first build, Pilot at
+747 px with the row, baseline not re-recorded. `lint:boot` 9 of 9, `lint:nouns` pass, `node --check` on the four files. Not run:
+`npm run verify` (no physics, ABI or build change) and `shots.js`. Not seen on a real screen or against a real radio.
+
+What went wrong. The first full run on the fix failed two more checks. One was mine: after the reload the world is already built
+and Fly goes straight to the line, so a race helper that waited for the launch card timed out; it now answers the card only when
+asked. The other was "set down on the floor under it ... parked at 11.737" on the keyboard page, which this work does not touch;
+it passed in the two baseline runs and in the final run. My reading, not proven: `__craftState().worldY` is the rendered position
+and `landed` flips at the recovery, so a trace frame that runs before the shell's own frame can see landed at the old height.
+Also, `ui.act('pause')` sets the shell's mode without showing the pause menu; the first draft of the check used it, and the check
+now presses Escape, as a pilot does.
