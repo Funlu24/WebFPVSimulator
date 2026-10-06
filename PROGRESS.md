@@ -66773,6 +66773,8 @@ out, and a NOTICE line. The sign's aspect is 3.593, so the town fits it 3.2 by 0
    the paint is still counted. **No threshold moved**: DRAWN_TOL is still 0.01 m and the 1.5 cm is still what the paint
    stands off by. After the change spot 1 is 190 of 190 samples within 1 cm (worst 0.000 m), the check is 24 and 0, and
    the self test is 14 of 14 planted faults caught with a clean baseline, the plinth band 2 cm proud still among them.
+   While this was being written the Cursor agent pushed the same one line (2fd1d56, 04:26 UTC, same mesh name, same
+   place); the two were merged and the longer comment kept.
 2. **A pronoun.** The roster comment said the logo was "supplied by him". Nothing in the repository says the patron's
    pronouns, so it now says "the patron".
 3. **Read and found nothing:** `quadconfigMono` keys out pixels within 20 units per channel of #323f5d and makes the
