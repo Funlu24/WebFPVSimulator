@@ -168,6 +168,8 @@ function toolbox() {
     };
     scene.traverse((o) => {
       if (!o.isMesh) return;
+      /* Skip live patron/partner marks: we're checking the wall surface, not the marks painted on it. */
+      if (o.name === 'partnerMarkTrim') return;
       const mat = o.material;
       if (mat && (mat.visible === false || mat.colorWrite === false)) return;
       if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
