@@ -66799,3 +66799,15 @@ the holder line an empty element with a stale has-patron class whenever a podium
   was not needed; it cost one probe and was never committed.
 - The 12 of 20 of 24 September is 11 of 20 when its own commit is flown today, so a count recorded in one container is
   not exact enough to compare with another's by one or two cases. A case by case run on both trees is.
+
+## 2026-10-06 | owner | Flown on the live build: "flys good"
+
+The owner, 2026-10-06 04:15 UTC, in the project thread, after flying the live build (main at e2b8e2a, served from
+webfpv.org since 14:43 UTC on 5 October): "flys good". That build carries the five inch grip change of 4 October
+(37a7f65), the takeoff camera fix (46a58cb), the support prompt fixes (2e34c05, ee5be65) and the builder's pinch
+(aafcc38). It is the pilot's word on a flight, not a check, and which of those changes the flight exercised is not
+recorded.
+
+Still open, put to the owner on a decision card the same morning: the credits room hanging 30 px under the command bar
+on a phone held sideways (lint:shell, 844 by 390), from the battery row of 1415c94. Keeping the row means re-recording
+that budget, which waits on the owner's word; until then lint:shell stays red on that one line.
