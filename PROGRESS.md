@@ -66811,3 +66811,52 @@ recorded.
 Still open, put to the owner on a decision card the same morning: the credits room hanging 30 px under the command bar
 on a phone held sideways (lint:shell, 844 by 390), from the battery row of 1415c94. Keeping the row means re-recording
 that budget, which waits on the owner's word; until then lint:shell stays red on that one line.
+
+## 2026-10-06 | shell | About fits a phone on its side again (the owner's "Make it fit")
+
+The owner's choice, 2026-10-06 04:19 UTC, on the decision card "Keep the battery row in Credits, with a short scroll on
+sideways phones?": "Make it fit", whose words were "I tighten Credits on short screens so all six rows fit without
+scrolling, and show you before it goes live". So lint:shell's budget for the About room at 844 by 390 stays at 0, and the
+screen changes instead.
+
+### What changed
+
+index.html, two short screen blocks for .screen-credits (the About room, which lists Partners, Support, Buy Mat a
+battery, FPV wiki, Report a bug and Back):
+
+- max-height 520 px: top padding 14 px (was 5vh), no rule under the title (Paused has none either, and squeezed it sat
+  on the panel's edge), no gap above the panel, and the panel's padding 4 px top and bottom (was 10 and 12). 38 px in
+  all at 844 by 390.
+- max-height 380 px: top padding 6 px, 2 px under the title, the panel's padding 2 px, for phones 360 px tall.
+
+The rows keep their 44 px touch targets and the title keeps its size. Nothing changes above 520 px tall.
+
+### Measured
+
+The panel's bottom against the top of the command bar, on arrival, touch, before (main at e2b8e2a) and after:
+
+    844 x 390   30 px under    0, 8 px clear; the Back row 282 to 326, the bar at 338
+    915 x 412   11 px under    0
+    800 x 360   33 px under    1 px, the panel's own bottom edge; the Back row ends at 307 and the bar is at 308
+    740 x 360                  0
+    667 x 375                  0
+
+### RUN LOG
+
+    lint:shell        PASS; the fold at 844x390 touch reads credits 0 px (main: 30, its one failure); 1600x900 and
+                      1280x720 unchanged
+    lint:responsive   PASS
+    lint:devices      2 problems, the whoop room tablet card at 1024x768 and 1180x820, the same two as main in the
+                      sweep of 5 October
+    pictures          before and after at 844 by 390 and 800 by 360, sent to the owner in the thread, not committed
+    not run           npm run verify: no physics, plant, module ABI or build change
+
+### What went wrong
+
+- The first cut kept the rule under the title with 4 px above it, and squeezed it sat on the panel's top edge. Taken
+  out on short screens instead.
+- The first cut fitted 844 by 390 only and left a 360 px tall phone 15 px under the bar; the second block is for that.
+
+### To main
+
+Not pushed: the owner asked to see it before it goes live.
