@@ -193,7 +193,7 @@ export const MAP_ONLY_PARTNERS = Object.freeze([
  * found panel when discovered.
  */
 export const PATRON_MAP_BRANDS = Object.freeze([
-  // Magnus Arge's $25 Patreon 'Your sign in the sim' logo, supplied by him on 2026-10-06, OK'd by the owner.
+  // Magnus Arge's $25 Patreon 'Your sign in the sim' logo, supplied by the patron on 2026-10-06, OK'd by the owner.
   partner({
     slug: 'quadconfig',
     name: 'Quad Configurator',
