@@ -67153,3 +67153,42 @@ settles the two "Not checked" items above except the last step: the heart on the
 whether the `BOARD_PATRONS` setting or the built in list is what made it true was not told apart. `/api/stats` lists
 `landing` as a ref tag of its own, 9 visits, beside `reddit` and `other`, so #10 is deployed and `landing` is no longer
 folded into `other`. `itch` has no visits yet, so nothing shows for it and it was not seen on the live board.
+
+## 2026-10-06 | support | The simulator's Patreon note lists the four tiers, to match the board
+
+The owner's word, 2026-10-06 06:21 UTC, in the project thread: he chose "Update it" on the card asking whether to update
+the simulator's Patreon note to the board's four tiers. The board's note went to four in its #6, merged earlier today on
+his word, with the $25 tier called "Your sign in the sim", the tier the first patron sign (Quad Configurator, #38)
+belongs to. The simulator's note still listed three.
+
+### What changed
+
+- `src/share/patreon.js`: `PATREON_NOTE` now ends "Build the sim, $20. Your sign in the sim, $25. USD a month." and is
+  byte for byte the board's `PATREON_NOTE` in `public/app.js` on the board's main (3a95ea7), compared by a script and not
+  by eye. The header comment's "the three memberships" is now "the four". The note is the hover text and the accessible
+  name of the anchor under the wordmark and in the builder, and the help line of the Support row in the Credits room.
+- `scripts/support-selftest.js`: the pin on the note's shape was changed with the thing it pins. It read "$3, $8 and $20
+  USD a month, no GST"; it now reads "$3, $8, $20 and $25 USD a month, no GST", the same shape with the fourth tier
+  added: the tiers in order, the note ending "USD a month.", and no GST. That is not a threshold moved to pass: the old
+  pin was written for the three tier note and cannot pass any four tier one. A negative control showed the new pin
+  rejects the old note and accepts the new one.
+
+### Run, in the same turn
+
+`npm run support:selftest`: 17 of 17 clean, the new pin among them. `npm run lint:nouns`: pass, 308 files. No module was
+added, so `src/fresh.js` needs nothing: it stamps a deploy and hashes no file.
+
+### Not run, and why
+
+`lint:shell`, `shots` and `check:longflight` were not run. The note is longer, 132 characters against 105, and it shows
+as the help line of the Credits room's Support row, a room that was fitted to its small windows earlier today (ce0238f).
+The longest note already in that room is the Report a bug row's, 152 characters, in the same help column, then Support's
+at 132, Partners' at 110, the wiki's at 89 and the tip's at 77, so the new note should not wrap further than one the room
+already carries. That is an argument from lengths and not a picture. The 20 minute prompt that `check:longflight` covers
+does not read `PATREON_NOTE`.
+
+### Left as it was
+
+The landing page's own copy of the note, in its `src/config.js`, still lists three tiers. It is another repository and
+outside this session's scope until it is added, and the header of `patreon.js` says the three copies have to agree. The
+simulator and the board now do.

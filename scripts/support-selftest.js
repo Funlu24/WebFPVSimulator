@@ -58,7 +58,7 @@ function press() {
 }
 
 check('the page is /cw/webfpv, no query', PATREON_URL === PAGE, PATREON_URL);
-check('$3, $8 and $20 USD a month, no GST', /\$3\..*\$8\..*\$20\. USD a month\.$/.test(PATREON_NOTE) && !/GST/.test(PATREON_NOTE), PATREON_NOTE);
+check('$3, $8, $20 and $25 USD a month, no GST', /\$3\..*\$8\..*\$20\..*\$25\. USD a month\.$/.test(PATREON_NOTE) && !/GST/.test(PATREON_NOTE), PATREON_NOTE);
 
 /* The anchor under the wordmark and in the builder. */
 const a = { dataset: {}, setAttribute() {} };

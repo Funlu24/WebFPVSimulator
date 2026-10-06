@@ -12,7 +12,7 @@
  * PATREON_URL is the public page. The same string, and the same note, have
  * to be set in the landing page's src/config.js and the board's
  * public/app.js, because those sites cannot import this file. The note is
- * the hover text: the three memberships, in the order Patreon lists them.
+ * the hover text: the four memberships, in the order Patreon lists them.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -38,7 +38,7 @@ export const PATREON_URL = 'https://www.patreon.com/cw/webfpv/membership';
 /* Stripe tip link for one-off donations */
 export const TIP_URL = 'https://donate.stripe.com/7sY4gzaAC2Eu3aOews8so0g';
 
-export const PATREON_NOTE = 'Support WebFPV on Patreon. Keep the lights on, $3. Hosting + runway, $8. Build the sim, $20. USD a month.';
+export const PATREON_NOTE = 'Support WebFPV on Patreon. Keep the lights on, $3. Hosting + runway, $8. Build the sim, $20. Your sign in the sim, $25. USD a month.';
 
 export const TIP_NOTE = 'Buy Mat a battery with a one-off $5 tip. Opens Stripe, amount can be changed.';
 
