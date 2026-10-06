@@ -1197,6 +1197,16 @@ const DEFAULTS = {
    * the typeof gate accepts it.
    */
   showFps: false,
+  /*
+   * STICK OVERLAY: the two gimbals at the bottom of the flight picture, a
+   * dot on each following the live sticks. On by default, so a pilot on a
+   * radio or a gamepad sees what the quad is being told, which they did not
+   * before: the overlay used to be the keyboard's alone. Off removes the
+   * gimbals for a clean picture; the Weight slider between them is not this
+   * setting's and stays. Only the picture: it reads the channels the frame
+   * loop already holds. A boolean so the typeof gate accepts it.
+   */
+  stickOverlay: true,
   packVoltage: 4.2,
   /*
    * How heavy the quad is, as a percentage of the weight the airframe is
@@ -8335,6 +8345,14 @@ export class Ui {
           s.showFps,
           (v) => { s.showFps = v; },
         ),
+        toggle(
+          'Stick overlay',
+          s.stickOverlay
+            ? 'On: two small boxes at the bottom of the flight picture, a dot on each following your sticks. Left is yaw and throttle, right is roll and pitch, in your stick mode. Not drawn on a phone with the thumb sticks, which are the sticks.'
+            : 'Off: no stick boxes on the flight picture. Turn it on to see what your sticks are telling the quad.',
+          s.stickOverlay,
+          (v) => { s.stickOverlay = v; },
+        ),
         { label: 'Sound', section: true },
         toggle('Sound', 'All sound: motors, wind, music, cues and every lap time called out loud.', s.sound, (v) => { s.sound = v; }),
         stepper('Volume', 'Overall level, the lap call included. Zero to ten.', `${s.volume}`, (d) => {
@@ -14638,8 +14656,9 @@ export class Ui {
   /*
    * Keyboard stick ghost. Mode 2: left is yaw (x) and throttle (y, idle
    * at the bottom), right is roll (x) and pitch (y, stick forward is up,
-   * matching the radio and the up arrow). Hidden when a radio is the
-   * stick source.
+   * matching the radio and the up arrow). Drawn for every stick source
+   * while the Stick overlay setting is on, which it is by default; it was
+   * the keyboard's alone until 2026-10-06. Hidden on thumb sticks.
    *
    * `show` now hides the two GIMBALS rather than the block they sit in,
    * because the air slider sits between them and is not the keyboard's.

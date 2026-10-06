@@ -66743,3 +66743,18 @@ tree as the first half, each npm script alone and one after another.
   same undeclared name audit: none. Its support click is sent as source 'landing', which the board takes.
 - The live simulator: index.html, src/main.js, src/share/supportprompt.js, src/fresh.js, src/ui/ui.js and the builder's
   index.html and app.js are byte for byte ee5be65's.
+
+## 2026-10-06: Stick overlay setting, on by default
+
+Request: an on-screen stick overlay in the sim, on by default, with a setting to turn it off. Finding: the two gimbals already
+existed (`osd-sticks`, `setStickOverlay`) but main.js drew them only when the keyboard was the primary source, so a pilot on a
+radio or gamepad never saw them. Added `stickOverlay` (boolean, default true, saved with the other settings) and a "Stick overlay"
+row beside Show FPS. main.js now passes `show: ui.settings.stickOverlay !== false && !input.isTouchPrimary()`, so every non-touch
+source gets the boxes and a phone on thumb sticks still does not. The Weight slider between the boxes is not covered by the
+setting. Display only: it reads channels the frame loop already holds, so physics and determinism are untouched.
+
+Checked: `node --check` on both files, `lint:boot` 9 of 9, `lint:nouns` pass. `lint:shell` FAILS with 8 problems, and fails the same
+8 on main without this change; this change adds one row to Pilot's overflow (702 to 747 px). Baseline not re-recorded. Not run:
+`npm run verify` (no physics, ABI or build change), `shots.js`, `lint:input` (timed out at 280 s here). Not seen on screen.
+
+What went wrong. Nothing broke, but a radio's channels are shown as the dots, and I have not seen that against a real radio.

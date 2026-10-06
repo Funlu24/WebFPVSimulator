@@ -9356,7 +9356,7 @@ export async function boot({ loading, bootStart, mapId }) {
       const ch = input.channels;
       const vis = turtleAxes(ch.roll, ch.pitch);
       ui.setStickOverlay({
-        show: input.isKeyboardPrimary() && !input.isTouchPrimary(),
+        show: ui.settings.stickOverlay !== false && !input.isTouchPrimary(),
         roll: vis[0],
         pitch: vis[1],
         yaw: ch.yaw,
