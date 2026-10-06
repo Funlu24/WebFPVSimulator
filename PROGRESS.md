@@ -67236,3 +67236,45 @@ Back was really 10 px under the bar at 844 by 390 and 38 px under at 360. Revert
 Mat, 2026-10-06 10:09 UTC, in the thread, after being offered fly it or a rerun of verify on main: "push to main". It
 covers this change only (the Instagram row and the two column About list on short wide screens). Fetched main first:
 8ab8996, an ancestor of this branch, so a fast forward.
+
+## 2026-10-06: bug-2a9d8037, DJI Controller 3 on a Pixel 9, no yaw (readout only)
+
+Ticket: DJI Virtual Joystick (2ca3:1021), Chrome 154 on Android, `mapping` empty, 4 axes, 17 buttons. The AETR guess read
+axes 0 to 3; roll, pitch and throttle moved in flight, axis 3 (yaw) stayed at 0. Same radio fine on a PC.
+
+### Sources
+
+- Chromium `GamepadMappings.java`, `UnknownGamepadMappings.mapToStandardGamepad`: X and Y are the left stick; the right
+  stick is only mapped when BOTH of a pair is present (Rx and Ry preferred over Z and Rz); Ltrigger or Brake and
+  Rtrigger, Gas or Throttle become the analog value of buttons 6 and 7; hat axes become d-pad buttons; other axes are
+  dropped, or exposed past index 3 under `kAndroidUnknownGamepadExtraAxes` ("enabled by default" in main).
+- The ticket still shows 4 axes on Chrome 154, so either that flag is not in the shipped build or the phone lists only
+  those axes. Not settled.
+- DJI's own HID descriptor (which Android axes the RC-N3 declares, and whether any is Rudder/Brake/Throttle) was not
+  found. A DJI forum thread says the RC-N3 as a PC joystick also has a gimbal wheel axis.
+
+### What is inferred, what is verified
+
+Inferred: yaw is declared on an Android axis that Chrome's fallback drops or folds into a trigger BUTTON value
+(buttons 6 or 7). Verified: nothing about the hardware. The existing report already shows no unnamed axis swept
+(`stray: []`), so yaw is not on a fifth axis; the one place the report was blind is the buttons' values.
+
+### What changed
+
+- `src/input/input.js`: `noteButtonTravel` and `rawTravel`. The stick report (`mapReport`) gains `raw: {axes, buttons}`:
+  lo and hi of every raw axis the flight watched, and lo and hi of every button that ever left rest (16 at most).
+  Observation only; nothing flies on it, physics and the ABI untouched, no mapping behaviour changed on any pad.
+- Not done: reading a button's value as a stick. Without the readout that is a guess about the wrong channel.
+
+### Run, in the same turn
+
+- `node --check` pass. A Node stub pad (4 axes, 17 buttons, yaw riding button 7's value as 0, 0.2, 0.6, 1, 0.4, 0)
+  gives `raw.buttons {"7":[0,1]}` and the right axis spans. `lint:shell` was run and prints layout overflow lines
+  unrelated to this change (the previous entry records the same failure on main); it was not compared in this turn.
+- `lint:input` and `npm run verify` not run.
+
+### Ask TOGAFPV
+
+Open the sim on the Pixel 9, fly a few seconds moving ONLY the yaw stick full left, full right, then send Report a bug.
+`stick.map.raw.buttons` shows whether yaw is on a button. If it shows nothing, the phone never delivers it and the only
+way round is a computer.

@@ -1433,6 +1433,7 @@ export class InputManager {
      * alive and are never judged again. See noteDeadChannels. Reset with
      * the pad and with the map, because it is a fact about both. */
     this.deadWatch = null;
+    this.btnSpan = null;
     this.deadList = [];
     this.deadAlive = new Set();
     /* A pad the browser calls a standard gamepad whose stick axis rests off
@@ -1961,6 +1962,7 @@ export class InputManager {
   /* A new pad or a new map: the old flight said nothing about either. */
   forgetDeadChannels() {
     this.deadWatch = null;
+    this.btnSpan = null;
     if (this.deadList.length) {
       this.deadList = [];
     }
@@ -1990,6 +1992,61 @@ export class InputManager {
       }
     }
     return out;
+  }
+
+  /*
+   * WHAT THE PAD'S BUTTONS HAVE READ, for a bug report and nothing else.
+   *
+   * bug-2a9d8037, a DJI Controller 3 on a Pixel 9 in Chrome: four axes and
+   * seventeen buttons, roll, pitch and throttle moving and the fourth axis
+   * flat for the whole flight, and the same radio fine on a PC. Chrome's
+   * Android fallback turns the axes it knows as triggers (Brake, Gas,
+   * Throttle, Ltrigger, Rtrigger) into the analog VALUE of buttons 6 and 7
+   * and drops or aliases the rest, so a stick the axes never show may be
+   * sitting in a button's value. The report carried the axes and not one
+   * number about the buttons, so that could not be told from a stick the
+   * phone never delivers. This keeps, for each button that has ever left
+   * rest, the lowest and highest value it read. Nothing flies on it.
+   * Bounded: sixteen entries, reset with the pad.
+   */
+  noteButtonTravel(gp) {
+    const b = gp.buttons;
+    if (!b) {
+      return;
+    }
+    if (!this.btnSpan) {
+      this.btnSpan = {};
+    }
+    const n = Math.min(b.length, 32);
+    for (let i = 0; i < n; i += 1) {
+      const v = b[i] ? b[i].value : 0;
+      const seen = this.btnSpan[i];
+      if (seen) {
+        if (v < seen[0]) {
+          seen[0] = v;
+        }
+        if (v > seen[1]) {
+          seen[1] = v;
+        }
+      } else if (Math.abs(v) > 0.02 && Object.keys(this.btnSpan).length < 16) {
+        this.btnSpan[i] = [Math.min(0, v), Math.max(0, v)];
+      }
+    }
+  }
+
+  /* The two for the report: [lo, hi] per button that has left rest, and the
+   * span of every raw axis the flight has watched. */
+  rawTravel() {
+    const round = (v) => Math.round(v * 100) / 100;
+    const buttons = {};
+    if (this.btnSpan) {
+      for (const k of Object.keys(this.btnSpan)) {
+        buttons[k] = [round(this.btnSpan[k][0]), round(this.btnSpan[k][1])];
+      }
+    }
+    const w = this.deadWatch;
+    const axes = w ? w.axes.map((s) => (s ? [round(s.lo), round(s.hi)] : null)) : [];
+    return { axes, buttons };
   }
 
   /*
@@ -2273,6 +2330,7 @@ export class InputManager {
        */
       guess: m.stored ? null : (m.guess || 'aetr'),
       buttons: gp.buttons ? gp.buttons.length : 0,
+      raw: this.rawTravel(),
       check: {
         dead: this.deadList,
         missing: this.missingChannels(gp),
@@ -4036,6 +4094,7 @@ export class InputManager {
       }
       this.noteThrottleParked(gp);
       this.noteGuessOrder(gp);
+      this.noteButtonTravel(gp);
       this.noteYawParked(gp, nowWall);
       this.noteStandardParked(gp, nowWall);
       this.noteRestartSwitch(gp);
