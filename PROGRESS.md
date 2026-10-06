@@ -67230,3 +67230,9 @@ has nothing to count an Instagram click under. None is sent.
 
 First fit tried: less padding and a smaller title. It cut the overhang from 18 px to 3 px and then stopped moving, because
 Back was really 10 px under the bar at 844 by 390 and 38 px under at 360. Reverted for the two column list.
+
+### To main
+
+Mat, 2026-10-06 10:09 UTC, in the thread, after being offered fly it or a rerun of verify on main: "push to main". It
+covers this change only (the Instagram row and the two column About list on short wide screens). Fetched main first:
+8ab8996, an ancestor of this branch, so a fast forward.
