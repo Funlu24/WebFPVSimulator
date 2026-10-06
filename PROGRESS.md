@@ -66882,3 +66882,13 @@ it passed in the two baseline runs and in the final run. My reading, not proven:
 and `landed` flips at the recovery, so a trace frame that runs before the shell's own frame can see landed at the old height.
 Also, `ui.act('pause')` sets the shell's mode without showing the pause menu; the first draft of the check used it, and the check
 now presses Escape, as a pilot does.
+
+## 2026-10-06: Stick overlay to main, on the owner's word
+
+The owner's word, 2026-10-06 05:46 UTC, in the project thread: "push to main". It covers PR #39 and nothing else: the Stick
+overlay setting (on by default, a row beside Show FPS, hidden on the thumb sticks), the gate mark's bottom margin read from the
+same `stickOverlayUp()`, and the 23 lint:input checks, as the two entries above describe them. Main fetched first and was still
+ed666ac, which the branch had already merged, so main is fast-forwarded to this commit, with no rewrite. What was run before:
+the full lint:input on 917d0c9, the branch head under this commit, 245 passed and 1 failed, the builder chooser check that fails
+the same way on ed666ac's parent. This commit adds only this entry. Nothing here has been seen on a real screen or radio; the
+owner is flying it live.
