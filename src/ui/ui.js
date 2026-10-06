@@ -182,7 +182,7 @@ import { formatScore } from '../game/score.js';
 import { PRACTICE_LAPS } from '../game/race.js';
 import { JOKE_MS, quotedJoke } from './loading.js';
 import { fillCredits } from './credits.js';
-import { PATREON_NOTE, TIP_NOTE, openSupport, openTip, patreonAnchor } from '../share/patreon.js';
+import { INSTAGRAM_NOTE, PATREON_NOTE, TIP_NOTE, openInstagram, openSupport, openTip, patreonAnchor } from '../share/patreon.js';
 import { mountRatesPanel } from './ratespanel.js';
 import { mountPidsPanel } from './pidspanel.js';
 import { touchWanted } from '../input/touchsticks.js';
@@ -7675,6 +7675,7 @@ export class Ui {
         },
         { label: 'Support', action: 'support', note: PATREON_NOTE },
         { label: 'Buy Mat a battery ($5)', action: 'tip', note: TIP_NOTE },
+        { label: 'Instagram', action: 'instagram', note: INSTAGRAM_NOTE },
         {
           label: 'FPV wiki',
           action: 'wiki',
@@ -16635,6 +16636,10 @@ export class Ui {
     /* Stripe tip link for one-off battery donation */
     if (action === 'tip') {
       openTip();
+      return;
+    }
+    if (action === 'instagram') {
+      openInstagram();
       return;
     }
     /* The board's partners page, which is one of our sites, in the board's

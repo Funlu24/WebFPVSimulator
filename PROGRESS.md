@@ -67192,3 +67192,41 @@ does not read `PATREON_NOTE`.
 The landing page's own copy of the note, in its `src/config.js`, still lists three tiers. It is another repository and
 outside this session's scope until it is added, and the header of `patreon.js` says the three copies have to agree. The
 simulator and the board now do.
+
+## 2026-10-06 | shell | Instagram row in the About room
+
+Mat asked for a link to WebFPV's Instagram, https://www.instagram.com/webfpv_org/, beside the Patreon and Tip links on
+four sites. This is the simulator's part.
+
+### What changed
+
+- `src/share/patreon.js`: `INSTAGRAM_URL`, `INSTAGRAM_NOTE` ("WebFPV on Instagram: clips, maps and updates. Opens in a new
+  tab.") and `openInstagram()`, built like `openTip()`: `window.open(url, '_blank', 'noopener,noreferrer')`, then
+  `tab.opener = null`. No ?ref= or utm on the URL.
+- `src/ui/ui.js`: an Instagram row in the About room straight after "Buy Mat a battery ($5)", and its action.
+- `scripts/support-selftest.js`: seven checks on the row: one tab, the exact href, target, window features, opener nulled,
+  no beacon, no dash in the note.
+- `index.html`: on a window under 520 px tall and at least 600 px wide the About list goes two rows to a line, so it is
+  four lines tall. Seven rows at 44 px did not fit 844 by 390 or 800 by 360 however tight the air around them was, and
+  the rows keep their 44 px targets. DOM order is unchanged, so the keys walk the same order.
+
+### No beacon
+
+The board's events endpoint (`validate.js`, `support_click`) records a click by source only and drops `target`, so it
+has nothing to count an Instagram click under. None is sent.
+
+### Run, in the same turn
+
+- `support:selftest` 24 of 24, `lint:nouns` pass, `lint:responsive` pass, `lint:scale` pass.
+- `lint:shell` and `lint:devices` fail on main in the same way: 7 problems and 3 problems, identical lists. Adding the row
+  with the old fit made the credits fold fail at 844 by 390 touch (18 px under the bar); with the two column list the
+  credits line passes there and at 915x412, 800x360, 740x360 and 667x375 (probed: Back ends 60 to 70 px above the bar at
+  844 by 390). The 7 and 3 are main's, not this change's.
+- `npm run verify`: 15 of 17 run checks pass, check 1 skipped (no emcc). Checks 15 and 16 (world-scale, map-isolation)
+  failed with `net::ERR_CONNECTION_REFUSED` loading the city map in this container. Not compared against main, so that is
+  an environment failure I have not proven pre-existing. Nothing here touches physics or the build.
+
+### What went wrong
+
+First fit tried: less padding and a smaller title. It cut the overhang from 18 px to 3 px and then stopped moving, because
+Back was really 10 px under the bar at 844 by 390 and 38 px under at 360. Reverted for the two column list.

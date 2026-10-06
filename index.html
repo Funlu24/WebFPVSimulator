@@ -4955,6 +4955,16 @@
         .screen-credits .menu-stage { margin-top: 0; }
         .screen-credits .menu { padding-top: 4px; padding-bottom: 4px; }
       }
+      /* SEVEN ROWS, A WIDE PHONE ON ITS SIDE. The Instagram row made it
+         seven, and at 44 px each they no longer fit a window 390 px tall
+         however tight the air is, and a 360 px one is 38 px short. The rows
+         keep their 44 px targets and go two to a line, so the list is four
+         lines tall: Partners, Support / Buy Mat a battery, Instagram / FPV
+         wiki, Report a bug / Back. Row order in the DOM is unchanged, so
+         the keys still walk it in the same order. */
+      @media (max-height: 520px) and (min-width: 600px) {
+        .screen-credits .menu { display: grid; grid-template-columns: 1fr 1fr; }
+      }
       /* And a shorter phone on its side, 360 px tall, a common Android
          size, where the steps above still left Back 15 px under the bar.
          The title is in the top bar's band there, clear of its crumb on the

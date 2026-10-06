@@ -40,6 +40,11 @@ export const TIP_URL = 'https://donate.stripe.com/7sY4gzaAC2Eu3aOews8so0g';
 
 export const PATREON_NOTE = 'Support WebFPV on Patreon. Keep the lights on, $3. Hosting + runway, $8. Build the sim, $20. Your sign in the sim, $25. USD a month.';
 
+/* The public page. Opened from script only, so no ?ref= or utm is added. */
+export const INSTAGRAM_URL = 'https://www.instagram.com/webfpv_org/';
+
+export const INSTAGRAM_NOTE = 'WebFPV on Instagram: clips, maps and updates. Opens in a new tab.';
+
 export const TIP_NOTE = 'Buy Mat a battery with a one-off $5 tip. Opens Stripe, amount can be changed.';
 
 /* Patreon's symbol. Do not restyle the path. */
@@ -126,5 +131,17 @@ export function openTip() {
     }
   } catch (e) {
     /* No beacon */
+  }
+}
+
+/*
+ * The Instagram row. No beacon: the board's events endpoint records a
+ * support click by source only and has no target to carry "instagram", so
+ * there is nothing for it to count.
+ */
+export function openInstagram() {
+  const tab = window.open(INSTAGRAM_URL, '_blank', 'noopener,noreferrer');
+  if (tab) {
+    tab.opener = null;
   }
 }

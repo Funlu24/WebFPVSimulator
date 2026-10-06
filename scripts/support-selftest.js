@@ -22,7 +22,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { PATREON_NOTE, PATREON_URL, bindPatreon, openSupport } from '../src/share/patreon.js';
+import { INSTAGRAM_NOTE, INSTAGRAM_URL, PATREON_NOTE, PATREON_URL, bindPatreon, openInstagram, openSupport } from '../src/share/patreon.js';
 
 const PAGE = 'https://www.patreon.com/cw/webfpv/membership';
 const rows = [];
@@ -81,6 +81,19 @@ check('beacon: one a press', beacons.length === 1, `${beacons.length} sent`);
 check('beacon: the visit ping endpoint', b.url === 'https://webfpv.org/board/api/stats/events', b.url);
 check('beacon: body', body === '{"v":1,"kind":"support_click","source":"sim","target":"patreon"}', body);
 check('beacon: text/plain', /^text\/plain(;|$)/.test(b.blob && b.blob.type), b.blob && b.blob.type);
+
+/* The Instagram row: same window features, no query, no beacon, no dashes. */
+opened.length = 0;
+beacons.length = 0;
+openInstagram();
+const ig = opened[0] || {};
+check('Instagram: one tab', opened.length === 1, `${opened.length} opened`);
+check('Instagram: href, no ref or utm', ig.url === 'https://www.instagram.com/webfpv_org/' && INSTAGRAM_URL === ig.url, ig.url);
+check('Instagram: target', ig.target === '_blank', ig.target);
+check('Instagram: rel, as window features', ig.features === 'noopener,noreferrer', ig.features);
+check('Instagram: opener nulled', Boolean(ig.tab) && ig.tab.opener === null, ig.tab && ig.tab.opener);
+check('Instagram: no beacon', beacons.length === 0, `${beacons.length} sent`);
+check('Instagram: note has no dash', !/[\u2013\u2014]/.test(INSTAGRAM_NOTE), INSTAGRAM_NOTE);
 
 nav.globalPrivacyControl = true;
 press();
