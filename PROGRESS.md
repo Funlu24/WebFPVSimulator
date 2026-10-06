@@ -66905,6 +66905,17 @@ The panel's bottom against the top of the command bar, on arrival, touch, before
     800 x 360   33 px under    1 px, the panel's own bottom edge; the Back row ends at 307 and the bar is at 308
     740 x 360                  0
     667 x 375                  0
+    640 x 360                  0; the Back row ends at 304 and the bar is at 308
+    568 x 320                  8 px; the panel stops at 276 and the list scrolls inside it
+
+568 by 320, the first iPhone SE on its side, cannot fit six 44 px rows: under the title their panel ends at 306 and the
+bar starts at 268. The list scrolls inside its panel there, as it did before. The chip rows rule for windows 640 px wide
+and narrower (`.chip-rows-1 .screen:not(.screen-title)` in index.html) outranks this top padding but never reaches About:
+syncChipRows in src/ui/ui.js counts the bug chip and the music dock, and About shows neither.
+
+On arrival the note for the row under the cursor is now the next thing below the panel, so it starts in the command
+bar's band, dimmed by the bar's fade, where half the Back row was; the page scrolls to it. At 640 px wide it begins under
+the bar's legend. Left as it is, and it shows in the pictures the owner was sent.
 
 ### RUN LOG
 
@@ -66914,6 +66925,8 @@ The panel's bottom against the top of the command bar, on arrival, touch, before
     lint:devices      2 problems, the whoop room tablet card at 1024x768 and 1180x820, the same two as main in the
                       sweep of 5 October
     pictures          before and after at 844 by 390 and 800 by 360, sent to the owner in the thread, not committed
+    probe             640 by 360 and 568 by 320, after the pictures went, the table's last two lines
+    lint:shell        PASS again after main's #38 (the Quad Configurator sign) was merged in, credits 0 px at 844x390
     not run           npm run verify: no physics, plant, module ABI or build change
 
 ### What went wrong
