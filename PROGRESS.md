@@ -66937,4 +66937,10 @@ the bar's legend. Left as it is, and it shows in the pictures the owner was sent
 
 ### To main
 
-Not pushed: the owner asked to see it before it goes live.
+Not pushed at first: the owner asked to see it before it goes live. The before and after pictures went to the owner in
+the thread at 04:34 UTC, and the owner's word came at 05:46 UTC on 2026-10-06, on the decision card "Push the Credits fit
+for sideways phones to main?": "Push". Its consequence read "It goes live on webfpv.org; open Credits on your phone on
+its side and Back should sit fully above the bottom bar", so the check after it is the owner's own phone. The card's
+context said the push also carries this branch's two progress notes of 5 and 6 October (204385d, 3275779), which are
+text only, and the approval covers those, the fit (ce0238f), the merge of main's #38 (b2dce88) and the measurements
+after it (d08e2a4). Main fast forwarded from ed666ac with this note on top.
