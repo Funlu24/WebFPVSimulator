@@ -67278,3 +67278,9 @@ Inferred: yaw is declared on an Android axis that Chrome's fallback drops or fol
 Open the sim on the Pixel 9, fly a few seconds moving ONLY the yaw stick full left, full right, then send Report a bug.
 `stick.map.raw.buttons` shows whether yaw is on a button. If it shows nothing, the phone never delivers it and the only
 way round is a computer.
+
+### To main
+
+Mat, 2026-10-06 14:43 UTC, in the thread, after being offered none, cheap, shots, verify or fly it: "push to main". It covers
+this change only (the raw axis and button readout in the stick report). Fetched main first: origin/main is an ancestor of
+this branch, so a fast forward.
