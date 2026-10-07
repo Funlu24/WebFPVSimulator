@@ -2563,7 +2563,7 @@ export async function buildMap(shell, onProgress, options) {
   /* groundAuto: the bake has folded colour into vertices and merged the
    * town's roads, walls and cars into shared materials, so its ground
    * cannot be marked material by material (render/comic.js, GROUND). */
-  setComicQuality(q, { groundAuto: true });
+  setComicQuality(q, { groundAuto: true, edges: true });
   const pipeline = new CityPipeline(renderer, scene, camera, {
     /*
      * 2.6e6 on High, not the town's own 4.6e6.

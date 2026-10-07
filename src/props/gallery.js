@@ -54,8 +54,12 @@ import { PropKit } from './kit.js';
 import { placedYaw } from './solids.js';
 import { sincos } from './trig.js';
 import { defaultDims, ELEMENTS } from '../trackbuilder/elements.js';
+import { setComicQuality } from '../render/comic.js';
 
 const params = new URLSearchParams(window.location.search);
+/* The comic layer as a built map at High sets it, edge highlights and the
+ * leaf clumps included, so an asset looks here the way it flies. */
+setComicQuality({ id: 'high' }, { edges: true });
 /* The time of day and the ground, as a built map would have them. */
 const timeId = Object.prototype.hasOwnProperty.call(TIMES, params.get('time')) ? params.get('time') : 'golden';
 const T = TIMES[timeId];

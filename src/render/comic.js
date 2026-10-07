@@ -110,6 +110,9 @@ export const COMIC = {
   /* 1 where a map's ground cannot be marked material by material, and its
    * up facing surfaces are told apart by colour instead. See GROUND. */
   groundAuto: { value: 0 },
+  /* 1 where the map's ink draws edge highlights and wants each surface's
+   * light in the scene's alpha. See EDGE HIGHLIGHTS. */
+  edge: { value: 0 },
 };
 
 /*
@@ -149,7 +152,8 @@ export function markGround(root) {
 /* Per preset. Low is the integrated laptop and the phone that has already
  * given up shadows and ink for fill rate; it keeps none of this, and the
  * guard in the shader is a uniform branch, so a zero skips the arithmetic
- * without a second program. */
+ * without a second program. The occlusion and the outer line are High's
+ * alone and the edge highlights Medium's and High's (setComicQuality). */
 const LEVELS = {
   low: { hatch: 0, grit: 0, brush: 0, detail: 0 },
   /* Medium is the integrated laptop: strokes and grit, not the brush
@@ -160,10 +164,11 @@ const LEVELS = {
   high: { hatch: 1, grit: 1, brush: 1, detail: 1 },
 };
 
-export function setComicQuality(q, { groundAuto = false } = {}) {
+export function setComicQuality(q, { groundAuto = false, edges = false } = {}) {
   const id = q && q.id ? q.id : 'high';
-  /* Every map sets this when it builds, so leaving the town clears it. */
+  /* Every map sets these when it builds, so leaving the town clears them. */
   COMIC.groundAuto.value = groundAuto ? 1 : 0;
+  COMIC.edge.value = edges && id !== 'low' ? 1 : 0;
   const lv = LEVELS[id] || LEVELS.high;
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
@@ -175,6 +180,7 @@ export function setComicQuality(q, { groundAuto = false } = {}) {
   }
   COMIC.detail.value = COMIC.detailMap.value ? lv.detail : 0;
   aoOn = id === 'high';
+  edgesOn = id !== 'low';
 }
 
 /*
@@ -543,6 +549,10 @@ uniform sampler2D uComicDetailMap;
 uniform float uComicGround;
 uniform float uComicGroundAuto;
 uniform float uComicFoliage;
+uniform float uComicEdge;
+/* How much sun this surface has, for the ink's edge highlights: written
+ * by comicShade, read by FRAG_TAIL. */
+float comicLit = 0.0;
 
 /* No sine in either: a sine's precision is the driver's, and a stroke
  * should land in the same place on every GPU. */
@@ -608,6 +618,15 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
   float square = smoothstep( 0.12, 0.38, facing );
   /* Ground, marked or, in the town, everything (GROUND, above). */
   float ground = max( uComicGround, uComicGroundAuto );
+
+  /* The sun on this surface, for the ink's edge highlights (EDGE
+   * HIGHLIGHTS, below): its share of the light, as the hatching reads it,
+   * so a face in a cast shadow has none. */
+  if ( uComicEdge > 0.0 ) {
+    float el = dot( direct, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float es = dot( sunFull, vec3( 0.2126, 0.7152, 0.0722 ) );
+    comicLit = clamp( es > 1e-5 ? el / es : 1.0, 0.0, 1.0 );
+  }
 
   if ( uComicGrit > 0.0 ) {
     /* Paint grit: two octaves of mottle in the base colour, the hand
@@ -754,6 +773,13 @@ const FRAG_BODY = /* glsl */ `
 	#endif
 `;
 
+/* The alpha an opaque surface writes for the ink's edge highlights (EDGE
+ * HIGHLIGHTS, pass 21): LIT_BASE in shade, up to LIT_BASE + LIT_SPAN in
+ * full sun. Above every blob code below and under the one that every other
+ * surface writes, which the ink reads as no code at all. */
+const LIT_BASE = 0.84;
+const LIT_SPAN = 0.14;
+
 /*
  * A CANOPY BLOB'S CODE, for the town's ink (graphics pass 19).
  *
@@ -783,11 +809,17 @@ const FRAG_BODY = /* glsl */ `
  * the material is opaque, and only after three's last chunk, so nothing
  * else in the frame changes. The ink half is in comicPipeline's blobs
  * option; a map that marks nothing pays one fetch on a crease's pixels.
+ *
+ * Since pass 21, on a map that draws edge highlights, every other opaque
+ * toon surface writes its sun there too (LIT_BASE above), and the ink is
+ * still the only thing that reads it.
  */
 const FRAG_TAIL = /* glsl */ `
 	#ifdef OPAQUE
 		if ( uComicBlob > 0.0 ) {
 			gl_FragColor.a = 0.25 + floor( vComicBlob * 128.0 ) / 256.0;
+		} else if ( uComicEdge > 0.0 ) {
+			gl_FragColor.a = ${LIT_BASE.toFixed(2)} + ${LIT_SPAN.toFixed(2)} * comicLit;
 		}
 	#endif
 `;
@@ -826,6 +858,7 @@ function inject(shader, material) {
     },
   };
   shader.uniforms.uComicGroundAuto = COMIC.groundAuto;
+  shader.uniforms.uComicEdge = COMIC.edge;
   shader.uniforms.uComicFoliage = {
     get value() {
       return material.userData.comicFoliage ? 1 : 0;
@@ -944,6 +977,7 @@ export function comicPipeline(pipeline, { blobs = false } = {}) {
   pipeline.comicAo = gl2 && comicAoOn() && addPipelineAo(pipeline);
   pipeline.comicSil = gl2 && comicAoOn() && addPipelineSil(pipeline);
   pipeline.comicBlobs = gl2 && blobs && addPipelineBlobs(pipeline);
+  pipeline.comicEdges = gl2 && comicEdgesOn() && addPipelineEdges(pipeline);
   const ink = pipeline.ink && pipeline.ink.mat && pipeline.ink.mat.uniforms;
   if (ink) {
     if (ink.uInk) {
@@ -1210,6 +1244,110 @@ function addPipelineBlobs(pipeline) {
 ${INK_MAIN_AT}`)
     .replace(INK_CONVEX_AT, `      /* The comic layer's canopy blobs: src/render/comic.js. */
       float convex  = comicBlobConvex( vUv, t, max( 0.0,  sx ), max( 0.0,  sy ) );`);
+  mat.needsUpdate = true;
+  return true;
+}
+
+/*
+ * EDGE HIGHLIGHTS (pass 21): the fifth of the plan's five, and the one the
+ * first twenty passes left. A painter picks out the top edge of a crate, a
+ * parapet, a step or a car's roof in a light colour where the sun catches
+ * it, which is most of what makes a surface read as a made thing with a
+ * worn edge rather than a fold in a sheet. The ink already finds every
+ * convex crease, so the highlight costs one fetch on a crease's pixels
+ * and nothing elsewhere: on the half of a crease's line that lies on the
+ * face in more sun, the ink gives way to a pale, warm stroke, and the half
+ * on the face in less stays ink. A crease between two faces in the same
+ * light, a silhouette and an inside corner are ink as before.
+ *
+ * Which half is sunlit is the one thing depth cannot say, and a normal
+ * rebuilt from the depth's derivative cannot either: at the crease itself
+ * the derivative straddles both faces, and the first try drew every
+ * highlight as a dotted line. The surface knows exactly, so it says: an
+ * opaque toon surface writes its sun into the scene's alpha (FRAG_TAIL,
+ * LIT_BASE), the channel the canopy blobs already use and nothing else
+ * reads. The ink reads the centre's from the fetch it already makes, and
+ * the far face's with one exact fetch at the tap across the crease, only
+ * on a pixel that is a convex crease in the sun. Medium and High, in the
+ * town and the yard; Low compiles none of it.
+ *
+ * Not on the race field. Its chain blooms from the scene's alpha, so it
+ * cannot carry the code, and the same rule on its prepass normals (the
+ * brighter of the two faces, by the sun in view space) was tried: the
+ * normals are one aliased sample a pixel, the brighter face flips from
+ * pixel to pixel along an edge, and the start blocks came out speckled
+ * with white. The field's few hard edges keep their ink.
+ */
+let edgesOn = true;
+export function comicEdgesOn() {
+  return edgesOn;
+}
+
+/* The stroke: the surface's own colour carried this far toward a warm
+ * paper white, so a red container's edge is a pale red and not a white
+ * wire. */
+export const EDGE_TINT_GLSL = 'vec3( 1.0, 0.95, 0.84 )';
+export const EDGE_MIX = 0.6;
+
+/* Where the highlights fade, in metres: well inside the ink's own fade
+ * (40 to 98 m), because past a few tens of metres a lip is a pixel wide
+ * and a crease's line breaks up along a roof edge into a row of dashes. */
+const EDGE_NEAR = 18;
+const EDGE_FAR = 45;
+
+/* Where the vendored ink pass writes its colour, exactly as
+ * src/maps/city/vendored/core/post.js has it. */
+const INK_OUT_AT = '      gl_FragColor = vec4( mix( col, line, clamp( edge, 0.0, 1.0 ) ), 1.0 );';
+
+/* The centre's fetch, kept whole so its alpha is read with its colour. */
+const INK_CENTRE = `    void main() {
+      vec4 comicCentre = texture2D( tDiffuse, vUv );
+      vec3 col = comicCentre.rgb;`;
+
+function addPipelineEdges(pipeline) {
+  const mat = pipeline.ink && pipeline.ink.mat;
+  if (!mat) {
+    return false;
+  }
+  const fs = mat.fragmentShader;
+  if (!fs.includes(INK_MAIN_AT) || !fs.includes(INK_LINE_AT) || !fs.includes(INK_OUT_AT)) {
+    return false;
+  }
+  const lo = (LIT_BASE - 0.005).toFixed(3);
+  mat.fragmentShader = fs
+    .replace(INK_MAIN_AT, `    /* The sun a surface wrote into the scene's alpha (FRAG_TAIL), 0 to 1,
+     * and -1 where nothing wrote one. */
+    float comicEdgeSun( float a ) {
+      return a > ${lo} && a < 0.995 ? ( a - ${LIT_BASE.toFixed(2)} ) * ${(1 / LIT_SPAN).toFixed(4)} : -1.0;
+    }
+${INK_CENTRE}`)
+    .replace(INK_LINE_AT, `      /* The comic layer's edge highlights: src/render/comic.js. A convex
+       * crease on a sunlit surface, whose far side is a surface in less sun,
+       * continuous with it in depth: the top of a box meeting its side, or a
+       * lit wall turning a corner into shade. The brighter face's half of
+       * the line is the highlight and the darker face's half stays ink. A
+       * silhouette stays ink, since its nearer tap is its own surface. */
+      float comicHl = 0.0;
+      {
+        float sunC = comicEdgeSun( comicCentre.a );
+        float cand = smoothstep( uSens * 0.32, uSens, convex ) * smoothstep( 0.35, 0.6, sunC );
+        if ( cand > 0.0 ) {
+          /* Across the crease: on the axis that bends more, the tap nearer
+           * the centre's depth, since the far one may be past a silhouette. */
+          bool across = sx > sy;
+          bool first = across ? abs( dl - dc ) < abs( dr - dc ) : abs( du - dc ) < abs( dd - dc );
+          vec2 o = across ? vec2( first ? -t.x : t.x, 0.0 ) : vec2( 0.0, first ? t.y : -t.y );
+          float d = across ? ( first ? dl : dr ) : ( first ? du : dd );
+          ivec2 s = textureSize( tDiffuse, 0 );
+          float b = comicEdgeSun( texelFetch( tDiffuse, clamp( ivec2( ( vUv + o ) * vec2( s ) ), ivec2( 0 ), s - 1 ), 0 ).a );
+          comicHl = cand * step( -0.5, b ) * smoothstep( 0.1, 0.3, sunC - b )
+            * ( 1.0 - smoothstep( 0.02, 0.06, abs( d - dc ) / dc ) )
+            * ( 1.0 - smoothstep( ${EDGE_NEAR.toFixed(1)}, ${EDGE_FAR.toFixed(1)}, dc ) );
+        }
+      }
+${INK_LINE_AT}`)
+    .replace(INK_OUT_AT, `      gl_FragColor = vec4( mix( mix( col, line, clamp( edge * ( 1.0 - comicHl ), 0.0, 1.0 ) ),
+        mix( col, ${EDGE_TINT_GLSL}, ${EDGE_MIX.toFixed(2)} ), clamp( comicHl, 0.0, 1.0 ) ), 1.0 );`);
   mat.needsUpdate = true;
   return true;
 }

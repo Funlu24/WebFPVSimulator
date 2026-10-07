@@ -1253,7 +1253,7 @@ export async function buildMap(shell, onProgress, options) {
   colliders.build();
   progress(0.9);
 
-  setComicQuality(q);
+  setComicQuality(q, { edges: true });
   const pipeline = new BuiltPipeline(renderer, scene, camera, {
     pixelBudget: q.city.pixelBudget,
     minScale: q.city.minScale,

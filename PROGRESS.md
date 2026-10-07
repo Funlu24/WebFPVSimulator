@@ -68361,3 +68361,59 @@ append conflict at the end of this file and nothing else in these files.
   shader error, and the town's sky shot there with the heaps and the streaks drawn. The usual one refused board
   connection per run.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.
+
+### Pass 21, same day: edge highlights, a pale lip where the sun catches an edge
+
+- The plan's fifth item, and the one the first twenty passes left. A painter picks out the top of a crate, a parapet,
+  a step or a car's roof in a light colour where the sun lands on it, and that is most of what makes a surface read as
+  a made thing with a worn edge rather than a fold in a sheet. The town and the yard had ink on every such edge and
+  nothing pale anywhere. The ink already finds every convex crease, so on the half of a crease's line that lies on the
+  face in more sun the ink now gives way to a pale, warm stroke, the surface's own colour carried 60 percent toward a
+  warm paper white (so a red container's edge is a pale red, not a white wire), and the half on the face in less sun
+  stays ink. A crease between two faces in the same light, a silhouette and an inside corner ink as before. Parapets,
+  balcony slabs, eaves, container tops, corner posts and door bars, the cars' roofs, bonnets, mirrors and wheel arches
+  and the van's roof rack pick up lips (`addPipelineEdges` in `src/render/comic.js`).
+- Which face is in more sun is the one thing depth cannot say, so the surface says it. On a map that draws edge
+  highlights, every opaque toon surface writes its share of the sun, as the hatching reads it, into the scene target's
+  alpha, the channel pass 19's canopy blobs use and nothing else reads: 0.84 in shade to 0.98 in full sun, above every
+  blob code and under the 1.0 every other surface writes, which reads as no code (`FRAG_TAIL`, `LIT_BASE`). The ink
+  pass reads the centre's from the fetch it already made, and, only on a pixel that is a convex crease in the sun, the
+  far face's with one exact fetch at the tap across the crease: on the axis that bends more, the tap nearer the centre
+  in depth, and only when that tap is continuous with the centre in depth, so a silhouette's far side is never
+  compared. The flight canvas is opaque and the ink writes 1.0 over the code, so nothing reaches the page.
+- Faded from 18 m to 45 m, well inside the ink's own fade (40 to 98 m), because past a few tens of metres a lip is a
+  pixel wide and a crease's line breaks into dashes along a roof edge.
+- Presets: Medium and High, on the town and the yard. Low compiles none of the ink's half and writes no code (the
+  uniform is zero), and a browser without WebGL 2 gets none of it, behind `comicGL2` like the rest of the layer. The
+  prop gallery now sets the comic layer as a built map does at High (`src/props/gallery.js`), so an asset looks there
+  the way it flies; it never set it before and drew with the module's defaults.
+- Cost: no new pass, target, draw call or program. In the toon shader a uniform branch and a few multiplies; in the ink
+  pass a few ALU operations a pixel and the one fetch on a sunlit crease's pixels. The budget probe's static count of
+  the ink pass, before (4ef0421, a worktree) and after: the town 23 to 24 on High and 11 to 12 on Medium, the yard 18
+  to 19 on High and 6 to 7 on Medium. P3 and P4 unchanged: the race field's post chain is untouched (its toon
+  programs carry the branch with the uniform at zero), and verify reads only the field.
+- Not on the race field: tried and dropped. Its chain blooms from the scene's alpha, so it cannot carry the code, and
+  the same rule run on its prepass normals instead (the brighter of the two faces, by the sun in view space) first drew
+  a white outline round a flag against the turf, where the field's depth term does not see a near silhouette, and with
+  a continuity test added it speckled the start blocks with white: the prepass normals are one aliased sample a pixel,
+  and the brighter face flips from pixel to pixel along an edge. Reverted before anything was committed; the field's
+  few hard edges keep their ink.
+- What went wrong on the way. The first try rebuilt the normal from the depth's derivative in the ink pass, which at
+  the crease itself straddles both faces, and drew every highlight as a dotted line. The second tested for a jump in
+  the code between the taps either side, which fails on a crease seen at a grazing angle and drew dashes; fetching the
+  far face's code at the tap across the crease fixed it. A rule that lit only faces turned up took the ink off creases
+  between two lit faces and left a lit wall's corner into shade with none; the brighter face rule replaced it. And past
+  about 40 m the town's roof edges drew rows of dashes until the fade came in.
+- Found in the Low comparison, and not a change: two of the town's four Low pairs differed over most of the frame. The
+  rig shoots the launch view 2.5 s after the screen changes, which lands at a different moment of the camera's settle
+  each run, and the before run's 02 view is a repeat of its 01, so its camera move had not been drawn when the shot was
+  taken. The two comparable pairs, 01 and 03, differ by 68 and 599 pixels: the falling petals and the traffic.
+- Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
+  `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date (no new module). Shots of the town on High, Medium and
+  Low and of the yard on High, before (4ef0421, a worktree) and after; the prop gallery's containers, sedan, van,
+  warehouse and crane before and after; the budget probe above. The race field's five close views, shot alone after its
+  trial was reverted, against before: only the waving flags differ. WebGL 1 (webgl2 refused before the page's first
+  line): flight on the town at High and Medium and on the yard at High, and the gallery, with no shader error, and the
+  yard's frame drawn with its models and clouds; WebGL 2 flight on the town and the yard at High with none. The usual
+  one refused board connection per run.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.
