@@ -68639,3 +68639,41 @@ append conflict at the end of this file and nothing else in these files.
   the comment corrections, which change what is freed and not what is drawn; the Low, yard and WebGL runs, the timing
   and the memory checks came after both.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and no solid moved.
+
+### Pass 25, same day: the pictures the game takes of itself, regenerated
+
+- The owner, at 22:53Z: one more round, then an assessment of progress, then a regression and performance sweep. This
+  is that round. The front door's cards, the town's world card still and the share card are frames of the real
+  renderer, made by `npm run gen:gatecards`, `npm run gen:posters` and `npm run gen:og`, and every one of them still
+  showed the look from before this branch. Regenerated at High: the race, freestyle and builder cards (`assets/gate/`)
+  and the town's still (`assets/posters/city.jpg`). Pictures, shipped against regenerated:
+  `/mnt/project-files/graphics-pass/round13/`.
+- Kept as shipped, two of them. The whoop card: regenerated, the room's tubes come out inked solid black on High and
+  the red pole loses its colour (round13's `whoop-tubes-inked-solid.jpg`), which is this branch's heavier ink at the
+  room's scale and not a picture to put on the front door; it goes to the sweep below. The share card: its camera
+  (og.js's CAM) now looks at an empty field, no gate, no markers and no parked quad, on main as on this branch
+  (checked at dc3141a), because the title's world no longer seats the course the card was composed on. A new frame is
+  the owner's call, so `og.png` stays the card of 2026-08-21.
+- Found: every generator that captures through `scripts/shots.js` fails on this container. The page's stats ping
+  (`POST /api/stats/events` to the board's local origin, 127.0.0.1:3100) is refused, and shots.js fails a run on any
+  console error, so gen:gatecards, gen:posters and gen:og each exited 1 before writing anything. The captures here ran
+  with a stand in for the board on 3100 that answers every request (a scratch script, not committed), and it was asked
+  for nothing but that ping. shots.js is unchanged: whether a refused ping should fail a capture is a call about the
+  harness, and `captureBuilder` already makes the opposite call for the builder.
+- Found and fixed: og.js's hide list was written before the gate (2026-09-09), so the regenerated share card had the
+  four gate cards over the whole field; it now hides gatecards.js's list without `.brand`, and the Patreon chip.
+  gatecards.js's builder list was written before the map's bar (2026-10-01) and the preview's Play box (2026-09-26),
+  and the regenerated builder card had both over the drawing; both are hidden now, the Play box after the preview's
+  kit has arrived, because it is made then.
+- The freestyle card: the town at High boots in more than shots.js's 20 s here, so the generator's first `until`
+  failed. It was captured with the generator's own steps (camera, animation step, hide list, frame wait) through
+  shots.js, with a 40 s wait before the first `until`. The generator is unchanged.
+- Found, from pass 23: the builder's 3D preview draws its trees as clumps, because `PropKit` defaults to clumps and
+  the preview has no quality preset. The builder card shows it. Left as it is for now, and measured in the sweep.
+- What went wrong: the first run of the three generators failed on the ping, the second on the town's boot, and two of
+  the first regenerations (the share card, the builder card) photographed chrome over the picture; each was read
+  before anything was copied over a shipped file, and nothing failed half way, because the generators copy only once
+  every capture has succeeded.
+- Checks: `node --check` on both scripts; every capture that was kept logged 0 console errors and 0 harness faults;
+  each regenerated picture read by eye against the one it replaces. Not run for this pass on its own:
+  `npm run verify`, which the sweep below runs.
