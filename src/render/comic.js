@@ -120,6 +120,7 @@ export function setComicQuality(q) {
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
   COMIC.brush.value = lv.brush;
+  aoOn = id === 'high';
 }
 
 /* The heavier pen for the ink passes, as a factor on each pipeline's own
@@ -380,6 +381,7 @@ if (!P[INSTALLED]) {
  */
 export function comicPipeline(pipeline) {
   pipeline.inkWeight = INK_WEIGHT;
+  pipeline.comicAo = comicAoOn() && addPipelineAo(pipeline);
   const ink = pipeline.ink && pipeline.ink.mat && pipeline.ink.mat.uniforms;
   if (ink) {
     if (ink.uInk) {
@@ -404,4 +406,142 @@ export function comicPipeline(pipeline) {
       g.uLift.value = 0.014;
     }
   }
+}
+
+/*
+ * AMBIENT OCCLUSION, folded into each pipeline's ink pass on High only.
+ *
+ * What the ink and hatching cannot give the world is weight: a container
+ * sits ON the concrete, a gate leg stands IN the grass, an underpass is
+ * dark because the sky cannot see into it. That is occlusion, and it is the
+ * single largest difference between a stylised world that reads as a
+ * diorama and one that reads as finished.
+ *
+ * No new pass and no new target: the ink pass already holds the frame's
+ * depth (the field's packed prepass, the town's depth texture), so eight
+ * more fetches of it in a disc about the pixel give a hemisphere estimate.
+ * The disc's radius is a fixed distance in the world, so a contact shadow
+ * is the same size on a near box and a far one, clamped in pixels so a
+ * distant pixel never scatters fetches across the frame. The disc is
+ * turned per pixel by interleaved gradient noise, which trades banding for
+ * a fine dither the ink pass's own antialiasing and the town's fxaa soften.
+ *
+ * Eight fetches is the whole cost, at full resolution, on High only. Low
+ * and Medium compile without COMIC_AO and pay nothing, not even the branch.
+ *
+ * The including shader defines COMIC_AO_DEPTH(uv) as the linear view depth
+ * in metres at uv, and provides the uniforms below.
+ */
+/* Unrolled, so the budget's tap counter (src/render/budget.js) counts the
+ * eight fetches rather than flagging a loop it cannot see into. */
+const AO_TAPS = Array.from({ length: 8 }, (_, i) => {
+  const r = Math.sqrt((i + 0.5) / 8).toFixed(6);
+  const a = (i * 2.3999632).toFixed(6);
+  return `    {
+      float a = ang + ${a};
+      vec2 suv = clamp( uv + vec2( cos( a ), sin( a ) ) * ( ${r} * px ) / uAoRes, vec2( 0.0 ), vec2( 1.0 ) );
+      vec3 v = comicAoPos( suv, COMIC_AO_DEPTH( suv ) ) - P;
+      float len = length( v ) + 1e-4;
+      occ += max( 0.0, dot( N, v / len ) - 0.12 ) * ( 1.0 - smoothstep( uAoRadius * 0.6, uAoRadius * 1.6, len ) );
+    }`;
+}).join('\n');
+
+export const AO_GLSL = /* glsl */ `
+  uniform vec2 uAoTanHalf;
+  uniform vec2 uAoRes;
+  uniform float uAoRadius;
+  uniform float uAoStrength;
+  uniform float uAoFar;
+
+  vec3 comicAoPos( vec2 uv, float d ) {
+    return vec3( ( uv * 2.0 - 1.0 ) * uAoTanHalf * d, -d );
+  }
+
+  /* 1 is open, 0 is fully occluded. N is the view space normal, facing the
+   * camera. */
+  float comicAo( vec2 uv, vec3 P, vec3 N ) {
+    float d = -P.z;
+    if ( d > uAoFar ) {
+      return 1.0;
+    }
+    float px = uAoRadius / ( d * uAoTanHalf.y ) * 0.5 * uAoRes.y;
+    px = clamp( px, 3.0, 48.0 );
+    float ign = fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( 0.06711056, 0.00583715 ) ) ) );
+    float ang = ign * 6.2831853;
+    float occ = 0.0;
+${AO_TAPS}
+    occ /= 8.0;
+    float fade = 1.0 - smoothstep( uAoFar * 0.6, uAoFar, d );
+    return 1.0 - clamp( occ * uAoStrength * 1.6, 0.0, 0.85 ) * fade;
+  }
+`;
+
+/* The colour occlusion darkens toward: a cool, deep violet rather than
+ * black, so occluded corners stay in the same warm light, cool shadow
+ * logic as the ramps. */
+export const AO_TINT_GLSL = 'vec3( 0.32, 0.30, 0.46 )';
+
+export function aoUniforms() {
+  return {
+    uAoTanHalf: { value: new THREE.Vector2(1, 1) },
+    uAoRes: { value: new THREE.Vector2(1, 1) },
+    uAoRadius: { value: 1.2 },
+    uAoStrength: { value: 2.6 },
+    uAoFar: { value: 90 },
+  };
+}
+
+/* Called per frame by each pipeline: the camera's frustum, which a
+ * pilot's FOV setting or a resize can change at any moment. */
+export function updateAoCamera(u, camera, w, h) {
+  const t = Math.tan((camera.fov * Math.PI) / 360);
+  u.uAoTanHalf.value.set(t * camera.aspect, t);
+  u.uAoRes.value.set(w, h);
+}
+
+/* Whether the preset in force wants the occlusion. Read at pipeline build;
+ * a preset change rebuilds the world, and so the pipeline. */
+let aoOn = true;
+export function comicAoOn() {
+  return aoOn;
+}
+
+/* The vendored ink pass's lines the occlusion is inserted at, exactly as
+ * src/maps/city/vendored/core/post.js has them. If an update changes
+ * either, nothing is inserted and the pipeline draws as before. */
+const INK_MAIN_AT = `    void main() {
+      vec3 col = texture2D( tDiffuse, vUv ).rgb;`;
+const INK_LINE_AT = '      vec3 line = mix( uInk, col * 0.42, 0.22 );';
+
+function addPipelineAo(pipeline) {
+  const mat = pipeline.ink && pipeline.ink.mat;
+  if (!mat) {
+    return false;
+  }
+  const fs = mat.fragmentShader;
+  if (!fs.includes(INK_MAIN_AT) || !fs.includes(INK_LINE_AT)) {
+    return false;
+  }
+  mat.fragmentShader = fs
+    .replace(INK_MAIN_AT, `    #define COMIC_AO_DEPTH(uv) linearDepth(uv)
+${AO_GLSL}
+${INK_MAIN_AT}`)
+    .replace(INK_LINE_AT, `      /* The comic layer's occlusion: src/render/comic.js. No normal
+       * buffer here, so the depth's own derivative. */
+      {
+        vec3 aoP = comicAoPos( vUv, dc );
+        vec3 aoN = normalize( cross( dFdx( aoP ), dFdy( aoP ) ) );
+        aoN *= sign( dot( aoN, -aoP ) + 1e-6 );
+        col *= mix( ${AO_TINT_GLSL}, vec3( 1.0 ), comicAo( vUv, aoP, aoN ) );
+      }
+${INK_LINE_AT}`);
+  Object.assign(mat.uniforms, aoUniforms());
+  mat.needsUpdate = true;
+  /* The frustum, per frame, before the pipeline's own render. */
+  const render = pipeline.render;
+  pipeline.render = function comicRender(...args) {
+    updateAoCamera(mat.uniforms, this.camera, this.size.x, this.size.y);
+    return render.apply(this, args);
+  };
+  return true;
 }

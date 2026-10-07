@@ -53,7 +53,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { INK_WEIGHT, INK_COLOR } from './comic.js';
+import {
+  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn,
+} from './comic.js';
 
 /*
  * Depth is packed into two 8 bit channels rather than kept in a depth
@@ -128,6 +130,10 @@ const OutlineShader = {
      * drawn. */
     uAaBias: { value: 0.00008 },
     uAaAmount: { value: 1.0 },
+    /* The prepass's depth range, for the occlusion's metres. */
+    uGeoNear: { value: 0.1 },
+    uGeoFar: { value: 1000 },
+    ...aoUniforms(),
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -148,7 +154,13 @@ const OutlineShader = {
     uniform float uAaBias;
     uniform float uAaAmount;
     uniform float uInkWidth;
+    uniform float uGeoNear;
+    uniform float uGeoFar;
     ${PACK_GLSL}
+    #ifdef COMIC_AO
+    #define COMIC_AO_DEPTH(uv) (unpackDepth16(texture2D(tGeo, uv).zw) * (uGeoFar - uGeoNear) + uGeoNear)
+    ${AO_GLSL}
+    #endif
 
     /* Only xy is stored. z is reconstructed positive, which is what a
      * front facing surface has in view space anyway, and the two places it
@@ -262,6 +274,19 @@ const OutlineShader = {
       // never draw on the sky, and let very distant geometry go clean
       edge *= step(d0, 0.999) * (1.0 - smoothstep(0.16, 0.42, d0));
 
+      #ifdef COMIC_AO
+      /* The comic layer's occlusion (src/render/comic.js), High only. The
+       * prepass normal where there is one; grass and the promoted occluders
+       * carry the sentinel instead, and get the depth's own derivative. */
+      if (d0 < 0.999) {
+        vec3 aoP = comicAoPos(vUv, d0 * (uGeoFar - uGeoNear) + uGeoNear);
+        vec3 aoN = normalize(cross(dFdx(aoP), dFdy(aoP)));
+        aoN *= sign(dot(aoN, -aoP) + 1e-6);
+        aoN = grass > 0.5 ? aoN : n0;
+        float ao = comicAo(vUv, aoP, aoN);
+        resolved *= mix(${AO_TINT_GLSL}, vec3(1.0), ao);
+      }
+      #endif
       gl_FragColor = vec4(mix(resolved, uLineColor, edge), base.a);
     }
   `,
@@ -442,6 +467,12 @@ export function buildComposer(renderer, scene, camera, quality) {
     outline = new ShaderPass(OutlineShader);
     outline.uniforms.tGeo.value = normalTarget.texture;
     outline.uniforms.uResolution.value.set(w, h);
+    /* Occlusion on High only: the preset was set by buildFieldScene before
+     * this runs. A define, so Medium compiles none of it. */
+    if (comicAoOn()) {
+      outline.material.defines.COMIC_AO = 1;
+      outline.material.needsUpdate = true;
+    }
     composer.addPass(outline);
   }
 
@@ -644,6 +675,12 @@ export function buildComposer(renderer, scene, camera, quality) {
     const prevMask = camera.layers.mask;
     geoUniforms.uNear.value = camera.near;
     geoUniforms.uFar.value = camera.far;
+    if (outline) {
+      outline.uniforms.uGeoNear.value = camera.near;
+      outline.uniforms.uGeoFar.value = camera.far;
+      updateAoCamera(outline.uniforms, camera,
+        outline.uniforms.uResolution.value.x, outline.uniforms.uResolution.value.y);
+    }
 
     /* Pass one: everything that inks, as packed normals and depth. Layer 0. */
     scene.overrideMaterial = normalMaterial;

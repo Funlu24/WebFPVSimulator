@@ -67351,3 +67351,16 @@ no build, no file format, no setting.
   both states (1000, 910, 1001, 1001 ms), so the number measures the pacing and not the shader. No frame time claim is
   made for this branch; it wants a real GPU, which is the pilot's.
 - Shots, yard and field at High, after: same look as pass 3.
+
+### Pass 5, same day: ambient occlusion on High (Mat: "keep going, its not where near aaa quality graphics yet", 08:29Z, then "keep in mind performance etc etc and backward compatability")
+
+- `comic.js` `AO_GLSL`: eight unrolled depth fetches in a disc of 1.2 m in the world (3 to 48 px), turned per pixel by
+  interleaved gradient noise, a normal hemisphere test, faded out by 90 m, darkening toward a cool violet. Folded into
+  the existing ink pass of both pipelines: the field's outline pass reads its packed prepass (prepass normal, or the
+  depth's derivative on sentinel pixels); the town and yard's ink pass gets it by exact line insertion on the
+  pipeline's own material, as manga.js does, normal from the depth's derivative. High only, as a `#define` on the field
+  and a build time choice on the vendored pipeline, so Medium and Low compile none of it.
+- Cost: P3 and P5 unchanged (no pass, no target). P4 plus 8 full resolution taps on High. Not measured on a GPU.
+- Tuning by shots: strength 1.0 was invisible; 6.0 proved it ran (dark pillar bases and beam corners in the bando);
+  2.6 with a 1.2 m radius kept.
+- Cars are being refined in a separate worktree branch; not in this commit.
