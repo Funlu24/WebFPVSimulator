@@ -68553,3 +68553,82 @@ append conflict at the end of this file and nothing else in these files.
   flight on the yard at High, no shader error, the same 32 warnings as pass 22's run. WebGL 2: flight on the yard at
   High, Medium and Low and on the town at High, no shader error. The usual one refused board connection per run.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and no solid moved.
+
+### Pass 24, same day: the town's trees near the eye drawn as clumps
+
+- What read weakest after pass 23, from a fresh round of shots (the title, the race field's launch and air views, the
+  gallery's trees and eight views of the town's trees): the town's cherries and groves beside the quad. Since pass 15
+  the blobs near the eye are eighty faced and since pass 19 they ink as one shape each, so a cherry beside the quad
+  was a bunch of smooth, pale balloons, which is the fault pass 23 had just taken out of the yard.
+- On Medium and High (the quality table's `leafClumps`, which the yard has read since pass 23) the twin that
+  `roundCanopiesNear` in `src/maps/city/index.js` swaps in near the eye is now one of the yard's clumps of lumps: the
+  cherries' three tones take three shapes and the groves' three tones three more, under every blob's own turn and
+  squash, so no two blobs read alike. The swap is pass 15's, the mesh's geometry pointer written when a cull cell
+  crosses `leafRound` (25 m), so there is no new draw call, program or material. Low swaps nothing, as before.
+- `clumpBlob` and its constants moved out of `src/props/kit.js` into a module of their own, `src/render/clump.js`,
+  unchanged, because the kit's module pulls in the whole prop catalogue and the town fetches nothing from
+  `src/props` (memory-check's rule). The kit imports it from there, and `npm run gen:preload` added the module to the
+  town's and the built map's preload lists.
+- Size, measured rather than guessed: the mean silhouette, as the radius of a circle of the same area averaged over
+  300 directions. The far blob (twenty faces at radius 1) is 0.874 and pass 15's near blob 0.887; a clump at full
+  size is 0.954 on average over the seven shapes the town draws, so it is drawn at 0.92, the round blob's scale,
+  where it is 0.877, and a canopy does not swell when its cell comes near. The eighth shape is leaner than the rest
+  (0.857 at full size) and is left out of the town. 180 faces on 92 vertices where the round blob is 80 on 240.
+- No solid moved, and nothing a collider reads changed: the swap runs on the chunks after the colliders and the bake,
+  as pass 15's did. A town blob's solid is the box round its unturned ellipsoid (`collideLeaves` in the vendored
+  `trees.js`) and every blob is drawn turned inside it. A clump at 0.92 reaches at most 0.975 of the radius at the
+  top of a lump (0.93 to 0.975 over the seven shapes), so across the blob it stays inside the box as the round blob
+  did; above and below it a turned blob already reached past the box, and a clump reaches at most 0.055 of the
+  radius further there. The other side, which a pilot can feel: its valleys lie at about 0.69 of the radius, where
+  the far blob's faces lie at 0.79 and the round blob's at 0.86, so between two lumps the box stands up to a tenth
+  of the radius further out from the leaves than it does on Low, four to nine centimetres on a town blob (a cherry's
+  is 0.38 to 0.73 m, a grove's 0.5 to 0.9 m). The town flies as it did; brushing a near canopy stops the quad where
+  it stopped before, which can now be just short of a valley.
+- Corrected, about pass 23: it said the clumps' mean radius was about the round blob's, "so a tree is about as full
+  as it was". Measured the same way as above, a clump's mean silhouette is 6 percent wider than the round blob's
+  (0.941 over the eight shapes at full size, against 0.887), so a yard tree is a little fuller than it was before
+  pass 23. The comment in `src/render/clump.js` says so now. Nothing else about the yard changed.
+- The owner's answer, 2026-10-07 at 22:15Z, on the card about fuller crowns for the yard's trees (pass 23's open
+  question, leaves a quad flies through or more solids): keep the rule. No leaf is drawn without a solid, so the
+  yard's crowns stay as they are and every saved map with a tree in it flies as it did. `GRAPHICS-PLAN.md` records it.
+- Found and fixed: a leak since pass 15, on this branch only. The town's teardown walks its scene and frees each
+  mesh's current geometry, so a near set's twin was freed only if the set was showing it when the town was left; a
+  twin drawn once and then left behind stayed on the GPU, and pass 15 made new twins every time the town was built.
+  `dispose()` now frees every blob and twin the swap holds, and the clumps are made with each town and freed with
+  it. Found by reading, while checking the comment's claim that the town frees its clumps; not measured.
+- Cost, from `window.__renderStats()` at the eight cameras (the park view and seven by four trees), before (581e05d,
+  a worktree) and after, every pass counted: draw calls the same at every camera on High and Medium, triangles up 3.3
+  to 6.5 percent on High (1,281,743 to 1,365,243 at the park view, 1,430,164 to 1,512,664 beside a grove) and 2.6 to
+  6.6 percent on Medium. On Low the town builds no twin. Timed on SwiftShader, twelve drawn frames a view counted
+  from the GPU gate's own counter (the gate held none), two runs each of before and after, interleaved, at the park
+  view and beside a cherry and a grove: High 2,202, 2,435 and 2,513 ms a frame before and 2,166, 2,250 and 2,272
+  after (2, 8 and 10 percent less), Medium 1,601, 1,824 and 1,785 before and 1,681, 1,812 and 1,717 after (5
+  percent more, 1 and 4 percent less). Two runs of one build differ by up to 12 percent, so the clumps cost nothing
+  measurable here. The near views on High were faster in both runs, plausibly because a clump is 92 shared vertices
+  where the round blob was 240 unshared ones and the vertex shader runs once a vertex, but that is not proved. A
+  guide to arithmetic and not to a real machine. The rig of passes 22 and 23 counted frames in a 20 s window, which
+  in the town is 8 to 12 frames and so quantised by a tenth; this pass's rig times a fixed number of drawn frames for
+  that reason.
+- What went wrong on the way. A scripted edit to a comment assumed where its lines broke and stopped on its own
+  assertion; it was redone against the file's own text. The first draft of the comments said the lumps' tops reach
+  1.04 of the radius (1.01 to 1.06: the check scales some shapes out), that a clump at 0.92 reaches 0.96 (0.975),
+  that the fallback was "as on main" (the near twin is this branch's) and nothing about the valleys; each was
+  measured and corrected before the commit. Two of the eight town cameras sit inside a building and are not used as
+  evidence. On Low, three shots caught the previous camera in one of the two runs (the park view where the cherry
+  should be), which is the harness and not the frame. The pairing script had pass 23's labels written into it; a new
+  one takes them as arguments. The first timing run was the window count above and was stopped for it, and a wait
+  loop that matched its own command line never ended and was stopped by hand. The leak above.
+- Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
+  `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date after `npm run gen:preload`; `npm run check:props` all
+  passed (the kit changed); `node scripts/memory-check.js` passed at Low, the town and Your map lazy and freed, and a
+  copy of it at Medium, where the town makes its clumps, passed for the town (46 geometries before it, 452 while it
+  stood, 46 after); it holds the camera still, so it could not have seen the leak above. Shots before (581e05d) and
+  after: the town's eight tree views on High and Medium, the clumps visible beside the quad and the far views
+  unchanged in size; Low, four views pixel identical and one different only in 279 pixels where something moved, the
+  other three caught by the harness fault above; the yard's six tree views on High, five pixel identical and the sixth
+  different only where the traffic drove, so the kit draws as it did. Headless Chromium with webgl2 refused: flight on
+  the town at High, no shader error. WebGL 2: flight on the town at Medium and the yard at High, no shader error. The
+  usual one refused board connection per run. The High and Medium shots after were taken before the teardown fix and
+  the comment corrections, which change what is freed and not what is drawn; the Low, yard and WebGL runs, the timing
+  and the memory checks came after both.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and no solid moved.

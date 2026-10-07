@@ -38,7 +38,6 @@
  */
 
 import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PAL } from '../maps/city/vendored/core/palette.js';
 import { cel, flat } from '../maps/city/vendored/core/toon.js';
 import { bake } from '../maps/city/vendored/core/util.js';
@@ -50,6 +49,7 @@ import { styleOf, tiltOf } from './types.js';
 import { tiltMeasure, tiltParts } from './solids.js';
 import { assetOf, partsOf, FAMILY_MATERIALS, FAMILY_PAINTERS } from './catalog.js';
 import * as PT from './textures.js';
+import { clumpBlob, CLUMP_SHAPES, CLUMP_SQUASH } from '../render/clump.js';
 
 /* The town's standard shadow tints. */
 const T = 0x6f6790;
@@ -547,145 +547,11 @@ function roundBlob() {
 }
 
 /*
- * CLUMPS (graphics pass 23). A smooth blob on a twig is a balloon, and a
- * yard cherry of twenty of them was a bunch of balloons on sticks. A
- * painter draws a canopy as clumps, with a scalloped outline. So on Medium
- * and High (the quality table's leafClumps) each blob is a sphere broken
- * into lumps, as the race field's trees were the same day (lumpCanopy in
- * src/render/scene.js): one lump over each vertex of an icosahedron,
- * nudged off it, a quarter of them left out and the rest each with its own
- * height and width under a round cap profile, so they meet in valleys and
- * leave a hollow here and there. Eight such shapes, and every blob's own
- * spin and squash on top, so no two read alike. Low keeps the round blob.
- *
- * THE SOLID STAYS INSIDE. A blob's solid is a sphere of 0.78 of its
- * smaller radius (treeLayout in street.js), which in this shape's own frame
- * is inside an ellipsoid 0.78 up and 0.78 * CLUMP_SQUASH across, for any
- * blob no rounder than CLUMP_SQUASH. The valleys lie on a floor outside
- * that, the shape is then measured, and if any face came nearer than 1.03
- * of that ellipsoid the whole shape would be scaled out until none did.
- * So the solid is inside what is drawn, and only the tops of the lumps,
- * like the round blob's vertices before them, are drawn and not solid:
- * they reach 1.04 of the blob's radius where the round blob reached 0.92,
- * and the shape's mean radius is about the round blob's.
- *
- * The normals are half the sphere's and half the lumps'. The field's take
- * a quarter from their lumps, because a 42 vertex blob shaded with its own
- * normals breaks into a toon band per facet; these have 92 vertices, and
- * half lets each lump catch the light without the blob reading as a rock.
- *
- * 180 faces where the round blob has 80, on 92 shared vertices where it
- * has 240 unshared ones. No trigonometry: the lumps are dot products with
- * fixed directions, so the shape is the same bits in every engine, and it
- * draws nothing from the world's rng.
+ * CLUMPS (graphics pass 23): on Medium and High each blob is drawn as a
+ * clump of lumps, clumpBlob in src/render/clump.js, which says why and how
+ * the solid stays inside it. The town draws its near canopies with the
+ * same shapes since pass 24, which is why they live there and not here.
  */
-const PHI = (1 + Math.sqrt(5)) / 2;
-const LUMP_AT = [
-  [0, 1, PHI], [0, -1, PHI], [0, 1, -PHI], [0, -1, -PHI],
-  [1, PHI, 0], [-1, PHI, 0], [1, -PHI, 0], [-1, -PHI, 0],
-  [PHI, 0, 1], [-PHI, 0, 1], [PHI, 0, -1], [-PHI, 0, -1],
-];
-const CLUMP_SHAPES = 8;
-/* The lumps' valleys lie on this ellipsoid and their tops reach CLUMP_TOP. */
-const CLUMP_FLOOR_XZ = 0.74;
-const CLUMP_FLOOR_Y = 0.82;
-const CLUMP_TOP = 1.04;
-/* The roundest blob a clump is proved for, as ry over r. Every tree in
- * street.js is 0.92 or flatter; anything rounder is drawn round. */
-const CLUMP_SQUASH = 0.92;
-const CLUMP = [];
-
-function unitOf(x, y, z) {
-  const l = Math.sqrt(x * x + y * y + z * z);
-  return [x / l, y / l, z / l];
-}
-
-function clumpBlob(shape) {
-  let g = CLUMP[shape];
-  if (g) {
-    return g;
-  }
-  let seed = (0x3c6ef372 + Math.imul(shape + 1, 0x9e3779b9)) >>> 0;
-  const rnd = () => {
-    seed = (seed + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  /* Each lump: its direction, its height (none for a quarter of them),
-   * and the cosine of its angular radius, 42 to 55 degrees, so neighbours
-   * (63 degrees apart) overlap. */
-  const lumps = LUMP_AT.map(([x, y, z]) => {
-    const d = unitOf(x, y, z);
-    return {
-      d: unitOf(d[0] + (rnd() - 0.5) * 0.36, d[1] + (rnd() - 0.5) * 0.36, d[2] + (rnd() - 0.5) * 0.36),
-      h: rnd() < 0.25 ? 0 : 0.75 + 0.25 * rnd(),
-      c0: 0.574 + 0.17 * rnd(),
-    };
-  });
-  const sphere = new THREE.IcosahedronGeometry(1, 2);
-  sphere.deleteAttribute('normal');
-  sphere.deleteAttribute('uv');
-  g = mergeVertices(sphere);
-  sphere.dispose();
-  const p = g.attributes.position;
-  const unit = new Float32Array(p.count * 3);
-  for (let i = 0; i < p.count; i += 1) {
-    const d = unitOf(p.getX(i), p.getY(i), p.getZ(i));
-    let n = 0;
-    for (const L of lumps) {
-      const c = d[0] * L.d[0] + d[1] * L.d[1] + d[2] * L.d[2];
-      if (c > L.c0) {
-        /* (1 - c) / (1 - c0) is the square of the angle over the
-         * radius, near enough, so this is a round cap. */
-        n = Math.max(n, L.h * Math.sqrt(1 - (1 - c) / (1 - L.c0)));
-      }
-    }
-    const floor = 1 / Math.sqrt((d[0] * d[0] + d[2] * d[2]) / (CLUMP_FLOOR_XZ * CLUMP_FLOOR_XZ)
-      + (d[1] * d[1]) / (CLUMP_FLOOR_Y * CLUMP_FLOOR_Y));
-    const rho = floor + (CLUMP_TOP - floor) * n;
-    unit[i * 3] = d[0];
-    unit[i * 3 + 1] = d[1];
-    unit[i * 3 + 2] = d[2];
-    p.setXYZ(i, d[0] * rho, d[1] * rho, d[2] * rho);
-  }
-  /*
-   * The solid, in this shape's own frame: 0.78 of the smaller radius is
-   * 0.78 up the y axis and at most 0.78 * CLUMP_SQUASH across it. Stretched
-   * so that ellipsoid is the unit ball, no face may come nearer the centre
-   * than 1.03, and if one does the shape is scaled out until none does.
-   * The nearest point of each face, not of its plane: a face down the steep
-   * side of a lump has a plane that passes close to the centre, and the
-   * plane is the test that scaled every shape out by a quarter.
-   */
-  const k = new THREE.Vector3(1 / (0.78 * CLUMP_SQUASH), 1 / 0.78, 1 / (0.78 * CLUMP_SQUASH));
-  const idx = g.index;
-  const tri = new THREE.Triangle();
-  const o = new THREE.Vector3();
-  const at = new THREE.Vector3();
-  let near = Infinity;
-  for (let f = 0; f < idx.count; f += 3) {
-    tri.a.fromBufferAttribute(p, idx.getX(f)).multiply(k);
-    tri.b.fromBufferAttribute(p, idx.getX(f + 1)).multiply(k);
-    tri.c.fromBufferAttribute(p, idx.getX(f + 2)).multiply(k);
-    near = Math.min(near, tri.closestPointToPoint(o, at).length());
-  }
-  if (near < 1.03) {
-    g.scale(1.03 / near, 1.03 / near, 1.03 / near);
-  }
-  g.computeVertexNormals();
-  const nr = g.attributes.normal;
-  for (let i = 0; i < nr.count; i += 1) {
-    const v = unitOf(
-      nr.getX(i) * 0.5 + unit[i * 3] * 0.5,
-      nr.getY(i) * 0.5 + unit[i * 3 + 1] * 0.5,
-      nr.getZ(i) * 0.5 + unit[i * 3 + 2] * 0.5,
-    );
-    nr.setXYZ(i, v[0], v[1], v[2]);
-  }
-  CLUMP[shape] = g;
-  return g;
-}
 
 /*
  * EACH BLOB ITS OWN CODE (graphics pass 23). The ink pass finds creases in

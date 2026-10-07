@@ -251,6 +251,7 @@
     'src/render/autoscale.js',
     'src/render/budget.js',
     'src/render/celmat.js',
+    'src/render/clump.js',
     'src/render/comic.js',
     'src/render/comicsky.js',
     'src/render/craft.js',

@@ -49,6 +49,7 @@ import { Pipeline } from './vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
 import { comicPipeline, setComicQuality } from '../../render/comic.js';
 import { comicSky } from '../../render/comicsky.js';
+import { clumpBlob } from '../../render/clump.js';
 import { buildSky } from './vendored/core/sky.js';
 import { setOutlineResolution } from './vendored/core/outline.js';
 import { buildWorld } from './vendored/world/index.js';
@@ -1838,8 +1839,51 @@ function markCanopies(root) {
  * draw; the shrubs and the bamboo are faceted on purpose and are left
  * alone, as is anything not in a cell (a set too wide for one is drawn
  * from every distance and keeps its blob).
+ *
+ * CLUMPS NEAR THE EYE (graphics pass 24). With its facets gone the near
+ * blob was a smooth balloon, and a cherry beside the quad was a bunch of
+ * them, pale and round, which is what the yard's trees were until pass 23.
+ * So on Medium and High (the quality table's leafClumps) the near blob is
+ * one of the yard's clumps of lumps (src/render/clump.js), a different one
+ * for each tone of each kind, under every blob's own spin and squash. It
+ * is drawn at 0.92, the round blob's scale, which gives it the twenty faced
+ * blob's mean silhouette: as the radius of a circle of the same area,
+ * averaged over 300 directions, 0.877 against 0.874 (the round blob 0.887),
+ * so a tree still does not swell as the eye nears it. The one shape of the
+ * eight that is leaner than the rest (0.857 at full size) is left out. 180
+ * faces on 92 vertices where the round blob is 80 on 240, and still no draw
+ * call or program, and no buffer beyond one clump per shape, made with the
+ * town and freed with it.
+ *
+ * Nothing a collider reads changes, as before. A town blob's solid is the
+ * box round its unturned ellipsoid (collideLeaves in the vendored trees.js),
+ * and every blob is drawn turned inside it. A clump at 0.92 reaches at most
+ * 0.975 of the radius at the top of a lump, so across the blob it stays
+ * inside the box as the round blob did; above and below it a turned blob
+ * already reached past the box, and a clump reaches at most 0.055 of the
+ * radius further than the round blob there. Its valleys lie at about 0.69
+ * of the radius, where the far blob's faces lie at 0.79 and the round
+ * blob's at 0.86, so between two lumps the box stands up to a tenth of the
+ * radius further out from the leaves than it does on Low.
  */
 const ROUND_CANOPY = /^(sakura|grove)Canopy\d+$/;
+/* The clump shapes the town draws: all but the lean one. */
+const TOWN_CLUMPS = [0, 1, 2, 3, 4, 6, 7];
+
+/* The clump for a set, by its kind and its tone: the cherries' three tones
+ * take the first three shapes and the groves' the next three. `made` holds
+ * this town's, one a shape. */
+function nearClump(name, made) {
+  const tone = Number(name.slice(name.lastIndexOf('Canopy') + 6)) || 0;
+  const k = TOWN_CLUMPS[((name.startsWith('grove') ? 3 : 0) + tone) % TOWN_CLUMPS.length];
+  let g = made[k];
+  if (!g) {
+    g = clumpBlob(k).clone();
+    g.scale(0.92, 0.92, 0.92);
+    made[k] = g;
+  }
+  return g;
+}
 
 function isRoundBlob(geo) {
   if (geo.type !== 'IcosahedronGeometry' || !geo.parameters || geo.parameters.detail !== 0) {
@@ -1860,8 +1904,9 @@ function isRoundBlob(geo) {
   return true;
 }
 
-function roundCanopiesNear(cells) {
+function roundCanopiesNear(cells, clumps, swapped) {
   const twins = new Map();
+  const shapes = [];
   let meshes = 0;
   for (const c of cells) {
     for (const item of c.items) {
@@ -1870,34 +1915,46 @@ function roundCanopiesNear(cells) {
           return;
         }
         const lo = o.geometry;
-        let hi = twins.get(lo);
+        const key = clumps ? `${lo.uuid}:${o.name}` : lo.uuid;
+        let hi = twins.get(key);
         if (hi === undefined) {
           hi = null;
           if (isRoundBlob(lo)) {
-            hi = new THREE.IcosahedronGeometry(lo.parameters.radius * 0.92, 1);
-            /* The same attributes as the blob it stands in for, so the
-             * program three.js built for the set binds it unchanged: the
-             * bake's trimAttributes has taken uv off the canopy. */
-            for (const name of Object.keys(hi.attributes)) {
-              if (!lo.attributes[name]) {
-                hi.deleteAttribute(name);
+            /* A clump only stands in for the unit blob both builders draw,
+             * and only if it carries every attribute the set's program
+             * reads, which after the bake's trimAttributes is position and
+             * normal. Otherwise the round blob, as before pass 24. */
+            const clump = clumps && lo.parameters.radius === 1 ? nearClump(o.name, shapes) : null;
+            if (clump && Object.keys(lo.attributes).every((name) => clump.attributes[name])) {
+              hi = clump;
+            } else {
+              hi = new THREE.IcosahedronGeometry(lo.parameters.radius * 0.92, 1);
+              /* The same attributes as the blob it stands in for, so the
+               * program three.js built for the set binds it unchanged: the
+               * bake's trimAttributes has taken uv off the canopy. */
+              for (const name of Object.keys(hi.attributes)) {
+                if (!lo.attributes[name]) {
+                  hi.deleteAttribute(name);
+                }
               }
             }
           }
-          twins.set(lo, hi);
+          twins.set(key, hi);
         }
         if (!hi) {
           return;
         }
         o.userData.leafLo = lo;
         o.userData.leafHi = hi;
+        swapped.add(lo);
+        swapped.add(hi);
         (c.leaves || (c.leaves = [])).push(o);
         c.leafNear = false;
         meshes += 1;
       });
     }
   }
-  return { meshes, sets: [...twins.values()].filter(Boolean).length };
+  return { meshes, sets: new Set([...twins.values()].filter(Boolean)).size, clumps: clumps === true };
 }
 
 function buildColliders(world) {
@@ -2547,7 +2604,11 @@ export async function buildMap(shell, onProgress, options) {
   progress(0.92);
   const cull = buildCullGrid(world.root, { cell: CULL_CELL });
   const leafRound = q.city.leafRound ?? 0;
-  const roundLeaves = leafRound > 0 ? roundCanopiesNear(cull.cells) : { meshes: 0, sets: 0 };
+  /* Every blob and twin the near canopies swap between, for dispose(). */
+  const leafSwapped = new Set();
+  const roundLeaves = leafRound > 0
+    ? roundCanopiesNear(cull.cells, q.city.leafClumps === true, leafSwapped)
+    : { meshes: 0, sets: 0, clumps: false };
   const leafR2 = leafRound * leafRound;
   const anim = cityAnimation(world, colliders, boomIndices, trainCars);
   let placeStep = 0;
@@ -2874,6 +2935,13 @@ export async function buildMap(shell, onProgress, options) {
       shell.evictSessionRoots(scene);
       pipeline.dispose();
       disposeSceneGraph(scene, SESSION_TEXTURES);
+      /* A near canopy set shows its blob or its twin (passes 15 and 24),
+       * and the walk above freed only the one each set showed last, so a
+       * twin drawn once and then left behind stayed on the GPU. Freeing a
+       * geometry twice is a no-op. */
+      for (const g of leafSwapped) {
+        g.dispose();
+      }
     },
   };
 }

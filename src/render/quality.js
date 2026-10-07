@@ -142,13 +142,15 @@ const PRESETS = {
       shadowHalf: 22,
       shadowProxyCell: 0,
       foliageKeep: 0.22,
-      /* The canopy blobs near the eye drawn at eighty faces rather than
-       * twenty, within this many metres of a cell's nearest point; 0 keeps
-       * twenty everywhere. See roundCanopiesNear in src/maps/city/index.js. */
+      /* The town's canopy blobs near the eye drawn at eighty faces, or as
+       * clumps with leafClumps, rather than twenty, within this many metres
+       * of a cell's nearest point; 0 keeps twenty everywhere. See
+       * roundCanopiesNear in src/maps/city/index.js. */
       leafRound: 0,
-      /* A built map's canopy blobs drawn as clumps of lumps rather than
-       * smooth round blobs: 180 faces a blob where the round one has 80.
-       * See clumpBlob in src/props/kit.js. */
+      /* Canopy blobs drawn as clumps of lumps rather than smooth round
+       * blobs, 180 faces a blob where the round one has 80: a built map's,
+       * and the town's within leafRound. See clumpBlob in
+       * src/render/clump.js. */
       leafClumps: false,
       cullRadius: 50,
       fogNear: 22,
