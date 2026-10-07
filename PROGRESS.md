@@ -68576,14 +68576,16 @@ append conflict at the end of this file and nothing else in these files.
   (0.857 at full size) and is left out of the town. 180 faces on 92 vertices where the round blob is 80 on 240.
 - No solid moved, and nothing a collider reads changed: the swap runs on the chunks after the colliders and the bake,
   as pass 15's did. A town blob's solid is the box round its unturned ellipsoid (`collideLeaves` in the vendored
-  `trees.js`) and every blob is drawn turned inside it. A clump at 0.92 reaches at most 0.975 of the radius at the
-  top of a lump (0.93 to 0.975 over the seven shapes), so across the blob it stays inside the box as the round blob
-  did; above and below it a turned blob already reached past the box, and a clump reaches at most 0.055 of the
-  radius further there. The other side, which a pilot can feel: its valleys lie at about 0.69 of the radius, where
-  the far blob's faces lie at 0.79 and the round blob's at 0.86, so between two lumps the box stands up to a tenth
-  of the radius further out from the leaves than it does on Low, four to nine centimetres on a town blob (a cherry's
-  is 0.38 to 0.73 m, a grove's 0.5 to 0.9 m). The town flies as it did; brushing a near canopy stops the quad where
-  it stopped before, which can now be just short of a valley.
+  `trees.js`) and every blob is drawn turned inside it. A clump at 0.92 reaches at most 0.975 of the radius at the top
+  of a lump (0.93 to 0.975 over the seven shapes), so across the blob it stays inside the box as the round blob did;
+  above and below it a turned blob already reached past the box, and a clump reaches at most 0.055 of the radius
+  further there. The other side, which a pilot can feel: its valleys lie at about 0.69 of the radius, where the far
+  blob's faces lie at 0.79 and the round blob's at 0.86, so between two lumps the box stands up to a tenth of the
+  radius further out from the leaves than it does on Low. On the town's blobs that is 3.5 to 11 cm on a cherry and 5
+  to 22 cm on a grove (blob radii of 0.35 to 1.1 m and 0.5 to 2.25 m: 0.56 and 0.72 of the tree's scale, times 0.68 to
+  1.3 and 0.7 to 1.25 a blob, at the vendored spots' scales of 0.92 to 1.5 and 1.0 to 2.5), and 1.3 to 2.6 cm across
+  a willow's frond (0.13 to 0.26 m). The town flies as it did; brushing a near canopy stops the quad where it stopped
+  before, which can now be just short of a valley.
 - Corrected, about pass 23: it said the clumps' mean radius was about the round blob's, "so a tree is about as full
   as it was". Measured the same way as above, a clump's mean silhouette is 6 percent wider than the round blob's
   (0.941 over the eight shapes at full size, against 0.887), so a yard tree is a little fuller than it was before
@@ -68617,7 +68619,10 @@ append conflict at the end of this file and nothing else in these files.
   evidence. On Low, three shots caught the previous camera in one of the two runs (the park view where the cherry
   should be), which is the harness and not the frame. The pairing script had pass 23's labels written into it; a new
   one takes them as arguments. The first timing run was the window count above and was stopped for it, and a wait
-  loop that matched its own command line never ended and was stopped by hand. The leak above.
+  loop that matched its own command line never ended and was stopped by hand. The leak above. And the first commit of
+  this entry put the gap at four to nine centimetres, from blob radii worked out for a tree at scale 1; the town's
+  cherries are drawn at 0.92 to 1.5 and its groves at 1.0 to 2.5, so the next commit corrected it from the vendored
+  spots' own scales.
 - Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
   `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date after `npm run gen:preload`; `npm run check:props` all
   passed (the kit changed); `node scripts/memory-check.js` passed at Low, the town and Your map lazy and freed, and a
