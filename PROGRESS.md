@@ -67926,3 +67926,23 @@ thousand on 1.01 to 1.40 million, every pass of the frame counted).
 - In the final runs, which went two at a time, two waits for three rendered frames timed out (the sedan from the
   mirror, the r32 side on). Both pictures were looked at and are the camera's view.
 - A `pkill` in the harness took its own shell with it, and a run had to be started again.
+
+### Merged, same day: the cars' fourth pass on the graphics branch
+
+- `cars-fourth-pass` (6ee0285 and a0d6d18, made from pass 11) merged into the graphics branch with a merge commit.
+  The only conflict was PROGRESS.md, where both lines appended at the end; both sections are kept, the graphics passes
+  first.
+- Read the diff before merging. It is `src/art/cars.js` only and render only: car solids still come from
+  `vehicleSize`, not from the drawing. `storyOf` reads the kind, the colour and the variant and nothing else, through
+  `Math.imul`, so no random stream is drawn and a car is the same car in every town and replay. The plate sheet is a
+  Canvas2D texture made the way the vendored `platePlate` it replaces made its one plate, so nothing changes for a
+  caller without a DOM. No dashes, the header untouched. One wording change after the merge: the ladder comment's
+  "his ladder" is now "a ladder".
+- Checks run on the merged tree: `node --check src/art/cars.js`, `npm run lint:preload` (up to date, boot 131
+  modules, city 76, built 34, 255 served), `npm run check:props` (all passed).
+- Shots of the town through the car pass's own cameras on the merged tree, so the cars now sit under passes 12 to 15:
+  the cab at the clinic keeps its green plate, door crest and wing mirrors under the comic layer, the courier's white
+  kei van shows its black plate and its high stop lamp, and nothing in these views gives a roof or a bonnet turf or
+  stones from the town's `groundAuto`. What went wrong: one of the four cameras, 9 m up, sees roofs and no car, so it
+  is no evidence about cars at all. Pictures are not committed.
+- Not run: `npm run verify`, because this is render only.

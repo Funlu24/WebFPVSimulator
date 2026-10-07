@@ -4995,7 +4995,7 @@ function keiTruckBody(M, s, o, lamps) {
  *   learner  a cream kei and a sky blue hatch carry the learner's leaf,
  *            a first year's car, at the nose and on the back glass.
  *   ladder   a kei van in any colour but white is a tradesman's, and
- *            carries his ladder strapped down on its roof between the
+ *            carries a ladder strapped down on its roof between the
  *            rails, lower than they stand.
  */
 const TAXI = new Set([CAR.charcoal, CAR.mustard, CAR.forest, CAR.silver]);
