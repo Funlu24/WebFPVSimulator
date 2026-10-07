@@ -67587,3 +67587,196 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
 - `node scripts/shots.js` through a scratch camera script: the town's cars on this branch and on main, the alley A/B.
 - Not run: `npm run verify`, because this is render only (no physics, plant, ABI or build), and a headless GPU says
   nothing about frame time.
+
+## 2026-10-07 | art | Cars, fourth pass: real plates, bumpers as parts, folded mirrors, and cars that say who drives them
+
+The owner asked again for Borderlands and AAA quality, "the models (cars etc etc could do with lots of refinement)",
+keeping "performance etc etc and backward compatability" in mind. The third pass gave the bodies their shape; this one
+is about what a car carries at the distances a pilot sees one, 3 to 30 m and often from 2 to 10 m up. Constraints, set
+with the request: the same exports and signatures, the same `vehicleSize`, the same wheel places, and the same material
+roles per kind (a car is one mesh per role, so no draw call may be added); triangles under twice dc3141a's per kind,
+for parked and moving bodies alike; every car kept inside its collider; variation read only from what `buildCar` is
+already handed, never from a random stream. Render only: nothing here reaches the physics, the module ABI or the
+build, so it did not need the owner's approval under the rule for those. Branch `cars-fourth-pass`, from f387454.
+
+### What changed (src/art/cars.js only)
+
+- **Real plates** (THE SHEET). Every plate was the vendored builder's one plate, `さ 21-08`, on every car in the world.
+  Now one 1024 by 512 canvas, painted once and shared by every car through the one plate material that was already
+  there, holds fifteen plates in the real layout (district and class number small along the top between the two bolts,
+  the kana and the big serial under them): white with green characters for a private car, yellow for a kei, yellow
+  with a goods class for a kei van or a kei truck, green with white for a vehicle on hire (goods, cab, bus), black with
+  yellow for a kei on hire. The numbers follow the real rules: a small car's class starts 5 and a large one's 3, a
+  kei's 58, goods 1 or 4, a kei's goods 48, a bus 2; a private car's kana is from さ on, one on hire's from あ to こ.
+  Which class a car carries comes from its kind and colour (below); which number of its class, from its colour and
+  variant through `Math.imul`, which is exact in every engine. The vendored `platePlate` is no longer imported, and the
+  vendored file is untouched. The town's bake batches by material and map, and the map is one texture, so every plate
+  still batches (the city's draw calls below are unchanged).
+- **Plate holders**: a dark frame 12 mm round every plate and 6 mm behind it (14 mm round the kei truck's tailgate
+  plate, and down to the under run bar on the lorry's), so a plate is a thing bolted on and the ink draws round it.
+- **Bumpers as parts** (`bumperLoft`): the band where a bumper's top rolls back into the body is dark, the fitting gap,
+  which draws the bumper as a part of its own from every side and from the air. A painted bumper with `low` set (the
+  kei's tail, and both ends of the hatch, the sedan and the minivan) has a black valance along its foot under a small
+  step, the paint standing proud of it. The chain that lamps, grilles and plates are laid on follows the paint where
+  the valance runs up behind it.
+- **Headlamp bezels**: a `briteDark` ring round the round lamps of the kei, the hatch and the minivan.
+- **High stop lamp**: across the head of the back glass on the wagon, the kei van and the van, at its foot on the
+  sedan's parcel shelf, and along the trailing face of the roof spoiler on the kinds that have one (the kei, the hatch,
+  the minivan), in `lampR`, so a moving car's brake light lights it with the others.
+- **The filler flap's shut line** on the rear wing on the kerb side of every town kind but the lorry and the bus, put
+  where it is clear of the handles, the door seams and a sliding door's run, and over the swage.
+- **Mud flaps** behind the rear wheels of the van and the kei van, behind the lorry's twins, and behind all four of
+  the kei truck's wheels.
+- **Side marker lamps**: two amber, in dark bezels, on the lorry's side guard.
+- **Mirrors**, below: folded on the town kinds, on the wings of a cab, on arms over the windscreen of the minibus,
+  on shorter arms on the coupes, none on the kei truck.
+- **What a car says about who drives it** (`storyOf`), read off the kind, the colour and the variant:
+  - a sedan in charcoal, mustard, forest green or silver is a cab: wing mirrors, a green plate, the vacancy sign
+    (空車) lit red on the dashboard on the kerb side, and the firm's crest (a cherry blossom in a ring) on its front
+    doors. The one sedan the town parks, the silver one at the clinic, is a cab waiting for a fare.
+  - a kei in mint, mustard or tea has a black roof, glasshouse sides and spoiler, the two tone a tall kei is sold in.
+  - a cream kei and a sky blue hatch carry the learner's leaf (wakaba), at the nose and on the back glass.
+  - a kei van in any colour but white is a tradesman's, with an aluminium ladder strapped down on its roof between the
+    rails and lower than they stand; a white one is a courier's, on a black plate.
+  - a white panel van and the box lorry are on hire (green goods plates); the minibus is the council's (green, 200).
+- **Stickers** share the sheet, so each costs triangles and nothing in draw calls; the leaf and the crest are cut to
+  their own outlines (`sticker`), because the plate material is opaque and the sheet's clear texels come out black.
+
+### The mirrors stood outside the solids
+
+Measured before anything was added: out on their arms, every town kind's door mirrors reached 16 to 20 cm past the
+car's solid (`vehicleSize`'s W, which the town's colliders and a built map's moving boxes are), the coupes' 10 and 11
+cm, the kei truck's 20 cm. The widest thing a pilot sees on a parked car, the thing a gap between two of them is judged
+by, was air. Now:
+
+- The town kinds' mirrors are **folded**, as a parked car's are in Japan: the housing lies back along the side glass
+  from its hinge, its back to the world in paint, and stops 2 mm inside the solid. There is 3.4 to 5.4 cm between the
+  glass and the solid's side on every kind that has them; a kind with less than 2 cm would draw the foot alone. A
+  moving car's are folded too, which a real one's would not be: its box is the same width, so a mirror out would stand
+  outside it just the same.
+- A cab's mirrors are on its **wings**, a black head on a thin stalk over each front wheel, the look of a Japanese
+  taxi, well inside the width and under the roof.
+- The minibus has the town bus's **mirrors on arms** from the front corners of its roof, a tall mirror hanging in front
+  of each upper corner of the windscreen, inside its width and short of its bumper.
+- The coupes' arms are **shortened** so the shell ends 2 mm inside the solid (`coupeMirrors`' `zMax`): their
+  glasshouses stand far enough in from their flares for a mirror out on an arm to fit.
+- The kei truck has **none**: its cab's flank is the face of its solid and its glass is flush with it, so a mirror,
+  folded or out, could only stand outside. Its mud flaps finish its sides instead.
+
+After, measured the same way: the widest point of every car is 2 to 20 mm past its solid's side, all of it from parts
+that were already there (bumper corners, handles and the coupes' corner lamps at 2 to 7 mm, the minibus's door glass
+at 10 mm, the lorry's top marker lamps at 20 mm, the kei truck's cab lips and glass at 9 to 16 mm), where it was 10 to
+20 cm. Nothing added stands further out than what it is laid on: the bumpers' new dark rows reach 0.6 to 2.5 mm past
+the solid at their corners, where the paint under them reaches 2 to 4 mm.
+
+One solid is not that box. A built map's parked car (`carLayout` in `src/props/street.js`) steps in to 7 cm inside W
+above the waist, which is inside the drawn side glass already (the glass stands 2 to 4 cm out of that step on every
+town kind, the minibus's 8, untouched here). There a folded mirror still stands 6.8 to 7.0 cm out of the step, where
+the mirror out stood 25.6 to 25.8 cm, and a coupe's stands above the waist ahead of the step, in air the solid leaves
+open as it did, 10 and 11 cm nearer the body than it was. Fitting the built map's solid to the glasshouse would change
+a collider, which is the physics' shape and the owner's call; it is written here and in `mirrors`' comment.
+
+### The cab's roof lantern, argued and not drawn
+
+A Japanese cab is known first by its andon, the lantern on its roof. It is not drawn. It would stand about 13 cm over
+the roof, and the roof is the top of every solid a sedan has: `vehicleSize`'s H (the town's box stops 15 cm under it),
+the built map's solid and the moving car's box. The sedan's drawing reaches 3 mm over H today (the third pass's ditch
+mouldings), and the third pass held every car's drawn bounds to within 9 mm of where they had been. A lantern would put
+13 cm of drawing over the solid, on the roof a drone is most likely to skim, which is the same mistake the mirrors were
+just taken out of. Raising the sedan's H for the cabs would change a collider for every sedan, cab or not, since the
+tables are per kind, and that is physics shape, the owner's call. So a cab is told by what fits: the wing mirrors from
+any side, the green plate and the lit vacancy sign from ahead, the crest from the side. If the owner wants the andon,
+the argument is for a taller solid for a cab (a kind of its own, or a solid per element), and it is theirs to make.
+
+### What did not change, and how that was checked
+
+Measured in Node with every kind built in every colour of `CAR` (the coupes in their liveries), before (f387454's
+file) and after, through the third pass's scratch loader (not committed):
+
+- The same exports, and the same arity on each exported function. `MODEL` differs only by the new `low` keys under
+  `nose` and `tail` of four kinds (the kei's tail; the hatch's, the sedan's and the minivan's two ends); its one reader
+  outside this file, `src/maps/built/cars.js`, reads a kind's presence and its `L`.
+- `carWheelBase`, and the moving wheel's geometry (bounds and vertex count), identical for every kind.
+- `userData.lamps` identical for every kind and colour, parked and moving; the meshes' names, count and shadow flags
+  identical; `townVehicle`'s groups (name, `userData.vehicle`, position, rotation) and `townKeiTruck`'s identical.
+- The material set of every kind's parked car and moving body identical for every colour and livery, so no draw call
+  is added anywhere: 13 / 13 meshes parked / moving for most kinds, 13 / 12 the wagon, 12 / 12 the lorry, 14 / 13 the
+  coupes, 15 / 15 the kei truck, as before.
+- No NaN in a position, normal or uv, and every normal unit length.
+- Drawn bounds: front, rear, top and bottom unchanged to the millimetre on every kind but the hatch's front, which is
+  5 mm further in (its front plate now stands square on the paint, where it leaned back onto the old slope and was
+  pushed out to clear it); the sides as above.
+
+Triangles per car. Parked is the whole car with its wheels; moving is a moving car's body, its wheels drawn apart from
+`carWheelGeometry` (unchanged). Where colours differ (a cab, a two tone, a ladder, a learner) the range is given, and
+the ratio is the most of it against dc3141a's.
+
+| kind | parked, dc3141a | parked, before | parked, after | moving body, dc3141a | moving body, before | moving body, after | meshes, parked / moving |
+|---|---|---|---|---|---|---|---|
+| kei | 1897 | 2771 | 2967 to 2979 (1.57x) | 1233 | 1771 | 1967 to 1979 (1.61x) | 13 / 13, unchanged |
+| keivan | 1815 | 2763 | 2895 to 3025 (1.67x) | 1167 | 1779 | 1911 to 2041 (1.75x) | 13 / 13, unchanged |
+| hatch | 1719 | 2581 | 2829 to 2837 (1.65x) | 1091 | 1617 | 1865 to 1873 (1.72x) | 13 / 13, unchanged |
+| sedan | 1989 | 2785 | 2967 to 2993 (1.50x) | 1349 | 1809 | 1991 to 2017 (1.50x) | 13 / 13, unchanged |
+| wagon | 1691 | 2565 | 2677 (1.58x) | 1043 | 1581 | 1693 (1.62x) | 13 / 12, unchanged |
+| minivan | 1930 | 2788 | 3076 (1.59x) | 1302 | 1824 | 2112 (1.62x) | 13 / 13, unchanged |
+| van | 1837 | 2815 | 2947 (1.60x) | 1189 | 1831 | 1963 (1.65x) | 13 / 13, unchanged |
+| boxtruck | 1715 | 2363 | 2477 (1.44x) | 979 | 1291 | 1405 (1.44x) | 12 / 12, unchanged |
+| minibus | 1881 | 2739 | 2833 (1.51x) | 1161 | 1683 | 1777 (1.53x) | 13 / 13, unchanged |
+| r32 | 4376 | 4712 | 4712 (1.08x) | 3748 | 3748 | 3748 (1.00x) | 14 / 13, unchanged |
+| e82 | 4745 | 5081 | 5081 (1.07x) | 4097 | 4097 | 4097 (1.00x) | 14 / 13, unchanged |
+| keitruck | 1539 | 2405 | 2395 (1.56x) | 891 | 1421 | 1411 (1.58x) | 15 / 15, unchanged |
+
+Nothing needs a level of detail: the most is the kei van's moving body with its ladder, 1.75 times dc3141a's, under
+the twice that was set. The kei truck is 10 triangles lighter: its mirrors cost more than its flaps and holder.
+
+In the city, `window.__budget` from seven cameras on parked town cars, the same cameras before and after: draw calls
+identical in every one (728, 480, 454, 648, 801, 288, 284), frame triangles up 0.7 to 1.2 percent (8.7 to 11.7
+thousand on 1.01 to 1.40 million, every pass of the frame counted).
+
+### Run, in the same turn
+
+- The Node measurements above.
+- `node scripts/shots.js` on the built map, the twelve kinds lined up beside the spawn by the scratch harness (not
+  committed) and shot close, three quarter, side on, nose, tail, from the mirror, over the roof and from a drone's
+  height; the colours that tell a story (cab, two tone, learner, ladder, courier, white van) shot again; and a row at
+  chase, low and drone heights. 141 views on the built map and 9 on the city (the four cameras of the request at 85
+  and at 50 degrees, and one from 9 m up), before (f387454's file, in a scratch copy of the tree outside the worktree)
+  and after, the after set retaken in full from the final file. The best 18 pairs, before on the left, are in the
+  project files, `graphics-pass/cars4/`. No picture is committed. Every run exits 1 on a console
+  `net::ERR_CONNECTION_REFUSED` (a resource this container cannot reach) with no harness fault, before and after alike.
+- `npm run lint:preload`: up to date, boot 131 modules, city 76, built 34, 255 served. `node --check src/art/cars.js`.
+- Not run: `npm run verify`, because nothing here is physics, the plant, the ABI or the build, and no cheap check
+  imports `src/art/cars.js`. The check in verify that reads the cars' drawing is check 15's collider scan of the city:
+  phantom volume (slices of a collider's footprint that no drawn mesh spans), holes (drawn objects less than half
+  inside anything solid) and mean cover. The cars' drawn front, rear, top and bottom are where they were (the hatch's
+  front 5 mm further in), everything added lies on or inside the body that was there, and the one footprint that moved
+  is the mirrors', from up to 20 cm outside the town's solids to inside them. I expect no change the scan can see, or a
+  small one in its favour. That is a judgement, not a measurement: it was not run.
+
+### What went wrong
+
+- Every kei van and kei truck first carried the same plate (`85-02`): a class was one cell of the sheet. A class is a
+  list of cells now, and the colour and the variant pick one.
+- The leaf and the crest came out on black squares: the plate material is opaque, so the sheet's clear texels render
+  black. Each is cut to its outline (`sticker`); the vacancy sign fills its whole cell.
+- The crest's outline used `TAU` at the top of the module, above the line that declares it, which is an error at
+  import. The first Node run caught it; it uses `Math.PI`.
+- The valance, where it is lower than 6.5 cm, folded the chain things are laid on back along a slope the paint hides:
+  the sedan's and the minivan's lower grille feet, the hatch's dark corner pieces and the foot of its plate stood on
+  that slope, pushed out from the paint. Seen in the close shots. The chain now leaves the slope at the paint's edge,
+  which is also what stands the hatch's front plate square on the paint (above).
+- The first private plates had 300 and 330 classes on cars no wider than 1.7 m, which are small cars and carry 5.
+  The town kinds carry 5 now, and only the coupes (1.75 and 1.76 m) a large car's 3.
+- The kei's front plate was first pushed 5 mm out by the bumper's new gap row, which the chain had taken in; the chain
+  leaves that row out now.
+- The filler flap first made degenerate strips, then crossed the swage where it runs high; it was moved and fitted
+  above it.
+- A scratch copy of `cars.js` could not be measured in Node: its relative imports resolved against the scratch folder.
+  Measured through the loader's redirect instead.
+- The first full after set was shot before the chain fix, the plate classes and the lorry's markers, so it was thrown
+  away and the whole set shot again from the final file.
+- Some row cameras are useless, before and after alike: one behind a pillar, four inside a building. The pairs use
+  the ones that see the row.
+- In the final runs, which went two at a time, two waits for three rendered frames timed out (the sedan from the
+  mirror, the r32 side on). Both pictures were looked at and are the camera's view.
+- A `pkill` in the harness took its own shell with it, and a run had to be started again.
