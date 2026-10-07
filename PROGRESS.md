@@ -67339,3 +67339,15 @@ no build, no file format, no setting.
   file was tracked).
 - Shots at High (field, yard, town), Low (field, yard: no strokes, no grit, as intended) and Medium (town: strokes).
   `lint:preload` clean after regenerating. `npm run verify` not run (render only).
+
+### Pass 4, same day: cheaper strokes, brush marks on High only
+
+- The quad already carries art directed hull outlines (`herocraft.js`, 1.06 to 1.09), so the planned heavier craft
+  outline was dropped: the shots show it inked already.
+- Cost, not looks: each stroke's dash came from value noise (four hashes); it is now two hashes per stroke with a hard
+  dash end. Brush marks moved to their own switch, on High only; Medium keeps strokes and grit. Phones start on Low
+  (`detectDefaultGraphics`), which carries none of this.
+- Tried and abandoned: timing the comic layer on and off in headless Chromium. The page paced at one frame a second in
+  both states (1000, 910, 1001, 1001 ms), so the number measures the pacing and not the shader. No frame time claim is
+  made for this branch; it wants a real GPU, which is the pilot's.
+- Shots, yard and field at High, after: same look as pass 3.

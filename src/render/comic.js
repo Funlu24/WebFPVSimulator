@@ -88,6 +88,7 @@ import * as THREE from 'three';
 export const COMIC = {
   hatch: { value: 1 },
   grit: { value: 1 },
+  brush: { value: 1 },
   ink: { value: new THREE.Color(0x0b0c12) },
   litLo: { value: 0.40 },
   litHi: { value: 0.62 },
@@ -106,9 +107,11 @@ export const COMIC = {
  * guard in the shader is a uniform branch, so a zero skips the arithmetic
  * without a second program. */
 const LEVELS = {
-  low: { hatch: 0, grit: 0 },
-  medium: { hatch: 1, grit: 1 },
-  high: { hatch: 1, grit: 1 },
+  low: { hatch: 0, grit: 0, brush: 0 },
+  /* Medium is the integrated laptop: strokes and grit, not the brush
+   * marks, which are the most arithmetic for the least picture. */
+  medium: { hatch: 1, grit: 1, brush: 0 },
+  high: { hatch: 1, grit: 1, brush: 1 },
 };
 
 export function setComicQuality(q) {
@@ -116,6 +119,7 @@ export function setComicQuality(q) {
   const lv = LEVELS[id] || LEVELS.high;
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
+  COMIC.brush.value = lv.brush;
 }
 
 /* The heavier pen for the ink passes, as a factor on each pipeline's own
@@ -150,6 +154,7 @@ ${MARK}
 varying vec3 vComicWorld;
 uniform float uComicHatch;
 uniform float uComicGrit;
+uniform float uComicBrush;
 uniform vec3 uComicInk;
 uniform float uComicLitLo;
 uniform float uComicLitHi;
@@ -182,8 +187,9 @@ float comicLine( float x, float y, float fw, float w ) {
   float cov = 1.0 - smoothstep( w * 0.5 - 0.5, w * 0.5 + 0.5, px );
   /* Broken into dashes along the stroke, each stroke its own: a pen lifts,
    * a ruler does not, and unbroken lines read as a printed mesh. */
-  float seg = comicNoise( vec2( floor( x ) * 7.13, y * 0.42 ) );
-  return cov * smoothstep( 0.30, 0.40, seg );
+  float sx = floor( x );
+  float sy = floor( y * 0.42 + comicHash( vec2( sx, 3.7 ) ) );
+  return cov * step( 0.3, comicHash( vec2( sx, sy ) ) );
 }
 
 /*
@@ -249,11 +255,11 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * Brush marks on the lit side too, sparse and faint, running across the
      * hatching: a painted surface shows the brush everywhere, and a lit
      * face that is one flat fill is the plastic look this replaces. Twice
-     * the hatching's spacing, a tenth of its weight, on the grit's switch.
+     * the hatching's spacing, a tenth of its weight. High only.
      */
-    if ( uComicGrit > 0.0 && fade > 0.0 ) {
+    if ( uComicBrush > 0.0 && fade > 0.0 ) {
       float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
-      col *= 1.0 - bm * 0.11 * fade * uComicGrit * ( 1.0 - shade );
+      col *= 1.0 - bm * 0.11 * fade * uComicBrush * ( 1.0 - shade );
     }
   }
   return col;
@@ -283,6 +289,7 @@ function inject(shader) {
   }
   shader.uniforms.uComicHatch = COMIC.hatch;
   shader.uniforms.uComicGrit = COMIC.grit;
+  shader.uniforms.uComicBrush = COMIC.brush;
   shader.uniforms.uComicInk = COMIC.ink;
   shader.uniforms.uComicLitLo = COMIC.litLo;
   shader.uniforms.uComicLitHi = COMIC.litHi;
