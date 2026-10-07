@@ -399,12 +399,24 @@ export function comicPipeline(pipeline) {
     if (ink.uInk) {
       ink.uInk.value.setHex(INK_COLOR);
     }
-    /* A little more sensitive, so more of the kit's creases are drawn. */
+    /*
+     * The crease thresholds scale with the pen. The ink pass reads a crease
+     * as the second difference of depth across the pen's reach, which grows
+     * in proportion to the reach, so a pen 1.55 times wider found every
+     * crease 1.55 times stronger, and pass 1 then lowered the threshold
+     * too: the town's twenty sided blossom blobs came out as wireframe
+     * gems, every facet edge inked. Multiplying the reach back into the
+     * thresholds keeps the kit's creases where main has them and makes only
+     * the lines heavier; the last tenth is a slightly keener pen.
+     */
     if (ink.uSens) {
-      ink.uSens.value *= 0.82;
+      ink.uSens.value *= INK_WEIGHT * 0.9;
+    }
+    if (ink.uConcave) {
+      ink.uConcave.value *= INK_WEIGHT * 0.9;
     }
     if (ink.uConcaveAmount) {
-      ink.uConcaveAmount.value = Math.min(1, ink.uConcaveAmount.value * 1.5);
+      ink.uConcaveAmount.value = Math.min(1, ink.uConcaveAmount.value * 1.3);
     }
   }
   const g = pipeline.grade && pipeline.grade.mat && pipeline.grade.mat.uniforms;

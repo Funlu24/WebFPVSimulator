@@ -67393,3 +67393,14 @@ no build, no file format, no setting.
   `__colliderBoxes()`, `__colliders()` and `__colliderShapes({near:50})` hashed in the page, identical to main
   (`15353:3f246c8bbbddeaea` both). `lint:preload`, `lint:quality` (71 of 71), `lint:frame` (34 of 34) and
   `lint:boot` (9 of 9) clean. `npm run verify` not run: render only.
+
+### Pass 8, same day: the town's blossom stops looking like wireframe gems
+
+- Found in the town shots: every facet edge of the twenty sided blossom blobs (and the grove's) was inked dark, which
+  main draws as a faint line. Cause, pass 1: the vendored ink pass finds a crease as the second difference of depth
+  across the pen's reach, and that grows with the reach, so the 1.55 times wider pen alone made every crease 1.55 times
+  stronger, and pass 1 lowered the threshold as well (0.82), about 1.9 times main's sensitivity in all.
+- `comic.js` `comicPipeline`: the convex and concave thresholds are now multiplied by the pen weight times 0.9 and the
+  concave amount by 1.3 (was 1.5). The silhouettes keep the heavier, darker pen; the kit's creases are back near
+  main's, a tenth keener. Shots, town and yard at High: blossom facets faint again, the yard's structural creases and
+  hatching unchanged.
