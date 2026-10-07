@@ -113,6 +113,9 @@ export const COMIC = {
   /* 1 where the map's ink draws edge highlights and wants each surface's
    * light in the scene's alpha. See EDGE HIGHLIGHTS. */
   edge: { value: 0 },
+  /* 1 where a built map's paved ground takes stains, 2 where it takes
+   * cracks as well. See GRIME. */
+  grime: { value: 0 },
 };
 
 /*
@@ -152,8 +155,9 @@ export function markGround(root) {
 /* Per preset. Low is the integrated laptop and the phone that has already
  * given up shadows and ink for fill rate; it keeps none of this, and the
  * guard in the shader is a uniform branch, so a zero skips the arithmetic
- * without a second program. The occlusion and the outer line are High's
- * alone and the edge highlights Medium's and High's (setComicQuality). */
+ * without a second program. The occlusion, the outer line and the ground's
+ * cracks are High's alone, and the edge highlights and the ground's stains
+ * Medium's and High's (setComicQuality). */
 const LEVELS = {
   low: { hatch: 0, grit: 0, brush: 0, detail: 0 },
   /* Medium is the integrated laptop: strokes and grit, not the brush
@@ -164,11 +168,12 @@ const LEVELS = {
   high: { hatch: 1, grit: 1, brush: 1, detail: 1 },
 };
 
-export function setComicQuality(q, { groundAuto = false, edges = false } = {}) {
+export function setComicQuality(q, { groundAuto = false, edges = false, grime = false } = {}) {
   const id = q && q.id ? q.id : 'high';
   /* Every map sets these when it builds, so leaving the town clears them. */
   COMIC.groundAuto.value = groundAuto ? 1 : 0;
   COMIC.edge.value = edges && id !== 'low' ? 1 : 0;
+  COMIC.grime.value = grime && id !== 'low' ? (id === 'high' ? 2 : 1) : 0;
   const lv = LEVELS[id] || LEVELS.high;
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
@@ -550,6 +555,7 @@ uniform float uComicGround;
 uniform float uComicGroundAuto;
 uniform float uComicFoliage;
 uniform float uComicEdge;
+uniform float uComicGrime;
 /* How much sun this surface has, for the ink's edge highlights: written
  * by comicShade, read by FRAG_TAIL. */
 float comicLit = 0.0;
@@ -567,6 +573,69 @@ float comicNoise( vec2 p ) {
   f = f * f * ( 3.0 - 2.0 * f );
   return mix( mix( comicHash( i ), comicHash( i + vec2( 1.0, 0.0 ) ), f.x ),
               mix( comicHash( i + vec2( 0.0, 1.0 ) ), comicHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
+}
+
+/* comicNoise with its slope: the value (x) and its gradient (yz), so the
+ * grime can carry a pixel's footprint through a wander it computes only
+ * where a crack can be (GRIME, in comicShade). */
+vec3 comicNoiseD( vec2 p ) {
+  vec2 i = floor( p );
+  vec2 f = fract( p );
+  vec2 u = f * f * ( 3.0 - 2.0 * f );
+  float a = comicHash( i );
+  float b = comicHash( i + vec2( 1.0, 0.0 ) );
+  float c = comicHash( i + vec2( 0.0, 1.0 ) );
+  float d = comicHash( i + vec2( 1.0, 1.0 ) );
+  float k = a - b - c + d;
+  return vec3( a + ( b - a ) * u.x + ( c - a ) * u.y + k * u.x * u.y,
+               6.0 * f * ( 1.0 - f ) * vec2( b - a + k * u.y, c - a + k * u.x ) );
+}
+
+/* Two hashes from one, for the grime's cells (GRIME, in comicShade). */
+vec2 comicHash2( vec2 p ) {
+  vec3 p3 = fract( vec3( p.xyx ) * vec3( 0.1031, 0.1030, 0.0973 ) );
+  p3 += dot( p3, p3.yzx + 33.33 );
+  return fract( ( p3.xx + p3.yz ) * p3.zy );
+}
+
+/* Cracks: the edges of a jittered grid of cells. Returns how far a point
+ * is from the edge between its nearest two cells, in cells (x), whether
+ * that edge is kept (y), and the edge's normal (zw), which is what turns
+ * the distance into pixels: the distance itself folds at the edge, so its
+ * own screen derivative vanishes on the line and drew it as dashes. An edge
+ * is kept or dropped by a hash of the two cells it parts, the same from
+ * either side, so what is left is not a net but broken runs of joined
+ * segments that fork and stop at a corner, which is how a slab cracks. */
+vec4 comicCrack( vec2 x ) {
+  vec2 n = floor( x );
+  vec2 f = x - n;
+  float d1 = 8.0;
+  float d2 = 8.0;
+  vec2 r1 = vec2( 0.0 );
+  vec2 r2 = vec2( 0.0 );
+  vec2 c1 = n;
+  vec2 c2 = n;
+  for ( int j = -1; j <= 1; j++ ) {
+    for ( int i = -1; i <= 1; i++ ) {
+      vec2 g = vec2( float( i ), float( j ) );
+      vec2 r = g + 0.08 + comicHash2( n + g ) * 0.84 - f;
+      float d = dot( r, r );
+      if ( d < d1 ) {
+        d2 = d1;
+        r2 = r1;
+        c2 = c1;
+        d1 = d;
+        r1 = r;
+        c1 = n + g;
+      } else if ( d < d2 ) {
+        d2 = d;
+        r2 = r;
+        c2 = n + g;
+      }
+    }
+  }
+  vec2 e = normalize( r2 - r1 );
+  return vec4( dot( ( r1 + r2 ) * 0.5, e ), step( comicHash( c1 + c2 + 0.37 ), 0.3 ), e );
 }
 
 /* Coverage of one set of parallel strokes at one octave: x is the stroke
@@ -647,16 +716,22 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * and air takes the contrast out of distant ground anyway (pass 10).
      */
     if ( ground > 0.0 && wn.y > max( wn.x, wn.z ) ) {
-      float m = comicNoise( p.xz * 0.07 + 41.0 ) * 0.6 + comicNoise( p.xz * 0.23 + 7.0 ) * 0.4;
-      m = smoothstep( 0.22, 0.78, m );
       float near = 1.0 - smoothstep( 50.0, 160.0, dist );
       /* On green ground only, and in hue more than in value: dry, yellowed
        * turf against lush. Dark patches read as cloud shadow on a field
        * that has real ones, and on pale concrete, dirt or sand any patch
-       * read as camouflage (pass 10), so those keep the grit alone. */
+       * read as camouflage (pass 10), so those keep the grit alone. The
+       * noise is read only where it can show: until pass 22 every paved
+       * pixel read it and multiplied it by zero, two noises a pixel, which
+       * is what the paved ground's stains read (GRIME). The colour is the
+       * same either way, because a zero weight leaves it exactly as it was. */
       float green = smoothstep( 0.01, 0.06, col.g - max( col.r, col.b ) );
-      vec3 tint = mix( vec3( 0.9, 0.99, 0.96 ), vec3( 1.08, 1.04, 0.8 ), m );
-      col *= mix( vec3( 1.0 ), tint, uComicGrit * near * green );
+      if ( near * green > 0.0 ) {
+        float m = comicNoise( p.xz * 0.07 + 41.0 ) * 0.6 + comicNoise( p.xz * 0.23 + 7.0 ) * 0.4;
+        m = smoothstep( 0.22, 0.78, m );
+        vec3 tint = mix( vec3( 0.9, 0.99, 0.96 ), vec3( 1.08, 1.04, 0.8 ), m );
+        col *= mix( vec3( 1.0 ), tint, uComicGrit * near * green );
+      }
     }
   }
 
@@ -683,6 +758,78 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     vec3 grass = ( 1.0 + blades ) * ( vec3( 1.0 ) + vec3( 0.07, 0.03, -0.12 ) * warm );
     vec3 detail = mix( vec3( 1.0 + stones * 0.65 ), grass, turf );
     col *= mix( vec3( 1.0 ), detail, up * uComicDetail );
+  }
+
+  /*
+   * GRIME (pass 22): a built map's paved ground, cracked and stained in the
+   * world. The yard's concrete is a tile of sixteen slabs whose stains and
+   * hairlines repeat every 24 m, kept faint on purpose because anything a
+   * tile shows twice is a pattern (built/ground.js); in the frame it was a
+   * pale plain. A comic yard's ground is drawn: inked cracks that run, fork
+   * and stop, and stains with a darker tide line at their edge, and here
+   * both are laid in the world, so nothing repeats.
+   *
+   * The cracks are a jittered cell network's edges, three in ten of them
+   * kept (comicCrack), in patches on a lattice 18 m apart, so a slab here
+   * and there is cracked and most are sound. Each is as wide as a real one
+   * near the eye and never thinner than a pixel and three quarters,
+   * measured in pixels across its own edge, and faded out from 18 m to
+   * 50 m, where it would be a hair laid over every slab. The stains are two
+   * octaves of noise cut at a crisp level, with a darker band inside the
+   * cut. Soft dark patches on pale ground read as camouflage (pass 10); a
+   * stain with an edge reads as a stain.
+   *
+   * On marked ground that faces up and is not turf, on built maps: the
+   * stains on Medium and High, the cracks on High alone, because the cells
+   * are nine hashes and a search a pixel and the most arithmetic in this
+   * shader (setComicQuality's grime: 1 stains, 2 both). The derivatives are
+   * taken in branches on uniforms alone, and the rest of a crack, its
+   * wander, cells and width, only on a pixel that could draw one: most of
+   * the ground is outside a patch.
+   */
+  if ( uComicGrime * uComicGround > 0.0 ) {
+    vec2 gp = p.xz;
+    float upG = smoothstep( 0.05, 0.25, wn.y - max( wn.x, wn.z ) );
+    float paved = 1.0 - smoothstep( 0.01, 0.06, col.g - max( col.r, col.b ) );
+    float gm = upG * paved;
+    float sn = comicNoise( gp * 0.4 + 5.3 ) * 0.62 + comicNoise( gp * 1.31 + 1.7 ) * 0.38;
+    float sfw = max( fwidth( sn ), 1e-5 );
+    float stain = smoothstep( 0.71 - sfw, 0.71 + sfw, sn );
+    float tide = stain * ( 1.0 - smoothstep( 0.71 + sfw, 0.71 + 3.0 * sfw + 0.01, sn ) );
+    col *= 1.0 - ( stain * 0.08 + tide * 0.12 ) * gm * ( 1.0 - smoothstep( 60.0, 140.0, dist ) );
+    if ( uComicGrime > 1.5 ) {
+      /* How far the ground moves across a pixel, taken here, where every
+       * pixel of the draw takes it: the rest branches pixel by pixel. */
+      vec2 gx = dFdx( gp );
+      vec2 gy = dFdy( gp );
+      /* Only where a crack can be drawn: turf, ground past 50 m and ground
+       * outside a patch, which is most of it, skip the rest. */
+      float zone = gm * ( 1.0 - smoothstep( 18.0, 50.0, dist ) );
+      if ( zone > 0.0 ) {
+        zone *= smoothstep( 0.54, 0.64, comicNoise( gp * 0.055 + 13.1 ) );
+      }
+      if ( zone > 0.0 ) {
+        /* A little wander, so a crack is a ragged line and not a ruled
+         * one, with its slope, which carries the pixel's footprint through
+         * the wander to the cells (cdx, cdy) as dFdx of the wandered
+         * coordinate would, without taking a derivative in a branch. */
+        vec3 wx = comicNoiseD( gp * 1.9 );
+        vec3 wy = comicNoiseD( gp * 1.9 + 7.3 );
+        vec2 cw = gp * 0.42 + ( vec2( wx.x, wy.x ) - 0.5 ) * 0.22;
+        vec2 jx = vec2( 0.42, 0.0 ) + wx.yz * 0.418;
+        vec2 jy = vec2( 0.0, 0.42 ) + wy.yz * 0.418;
+        vec2 cdx = vec2( dot( jx, gx ), dot( jy, gx ) );
+        vec2 cdy = vec2( dot( jx, gy ), dot( jy, gy ) );
+        vec4 ck = comicCrack( cw );
+        float cpix = max( length( vec2( dot( cdx, ck.zw ), dot( cdy, ck.zw ) ) ), 1e-6 );
+        /* Half a crack's width in pixels: about 7 mm, swelling and thinning
+         * along it as an inked stroke does, and never under a pixel and
+         * three quarters across, so a crack at forty metres is still a line. */
+        float chalf = max( 0.85, 0.0028 * mix( 0.35, 1.5, comicNoise( gp * 0.8 + 3.9 ) ) / cpix );
+        float crack = ( 1.0 - smoothstep( chalf - 0.5, chalf + 0.5, ck.x / cpix ) ) * ck.y * zone;
+        col = mix( col, col * 0.22 + uComicInk * 0.4, crack * 0.85 );
+      }
+    }
   }
 
   /*
@@ -859,6 +1006,7 @@ function inject(shader, material) {
   };
   shader.uniforms.uComicGroundAuto = COMIC.groundAuto;
   shader.uniforms.uComicEdge = COMIC.edge;
+  shader.uniforms.uComicGrime = COMIC.grime;
   shader.uniforms.uComicFoliage = {
     get value() {
       return material.userData.comicFoliage ? 1 : 0;

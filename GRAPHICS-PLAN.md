@@ -51,11 +51,14 @@ loop: plan, a pass, screenshots, re-plan.
   fetches the field ink already makes. Done in pass 21 on the town and the
   yard; the field keeps its ink (below).
 - Sky: a painted, banded sky with hard edged clouds instead of soft ones.
-- Ground: stronger grime and painted detail on concrete and grass.
+- Ground: stronger grime and painted detail on concrete and grass. Done in pass
+  22 on a built map's paved ground (inked cracks on High, stains with a tide
+  line on Medium and High); the town's ground cannot be marked apart from its
+  roofs, and the field's is turf.
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
 
-## Where it stands after pass 21
+## Where it stands after pass 22
 
 Done: ink, hatching (single in shade, crossed in cast shadow, thinning on surfaces seen edge on), grit, brush marks
 (High), occlusion (High), an outer line heavier than the inner lines (High; the field only within 30 m), painted turf
@@ -69,10 +72,12 @@ cabs, learners, two tone keis, a tradesman's ladder), the 5 inch rebuilt as a be
 calls where there were 81, and the whoop inked for the first time, with the 5 inch's even shell, its braces ending at
 the duct walls instead of lying across the props, and its lamps and belly straps where they belong, and edge
 highlights in the town and the yard (Medium and High): on a convex crease between a face in more sun and a face in
-less, the brighter face's half of the line is a pale, warm lip and the other half stays ink. Low is unchanged
+less, the brighter face's half of the line is a pale, warm lip and the other half stays ink, and on a built map's
+paved ground, laid in the world so nothing repeats, inked cracks that run, fork and stop (High) and stains with a
+darker tide line (Medium and High). Low is unchanged
 except the clouds (their ink rim, shape and paint, and the town's and the yard's heaps), the yard's rounder canopies
-and the new car, quad and whoop models; Medium has no brush marks, no occlusion and no outer line, and keeps the edge
-highlights. A browser without
+and the new car, quad and whoop models; Medium has no brush marks, no occlusion, no outer line and no cracks, and
+keeps the edge highlights and the stains. A browser without
 WebGL 2, which main draws on through three's fallback and which this branch left with no world until pass 19, gets
 none of the comic layer and draws as main does, with the new models, the heaped clouds and, on Medium and High, the
 streak cloud.

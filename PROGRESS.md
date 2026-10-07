@@ -68417,3 +68417,72 @@ append conflict at the end of this file and nothing else in these files.
   yard's frame drawn with its models and clouds; WebGL 2 flight on the town and the yard at High with none. The usual
   one refused board connection per run.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.
+
+### Pass 22, same day: a built map's paved ground, cracked and stained in the world
+
+- The yard's ground was the weakest thing left in its frame: a pale plain from the pads to the fence. Its concrete is a
+  tile of four by four slabs, six metres each, whose stains and hairline cracks are kept faint on purpose because the
+  tile repeats every 24 m and anything it shows twice is a pattern (`src/maps/built/ground.js`). A comic yard's ground
+  is drawn: inked cracks that run, fork and stop, and stains with a darker tide line where the water dried. Both are now
+  laid in the world by the toon shader, so nothing repeats, on a built map's marked ground (its plot and its roads) that
+  faces up and is not turf: concrete, tarmac and dirt (GRIME in `src/render/comic.js`).
+- The cracks are the edges of a jittered grid of cells 2.4 m across, three edges in ten kept by a hash of the two cells
+  each one parts, which is the same from either side, so what is left is not a net but broken runs of joined segments
+  that fork and stop at a corner. A little wander in the cells' coordinate makes a crack a ragged line rather than a
+  ruled one. They come in patches on a lattice 18 m apart, so a slab here and there is cracked and most are sound. Each
+  is about 13 mm wide, swelling and thinning along its length as an inked stroke does, never under 1.7 pixels across,
+  and faded out from 18 m to 50 m, past which a crack would be a hair over every slab.
+- The stains are two octaves of noise cut at one crisp level, with a darker band just inside the cut, faded out from
+  60 m to 140 m. Soft dark patches on pale ground read as camouflage (pass 10); a stain with an edge reads as a stain.
+- Presets: the stains on Medium and High, the cracks on High alone, because the cell search (nine hashes and a sort a
+  pixel) is the most arithmetic in the toon shader. Low compiles the branch with its uniform at zero and draws exactly
+  as before. The town draws none of it: its bake merges the roads with the walls and the cars into one material, so its
+  ground cannot be marked (GROUND), and every surface facing up there would crack, roofs and car roofs with it. The
+  race field's ground is turf, which the grime skips, and the field sets the uniform to zero. A browser without WebGL 2
+  gets none of it, behind `comicGL2` like the rest of the layer.
+- Cost: no new pass, target, texture, draw call or program. On a paved ground pixel the stains read two value noises
+  and one `fwidth`, on Medium and High. The lawn patches beside them in the grit used to read two noises on every
+  ground pixel and multiply them by zero wherever the ground is not green, so they are now read only where they can
+  show, which leaves the colour exactly as it was and takes two noises off every paved pixel, every non green surface
+  facing up in the town and all ground past 160 m (the town's and the field's shots below are unchanged). On High a
+  crack costs one noise more on ground within 50 m, and its wander, the nine cell search and one noise more only on
+  a pixel inside a crack patch, a branch that differs from pixel to pixel, so it takes no derivative: the wander
+  carries its own slope (`comicNoiseD`) and the pixel's footprint goes through it by the chain rule.
+- Timed on SwiftShader, where the GPU is the CPU, so shader arithmetic shows in the frame time, and taken as a guide
+  and not as a number for any real machine: a scratch probe parks the camera on two of the yard's views, low across
+  the slabs and from 14 m up, and counts frames over 20 s, before (961d020, a worktree) and after, the runs
+  interleaved. Before, Medium 646 ms a frame low and 749 ms from above (four runs) and High 932 and 1045 ms (six
+  runs); after, Medium 741 and 817 ms (two runs), 15 and 9 percent more, and High 1053 and 1295 ms (four runs), 13
+  and 24 percent more. A frame is a whole count in 14 to 32 over 20 s, so each figure is good to about 5 percent, and
+  neither saving above showed beyond that: the first build of the cracks, which read the wander on every ground pixel,
+  timed 1111 and 1340 ms, and Medium before the lawn patch change 715 and 800 ms. Counted in operations, the change is
+  a few on a paved pixel at Medium, about a hundred on a paved pixel within 50 m at High and some seven hundred inside
+  a crack patch, which on the graphics High is meant for is a fraction of a millisecond at 1080p. SwiftShader did not
+  show the savings, so either it pays for branches a GPU skips or the counts are off, and a real Medium machine is the
+  check that settles it; that and a phone on Low stay the open check before this ships.
+- What went wrong on the way. The first try measured a crack's width with the screen derivative of the distance to the
+  nearest edge, and that distance folds at the edge, so its derivative vanishes in the very pixels the line is in: the
+  cracks drew as dashes. The distance is now taken to the bisector of the two nearest cells and turned into pixels by
+  the derivative of the cell coordinate across that edge's normal. The second try held a crack at a pixel and a half
+  wide at any range, which made the near ones hairlines; they now have a width in metres with the pixel width as a
+  floor. The first build drew the cracks on Medium too and read the wander and searched the cells on every ground
+  pixel, because a derivative cannot be taken in a branch that differs from pixel to pixel; the cracks are now
+  High's, and the wander carries its slope. The first frame time probe counted frames over 6 s and printed nothing,
+  because the shot script prints an eval's string quoted; at 4 to 7 frames a window it could not have told the
+  difference anyway. And a batch of shots killed half way left its headless browser running, which had to be
+  stopped by hand before the reruns, and a `pkill` whose pattern was in its own command line killed its own shell.
+- Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
+  `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date. Shots of the yard from six cameras, from 1.2 m to
+  25 m up, before (961d020, a worktree) and after: its concrete at golden hour, dusk and overcast and its tarmac and
+  dirt grounds on High, and its concrete on Medium (stains, no cracks) and on Low, where the six pairs differ only
+  where the traffic drove (402 to 2287 pixels, each in a box round a car). After the two savings the yard was shot
+  again on High and Medium, and differs from the first after only where the traffic drove and, on High, by the edge
+  pixels of far cracks, whose width now comes from the exact slope. The town's three parked views on High differ
+  from pass 21's by the falling petals and a car, before the lawn patch change and after it; the race field's five
+  gate views differ in the gates' sleeves and the trees, and by fewer pixels than two runs of the same commit differ
+  there (13460 against 16917 on one, 57814 against 70661 on another), so that is the field's own motion and not this
+  pass. The town's launch view is not compared, for the reason in pass 21. WebGL 1 (webgl2 refused before the page's
+  first line): flight on the yard at High with no shader error and its frame drawn, models and clouds, without the
+  comic layer; WebGL 2 flight on the yard and the town at High and Medium with none, and the race field's shots at
+  High with none, all on the final shader. The usual one refused board connection per run.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.
