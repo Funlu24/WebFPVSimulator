@@ -67417,3 +67417,12 @@ no build, no file format, no setting.
   that must not crawl has to fade where the ground is foreshortened, which is everywhere a pilot looks. A real grass
   look wants a texture with mipmaps or geometry, not this layer.
 - Shots, field, town and yard at High, against main. `npm run verify` not run: render only.
+
+### Pass 10, same day: ground patches fade with range
+
+- Found in the asset gallery (`src/props/gallery.html?row=industrial`), against main: pass 6's ground patches turned
+  its wide pale sand into camouflage all the way to the haze, because past a hundred metres or so the 14 m and 4 m
+  patches shrink to a few pixels each. The yard's concrete and a built map's dirt are the same kind of ground.
+- `comic.js`: the patches fade out between 50 and 160 m, their edge is softer (0.22 to 0.78) and their depth is plus
+  or minus 15 percent (was 18). Near ground keeps its variation; the far field goes back to an even colour, which is
+  also what air does to distant contrast. Shots: gallery row and race field overview, against main.

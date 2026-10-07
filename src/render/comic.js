@@ -233,11 +233,17 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * clover patches tens of metres across, the variation a painted
      * backdrop has and a flat fill does not. Two octaves at 14 m and 4 m,
      * on the up facing plane only, so walls keep their own grit.
+     *
+     * Faded out by 160 m. Past that the patches shrink to a few pixels and
+     * a wide pale ground (the asset gallery's sand, a built map's dirt)
+     * read as camouflage all the way to the haze; air takes the contrast
+     * out of distant ground anyway (pass 10).
      */
     if ( wn.y > max( wn.x, wn.z ) ) {
       float m = comicNoise( p.xz * 0.07 + 41.0 ) * 0.6 + comicNoise( p.xz * 0.23 + 7.0 ) * 0.4;
-      m = smoothstep( 0.28, 0.72, m );
-      col *= 1.0 + ( m - 0.5 ) * 0.36 * uComicGrit;
+      m = smoothstep( 0.22, 0.78, m );
+      float near = 1.0 - smoothstep( 50.0, 160.0, dist );
+      col *= 1.0 + ( m - 0.5 ) * 0.3 * uComicGrit * near;
     }
   }
 
