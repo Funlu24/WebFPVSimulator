@@ -67426,3 +67426,7 @@ no build, no file format, no setting.
 - `comic.js`: the patches fade out between 50 and 160 m, their edge is softer (0.22 to 0.78) and their depth is plus
   or minus 15 percent (was 18). Near ground keeps its variation; the far field goes back to an even colour, which is
   also what air does to distant contrast. Shots: gallery row and race field overview, against main.
+- Then, same pass: the patches draw on green ground only, and in hue more than in value (dry, yellowed turf against
+  lush), because a softer, nearer dark patch still read as camouflage on the gallery's sand and as a cloud shadow on a
+  field that has real ones. Concrete, dirt and sand keep the fine grit alone. A first hue version on every surface
+  turned the sand mustard. Shots: gallery nature row, race field, against main.
