@@ -509,20 +509,32 @@ const UNIT = {
 };
 
 /*
- * A canopy blob: the same icosahedron, with its normals taken from the
- * sphere it stands for rather than from its faces. At detail 0 three.js
- * gives every vertex its face's normal, so the cel ramp quantised each of
- * the twenty facets on its own and a tree's canopy was a mosaic of lit and
- * shaded triangles. Every vertex of the unit icosahedron is on the unit
- * sphere, so its normal is its own direction, as the town's planet has it
+ * A canopy blob: an icosahedron with its normals taken from the sphere it
+ * stands for rather than from its faces. At detail 0 three.js gives every
+ * vertex its face's normal, so the cel ramp quantised each of the twenty
+ * facets on its own and a tree's canopy was a mosaic of lit and shaded
+ * triangles. Every vertex is on the sphere, so its normal is its own
+ * direction, as the town's planet has it
  * (src/maps/city/vendored/world/planet.js) and the town's own canopies now
  * do (buildSakura and buildGrove, PATCH-world-trees.diff). The ramp gives
- * each blob two or three clean bands; the outline keeps its facets, and
- * bake() carries the normals through the blob's squash with the inverse
- * transpose. Rubble and a sandbag keep the faceted blob.
+ * each blob two or three clean bands, and bake() carries the normals
+ * through the blob's squash with the inverse transpose. Rubble and a
+ * sandbag keep the faceted blob.
+ *
+ * EIGHTY FACES, NOT TWENTY (graphics pass 15). With round shading the
+ * outline still kept the facets: the ink pass finds creases in depth, and
+ * the twenty faced blob's 42 degree turn at every edge is a crease, so a
+ * cherry close up was a bunch of inked pink gems. Detail 1 turns about 20
+ * degrees at an edge and its silhouette is a near circle. It is drawn at
+ * 0.92 of the sphere, which gives it the twenty faced blob's average
+ * silhouette (0.906 by projected area, 0.938 by mean width), so a tree is
+ * as full as it was. Its inradius is then 0.86, outside the 0.78 the
+ * canopy's solid is cut to in street.js, so the solid stays inside what is
+ * drawn. A tree in the yard is eighteen or so blobs, so this is about a
+ * thousand more triangles a tree: 5,670 to 22,680 in the default yard.
  */
 function roundBlob() {
-  const g = new THREE.IcosahedronGeometry(1, 0);
+  const g = new THREE.IcosahedronGeometry(0.92, 1);
   const p = g.attributes.position;
   const n = g.attributes.normal;
   const v = new THREE.Vector3();

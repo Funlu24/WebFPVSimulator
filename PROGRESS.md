@@ -67691,3 +67691,35 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
   pass 13's; the mesh hash probe above, three captures. `node --check src/render/scene.js`. `npm run lint:preload`
   and `npm run lint:quality` (below). Not run: `npm run verify`, render only, and the world it could move is the
   thing the hash probe measured.
+
+### Pass 15, same day: canopies are round, not cut gems
+
+- Pass 13 left this as the next thing for trees: the yard's and the town's canopy blobs were twenty faced icosahedra,
+  shaded round, but the outline pass reads creases from depth and every edge of a twenty faced blob turns 42 degrees,
+  so it inked each facet. A cherry close up in the yard was a bunch of pink gems, and a grove beside the quad in the
+  town was green ones.
+- The kit (`roundBlob` in `src/props/kit.js`), which draws every tree the builder places: the blob is now eighty faced
+  (detail 1, about 20 degrees at an edge, a near circular outline) and drawn at 0.92 of the sphere. Measured rather than
+  guessed, 0.92 is between the two ways of matching the twenty faced blob's average silhouette, 0.906 by projected area
+  and 0.938 by mean width, so a tree is as full as it was. The canopy's solid in `street.js` is a sphere of 0.78 of the
+  blob's smaller radius, cut to the old blob's inradius of 0.7947; the new blob's inradius is 0.934 times 0.92, which is
+  0.86, so the solid is still inside what is drawn and a pilot still never meets leaves that are not there. The comment
+  over the trees in `street.js` says so now. Cost: a yard tree is eighteen or so blobs, about a thousand more triangles a
+  tree; the default yard's canopies go from 5,670 triangles to 22,680 of about 140,000.
+- The town, where the trees ARE the triangle budget: the round blob is drawn only in cull cells whose nearest point is
+  within `leafRound` metres of the eye, 25 on Medium and High and off on Low (a new key in the city block of
+  `src/render/quality.js`). `roundCanopiesNear` in `src/maps/city/index.js` finds the cherry and grove chunks after the
+  bake and the chunking, checks each is the round shaded twenty faced blob, and makes one eighty faced twin per set with
+  the same attributes (the bake has taken uv off the canopy, so the twin drops it too, and the set's program binds it
+  unchanged). `cullTo` swaps the geometry pointer when a cell crosses the line, so there is no new draw call, program or
+  buffer, and nothing a collider or the bake reads changes, because both are done before. The shrubs and the bamboo are
+  faceted on purpose and keep their blobs.
+- Measured in the town with `window.__renderStats()` at four cameras by two groves, before and after: draw calls the
+  same (645 against 647, 517 against 514, 347 and 822 both), triangles up 3.0 to 4.4 percent (1,356,560 to 1,416,128 at
+  the worst), 357 to 597 instances drawn round. Every pass is in those counts, shadow and outline prepass included.
+- The capture harness timed out waiting for three frames once or twice per run in the town, with and without this pass
+  at the same cameras: that is software GL in this container drawing a million triangles, not the change.
+- Run, in the same turn: shots of two trees in the town and two in the yard at two cameras each against pass 13's; the
+  render stats probe above with and without the change; `npm run check:props` all passed (the kit changed),
+  `npm run lint:quality` 71 of 71 (the quality table changed), `npm run lint:preload` up to date, `node --check` on the
+  four files. Not run: `npm run verify`, render only.

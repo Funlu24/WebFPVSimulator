@@ -1715,13 +1715,15 @@ export function carDraw(el, parts, K) {
  * (K.leaf), and seven sided whorls; laid out with this module's own sine
  * and square root, so the solids are the same bits in every engine.
  *
- * Every blob holds a solid sphere of the drawn icosahedron's inradius
- * (0.7947 of its smaller radius, taken as 0.78), and every whorl the
- * largest sphere it holds and a capsule up its axis inside the slant. A
- * pilot who clips a canopy is where the picture says they are, and never
- * meets leaves that are not drawn; the outermost tips of a blob or a
- * whorl's skirt are drawn and not solid, which is the side to be wrong on
- * for leaves.
+ * Every blob holds a solid sphere of the twenty faced icosahedron's
+ * inradius (0.7947 of its smaller radius, taken as 0.78); the blob is drawn
+ * at eighty faces now (see roundBlob in kit.js), whose inradius is 0.86 of
+ * the same radius, so the solid is still inside it. Every whorl holds the
+ * largest sphere that fits in it and a capsule up its axis inside the
+ * slant. A pilot who clips a canopy is where the picture says they are,
+ * and never meets leaves that are not drawn; the outermost tips of a blob
+ * or a whorl's skirt are drawn and not solid, which is the side to be
+ * wrong on for leaves.
  * ------------------------------------------------------------------ */
 
 /* (1 - k / n) ^ 0.82 for n = 5 and 6: the cedar's taper, as literals,

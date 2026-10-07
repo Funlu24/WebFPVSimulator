@@ -142,6 +142,10 @@ const PRESETS = {
       shadowHalf: 22,
       shadowProxyCell: 0,
       foliageKeep: 0.22,
+      /* The canopy blobs near the eye drawn at eighty faces rather than
+       * twenty, within this many metres of a cell's nearest point; 0 keeps
+       * twenty everywhere. See roundCanopiesNear in src/maps/city/index.js. */
+      leafRound: 0,
       cullRadius: 50,
       fogNear: 22,
       fogFar: 46,
@@ -182,6 +186,7 @@ const PRESETS = {
       shadowHalf: 18,
       shadowProxyCell: 24,
       foliageKeep: 0.30,
+      leafRound: 25,
       cullRadius: 58,
       fogNear: 22,
       fogFar: 53,
@@ -239,6 +244,7 @@ const PRESETS = {
       shadowHalf: 22,
       shadowProxyCell: 24,
       foliageKeep: 0.48,
+      leafRound: 25,
       cullRadius: 70,
       fogNear: 22,
       fogFar: 65,

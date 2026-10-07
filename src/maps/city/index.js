@@ -1791,6 +1791,95 @@ function markCanopies(root) {
   return made.size;
 }
 
+/*
+ * ROUND CANOPIES NEAR THE EYE (graphics pass 15).
+ *
+ * The cherry and grove canopies are twenty faced blobs, shaded round since
+ * PATCH-world-trees.diff, but the outline still found their facets: the ink
+ * pass reads creases from depth, and a 42 degree turn at every edge is a
+ * crease, so a tree beside the quad was a bunch of inked gems. An eighty
+ * faced blob turns about 20 degrees at an edge and outlines as a near
+ * circle. It is drawn at 0.92 of the sphere, which matches the twenty
+ * faced blob's average silhouette (0.906 by projected area, 0.938 by mean
+ * width), so a canopy does not swell as the eye nears it.
+ *
+ * Near cells only, because the town's triangles are its trees: the eighty
+ * faced blob is four times the twenty, and the town carries 6,798 cherry
+ * and grove blobs after thinning on High. A cell takes the round blob while
+ * its nearest point is within `q.city.leafRound` metres of the eye; past
+ * that the fog has started and a facet is a few pixels. The swap is the
+ * mesh's geometry pointer, written only when a cell crosses the line, so it
+ * costs no draw call, no program and no buffer beyond one eighty faced
+ * blob per set, and it changes nothing a collider or the bake reads: it is
+ * done on the chunks after both. Low keeps the twenty faced blob.
+ *
+ * Sets are found by name and checked by shape, an icosahedron at detail 0
+ * whose normals are radial, which is the blob buildSakura and buildGrove
+ * draw; the shrubs and the bamboo are faceted on purpose and are left
+ * alone, as is anything not in a cell (a set too wide for one is drawn
+ * from every distance and keeps its blob).
+ */
+const ROUND_CANOPY = /^(sakura|grove)Canopy\d+$/;
+
+function isRoundBlob(geo) {
+  if (geo.type !== 'IcosahedronGeometry' || !geo.parameters || geo.parameters.detail !== 0) {
+    return false;
+  }
+  const p = geo.attributes.position;
+  const n = geo.attributes.normal;
+  if (!p || !n) {
+    return false;
+  }
+  for (let i = 0; i < p.count; i += 1) {
+    const l = Math.hypot(p.getX(i), p.getY(i), p.getZ(i));
+    if (Math.abs(n.getX(i) * l - p.getX(i)) > 1e-4 || Math.abs(n.getY(i) * l - p.getY(i)) > 1e-4
+      || Math.abs(n.getZ(i) * l - p.getZ(i)) > 1e-4) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function roundCanopiesNear(cells) {
+  const twins = new Map();
+  let meshes = 0;
+  for (const c of cells) {
+    for (const item of c.items) {
+      item.traverse((o) => {
+        if (!o.isInstancedMesh || !ROUND_CANOPY.test(o.name)) {
+          return;
+        }
+        const lo = o.geometry;
+        let hi = twins.get(lo);
+        if (hi === undefined) {
+          hi = null;
+          if (isRoundBlob(lo)) {
+            hi = new THREE.IcosahedronGeometry(lo.parameters.radius * 0.92, 1);
+            /* The same attributes as the blob it stands in for, so the
+             * program three.js built for the set binds it unchanged: the
+             * bake's trimAttributes has taken uv off the canopy. */
+            for (const name of Object.keys(hi.attributes)) {
+              if (!lo.attributes[name]) {
+                hi.deleteAttribute(name);
+              }
+            }
+          }
+          twins.set(lo, hi);
+        }
+        if (!hi) {
+          return;
+        }
+        o.userData.leafLo = lo;
+        o.userData.leafHi = hi;
+        (c.leaves || (c.leaves = [])).push(o);
+        c.leafNear = false;
+        meshes += 1;
+      });
+    }
+  }
+  return { meshes, sets: [...twins.values()].filter(Boolean).length };
+}
+
 function buildColliders(world) {
   const colliders = new Colliders();
   let noTop = 0;
@@ -2433,6 +2522,9 @@ export async function buildMap(shell, onProgress, options) {
   const chunked = chunkInstanced(world.root, { cell: CULL_CELL });
   progress(0.92);
   const cull = buildCullGrid(world.root, { cell: CULL_CELL });
+  const leafRound = q.city.leafRound ?? 0;
+  const roundLeaves = leafRound > 0 ? roundCanopiesNear(cull.cells) : { meshes: 0, sets: 0 };
+  const leafR2 = leafRound * leafRound;
   const anim = cityAnimation(world, colliders, boomIndices, trainCars);
   let placeStep = 0;
   /* Measured AFTER cityAnimation has seated the booms at step zero, so it is
@@ -2592,6 +2684,16 @@ export async function buildMap(shell, onProgress, options) {
       const dx = Math.max(0, Math.abs(eye.x - c.x) - cullHalf);
       const dz = Math.max(0, Math.abs(eye.z - c.z) - cullHalf);
       const d2 = dx * dx + dz * dz;
+      if (c.leaves) {
+        const near = d2 <= leafR2;
+        if (c.leafNear !== near) {
+          c.leafNear = near;
+          for (let j = 0; j < c.leaves.length; j += 1) {
+            const o = c.leaves[j];
+            o.geometry = near ? o.userData.leafHi : o.userData.leafLo;
+          }
+        }
+      }
       const on = d2 <= cullR2;
       if (c.on === on) {
         continue;
@@ -2715,6 +2817,7 @@ export async function buildMap(shell, onProgress, options) {
       cullAlways: cull.always.length,
       cullRadius,
       foliageKeep,
+      roundLeaves: { ...roundLeaves, radius: leafRound },
       planting: world.planting ?? null,
       places: {
         ...places.stats,
