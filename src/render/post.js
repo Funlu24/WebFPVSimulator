@@ -159,6 +159,9 @@ const OutlineShader = {
     ${PACK_GLSL}
     #ifdef COMIC_AO
     #define COMIC_AO_DEPTH(uv) (unpackDepth16(texture2D(tGeo, uv).zw) * (uGeoFar - uGeoNear) + uGeoNear)
+    /* One and a half depth codes of the 16 bit packing above: a tap and
+     * the centre can each be half a code off, plus the slack. */
+    #define COMIC_AO_QUANT ((uGeoFar - uGeoNear) * (1.5 / 65025.0))
     ${AO_GLSL}
     #endif
 

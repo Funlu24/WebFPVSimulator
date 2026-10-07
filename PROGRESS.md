@@ -67587,3 +67587,31 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
 - `node scripts/shots.js` through a scratch camera script: the town's cars on this branch and on main, the alley A/B.
 - Not run: `npm run verify`, because this is render only (no physics, plant, ABI or build), and a headless GPU says
   nothing about frame time.
+
+### Pass 12, same day: a painted texture on the ground, and bands the occlusion drew on the field
+
+- `comic.js`: the ground's detail map. Seen from a quad a metre or two up the ground is most of the frame, and a flat
+  fill there was the plainest thing on screen and the weakest cue for how fast the world is going by. One 512 square
+  texture, generated in code at the first preset that keeps it (Medium and High; Low never builds or uploads it), from
+  a fixed seed of its own (not the world rng) and with no trigonometry: red is turf, short tapered strokes in three
+  tones laid densely; green is aggregate, small light and dark stones in a mottle; blue is the turf strokes' warm or
+  cool hue. Each channel is settled to a mean of exactly one half, so its coarsest mip is neutral and the far field
+  keeps its colour. Mipmaps and anisotropy 8 do the fade with distance that the three shader only grass tries of pass
+  9 could not. Sampled twice, a 2.7 m tile and a 7.9 m one turned 37 degrees, on surfaces that face up: turf on green
+  ground, stones on the rest. Two fetches per toon fragment on Medium and High, inside a uniform branch (a fetch with
+  implicit derivatives in a per pixel branch is undefined). It costs about 100 ms of the first map load in Node on this
+  container and 1.4 MB of texture with its mips. No full screen pass samples it, so the budget's P4 cannot move.
+- Found while shooting it, and mine: pass 5's occlusion drew bands across the race field's lawn wherever the camera
+  looks down at turf close by, which is every start on the pads. The field's prepass packs depth into 16 bits over
+  the whole camera range, a code every 4 cm or so, and the occlusion read that staircase as something standing on the
+  ground. Toggling the comic layer's knobs off in the page left the bands, which is what pointed at the post pass. A
+  tap now has to stand more than one and a half depth codes above the surface before it counts (`COMIC_AO_QUANT`,
+  defined by post.js from its own packing, zero in the town's pipeline, whose depth texture is fine enough). Shot on
+  the pads: bands gone, contact shading at gate feet kept.
+- Tried and taken back in the same pass: starting the first hatching set later on ground that faces up, on the theory
+  that the bands were faint strokes. The toggles showed they were not, so it came out again rather than ship a change
+  with a false comment.
+- Shots, against main and against pass 11: race field at High (overview, pads, a gate, a flag), Medium and Low, the
+  yard at High, the town at High. On Low the ground matches an 08:21 capture within a 2 percent fuzz; the only differing pixels
+  are the clouds of pass 6, the canopies of pass 7 and a flag in the wind. `npm run lint:preload` up to date,
+  `npm run lint:quality` 71 of 71 clean, `node --check` on both files. Not run: `npm run verify`, render only.

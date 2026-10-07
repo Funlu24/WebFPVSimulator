@@ -9,7 +9,8 @@
  * painted texture rather than a flat fill. This file adds both to the
  * lighting of MeshToonMaterial itself, so the race field (celmat.js), the
  * town and a built map (the vendored toon.js) all get the same hand with
- * one edit and no new pass, no new target and no new texture.
+ * one edit and no new pass and no new target. Its one texture, the
+ * ground's detail map, came with pass 12 and is generated in code.
  *
  * WHY THE PROTOTYPE AND NOT EACH CALL SITE. The field builds its toon
  * materials through celMaterial and the freestyle maps through the
@@ -56,8 +57,10 @@
  * side at 0.79 of that, so the field's trees never got a stroke. That
  * fraction is the tone, and the strokes are its ink.
  *
- * Render only. Nothing here reads or writes the physics state, and no
- * shader here samples a texture, so the budget's P4 cannot move.
+ * Render only. Nothing here reads or writes the physics state. The one
+ * texture (the ground's detail map, pass 12, further down) is generated
+ * here from a fixed seed and sampled by scene materials, never by a full
+ * screen pass, so the budget's P4 cannot move.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -100,6 +103,10 @@ export const COMIC = {
   /* Where the strokes thin out with distance, in metres. */
   fadeNear: { value: 70 },
   fadeFar: { value: 160 },
+  /* The ground's detail map (pass 12): 0 until a preset that keeps it has
+   * built the texture, so a page that never sets a preset samples nothing. */
+  detail: { value: 0 },
+  detailMap: { value: null },
 };
 
 /* Per preset. Low is the integrated laptop and the phone that has already
@@ -107,11 +114,13 @@ export const COMIC = {
  * guard in the shader is a uniform branch, so a zero skips the arithmetic
  * without a second program. */
 const LEVELS = {
-  low: { hatch: 0, grit: 0, brush: 0 },
+  low: { hatch: 0, grit: 0, brush: 0, detail: 0 },
   /* Medium is the integrated laptop: strokes and grit, not the brush
-   * marks, which are the most arithmetic for the least picture. */
-  medium: { hatch: 1, grit: 1, brush: 0 },
-  high: { hatch: 1, grit: 1, brush: 1 },
+   * marks, which are the most arithmetic for the least picture. It keeps
+   * the ground's detail map: two fetches of a small cached texture is
+   * cheap, and it is what tells a pilot how fast the ground is going by. */
+  medium: { hatch: 1, grit: 1, brush: 0, detail: 1 },
+  high: { hatch: 1, grit: 1, brush: 1, detail: 1 },
 };
 
 export function setComicQuality(q) {
@@ -120,7 +129,195 @@ export function setComicQuality(q) {
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
   COMIC.brush.value = lv.brush;
+  /* Built on the first preset that keeps it and never on Low, which
+   * neither allocates nor uploads it. */
+  if (lv.detail > 0 && !COMIC.detailMap.value) {
+    COMIC.detailMap.value = buildDetailMap();
+  }
+  COMIC.detail.value = COMIC.detailMap.value ? lv.detail : 0;
   aoOn = id === 'high';
+}
+
+/*
+ * THE GROUND'S DETAIL MAP (pass 12).
+ *
+ * Seen from a quad a metre or two up, the ground is most of the frame, and
+ * a flat fill there is the plainest thing on screen: it is also what tells
+ * a pilot how fast the world is going by. The grit and the patches above
+ * vary it over metres; what was missing is the texture of the stuff itself,
+ * a turf's blades and a road's stones, at centimetres.
+ *
+ * Three tries at painting grass in the shader alone failed (pass 9, in
+ * PROGRESS.md), all for the same reason: a pattern finer than a pixel has
+ * to be faded by hand where the ground is foreshortened, which is
+ * everywhere a pilot looks, and the fade ate it. A texture with mipmaps and
+ * anisotropic filtering does that fade properly, so this is one: 512 square,
+ * generated here at the first preset that wants it, from a fixed seed of
+ * its own (never the world's rng, which plants the colliders), with no
+ * trigonometry so every engine paints the same pixels. Each channel is
+ * settled to a mean of exactly one half, so the coarsest mip is neutral and
+ * the far field keeps the colour it had.
+ *
+ *   r  turf: short tapered strokes in every direction, light and dark,
+ *      over a soft clumping. Painted blades, not photographed ones.
+ *   g  aggregate: small light and dark stones in a mottle, for asphalt,
+ *      concrete, dirt and sand.
+ *   b  the turf strokes' hue, warm (dry) or cool (lush), so a lawn up close
+ *      is several greens, which is how a painter does one.
+ */
+const DETAIL_N = 512;
+
+function buildDetailMap() {
+  const N = DETAIL_N;
+  let seed = 0x2f6b9d13;
+  const rnd = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const turf = new Float32Array(N * N).fill(0.5);
+  const stone = new Float32Array(N * N).fill(0.5);
+  const hue = new Float32Array(N * N).fill(0.5);
+
+  /* Value noise on a lattice that wraps, so the tile repeats seamlessly. */
+  const mottle = (buf, cells, amp) => {
+    const g = new Float32Array(cells * cells);
+    for (let i = 0; i < g.length; i += 1) {
+      g[i] = rnd() - 0.5;
+    }
+    for (let y = 0; y < N; y += 1) {
+      const fy = (y / N) * cells;
+      const iy = Math.floor(fy);
+      let ty = fy - iy;
+      ty = ty * ty * (3 - 2 * ty);
+      const y0 = iy % cells;
+      const y1 = (iy + 1) % cells;
+      for (let x = 0; x < N; x += 1) {
+        const fx = (x / N) * cells;
+        const ix = Math.floor(fx);
+        let tx = fx - ix;
+        tx = tx * tx * (3 - 2 * tx);
+        const x0 = ix % cells;
+        const x1 = (ix + 1) % cells;
+        const a = g[y0 * cells + x0] + (g[y0 * cells + x1] - g[y0 * cells + x0]) * tx;
+        const b = g[y1 * cells + x0] + (g[y1 * cells + x1] - g[y1 * cells + x0]) * tx;
+        buf[y * N + x] += (a + (b - a) * ty) * amp;
+      }
+    }
+  };
+
+  /* One tapered stroke from its centre along a unit direction, wrapped at
+   * the tile's edges; `tint` writes the same coverage into the hue. */
+  const stroke = (buf, cx, cy, ux, uy, len, hw, val, alpha, tint) => {
+    const ax = cx - ux * len * 0.5;
+    const ay = cy - uy * len * 0.5;
+    const r = Math.ceil(len * 0.5 + hw + 1);
+    const bx = Math.floor(cx);
+    const by = Math.floor(cy);
+    for (let oy = -r; oy <= r; oy += 1) {
+      for (let ox = -r; ox <= r; ox += 1) {
+        const px = bx + ox + 0.5;
+        const py = by + oy + 0.5;
+        let t = ((px - ax) * ux + (py - ay) * uy) / len;
+        t = t < 0 ? 0 : (t > 1 ? 1 : t);
+        const qx = ax + ux * len * t - px;
+        const qy = ay + uy * len * t - py;
+        const d = Math.sqrt(qx * qx + qy * qy);
+        const taper = 1 - (2 * t - 1) * (2 * t - 1);
+        const w = hw * (0.3 + 0.7 * taper);
+        const cov = Math.min(1, Math.max(0, w + 0.5 - d)) * alpha;
+        if (cov <= 0) {
+          continue;
+        }
+        const k = (((by + oy) % N + N) % N) * N + (((bx + ox) % N + N) % N);
+        buf[k] += (val - buf[k]) * cov;
+        if (tint !== null) {
+          hue[k] += (tint - hue[k]) * cov;
+        }
+      }
+    }
+  };
+
+  /* A unit direction without trigonometry: a point in the unit disc,
+   * rejected until it is not near the centre, then normalised. */
+  const dir = () => {
+    for (;;) {
+      const x = rnd() * 2 - 1;
+      const y = rnd() * 2 - 1;
+      const m = x * x + y * y;
+      if (m > 0.04 && m <= 1) {
+        const s = 1 / Math.sqrt(m);
+        return [x * s, y * s];
+      }
+    }
+  };
+
+  /* Dense and layered, three tones laid over each other until no flat
+   * ground shows between them: sparse strokes on a flat grey read as hay
+   * or pine needles, not as a lawn. */
+  mottle(turf, 8, 0.10);
+  mottle(turf, 32, 0.08);
+  for (let i = 0; i < 26000; i += 1) {
+    const [ux, uy] = dir();
+    const tone = rnd();
+    const val = tone < 0.35 ? 0.24 + rnd() * 0.16 : (tone < 0.7 ? 0.55 + rnd() * 0.15 : 0.75 + rnd() * 0.13);
+    const tint = tone < 0.35 ? rnd() * 0.45 : 0.4 + rnd() * 0.6;
+    stroke(turf, rnd() * N, rnd() * N, ux, uy, 4 + rnd() * 6, 0.5 + rnd() * 0.5, val, 0.75, tint);
+  }
+
+  mottle(stone, 16, 0.12);
+  mottle(stone, 64, 0.06);
+  for (let i = 0; i < 26000; i += 1) {
+    const [ux, uy] = dir();
+    const light = rnd() < 0.4;
+    const val = light ? 0.66 + rnd() * 0.2 : 0.14 + rnd() * 0.2;
+    /* A stone is a stroke as long as it is wide. */
+    const r = 0.5 + rnd() * 1.2;
+    stroke(stone, rnd() * N, rnd() * N, ux, uy, r * (1 + rnd()), r, val, 0.8, null);
+  }
+
+  /* Settle each channel to a mean of one half at a set spread, so the
+   * coarsest mip is neutral whatever the strokes added up to. */
+  const settle = (buf, spread) => {
+    let m = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      m += buf[i];
+    }
+    m /= buf.length;
+    let v = 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      v += (buf[i] - m) * (buf[i] - m);
+    }
+    const k = v > 0 ? spread / Math.sqrt(v / buf.length) : 0;
+    for (let i = 0; i < buf.length; i += 1) {
+      buf[i] = 0.5 + (buf[i] - m) * k;
+    }
+  };
+  settle(turf, 0.15);
+  settle(stone, 0.13);
+  settle(hue, 0.16);
+
+  const data = new Uint8Array(N * N * 4);
+  const byte = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
+  for (let i = 0; i < N * N; i += 1) {
+    data[i * 4] = byte(turf[i]);
+    data[i * 4 + 1] = byte(stone[i]);
+    data[i * 4 + 2] = byte(hue[i]);
+    data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  /* Clamped to what the GPU offers. Anisotropy is what keeps the strokes
+   * sharp along a road seen at a grazing angle instead of a blur. */
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /* The heavier pen for the ink passes, as a factor on each pipeline's own
@@ -164,6 +361,8 @@ uniform float uComicWidth;
 uniform float uComicPeriod;
 uniform float uComicFadeNear;
 uniform float uComicFadeFar;
+uniform float uComicDetail;
+uniform sampler2D uComicDetailMap;
 
 /* No sine in either: a sine's precision is the driver's, and a stroke
  * should land in the same place on every GPU. */
@@ -260,6 +459,30 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     }
   }
 
+  /*
+   * The ground's detail map (pass 12, buildDetailMap): turf on green ground,
+   * stones on everything else that faces up. Two fetches at scales that do
+   * not divide each other (a 2.7 m tile and a 7.9 m one turned 37 degrees),
+   * so neither tile's repeat lines up into a grid seen from height. Fetched
+   * whatever the surface faces, inside this uniform branch only: a fetch
+   * with implicit derivatives in a branch that neighbouring pixels did not
+   * take is undefined, and walls are cheap to sample and multiply by zero.
+   */
+  if ( uComicDetail > 0.0 ) {
+    vec2 du = p.xz * 0.37;
+    vec2 dv = vec2( p.x * 0.799 - p.z * 0.602, p.x * 0.602 + p.z * 0.799 ) * 0.127 + vec2( 0.31, 0.77 );
+    vec4 d1 = texture2D( uComicDetailMap, du );
+    vec4 d2 = texture2D( uComicDetailMap, dv );
+    float up = smoothstep( 0.05, 0.25, wn.y - max( wn.x, wn.z ) );
+    float turf = smoothstep( 0.01, 0.06, col.g - max( col.r, col.b ) );
+    float blades = ( d1.r - 0.5 ) * 0.75 + ( d2.r - 0.5 ) * 0.55;
+    float stones = ( d1.g - 0.5 ) * 0.7 + ( d2.g - 0.5 ) * 0.4;
+    float warm = ( d1.b - 0.5 ) * 1.2 + ( d2.b - 0.5 ) * 0.8;
+    vec3 grass = ( 1.0 + blades ) * ( vec3( 1.0 ) + vec3( 0.07, 0.03, -0.12 ) * warm );
+    vec3 detail = mix( vec3( 1.0 + stones * 0.65 ), grass, turf );
+    col *= mix( vec3( 1.0 ), detail, up * uComicDetail );
+  }
+
   if ( uComicHatch > 0.0 ) {
     /* The screen derivatives first, in uniform control flow: a derivative
      * taken inside a branch that neighbouring pixels did not take is
@@ -337,6 +560,8 @@ function inject(shader) {
   shader.uniforms.uComicPeriod = COMIC.period;
   shader.uniforms.uComicFadeNear = COMIC.fadeNear;
   shader.uniforms.uComicFadeFar = COMIC.fadeFar;
+  shader.uniforms.uComicDetail = COMIC.detail;
+  shader.uniforms.uComicDetailMap = COMIC.detailMap;
   shader.vertexShader = vs
     .replace('#include <common>', `#include <common>\n${VERT_HEAD}`)
     .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_BODY}`);
@@ -492,11 +717,23 @@ const AO_TAPS = Array.from({ length: 8 }, (_, i) => {
       vec2 suv = clamp( uv + vec2( cos( a ), sin( a ) ) * ( ${r} * px ) / uAoRes, vec2( 0.0 ), vec2( 1.0 ) );
       vec3 v = comicAoPos( suv, COMIC_AO_DEPTH( suv ) ) - P;
       float len = length( v ) + 1e-4;
-      occ += max( 0.0, dot( N, v / len ) - 0.12 ) * ( 1.0 - smoothstep( uAoRadius * 0.6, uAoRadius * 1.6, len ) );
+      occ += max( 0.0, ( dot( N, v ) - COMIC_AO_QUANT ) / len - 0.12 ) * ( 1.0 - smoothstep( uAoRadius * 0.6, uAoRadius * 1.6, len ) );
     }`;
 }).join('\n');
 
 export const AO_GLSL = /* glsl */ `
+  /*
+   * How far a depth read can be off, in metres, as a height above the
+   * surface a tap may stand and still count as the surface itself. The
+   * field's prepass packs depth into 16 bits over its whole range, a code
+   * every 4 cm (post.js), and a quad on the start pads looking down at
+   * turf a metre away reads that staircase as occlusion: bands across the
+   * lawn along every depth code (pass 12). The including shader defines it
+   * from its own packing; the town's depth texture is fine enough for 0.
+   */
+  #ifndef COMIC_AO_QUANT
+  #define COMIC_AO_QUANT 0.0
+  #endif
   uniform vec2 uAoTanHalf;
   uniform vec2 uAoRes;
   uniform float uAoRadius;
