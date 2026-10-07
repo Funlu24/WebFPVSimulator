@@ -68306,3 +68306,58 @@ append conflict at the end of this file and nothing else in these files.
   main and branch, by a scratch probe that wraps `getContext` before the page's first line. The usual one refused
   board connection per run.
 - Not run: `npm run verify`. Render and a measurement script only: no physics, plant, ABI or build change.
+
+### Pass 20, same day: the town's and the yard's clouds as painted heaps, and the streak cloud on their skies
+
+- The town and the yard hung the vendored sky's clouds round the eye: 22 flat cards, a pale lit plane over a paler
+  shade plane, one texture of seven ellipses for all of them, 62 percent opaque. In a frame they were washes with no
+  form, the same outline came round as the view turned, and a card only looks flat at the middle of the screen: at the
+  FPV camera's 85 degrees every card toward an edge stretched into a long wedge.
+- Each card is now a heap of the race field's kind (`comicSky` in the new `src/render/comicsky.js`): flattened base
+  puffs with two tiers heaped on them, cut flat at one base, painted in three bands keyed to an axis leaning from up
+  toward the sun, with an ink rim where each puff turns away. It stands where its card stood, as wide as the card's
+  painted cloud, its base on the card's painted trim, 1.15 of the card's height tall, so the sky keeps its layout. Its
+  shape comes from a stream seeded by the card's index. The world rng and the vendored files are untouched, and the
+  cards stay in the scene, hidden, so the yard's paintSky still finds their materials.
+- One merged mesh and one draw call where there were up to 44 blended, textured quads, on every preset and on WebGL 1.
+  It writes no depth and draws right after the dome, as the cards did, so the whole town stands in front of it. Inside
+  it the eye never leaves the centre of the ring (the group trails the camera), so the puffs are merged farthest first,
+  which is the painter's order from any heading, and the faces turned away from the centre are left out of the index.
+  Each puff takes the least sphere detail that keeps its outline within about a pixel of round at 1920 wide.
+- Cost, measured in the browser here: 31,736 triangles and 32,022 vertices, about 0.96 MB of buffers, and 23 to 31 ms
+  of the map's build (42 ms the first time, with the spheres made). The town's six sky views drew 15 to 25 fewer calls
+  and 31.7 thousand more triangles than before. Those views were already at 1.08 to 1.21 million triangles before
+  this pass and are at 1.11 to 1.24 after; the 1.2 million of P2 is the race field's budget, which verify reads at the
+  field only, so nothing here is held to it, but it is written down. Not timed on a GPU.
+- The yard's times: paintSky hands each time's cloud, shade, ink and sun to the heaps (`skyLook` in
+  `src/maps/built/looks.js`), so golden, noon, dusk and overcast each paint their own; the builder's preview keeps the
+  cards and is unchanged. Overcast gets its own heap shade (`heapShade`): its card shade was an edge under a lit layer
+  at 94 percent, and a heap seen from under it is mostly belly, which in that shade hung darker than the sky, the
+  smudge on the lens the overcast's own note warns about. Now the belly is a step under the sky and the body a step
+  over it.
+- The streak cloud (pass 18, the field's) is on the town's and the yard's domes too, Medium and High only. Its GLSL
+  moved from `scene.js` to `comicsky.js` with its tints and strength as arguments, and the field passes the numbers it
+  had: the field's six sky views before (b80a212) and after differ only at the waving flags. On the town and the yard
+  it goes into the dome's program when three compiles it, before the line that writes the colour, so it follows the
+  yard's dome through paintSky's own shader; the dome asks three for derivatives, so it compiles on WebGL 1. Its tints
+  are the time's cloud colour, cooler away from the sun, so dusk paints pink cirrus on the indigo. Overcast has none
+  (`streak: 0`). On Low the dome gets no new uniform and no new code.
+- What went wrong on the way. The first try painted the cards instead (an atlas of four inked cumulus shapes in place
+  of the vendored texture): black ink read as clip art, the plane's aspect stretched every shape 1.7 times, base lumps
+  hung as skirts, and in the end a crisp painted card shows the wedge a soft one hid. Dropped, and the atlas code taken
+  out before anything was committed. The first heaps used the field's sphere, which showed its facets at a fifth of the
+  frame, and the field's deep belly, which made the town's clouds mauve and no lighter than the sky; a few broad base
+  puffs read as loaves. And the field's rim, seen from a few degrees under the cut base, inked the whole base and
+  scattered broken strokes across the belly, so a face that looks straight down now takes no rim. A wait loop that
+  looked for the capture with `pgrep -f` found itself and never ended; killed by hand.
+- Checks: `node --check` on every file changed; `npm run lint:preload` up to date after `gen:preload` (the new module
+  is in the boot graph through scene.js and in fresh.js's served list); `npm run lint:quality` 71 of 71;
+  `npm run lint:frame` 34 passed; `npm run lint:boot` 9 of 9; `npm run lint:memory` PASS, every world lazy and freed.
+  The sky rig on the town at High before (the cards) and after, at every step of the tuning, and once on Low after;
+  a reshoot after the face trimming loop was rewritten to allocate nothing, identical to the shots before it but for
+  two pixels by one or two levels at the foot of two frames;
+  the yard's four times at High, before (b80a212, a worktree) and after; the field's six sky views before and after,
+  diffed. WebGL 1 (webgl2 refused before the page's first line): flight on the town and the yard at High with no
+  shader error, and the town's sky shot there with the heaps and the streaks drawn. The usual one refused board
+  connection per run.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.

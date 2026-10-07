@@ -54,25 +54,30 @@ loop: plan, a pass, screenshots, re-plan.
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
 
-## Where it stands after pass 19
+## Where it stands after pass 20
 
 Done: ink, hatching (single in shade, crossed in cast shadow, thinning on surfaces seen edge on), grit, brush marks
 (High), occlusion (High), an outer line heavier than the inner lines (High; the field only within 30 m), painted turf
 and stone on marked ground only, leaf clumps on every canopy, round eighty faced canopies (the town only near the
-eye), cumulus clouds with lit heads and flat bases on the race field, high streak cloud painted on the race field's
-upper sky (Medium and High), the town's round canopies inked as one shape each rather than their facets, harder grade
+eye), cumulus clouds with lit heads and flat bases on the race field, and on the town's and the yard's skies in place of
+the vendored flat cards (one draw call where there were up to 44, each of the yard's times in its own colours), high
+streak cloud painted on all three skies (Medium and High; none under the yard's overcast), the town's round canopies
+inked as one shape each rather than their facets, harder grade
 on both pipelines, four passes of car detail (plates by class, bumpers as parts, folded mirrors inside each solid,
 cabs, learners, two tone keis, a tradesman's ladder), the 5 inch rebuilt as a bench built freestyle quad in 25 draw
 calls where there were 81, and the whoop inked for the first time, with the 5 inch's even shell, its braces ending at
 the duct walls instead of lying across the props, and its lamps and belly straps where they belong. Low is unchanged
-except the clouds (their ink rim, shape and paint), the yard's rounder canopies and the new car, quad and whoop
-models; Medium has no brush marks, no occlusion and no outer line. A browser without WebGL 2, which main draws on
-through three's fallback and which this branch left with no world until pass 19, gets none of the comic layer and
-draws as main does, with the new models and, on Medium and High, the streak cloud.
+except the clouds (their ink rim, shape and paint, and the town's and the yard's heaps), the yard's rounder canopies
+and the new car, quad and whoop models; Medium has no brush marks, no occlusion and no outer line. A browser without
+WebGL 2, which main draws on through three's fallback and which this branch left with no world until pass 19, gets
+none of the comic layer and draws as main does, with the new models, the heaped clouds and, on Medium and High, the
+streak cloud.
 
 Tried and dropped, with the reason in PROGRESS.md: grass blades (cost, and the owner's 2026-08-16 decision), dark
 landscape patches (read as cloud shadow), wood grain on the start blocks (too little wood shows in the launch view),
-the outer line on the field's distance (it filled the gates' sleeves and made the distance busy).
+the outer line on the field's distance (it filled the gates' sleeves and made the distance busy), painted cloud cards
+for the town and the yard (a flat card skews into a wedge toward the edge of an 85 degree view, and an inked one shows
+it more).
 
 Open for the owner: a taxi roof lantern needs a taller sedan solid, the built map's parked cars' folded mirrors stand
 7 cm out of the solid's step, and the quad takes about 30 ms more to build at boot and when Settings opens. And the
@@ -81,5 +86,5 @@ ceiling of 14 derived for Medium's machine, which is at 9. Dispute 7 in `.loop/t
 
 Next, once the owner has flown it and said which way to push:
 
-- Skies: posterized bands, a stronger horizon colour and the field's streak cloud on the town and the yard.
+- Skies: posterized bands and a stronger horizon colour.
 - A frame time comparison against main on a real Medium machine and a phone on Low before this ships.

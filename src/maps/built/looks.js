@@ -58,7 +58,12 @@ import { sceneOf } from '../../trackbuilder/model.js';
  *                      is quantised to, and the two cloud layers' colours
  *                      and opacities, over buildSky's own; cloudInk, where
  *                      a time has it, the width in texels of an ink line
- *                      round each cloud's lit layer (paintSky).
+ *                      round each cloud's lit layer (paintSky); streak,
+ *                      where a time has it, how strongly the comic layer
+ *                      paints its streak cloud (STREAK in
+ *                      src/render/comicsky.js if it does not say), and
+ *                      heapShade, where a time has it, the shade its heaped
+ *                      clouds take in place of cloudShade (skyLook).
  *   hills              the painted ridges, far and near.
  *   ink, grade         the post pipeline's ink colour and anime grade.
  *   flats              what the kit multiplies every unlit material that is
@@ -175,6 +180,14 @@ export const TIMES = {
       top: 0xb2afc7, mid: 0xc2bfd3, haze: 0xcecbd9, bands: 26,
       cloud: 0xdedce8, cloudOpacity: 0.94, cloudShade: 0x9d99b3, cloudShadeOpacity: 0.62,
       cloudInk: 3,
+      /* A sky under a deck has no high cloud to see. */
+      streak: 0,
+      /* The cards' shade was an edge under a lit layer at 94 percent; a
+       * heap seen from under it is mostly belly, and in cloudShade it hung
+       * darker than the sky, which is the smudge on the lens above. In
+       * this the belly sits a step under the sky and the body a step over
+       * it. */
+      heapShade: 0xc2bece,
     },
     hills: { far: 0xc6c3d6, near: 0xb8b5cb },
     ink: 0x3d3953,
@@ -315,6 +328,11 @@ const DOME_FRAGMENT = /* glsl */ `
  * planes, the shade behind and the lit one in front, and every puff shares
  * the same two materials; those are the sky's own (made with cache: false),
  * so setting them touches nothing else.
+ *
+ * Where the comic layer has painted the sky (comicSky in
+ * src/render/comicsky.js, which the yard does and the builder's preview
+ * does not), its heaps and its streak cloud take the time's look as well,
+ * and the cards, which the heaps hide, are left alone.
  */
 export function paintSky(sky, T) {
   const m = sky.dome.material;
@@ -330,8 +348,12 @@ export function paintSky(sky, T) {
   u.uMid.value.set(T.sky.mid);
   u.uHaze.value.set(T.sky.haze);
   u.uBands.value = T.sky.bands;
+  const comic = sky.clouds.userData.comicPaint;
+  if (comic) {
+    comic(skyLook(T));
+  }
   const puff = sky.clouds.children[0];
-  if (puff && puff.children.length === 2) {
+  if (puff && puff.children.length === 2 && puff.visible) {
     const [shade, lit] = puff.children;
     lit.material.color.set(T.sky.cloud);
     lit.material.opacity = T.sky.cloudOpacity;
@@ -339,6 +361,18 @@ export function paintSky(sky, T) {
     shade.material.opacity = T.sky.cloudShadeOpacity;
     inkClouds(lit.material, T);
   }
+}
+
+/* What the comic layer's sky (comicSky in src/render/comicsky.js) takes
+ * from a time. */
+export function skyLook(T) {
+  return {
+    cloud: T.sky.cloud,
+    shade: T.sky.heapShade ?? T.sky.cloudShade,
+    ink: T.ink,
+    sun: T.sun.at,
+    streak: T.sky.streak,
+  };
 }
 
 /*

@@ -46,6 +46,7 @@ import {
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
 import { setComicQuality } from './comic.js';
+import { CIRRUS_GLSL } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
 /* The obstacle dimensions come from the track module, which holds MultiGP's
@@ -315,64 +316,8 @@ const SKY_GLSL = /* glsl */ `
     return col;
   }
 `;
-/*
- * HIGH STREAK CLOUD, painted across the upper sky (graphics pass 18).
- *
- * Above the cumulus, between the zenith and the tree line, the field's sky
- * was one smooth gradient, the largest unpainted area in a racing frame:
- * half the screen whenever the nose is up. A painted sky is never empty
- * there. These are cirrus streaks, drawn as a flat layer seen in
- * perspective, so they run toward the vanishing point the way real high
- * cloud does, in short broken wisps with a crisp painted edge rather than
- * a soft fog, pale, warmer on the sun's side.
- *
- * Every term is a direction, so the layer is fixed to the world and turns
- * with the view and nothing else: no time, no rng, no position, so it can
- * neither crawl nor differ between two loads. The wisp edge is widened by
- * its own screen derivative, which is what keeps the streaks low in the sky
- * from stepping where the layer is foreshortened. The layer fades out well
- * above the horizon, where it would be too fine to draw anyway, and thins
- * again overhead, where the nearest part of it would draw its wisps
- * largest, so the zenith keeps its deepest blue. No sine anywhere, for the
- * same reason comic.js gives: a hash lands on the same pixel on every GPU.
- *
- * Off on Low (uCirrus), which is a uniform branch, so the dome keeps one
- * program. Four value noise reads on the sky's pixels on Medium and High.
- */
-const CIRRUS_GLSL = /* glsl */ `
-  float skyHash(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-  }
-  float skyNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(skyHash(i), skyHash(i + vec2(1.0, 0.0)), f.x),
-               mix(skyHash(i + vec2(0.0, 1.0)), skyHash(i + vec2(1.0, 1.0)), f.x), f.y);
-  }
-  vec3 celSkyCirrus(vec3 col, vec3 vd, vec3 sunDir) {
-    /* The layer's plane, softened at the horizon so it never runs off to
-     * infinity, and turned to the wind. No early out below the horizon:
-     * fwidth is undefined after a branch that differs between neighbouring
-     * pixels, and the mask already takes it to nothing there. */
-    vec2 p = vd.xz / (max(vd.y, 0.0) + 0.18);
-    p = mat2(0.83, -0.56, 0.56, 0.83) * p;
-    /* Long along the wind and narrow across it, the wisps bent by a coarser
-     * noise so no two run parallel, and patchy, so the sky is not covered. */
-    vec2 st = p * vec2(2.2, 9.0);
-    float n = skyNoise(st + vec2(skyNoise(p * 2.6) * 2.4, 0.0)) * 0.65
-            + skyNoise(st * 2.3 + 11.0) * 0.35;
-    float cover = smoothstep(0.55, 0.78, skyNoise(p * 0.8 + 5.0));
-    float e = max(fwidth(n), 0.04);
-    float wisp = smoothstep(0.62 - e, 0.62 + e, n) * cover;
-    float mask = smoothstep(0.08, 0.30, vd.y) * (1.0 - smoothstep(0.75, 0.97, vd.y));
-    vec3 tint = mix(vec3(0.93, 0.94, 0.97), vec3(1.0, 0.95, 0.86),
-      pow(max(dot(vd, normalize(sunDir)), 0.0), 4.0));
-    return mix(col, tint, wisp * mask * 0.30);
-  }
-`;
+/* The high streak cloud the dome paints (graphics pass 18) is CIRRUS_GLSL
+ * in ./comicsky.js, which the town's and the yard's domes share. */
 const FOG_NEAR = 130;
 /* 2200, not 780. At 780 every piece of terrain past that distance renders
  * as exactly the horizon colour, 0.781 linear, which leaves no room above
@@ -4893,7 +4838,8 @@ function skyDome(q = null) {
       void main() {
         vec3 col = celSkyColor(vDir, uSun, uHorizon, uHigh);
         if (uCirrus > 0.0) {
-          col = celSkyCirrus(col, normalize(vDir), uSun);
+          col = celSkyCirrus(col, normalize(vDir), uSun,
+            vec3(0.93, 0.94, 0.97), vec3(1.0, 0.95, 0.86), 0.30);
         }
         gl_FragColor = vec4(col, 1.0);
       }

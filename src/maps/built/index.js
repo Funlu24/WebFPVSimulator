@@ -77,6 +77,7 @@ import { PAL } from '../city/vendored/core/palette.js';
 import { Pipeline } from '../city/vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
 import { comicPipeline, setComicQuality, markGround } from '../../render/comic.js';
+import { comicSky } from '../../render/comicsky.js';
 import { buildSky } from '../city/vendored/core/sky.js';
 import { setOutlineResolution } from '../city/vendored/core/outline.js';
 import { cel, flat } from '../city/vendored/core/toon.js';
@@ -99,7 +100,7 @@ import { makePartnerMark, signAspect } from '../../art/partnermark.js';
 import { PARTNERS, MAP_ONLY_PARTNERS, PATRON_MAP_BRANDS } from '../../partners/roster.js';
 import { seatDocument, groundUnder, topUnder, PLATFORM_REACH } from './place.js';
 import { starterMap } from './starter.js';
-import { lookOf, kitLook, paintLights, paintSky, paintPost } from './looks.js';
+import { lookOf, kitLook, paintLights, paintSky, paintPost, skyLook } from './looks.js';
 import { chooseStfSpot, choosePartnerSpots, choosePatronSpots, stfKey } from './egg.js';
 import { choosePatrons } from '../../partners/patrons.js';
 import { trafficOf, uploadTraffic, roadKeepOut } from './traffic.js';
@@ -1136,6 +1137,9 @@ export async function buildMap(shell, onProgress, options) {
   const BOUNCE_OFFSET = new THREE.Vector3(...T.bounce.at);
 
   const sky = buildSky(scene, skyRadius);
+  /* Heaped cumulus in place of the vendored cards, and the streak cloud on
+   * Medium and High, in the time's colours: src/render/comicsky.js. */
+  comicSky(sky, skyLook(T), { streaks: q.id !== 'low' });
   paintSky(sky, T);
   const backdrop = buildBackdrop(scene, hillScale, T.hills);
   progress(0.1);

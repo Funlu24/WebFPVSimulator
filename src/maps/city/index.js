@@ -48,6 +48,7 @@ import { PAL } from './vendored/core/palette.js';
 import { Pipeline } from './vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
 import { comicPipeline, setComicQuality } from '../../render/comic.js';
+import { comicSky } from '../../render/comicsky.js';
 import { buildSky } from './vendored/core/sky.js';
 import { setOutlineResolution } from './vendored/core/outline.js';
 import { buildWorld } from './vendored/world/index.js';
@@ -2303,6 +2304,10 @@ export async function buildMap(shell, onProgress, options) {
 
   progress(0.04);
   const sky = buildSky(scene, 500);
+  /* Heaped cumulus in place of the vendored cards, and the streak cloud on
+   * Medium and High: src/render/comicsky.js. */
+  comicSky(sky, { cloud: PAL.cloud, shade: PAL.cloudShade, ink: PAL.ink, sun: SUN_OFFSET.toArray() },
+    { streaks: q.id !== 'low' });
   progress(0.08);
 
   /*
