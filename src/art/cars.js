@@ -94,6 +94,22 @@
  * triangles and nothing in draw calls; the coupes, already sculpted, gain
  * only the wheels.
  *
+ * THE FOURTH PASS (2026-10-07), the owner's "lots of refinement" once
+ * more, under the third pass's limits: what a car carries, at the
+ * distances a pilot passes one. A real plate by class, off one sheet that
+ * holds every plate and the few stickers a car wears (THE SHEET), so the
+ * plate is still one material, and the plate in a dark holder; a bumper
+ * drawn as a part, with a dark fitting gap round its top and, painted, a
+ * black valance at its foot; rings round the round headlamps; the high
+ * stop lamp; the filler flap; mud flaps on the working vehicles and side
+ * markers on the lorry; and the door mirrors folded, as a parked car's
+ * are, which brings every car's drawing back inside its solid's width
+ * (out on their arms they stood 16 to 20 cm past it). And a car says
+ * something about who drives it, read off what buildCar is handed and
+ * nothing else (storyOf): the cabs with their wing mirrors, the two tone
+ * keis, the learners' leaves, the tradesman's ladder. It costs at most
+ * 1.75 times the second pass's triangles, and nothing in draw calls.
+ *
  * TWO LEVELS OF DETAIL. 'parked' (every parked car, the town's and a built
  * map's) draws the wheels at 16 sides with their outer faces only; 'full'
  * (the moving cars, a handful on a map) draws them with both faces. A
@@ -124,7 +140,6 @@
 import * as THREE from 'three';
 import { PAL } from '../maps/city/vendored/core/palette.js';
 import { cel, flat } from '../maps/city/vendored/core/toon.js';
-import { platePlate } from '../maps/city/vendored/core/textures.js';
 import { hullOutline } from '../maps/city/vendored/core/outline.js';
 import { SPEC as TOWN_SPEC, CAR, vehicleSize } from '../maps/city/vendored/world/vehicles.js';
 
@@ -660,6 +675,229 @@ const AMBER = 0xeaa451;
 /* A reversing lamp's clear lens: not LAMP_FRONT, so it is never lit. */
 const CLEAR = 0xe9e6e2;
 
+/* ------------------------------------------------------------------ *
+ * THE SHEET: every car's number plate and the few stickers a Japanese
+ * car carries, painted once on one canvas, so there is still one plate
+ * material for every car in the world and the town's bake still folds
+ * every plate into one batch. A plate is a cell of it, picked by what the
+ * car is (storyOf): white with green characters for a private car,
+ * yellow with black for a kei, green with white for a vehicle on hire
+ * (a taxi, the box lorry, the council's minibus, a delivery van), black
+ * with yellow for a kei on hire; one to three numbers for each kind of
+ * vehicle, so two cars side by side seldom carry the same one. The real
+ * plate's layout, which is what says Japan from three metres: the
+ * district and the class number small along the top between the two
+ * bolts, the kana and the big serial under them. Painted as the vendored
+ * builder painted its one plate (Canvas2D, the town's Japanese fonts,
+ * sRGB, anisotropy 4), fifteen plates in cells of 256 by 128.
+ *
+ * The stickers share the sheet for the same reason, the three of them in
+ * its last cell: the taxi's vacancy sign on its dashboard, the green and
+ * yellow learner's leaf (wakaba), the taxi company's crest on its doors.
+ * Each costs a few triangles and nothing in draw calls, where a material
+ * of its own would cost one a car.
+ * ------------------------------------------------------------------ */
+
+const SHEET_W = 1024;
+const SHEET_H = 512;
+const JP_FONT = `'Yu Gothic', 'Yu Gothic UI', 'Meiryo', 'MS Gothic', 'Hiragino Kaku Gothic ProN', sans-serif`;
+/* The plate classes, each the cells of the sheet that carry one. */
+const PLATE = {
+  private: [0, 1, 2], large: [3, 4], kei: [5, 6], keiGoods: [7, 8], goods: [9, 10], taxi: [11, 12], bus: [13], keiHire: [14],
+};
+const PLATE_LOOK = [
+  { bg: '#f2f0e8', ink: '#2c6a4b', rim: '#bdbab0' },
+  { bg: '#eccb4e', ink: '#28272b', rim: '#b8952c' },
+  { bg: '#2e6c4f', ink: '#f0eee4', rim: '#1f4d38' },
+  { bg: '#2a2a30', ink: '#e9c64e', rim: '#141418' },
+];
+/* The sheet's plates in order, four to a row of it: [look, district,
+ * class number, kana, serial]. The numbers follow the real rules: a
+ * passenger car's class number starts 5 when it is a small car, no wider
+ * than 1.7 m, which every town kind is, and 3 when it is wider, which the
+ * coupes are; a kei's 58; a goods vehicle's 4 (small) or 1 (large), a kei
+ * goods vehicle's 48; a bus's 2. A private car's kana are from さ on, a
+ * vehicle on hire's from あ to こ. The first is the vendored builder's
+ * one plate, given its district and class. */
+const PLATE_TEXT = [
+  [0, '多摩', '500', 'さ', '21-08'], [0, '湘南', '530', 'む', '47-26'], [0, 'なにわ', '501', 'ね', '68-31'],
+  [0, '多摩', '300', 'す', '19-62'], [0, 'なにわ', '330', 'み', '72-05'],
+  [1, '多摩', '580', 'な', '12-59'], [1, '湘南', '581', 'ゆ', '30-74'],
+  [1, 'なにわ', '480', 'よ', '85-02'], [1, '多摩', '480', 'せ', '63-19'],
+  [2, '多摩', '400', 'あ', '16-40'], [2, 'なにわ', '100', 'う', '58-77'],
+  [2, '湘南', '500', 'か', '72-13'], [2, '多摩', '500', 'く', '40-96'],
+  [2, 'なにわ', '200', 'き', '39-58'],
+  [3, '多摩', '480', 'え', '52-87'],
+];
+/* Where the stickers are, all three in the sheet's last cell: [x, y, w,
+ * h] in its pixels. Each is drawn at half the size it is designed at
+ * (256 by 128 for the sign, 128 square for the others), which is still a
+ * texel or two for every pixel it covers from a chase camera. */
+const STICKER = { vacant: [768, 384, 128, 64], leaf: [896, 384, 64, 64], crest: [960, 384, 64, 64] };
+
+/* A cell's corners as uvs, in the order a plate's face is wound (its
+ * lower left as read, lower right, upper right, upper left), three texels
+ * in, so a smaller mip does not bleed a neighbour's colour round it. */
+function cellUV([x, y, w, h]) {
+  const p = 3;
+  const u0 = (x + p) / SHEET_W;
+  const u1 = (x + w - p) / SHEET_W;
+  const v0 = 1 - (y + h - p) / SHEET_H;
+  const v1 = 1 - (y + p) / SHEET_H;
+  return [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+}
+
+/* The car's own plate, from its story (a Mesher with none is a plain
+ * private car's). */
+function plateUV(M) {
+  const i = (M.story ?? PLAIN).plate;
+  return cellUV([(i % 4) * 256, (i >> 2) * 128, 256, 128]);
+}
+
+/* The leaf's outline and the crest's, as fractions of their cells, x
+ * across and y down as the sheet is painted. The plate material is
+ * opaque, so the sheet's clear texels come out black: a sticker that is
+ * not a rectangle is cut to its own outline (the leaf on the middle of
+ * its white edge, the crest just inside its rim) and never drawn as its
+ * cell's square. */
+const LEAF = [[22, 16], [64, 42], [106, 16], [106, 78], [64, 114], [22, 78]].map(([a, b]) => [a / 128, b / 128]);
+const CREST = Array.from({ length: 16 }, (_, k) => [0.5 + 0.453 * Math.cos((k / 8) * Math.PI), 0.5 + 0.453 * Math.sin((k / 8) * Math.PI)]);
+
+/* A sticker: `shape` (its cell's whole rectangle when null), each point
+ * put on the car by `at(fx, fy)`, fractions of the cell as above. */
+function sticker(M, cell, shape, at, toward) {
+  const [x, y, w, h] = cell;
+  let q = shape ?? [[0, 1], [1, 1], [1, 0], [0, 0]];
+  if (area2(q.map(([fx, fy]) => [fx, -fy])) < 0) {
+    q = q.slice().reverse();
+  }
+  M.face('plate', q.map(([fx, fy]) => at(fx, fy)), {
+    uvs: q.map(([fx, fy]) => [(x + fx * w) / SHEET_W, 1 - (y + fy * h) / SHEET_H]),
+    tris: q.length > 4 ? triangulate(q.map(([fx, fy]) => [fx, -fy])) : null,
+    toward,
+  });
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+/* Text at (x, y), as big as `size` and no wider than `maxW`. */
+function fitText(c, text, x, y, maxW, size, color, weight = 'bold') {
+  let s = size;
+  do {
+    c.font = `${weight} ${s}px ${JP_FONT}`;
+    if (c.measureText(text).width <= maxW) {
+      break;
+    }
+    s -= 2;
+  } while (s > 6);
+  c.fillStyle = color;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(text, x, y);
+}
+
+function sheet() {
+  const cv = document.createElement('canvas');
+  cv.width = SHEET_W;
+  cv.height = SHEET_H;
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = true;
+  PLATE_TEXT.forEach(([k, district, cls, kana, serial], i) => {
+    const look = PLATE_LOOK[k];
+    c.save();
+    c.translate((i % 4) * 256, (i >> 2) * 128);
+    /* The plate's pressed rim, then its face. */
+    c.fillStyle = look.rim;
+    roundRect(c, 2, 2, 252, 124, 12);
+    c.fill();
+    c.fillStyle = look.bg;
+    roundRect(c, 7, 7, 242, 114, 8);
+    c.fill();
+    c.fillStyle = look.rim;
+    for (const bx of [42, 214]) {
+      c.beginPath();
+      c.arc(bx, 26, 7, 0, TAU);
+      c.fill();
+    }
+    fitText(c, `${district} ${cls}`, 128, 29, 124, 27, look.ink);
+    fitText(c, kana, 36, 84, 40, 32, look.ink);
+    fitText(c, serial, 148, 83, 182, 74, look.ink);
+    c.restore();
+  });
+  /* The stickers, each painted at its design size and scaled into its
+   * cell. The vacancy sign: a dark box on the dashboard, its two
+   * characters lit red, which is what a hand at the kerb looks for. */
+  const inCell = ([x, y, w], size, draw) => {
+    c.save();
+    c.translate(x, y);
+    c.scale(w / size, w / size);
+    draw();
+    c.restore();
+  };
+  inCell(STICKER.vacant, 256, () => {
+    c.fillStyle = '#26232b';
+    c.fillRect(0, 0, 256, 128);
+    c.shadowColor = '#ff6b55';
+    c.shadowBlur = 5;
+    fitText(c, '空車', 128, 66, 210, 86, '#f0604c');
+    c.shadowBlur = 0;
+  });
+  /* The learner's leaf: a shield cut in two, yellow and green, on a white
+   * edge. */
+  inCell(STICKER.leaf, 128, () => {
+    const leaf = (pts, fill) => {
+      c.beginPath();
+      pts.forEach(([px, py], i) => (i ? c.lineTo(px, py) : c.moveTo(px, py)));
+      c.closePath();
+      c.fillStyle = fill;
+      c.fill();
+    };
+    c.lineJoin = 'round';
+    c.lineWidth = 12;
+    c.strokeStyle = '#f4f2ea';
+    leaf([[22, 16], [64, 42], [106, 16], [106, 78], [64, 114], [22, 78]], '#f4f2ea');
+    c.stroke();
+    leaf([[22, 16], [64, 42], [64, 114], [22, 78]], '#e8c440');
+    leaf([[106, 16], [64, 42], [64, 114], [106, 78]], '#3e9a5c');
+  });
+  /* The taxi company's crest: a cherry blossom in a ring. */
+  inCell(STICKER.crest, 128, () => {
+    c.fillStyle = '#efe8d4';
+    c.beginPath();
+    c.arc(64, 64, 60, 0, TAU);
+    c.fill();
+    c.lineWidth = 9;
+    c.strokeStyle = '#2e6c4f';
+    c.beginPath();
+    c.arc(64, 64, 53, 0, TAU);
+    c.stroke();
+    c.fillStyle = '#de8aa3';
+    for (let k = 0; k < 5; k += 1) {
+      const a = (k / 5) * TAU - Math.PI / 2;
+      c.beginPath();
+      c.ellipse(64 + Math.cos(a) * 20, 64 + Math.sin(a) * 20, 17, 13, a, 0, TAU);
+      c.fill();
+    }
+    c.fillStyle = '#b8455c';
+    c.beginPath();
+    c.arc(64, 64, 8, 0, TAU);
+    c.fill();
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 const MAT = {};
 function mats() {
   if (MAT.dark) {
@@ -675,9 +913,10 @@ function mats() {
   MAT.lampR = flat({ color: LAMP_REAR });
   MAT.amber = flat({ color: AMBER });
   MAT.clear = flat({ color: CLEAR });
-  /* One plate material for every car, as the vendored builder kept one:
-   * flat() does not cache a mapped material. */
-  MAT.plate = flat({ color: 0xffffff, map: platePlate(), cache: false });
+  /* One plate material for every car, as the vendored builder kept one,
+   * its map the sheet of every plate and sticker: flat() does not cache a
+   * mapped material. */
+  MAT.plate = flat({ color: 0xffffff, map: sheet(), cache: false });
   return MAT;
 }
 const paint = (c) => cel({ color: c, bands: 3, tint: 0x6a6288 });
@@ -693,7 +932,9 @@ const deepPaint = (c) => cel({ color: deepOf(c), bands: 3, tint: 0x5e5680 });
  *                lamp face stands against L / 2; out: how far the bumper
  *                stands past L / 2; bumper and dam: the bumper's top and
  *                bottom; lean: how far the face leans back at its top;
- *                tuck: how far the bumper's foot is tucked under.
+ *                tuck: how far the bumper's foot is tucked under; low:
+ *                on a painted bumper, how high the black valance along
+ *                its foot comes up (bumperLoft), none when unset.
  *   arch         gap: the arch's radius over the tyre's; lift: its centre
  *                over the axle; lip: the flare's width, 0 for none.
  *   cham         [c, d] of the flank chamfer (e) and of the plan corners
@@ -714,7 +955,7 @@ const SHAPE = {
   kei: {
     p2: true, rearWiper: true,
     nose: { edge: 0.95, face: 0.0, out: 0.05, bumper: 0.64, dam: 0.30, lean: 0.07, tuck: 0.06, wrap: { rp: [0.16, 0.18], front: 0.055, side: 0.02 } },
-    tail: { edge: 0.99, face: 0.0, out: 0.035, bumper: 0.56, dam: 0.36, lean: 0.03, tuck: 0.05, wrap: { rp: [0.12, 0.16], front: 0.045, side: 0.02 } },
+    tail: { edge: 0.99, face: 0.0, out: 0.035, bumper: 0.56, dam: 0.36, lean: 0.03, tuck: 0.05, low: 0.06, wrap: { rp: [0.12, 0.16], front: 0.045, side: 0.02 } },
     arch: { gap: 0.05, lift: 0.03, lip: 0.035 },
     lip: { w: 0.04, proud: 0.014 },
     cham: { e: [0.045, 0.045], n: [0.09, 0.12] },
@@ -739,8 +980,8 @@ const SHAPE = {
   },
   hatch: {
     p2: true, rearWiper: true,
-    nose: { edge: 0.92, face: 0.0, out: 0.05, bumper: 0.62, dam: 0.27, lean: 0.10, tuck: 0.08, wrap: { rp: [0.22, 0.22], front: 0.05, side: 0.02 } },
-    tail: { edge: 0.97, face: 0.0, out: 0.035, bumper: 0.60, dam: 0.32, lean: 0.05, tuck: 0.06, wrap: { rp: [0.16, 0.20], front: 0.045, side: 0.02 } },
+    nose: { edge: 0.92, face: 0.0, out: 0.05, bumper: 0.62, dam: 0.27, lean: 0.10, tuck: 0.08, low: 0.03, wrap: { rp: [0.22, 0.22], front: 0.05, side: 0.02 } },
+    tail: { edge: 0.97, face: 0.0, out: 0.035, bumper: 0.60, dam: 0.32, lean: 0.05, tuck: 0.06, low: 0.07, wrap: { rp: [0.16, 0.20], front: 0.045, side: 0.02 } },
     arch: { gap: 0.05, lift: 0.03, lip: 0.035 },
     lip: { w: 0.04, proud: 0.014 },
     cham: { e: [0.05, 0.05], n: [0.12, 0.15] },
@@ -752,8 +993,8 @@ const SHAPE = {
   },
   sedan: {
     p2: true,
-    nose: { edge: 0.93, face: 0.0, out: 0.05, bumper: 0.60, dam: 0.28, lean: 0.05, tuck: 0.07, wrap: { rp: [0.12, 0.14], front: 0.055, side: 0.022 } },
-    tail: { edge: 0.95, face: 0.0, out: 0.05, bumper: 0.58, dam: 0.32, lean: 0.05, tuck: 0.06, wrap: { rp: [0.12, 0.14], front: 0.05, side: 0.022 } },
+    nose: { edge: 0.93, face: 0.0, out: 0.05, bumper: 0.60, dam: 0.28, lean: 0.05, tuck: 0.07, low: 0.045, wrap: { rp: [0.12, 0.14], front: 0.055, side: 0.022 } },
+    tail: { edge: 0.95, face: 0.0, out: 0.05, bumper: 0.58, dam: 0.32, lean: 0.05, tuck: 0.06, low: 0.05, wrap: { rp: [0.12, 0.14], front: 0.05, side: 0.022 } },
     arch: { gap: 0.05, lift: 0.03, lip: 0.03 },
     lip: { w: 0.035, proud: 0.014 },
     cham: { e: [0.03, 0.035], n: [0.07, 0.09] },
@@ -778,8 +1019,8 @@ const SHAPE = {
   },
   minivan: {
     p2: true, rearWiper: true,
-    nose: { edge: 1.01, face: 0.0, out: 0.05, bumper: 0.70, dam: 0.28, lean: 0.08, tuck: 0.07, wrap: { rp: [0.20, 0.22], front: 0.06, side: 0.022 } },
-    tail: { edge: 1.05, face: 0.0, out: 0.035, bumper: 0.60, dam: 0.36, lean: 0.03, tuck: 0.05, wrap: { rp: [0.14, 0.18], front: 0.045, side: 0.02 } },
+    nose: { edge: 1.01, face: 0.0, out: 0.05, bumper: 0.70, dam: 0.28, lean: 0.08, tuck: 0.07, low: 0.045, wrap: { rp: [0.20, 0.22], front: 0.06, side: 0.022 } },
+    tail: { edge: 1.05, face: 0.0, out: 0.035, bumper: 0.60, dam: 0.36, lean: 0.03, tuck: 0.05, low: 0.06, wrap: { rp: [0.14, 0.18], front: 0.045, side: 0.02 } },
     arch: { gap: 0.05, lift: 0.03, lip: 0.035 },
     lip: { w: 0.04, proud: 0.014 },
     cham: { e: [0.05, 0.05], n: [0.12, 0.15] },
@@ -1597,8 +1838,16 @@ function glints(poly, slant, streaks, draw) {
  * A screen on one of the glasshouse's raked faces, between two profile
  * points (a at the bottom, b at the top) whose half widths are za and zb.
  * A dark surround, the glass inside it, the streaks on the glass.
+ * `stickers` are cells of the sheet behind the glass, each { cell, shape,
+ * u, v }: shape its outline (sticker(), the whole cell when unset), u its
+ * two edges across the car, the first where the cell's left edge goes,
+ * and v its foot and head up the glass from the glass's foot, in metres;
+ * they lie over the streaks and under the wipers. `stop` puts
+ * the high stop lamp behind a back glass, a red bar across its middle at
+ * its head ('top', a tailgate's) or at its foot ('bottom', a saloon's
+ * parcel shelf).
  */
-function screen(M, a, b, za, zb, out, { frame: fr = 0.05, bottom = 0.05, streaks = [[0.2, 0.2], [0.52, 0.06]], chrome = false, band = null, wipers = null } = {}) {
+function screen(M, a, b, za, zb, out, { frame: fr = 0.05, bottom = 0.05, streaks = [[0.2, 0.2], [0.52, 0.06]], chrome = false, band = null, wipers = null, stickers = null, stop = null } = {}) {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.sqrt(dx * dx + dy * dy);
@@ -1637,6 +1886,15 @@ function screen(M, a, b, za, zb, out, { frame: fr = 0.05, bottom = 0.05, streaks
     }
   }
   glints(glass, -0.55, streaks, (q) => draw('glint', q, 0.014));
+  for (const { cell, shape = null, u: [ua, ub], v: [va, vb] } of stickers ?? []) {
+    const at = (fx, fy) => P(ua + (ub - ua) * fx, bottom + vb + (va - vb) * fy, 0.0155);
+    sticker(M, cell, shape, at, [nx, ny, 0]);
+  }
+  if (stop) {
+    const h = 0.026;
+    const v0 = stop === 'top' ? len - fr - 0.014 - h : bottom + 0.014;
+    M.face('lampR', [P(-0.16, v0, 0.0155), P(0.16, v0, 0.0155), P(0.16, v0 + h, 0.0155), P(-0.16, v0 + h, 0.0155)], { toward: [nx, ny, 0] });
+  }
   /* Wiper blades lying on the glass: each from its pivot at the foot
    * [u, v up the glass] to its tip, a dark blade on a thinner arm. */
   for (const [u0, v0, u1, v1] of wipers ?? []) {
@@ -1656,7 +1914,7 @@ function screen(M, a, b, za, zb, out, { frame: fr = 0.05, bottom = 0.05, streaks
  * screens' pillars; pillars stand at the kind's seams; `side` limits it
  * (a van is glazed over its cab only).
  */
-function sideGlass(M, s, cap, hw) {
+function sideGlass(M, s, cap, hw, roof2 = null) {
   const g = s.glass;
   let dlo = inset(cap, cap.map(() => g.frame));
   dlo = clip(dlo, 0, 1, -(s.waist + g.belt));
@@ -1699,7 +1957,11 @@ function sideGlass(M, s, cap, hw) {
       const q = area2(poly) >= 0 ? poly : poly.slice().reverse();
       M.face(role, q.map((p) => at(p, lift)), { tris: q.length > 4 ? triangulate(q) : null, toward: [0, 0, side] });
     };
-    if (g.pillars === 'dark') {
+    if (roof2) {
+      /* A two tone's whole glasshouse side over the belt, pillars and
+       * rails, in the roof's colour. */
+      lay(roof2, clip(inset(cap, cap.map(() => 0.004)), 0, 1, -(s.waist + g.belt - 0.012)), 0.006);
+    } else if (g.pillars === 'dark') {
       lay('dark', inset(dlo, dlo.map(() => -0.012)), 0.006);
     }
     for (const q of panes) {
@@ -1746,13 +2008,17 @@ function plate(M, chain, sign, y, clear = false) {
   /* u runs left to right as the plate is read: seen from ahead the
    * reader's right is -z, from behind it is +z. */
   const pz = sign > 0 ? [0.165, -0.165] : [-0.165, 0.165];
-  const pts = [
-    [a.x + a.nx * lift, y - 0.0825 + a.ny * lift, pz[0]],
-    [a.x + a.nx * lift, y - 0.0825 + a.ny * lift, pz[1]],
-    [b.x + b.nx * lift, y + 0.0825 + b.ny * lift, pz[1]],
-    [b.x + b.nx * lift, y + 0.0825 + b.ny * lift, pz[0]],
-  ];
-  M.face('plate', pts, { uvs: [[0, 0], [1, 0], [1, 1], [0, 1]], toward: [sign * Math.abs(a.nx), a.ny, 0] });
+  const at = (f, yy, z, l) => [f.x + f.nx * l, yy + f.ny * l, z];
+  const toward = [sign * Math.abs(a.nx), a.ny, 0];
+  M.face('plate', [at(a, y - 0.0825, pz[0], lift), at(a, y - 0.0825, pz[1], lift), at(b, y + 0.0825, pz[1], lift), at(b, y + 0.0825, pz[0], lift)], {
+    uvs: plateUV(M), toward,
+  });
+  /* Its holder, a dark frame 12 mm round it and 6 mm behind it, so the
+   * plate is a thing bolted on and not a label on the paint: the line
+   * the ink draws round it is what reads at ten metres. */
+  const e = sign * 0.012;
+  const hl = lift - 0.006;
+  M.face('dark', [at(a, y - 0.0945, pz[0] + e, hl), at(a, y - 0.0945, pz[1] - e, hl), at(b, y + 0.0945, pz[1] - e, hl), at(b, y + 0.0945, pz[0] + e, hl)], { toward });
 }
 
 /* ------------------------------------------------------------------ *
@@ -1894,33 +2160,97 @@ function swage(M, s, hw, flank, shuts = []) {
   return y + 0.045;
 }
 
-/* The door mirrors: a dark foot on the door's top front
- * corner, a dark arm, and a housing in paint that is round at its front
- * and flat at its back, where the glass is, and narrower at its outer end
- * in plan, as a mirror's shell is. */
-function mirrors(M, s, hw, role) {
+/*
+ * THE DOOR MIRRORS, FOLDED, as a car parked in Japan has them. Out on
+ * their arms they reached 16 to 20 cm past the car's solid, which stands
+ * 12 to 14 mm outside the flank (vehicleSize's W, and the built map's
+ * solids and moving boxes after it), so a quad could be flown through the
+ * one thing a pilot threads between two parked cars; and a town car's
+ * glasshouse stands too close to its flank for a mirror out to fit inside
+ * that. Folded, the housing lies back along the side glass from its hinge
+ * on the door's top front corner, its back to the world in paint, round
+ * at the hinge and at its outer face, and stops 2 mm inside the solid.
+ * `zGlass` is the side glass's half width at the housing's foot, which
+ * it stands 2 mm off. A kind whose glass leaves it under 2 cm draws the
+ * foot alone. A built map's parked car is the one solid this does not
+ * reach inside: above the waist it steps in to 7 cm inside W (carLayout
+ * in src/props/street.js), inside the side glass already, so there the
+ * housing stands 7 cm out of the step, where the mirror out stood 26.
+ */
+function mirrors(M, s, hw, role, zGlass) {
   const mx = s.cab[1] - 0.12;
-  const y0 = s.waist + 0.035;
-  const y1 = s.waist + 0.14;
-  const back = mx - 0.035;
-  const front = mx + 0.045;
-  /* The shell's side view, the back straight, the front rounded. */
-  const prof = [[back, y0], [front - 0.03, y0], [front - 0.008, y0 + 0.02], [front, (y0 + y1) / 2], [front - 0.008, y1 - 0.02], [front - 0.03, y1], [back, y1]];
+  const y0 = s.waist + 0.03;
+  const h = 0.105;
+  const zi = zGlass + 0.002;
+  const zo = s.W / 2 - 0.002;
+  const xf = mx + 0.045;
+  const xb = mx - 0.155;
+  /* The housing's side view: its hinge end round, its tail cut back. */
+  const prof = [
+    [xb + 0.012, y0], [xf - 0.035, y0], [xf - 0.006, y0 + 0.028], [xf, y0 + 0.06], [xf - 0.014, y0 + h - 0.014],
+    [xf - 0.05, y0 + h], [xb + 0.035, y0 + h - 0.01], [xb, y0 + h - 0.045],
+  ];
+  const c = Math.min(0.016, (zo - zi) * 0.3);
+  const pts = prof.map(([x, y]) => ({ x, y, c, d: c }));
+  /* A prism's sides stop its chamfer's depth short of its half width, and
+   * only the outer one is rounded and capped here, so the half width is
+   * that much more than half the housing's: its inner side then meets the
+   * glass, and its outer face is at `zo`. */
+  const t = (zo - zi + c) / 2;
+  const m4 = new THREE.Matrix4();
   for (const side of [1, -1]) {
     M.box('dark', mx - 0.06, s.waist - 0.004, side > 0 ? hw - 0.03 : -(hw + 0.012), mx + 0.05, s.waist + 0.03, side > 0 ? hw + 0.012 : -(hw - 0.03), '-y');
-    M.box('dark', mx - 0.02, y0 + 0.005, side > 0 ? hw : -(hw + 0.07), mx + 0.02, y0 + 0.03, side > 0 ? hw + 0.07 : -hw, '-y');
-    const zi = side * (hw + 0.05);
-    const zo = side * (hw + 0.2);
-    /* The inner end full height, the outer end drawn in at the front. */
-    const outer = prof.map(([x, y]) => [back + (x - back) * 0.8, y0 + 0.008 + (y - y0) * 0.86]);
-    const n = prof.length;
-    for (let i = 0; i < n; i += 1) {
-      const j = (i + 1) % n;
-      const quad = [[prof[i][0], prof[i][1], zi], [prof[j][0], prof[j][1], zi], [outer[j][0], outer[j][1], zo], [outer[i][0], outer[i][1], zo]];
-      const mid = [(prof[i][0] + prof[j][0]) / 2 - mx, (prof[i][1] + prof[j][1]) / 2 - (y0 + y1) / 2, 0];
-      M.face(i === n - 1 ? 'glass' : role, quad, { toward: mid });
+    if (zo - zi < 0.02) {
+      continue;
     }
-    M.face(role, outer.map(([x, y]) => [x, y, zo]), { tris: triangulate(outer), toward: [0, 0, side] });
+    M.at(m4.makeTranslation(0, 0, side * (zo - t)));
+    prism(M, role, pts, () => t, { sides: [side], round: true, smooth: true });
+    M.at(null);
+  }
+}
+
+/*
+ * THE MINIBUS'S MIRRORS, the town bus's own look: from each front corner
+ * of the roof an arm reaching forward over the windscreen and dropping a
+ * tall mirror in front of its upper corner, glass toward the driver, all
+ * of it inside the bus's width and short of its bumper. `rf` is the
+ * windscreen's head, `z` where the arms leave the roof.
+ */
+function busMirrors(M, s, rf, z) {
+  const xa = rf - 0.05;
+  const ya = s.roof - 0.08;
+  const xe = s.L / 2 - 0.09;
+  const ye = ya - 0.1;
+  const zh = s.W / 2 - 0.09;
+  for (const side of [1, -1]) {
+    const zs = side * z;
+    const zm = side * zh;
+    M.box('dark', xa - 0.06, ya - 0.03, zs - 0.03, xa + 0.04, ya + 0.03, zs + 0.03);
+    M.bar('dark', xa, ya, xe, ye, 0.026, zs - 0.013, zs + 0.013);
+    M.box('dark', xe - 0.013, ye - 0.013, Math.min(zs, zm) - 0.013, xe + 0.013, ye + 0.013, Math.max(zs, zm) + 0.013);
+    M.box('dark', xe - 0.012, ye - 0.2, zm - 0.012, xe + 0.012, ye, zm + 0.012, '+y');
+    const h0 = ye - 0.48;
+    const h1 = ye - 0.19;
+    M.box('dark', xe - 0.03, h0, zm - 0.075, xe + 0.025, h1, zm + 0.075);
+    M.face('glass', [[xe - 0.0305, h0 + 0.012, zm - 0.063], [xe - 0.0305, h0 + 0.012, zm + 0.063], [xe - 0.0305, h1 - 0.012, zm + 0.063], [xe - 0.0305, h1 - 0.012, zm - 0.063]], { toward: [-1, 0, 0] });
+  }
+}
+
+/*
+ * THE TAXI'S WING MIRRORS, the look of a Japanese cab: a black head on a
+ * thin stalk standing on each front wing, well inside the car's width
+ * and under its roof, with the glass on its back toward the driver.
+ * `x` and `y` are the wing's top where the stalk stands.
+ */
+function wingMirrors(M, x, y, z) {
+  for (const side of [1, -1]) {
+    const zs = side * z;
+    M.box('dark', x - 0.03, y - 0.02, zs - 0.022, x + 0.03, y + 0.012, zs + 0.022, '-y');
+    M.bar('dark', x, y, x - 0.035, y + 0.115, 0.016, zs - 0.007, zs + 0.007);
+    const z0 = side > 0 ? zs - 0.035 : zs - 0.05;
+    const z1 = side > 0 ? zs + 0.05 : zs + 0.035;
+    M.box('dark', x - 0.07, y + 0.105, z0, x - 0.02, y + 0.17, z1);
+    M.face('glass', [[x - 0.0705, y + 0.112, z0 + 0.008], [x - 0.0705, y + 0.112, z1 - 0.008], [x - 0.0705, y + 0.163, z1 - 0.008], [x - 0.0705, y + 0.163, z0 + 0.008]], { toward: [-1, 0, 0] });
   }
 }
 
@@ -2013,7 +2343,19 @@ function bumperLoft(M, s, sign, hw, role) {
   const xw = Math.min(ax + A + 0.01, x0 - rx - 0.03);
   const top = e.bumper;
   const dam = e.dam;
-  const rows = b.rows ?? [[0.35, dam], [1, dam + 0.07], [1, top - 0.045], [0.78, top - 0.008], [-0.5, top]];
+  /* The section, foot to top, each row [its share of the stand, y, the
+   * role of the band above it]. The band where the top rolls back into
+   * the body is dark: the gap a bumper is fitted with, which draws it
+   * round its top as a part of its own from every side and from the air.
+   * A painted bumper with `low` set has its foot in black as well, that
+   * high over the dam and standing 4 mm back of the paint under a small
+   * step, the valance a painted bumper is moulded with. */
+  const low = e.low && role === 'body' ? e.low : 0;
+  const rows = b.rows ?? [
+    [0.35, dam, low ? 'dark' : role],
+    ...(low ? [[0.93, dam + 0.065, 'dark'], [0.93, dam + low, role], [1, dam + low + 0.01, role]] : [[1, dam + 0.07, role]]),
+    [1, top - 0.045, role], [0.78, top - 0.008, role], [0.12, top - 0.002, 'dark'], [-0.5, top],
+  ];
   const m = b.segs ?? 3;
   /* Samples along the plan: [x, z, its normal, how much of the end it
    * is (0 on the flank, 1 across the end), how much of its stand it
@@ -2052,7 +2394,7 @@ function bumperLoft(M, s, sign, hw, role) {
       const c = S[i + 1];
       const na = nOf(a);
       const nc = nOf(c);
-      quadN(M, role, [P(a, o0, y0), P(c, o0, y0), P(c, o1, y1), P(a, o1, y1)], [na, nc, nc, na]);
+      quadN(M, rows[k][2] ?? role, [P(a, o0, y0), P(c, o0, y0), P(c, o1, y1), P(a, o1, y1)], [na, nc, nc, na]);
     }
   }
   /* Its two ends, square, facing the arches. */
@@ -2062,8 +2404,17 @@ function bumperLoft(M, s, sign, hw, role) {
   for (const a of [S[0], S[S.length - 1]]) {
     M.face(role, ordered.map(([o, y]) => P(a, o, y)), { tris: T, toward: [-sign, 0, 0] });
   }
-  /* Its face across the middle, as a chain. */
-  return rows.slice(0, -1).map(([o, y]) => [sign * (x0 + o * b.front), y]);
+  /* Its face across the middle, as a chain, up to the top's roll: the
+   * gap behind that is under what is laid on the face, not a face. A
+   * valance lower than its slope runs on up behind the paint, so there
+   * the chain leaves the slope where the paint's edge comes down to it,
+   * and what is laid at that height lies on the paint, not on the black
+   * hidden behind it. */
+  let face = rows.slice(0, b.rows ? -1 : -2).map(([o, y]) => [o, y]);
+  if (!b.rows && low && low < 0.065) {
+    face = [face[0], [0.35 + (0.58 * low) / 0.065, dam + low], ...face.slice(2)];
+  }
+  return face.map(([o, y]) => [sign * (x0 + o * b.front), y]);
 }
 
 /* The lip round an arch: a ring standing `proud` off the flank and `w`
@@ -2289,7 +2640,7 @@ const FACES = {
         {
           poly: rrect(0.355, 0.785, 0.585, 0.915, 0.05, 2), mirror: true, rim: 0.022, h: 0.022, lens: 0.006,
           rimRole: 'body', lensRole: 'clear', lamp: true, lampAt: [0.505, 0.85],
-          parts: [{ role: 'lampF', disc: [0.505, 0.85, 0.048, 10] }, { role: 'amber', poly: rrect(0.382, 0.80, 0.418, 0.90, 0.012, 1) }],
+          parts: [{ role: 'briteDark', ring: [0.505, 0.85, 0.047, 0.06, 10] }, { role: 'lampF', disc: [0.505, 0.85, 0.048, 10] }, { role: 'amber', poly: rrect(0.382, 0.80, 0.418, 0.90, 0.012, 1) }],
         },
         {
           poly: rrect(-0.24, 0.805, 0.24, 0.872, 0.03, 1), rim: 0.012, h: 0.016, lens: 0.004,
@@ -2351,7 +2702,7 @@ const FACES = {
         {
           poly: [[0.30, 0.715], [0.60, 0.70], [0.672, 0.745], [0.678, 0.86], [0.62, 0.875], [0.36, 0.785]], mirror: true,
           rim: 0.014, h: 0.02, lens: 0.006, rimRole: 'dark', lensRole: 'clear', lamp: true, lampAt: [0.56, 0.79],
-          parts: [{ role: 'lampF', disc: [0.56, 0.79, 0.044, 10] },
+          parts: [{ role: 'briteDark', ring: [0.56, 0.79, 0.043, 0.055, 10] }, { role: 'lampF', disc: [0.56, 0.79, 0.044, 10] },
             { role: 'lampF', poly: [[0.40, 0.772], [0.62, 0.842], [0.636, 0.852], [0.42, 0.786]] },
             { role: 'amber', poly: [[0.645, 0.76], [0.662, 0.765], [0.665, 0.84], [0.648, 0.84]] }],
         },
@@ -2461,7 +2812,8 @@ const FACES = {
         {
           poly: [[0.31, 0.785], [0.64, 0.765], [0.675, 0.80], [0.678, 0.955], [0.31, 0.93]], mirror: true, rim: 0.016, h: 0.022, lens: 0.006,
           rimRole: 'dark', lensRole: 'clear', lamp: true, lampAt: [0.49, 0.855],
-          parts: [{ role: 'lampF', disc: [0.42, 0.855, 0.045, 10] }, { role: 'lampF', disc: [0.55, 0.855, 0.045, 10] },
+          parts: [{ role: 'briteDark', ring: [0.42, 0.855, 0.044, 0.056, 10] }, { role: 'briteDark', ring: [0.55, 0.855, 0.044, 0.056, 10] },
+            { role: 'lampF', disc: [0.42, 0.855, 0.045, 10] }, { role: 'lampF', disc: [0.55, 0.855, 0.045, 10] },
             { role: 'amber', poly: [[0.62, 0.78], [0.66, 0.775], [0.665, 0.81], [0.622, 0.812]] },
             { role: 'lampF', poly: [[0.33, 0.905], [0.66, 0.925], [0.66, 0.94], [0.33, 0.918]] }],
         },
@@ -2714,14 +3066,18 @@ function bodyOf(M, s) {
   const hwB = hw - s.cabin.shoulder;
   const hwC = (y) => hwB - s.cabin.tuck * Math.max(0, (y - s.waist) / run);
   const rc = s.cabin.roof;
+  /* A two tone's roof (storyOf) is its roof, the roof's rounded edges and
+   * the rounds of the pillars down to the waist, as the factory paints it;
+   * sideGlass paints the rest of the glasshouse's side to match. */
+  const roof2 = M.story ? M.story.roof : null;
   const cabPts = [
     { x: xBack, y: cabBase, c: 0.015, d: 0.015, edge: null },
     { x: xFront, y: cabBase, c: 0.015, d: 0.015, edge: 'body' },
-    { x: rf, y: s.roof, c: rc, d: rc, edge: 'body' },
+    { x: rf, y: s.roof, c: rc, d: rc, edge: roof2 ?? 'body' },
     { x: rr, y: s.roof, c: rc, d: rc, edge: 'body' },
   ];
   const ccap = prism(M, 'body', cabPts, (x, y) => hwC(y), {
-    round: true, smooth: true, segs: 3, edgeRole: (i, ch) => (ch ? 'body' : cabPts[i].edge),
+    round: true, smooth: true, segs: 3, edgeRole: (i, ch) => (ch ? (roof2 && i > 0 ? roof2 : 'body') : cabPts[i].edge),
   });
 
   /* The pressed ribs across a commercial's roof, the stiffening a panel
@@ -2743,7 +3099,7 @@ function bodyOf(M, s) {
    * roof that has no rails, ribs or bus furniture on it: from a drone,
    * which is where a pilot sees most cars from, they draw the roof's
    * outline in, as the shut lines draw the doors on the flank. */
-  if (!s.rails && !s.bus && s.kind !== 'van' && s.kind !== 'keivan') {
+  if (!s.rails && !s.bus && !roof2 && s.kind !== 'van' && s.kind !== 'keivan') {
     const zd = hwC(s.roof) - rc - 0.045;
     const xa = rr + (s.rear && s.rear.spoiler ? 0.16 : 0.08);
     const xb = rf - 0.08;
@@ -2758,15 +3114,25 @@ function bodyOf(M, s) {
   /* ---- glass ---- */
   const chrome = s.glass.pillars === 'chrome';
   const zs = hwC(s.waist) - 0.015;
+  const story = M.story ?? PLAIN;
+  /* The edge of the glass at its foot, inboard of its frame. */
+  const ze = zs - s.glass.frame;
   screen(M, [s.cab[1], s.waist], [rf, s.roof], zs, hwC(s.roof) - rc, [1, 1], {
     frame: s.glass.frame, bottom: 0.06, chrome, band: s.glass.band,
     wipers: [[0.42 * zs, 0.012, -0.3 * zs, 0.06], [-0.26 * zs, 0.012, -0.88 * zs, 0.05]],
+    /* The vacancy sign on the dashboard on the kerb side, the left, which
+     * is -z, so read from ahead its left edge is the one further in. */
+    stickers: story.taxi ? [{ cell: STICKER.vacant, u: [-(ze - 0.3), -(ze - 0.04)], v: [0.012, 0.142] }] : null,
   });
   screen(M, [s.cab[0], s.waist], [rr, s.roof], zs, hwC(s.roof) - rc, [-1, 1], {
     frame: s.glass.frame, bottom: s.kind === 'sedan' ? 0.05 : 0.08, streaks: [[0.3, 0.14]], chrome, band: s.glass.band,
     wipers: s.rearWiper ? [[0.04, 0.015, 0.62 * zs, 0.04]] : null,
+    stop: s.kind === 'sedan' ? 'bottom' : (s.kind === 'wagon' || s.kind === 'keivan' || s.kind === 'van' ? 'top' : null),
+    /* The learner's leaf in the back glass's lower corner on the kerb
+     * side, which read from behind is the left. */
+    stickers: story.learner ? [{ cell: STICKER.leaf, shape: LEAF, u: [-(ze - 0.06), -(ze - 0.19)], v: [0.02, 0.15] }] : null,
   });
-  sideGlass(M, s, ccap, hwC);
+  sideGlass(M, s, ccap, hwC, roof2);
 
   /* ---- the nose and the tail ---- */
   endsP2(M, s, prof, hw, lamps, { front: prof.front, rear: prof.rear });
@@ -2794,6 +3160,33 @@ function bodyOf(M, s) {
   if (s.slider !== undefined) {
     onFlank(M, 'dark', hw, s.slider - 0.55, s.waist - 0.05, s.slider + 0.55, s.waist - 0.03, 0.006);
   }
+  if (s.kind === 'van' || s.kind === 'keivan') {
+    const wz = wheelZ(s);
+    const tw = tyreWidth(s);
+    mudFlaps(M, s, s.axle[1], s.sill + 0.02, wz - tw / 2 - 0.006, wz + tw / 2 + 0.006);
+  }
+  /* The fuel filler's flap over the rear wheel on the left, its shut
+   * line round it: one of the small things that says a panel is a car's
+   * and not a box's. It goes where it is clear of the handles, the shut
+   * lines and a sliding door's run, and over the swage. The lorry's and
+   * the bus's tanks are under them. */
+  if (!s.box && !s.bus) {
+    const busy = [
+      ...(s.handles ?? []).map((x) => [x - 0.09, x + 0.09]), ...(s.seams ?? []).map((x) => [x - 0.02, x + 0.02]),
+      ...(s.slider !== undefined ? [[s.slider - 0.56, s.slider + 0.56]] : []),
+    ];
+    const fx = [0.04, -0.12, 0.2, -0.28].map((d) => s.axle[1] + d).find((x) => busy.every(([a, b]) => x + 0.07 < a || x - 0.07 > b));
+    const sy = s.chromeStrip ? null : swageY(s);
+    const fy = Math.max(s.waist - 0.16, sy === null ? -Infinity : sy + 0.1);
+    const z = -(hw + 0.005);
+    const w = 0.004;
+    for (const [x0, y0, x1, y1] of fx === undefined ? [] : [
+      [fx - 0.06 - w, fy - 0.045 - w, fx + 0.06 + w, fy - 0.045 + w], [fx - 0.06 - w, fy + 0.045 - w, fx + 0.06 + w, fy + 0.045 + w],
+      [fx - 0.06 - w, fy - 0.045 + w, fx - 0.06 + w, fy + 0.045 - w], [fx + 0.06 - w, fy - 0.045 + w, fx + 0.06 + w, fy + 0.045 - w],
+    ]) {
+      M.face('dark', [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]], { toward: [0, 0, -1] });
+    }
+  }
   const swaged = s.chromeStrip ? null : swage(M, s, hw, flank, lines);
   /* The side repeater behind the front arch, lifted clear of the swage
    * where the swage stands high over a tall arch (the hatch's and the
@@ -2803,10 +3196,54 @@ function bodyOf(M, s) {
   if (s.chromeStrip) {
     onFlank(M, 'brite', hw, sillX0 + 0.05, s.waist - 0.3, sillX1 - 0.05, s.waist - 0.28, 0.007);
   }
-  mirrors(M, s, hw, s.bumpers === 'dark' || s.bumpers === 'steel' ? 'dark' : 'body');
+  if (M.story && M.story.taxi) {
+    /* On the wings, over the front wheels' fore halves, on the flat of
+     * the wing inside the shoulder's round. */
+    const xm = s.axle[0] + 0.16;
+    const ym = s.nose.edge + 0.022 + ((s.waist + 0.004 - s.nose.edge - 0.022) * (L2 + s.nose.face - s.nose.lean - 0.12 - xm)) / (L2 + s.nose.face - s.nose.lean - 0.12 - s.cab[1] - 0.03);
+    wingMirrors(M, xm, ym, hw - s.cham.e[1] - 0.05);
+  } else if (s.bus) {
+    busMirrors(M, s, rf, hwC(s.roof) - 0.12);
+  } else {
+    mirrors(M, s, hw, s.bumpers === 'dark' || s.bumpers === 'steel' ? 'dark' : 'body', hwC(s.waist + 0.03));
+  }
+
+  /* The cab firm's crest on the front doors, between the strip and the
+   * glass. */
+  if (story.taxi) {
+    const xc = (doorFront + (s.seams ? s.seams[0] : s.axle[1])) / 2;
+    const yc = s.waist - 0.135;
+    const r = 0.095;
+    for (const side of [1, -1]) {
+      const z = side * (hw + 0.006);
+      sticker(M, STICKER.crest, CREST, (fx, fy) => [xc - r + 2 * r * fx, yc + r - 2 * r * fy, z], [0, 0, side]);
+    }
+  }
 
   /* ---- the bonnet's shut lines, where there is a bonnet ---- */
   const noseTop = L2 + s.nose.face - s.nose.lean;
+  if (story.learner) {
+    /* The learner's leaf at the nose on the kerb side: on a kei's upright
+     * face over the bumper, on a hatch's bonnet, where there is room for
+     * it, read from ahead with its foot toward the nose. */
+    if (s.kind === 'kei') {
+      const y0 = s.nose.bumper + 0.016;
+      const at = (fx, fy) => endPoint(prof.front, 1, y0 + 0.125 * (1 - fy), -0.2 - 0.13 * fx, 0.005);
+      sticker(M, STICKER.leaf, LEAF, at, [1, 0, 0]);
+    } else {
+      /* The bonnet's top, from its front edge's crown back to the cowl. */
+      const xa = noseTop - 0.12;
+      const xb = s.cab[1] + 0.03;
+      const top = (x) => s.nose.edge + 0.022 + ((s.waist + 0.004 - s.nose.edge - 0.022) * (xa - x)) / (xa - xb) + 0.005;
+      const [x0, x1] = [noseTop - 0.2, noseTop - 0.33];
+      const [zi, zo] = [-(hw - 0.34), -(hw - 0.2)];
+      const at = (fx, fy) => {
+        const x = x1 + (x0 - x1) * fy;
+        return [x, top(x), zi + (zo - zi) * fx];
+      };
+      sticker(M, STICKER.leaf, LEAF, at, [0, 1, 0]);
+    }
+  }
   if (noseTop - s.cab[1] > 0.4) {
     for (const side of [1, -1]) {
       const z = side * (hw - 0.14);
@@ -2865,13 +3302,25 @@ function lorry(M, s, lamps) {
   chassis.push({ x: b.x1 + 0.02, y: b.y0 + 0.01, c: 0, d: 0, edge: 'dark' });
   chassis.push({ x: b.x0 + 0.04, y: b.y0 + 0.01, c: 0, d: 0, edge: 'dark' });
   prism(M, 'dark', chassis, () => hw - 0.02);
-  /* The side guard, a rail along the flank between the axles. */
-  onFlank(M, 'brite', hw - 0.02, s.axle[1] + 0.5, 0.56, b.x1 - 0.05, 0.63, 0.012);
-  /* Mudguards over the rear wheels. */
+  /* The side guard, a rail along the flank between the axles, and on it
+   * two of the small amber side marker lamps a Japanese lorry carries
+   * down its flanks, each in a dark bezel, which is what tells a lorry's
+   * side from a van's at a chase camera's distance. */
+  const g0 = s.axle[1] + 0.5;
+  const g1 = b.x1 - 0.05;
+  onFlank(M, 'brite', hw - 0.02, g0, 0.56, g1, 0.63, 0.012);
+  for (const x of [g0 + (g1 - g0) * 0.3, g0 + (g1 - g0) * 0.7]) {
+    onFlank(M, 'dark', hw - 0.02, x - 0.05, 0.568, x + 0.05, 0.622, 0.014);
+    onFlank(M, 'amber', hw - 0.02, x - 0.04, 0.576, x + 0.04, 0.614, 0.016);
+  }
+  /* Mudguards over the rear wheels, and their flaps behind the twins. */
   const A = s.R + s.arch.gap;
   for (const side of [1, -1]) {
     M.box('dark', s.axle[1] - A, b.y0 - 0.04, side > 0 ? hw - 0.3 : -hw + 0.02, s.axle[1] + A, b.y0, side > 0 ? hw - 0.02 : -hw + 0.3);
   }
+  const wz = wheelZ(s);
+  const tw = tyreWidth(s);
+  mudFlaps(M, s, s.axle[1], b.y0 - 0.04, wz - 2 * tw - 0.026, wz + tw / 2 + 0.006);
   /* The box, square with a small chamfer round both flanks. */
   const bw = (s.W + 0.06) / 2;
   const boxPts = [
@@ -2908,10 +3357,15 @@ function lorry(M, s, lamps) {
     M.face('lampR', [[rx - 0.082, 0.52, z + 0.12], [rx - 0.082, 0.52, z - 0.12], [rx - 0.082, 0.6, z - 0.12], [rx - 0.082, 0.6, z + 0.12]], { toward: [-1, 0, 0] });
     lamps.rear.push([rx - 0.1, 0.56, z]);
   }
-  M.face('plate', [[rx - 0.083, 0.64, -0.165], [rx - 0.083, 0.64, 0.165], [rx - 0.083, 0.805, 0.165], [rx - 0.083, 0.805, -0.165]], { uvs: [[0, 0], [1, 0], [1, 1], [0, 1]], toward: [-1, 0, 0] });
+  M.face('plate', [[rx - 0.083, 0.64, -0.165], [rx - 0.083, 0.64, 0.165], [rx - 0.083, 0.805, 0.165], [rx - 0.083, 0.805, -0.165]], { uvs: plateUV(M), toward: [-1, 0, 0] });
+  /* Its holder, down to the bar it is bolted to. */
+  M.face('dark', [[rx - 0.079, 0.615, -0.177], [rx - 0.079, 0.615, 0.177], [rx - 0.079, 0.817, 0.177], [rx - 0.079, 0.817, -0.177]], { toward: [-1, 0, 0] });
 }
 
-/* Roof rails on their feet. */
+/* Roof rails on their feet, and a tradesman's ladder between them
+ * (storyOf): aluminium, lying on the roof's ribs, two straps over it
+ * hooked to the rails, all of it under the rails' tops, so the car is no
+ * taller for it. */
 function rails(M, s, rf, rr, hwC) {
   const z = hwC(s.roof) - 0.12;
   for (const side of [1, -1]) {
@@ -2920,13 +3374,49 @@ function rails(M, s, rf, rr, hwC) {
       M.box('dark', x - 0.04, s.roof - 0.01, side * z - 0.025, x + 0.04, s.roof + 0.05, side * z + 0.025);
     }
   }
+  if (!(M.story && M.story.ladder)) {
+    return;
+  }
+  const y = s.roof + 0.014;
+  const x0 = rr + 0.22;
+  const x1 = rf - 0.06;
+  const zl = 0.19;
+  for (const side of [1, -1]) {
+    M.box('brite', x0, y, side * zl - 0.0125, x1, y + 0.032, side * zl + 0.0125, '-y');
+  }
+  const n = Math.floor((x1 - x0) / 0.28);
+  for (let k = 1; k <= n; k += 1) {
+    const x = x0 + ((x1 - x0) * k) / (n + 1);
+    M.box('brite', x - 0.011, y + 0.008, -zl + 0.0125, x + 0.011, y + 0.026, zl - 0.0125, '-y');
+  }
+  for (const x of [x0 + 0.55, x1 - 0.55]) {
+    M.box('dark', x - 0.014, y + 0.032, -(z - 0.02), x + 0.014, y + 0.038, z - 0.02, '-y');
+  }
 }
 
-/* A small spoiler over the tailgate glass, at the roof's rear edge. */
+/* Mud flaps: a black flap hanging behind each wheel of the axle at `ax`,
+ * from under the body (`top`) to a hand over the road, `z0` to `z1`
+ * across, which is the tyre's tread or a twin's pair; a working vehicle's
+ * splash guards, which from a chase camera finish its wheel. */
+function mudFlaps(M, s, ax, top, z0, z1) {
+  const x = ax - s.R - 0.045;
+  for (const side of [1, -1]) {
+    M.box('dark', x - 0.012, 0.1, side > 0 ? z0 : -z1, x, top, side > 0 ? z1 : -z0, '+y');
+  }
+}
+
+/* A small spoiler over the tailgate glass, at the roof's rear edge, in
+ * the roof's colour, with the high stop lamp along its trailing face. */
 function roofSpoiler(M, s, rr, hwC) {
   const z = hwC(s.roof) - 0.03;
   const poly = [[rr - 0.1, s.roof - 0.055], [rr + 0.14, s.roof - 0.01], [rr + 0.14, s.roof + 0.012], [rr - 0.06, s.roof - 0.015]];
-  slab(M, 'body', poly, -z, z);
+  slab(M, (M.story && M.story.roof) || 'body', poly, -z, z);
+  /* The trailing face runs from poly[3] down to poly[0] and faces back
+   * and up; the lamp is its middle half, 2 mm proud. */
+  const [ax, ay] = poly[3];
+  const [bx, by] = poly[0];
+  const at = (t, zz) => [ax + (bx - ax) * t - 0.0014, ay + (by - ay) * t + 0.0014, zz];
+  M.face('lampR', [at(0.25, -0.17), at(0.25, 0.17), at(0.75, 0.17), at(0.75, -0.17)], { toward: [-1, 1, 0] });
 }
 
 /* The minibus's furniture: its doors, the destination box, the roof unit. */
@@ -3926,7 +4416,7 @@ function plateOn(M, sh, view, y, lift = 0.016, zc = 0) {
   const pz = sign > 0 ? [zc + hw, zc - hw] : [zc - hw, zc + hw];
   const toward = [sign, 0, 0];
   M.face('plate', [[x, y - hh, pz[0]], [x, y - hh, pz[1]], [x, y + hh, pz[1]], [x, y + hh, pz[0]]], {
-    uvs: [[0, 0], [1, 0], [1, 1], [0, 1]], toward,
+    uvs: plateUV(M), toward,
   });
   /* Its holder, a dark edge standing just behind it. */
   const e = sign * 0.012;
@@ -4002,18 +4492,25 @@ function lineOn(M, sh, role, a, b, w, lift = 0.003, view = 'side') {
 
 /* The door mirrors of a coupe: a dark foot on the door's top front corner
  * at (x, y) standing out of the flank at z, an arm, and a shell in paint
- * round at its front, the glass on its back. `len` how far it reaches. */
-function coupeMirrors(M, x, y, z, { len = 0.17, h = 0.1, d = 0.1, role = 'body' } = {}) {
+ * round at its front, the glass on its back. `len` how far it reaches,
+ * held so its outer end is no further out than `zMax`, inside the car's
+ * solid: the arm gives up its length first, then the shell. A coupe's
+ * glasshouse stands far enough in from its flares that a mirror out on
+ * its arm still fits, where a town car's has to fold (mirrors). */
+function coupeMirrors(M, x, y, z, { len = 0.17, h = 0.1, d = 0.1, role = 'body', zMax = Infinity } = {}) {
   const back = x - d / 2;
   const front = x + d / 2;
   const y0 = y + 0.04;
   const y1 = y0 + h;
   const prof = [[back, y0], [front - 0.03, y0], [front - 0.006, y0 + h * 0.22], [front, (y0 + y1) / 2], [front - 0.006, y1 - h * 0.22], [front - 0.03, y1], [back, y1]];
+  const over = Math.max(0, z + 0.04 + len - zMax);
+  const arm = Math.max(0.015, 0.04 - over);
+  const reach = Math.min(len, zMax - z - arm);
   for (const side of [1, -1]) {
     M.box('dark', x - 0.055, y - 0.004, side > 0 ? z - 0.03 : -(z + 0.015), x + 0.045, y + 0.035, side > 0 ? z + 0.015 : -(z - 0.03), '-y');
-    M.box('dark', x - 0.02, y0 + 0.005, side > 0 ? z : -(z + 0.06), x + 0.02, y0 + 0.028, side > 0 ? z + 0.06 : -z, '-y');
-    const zi = side * (z + 0.04);
-    const zo = side * (z + 0.04 + len);
+    M.box('dark', x - 0.02, y0 + 0.005, side > 0 ? z : -(z + arm + 0.02), x + 0.02, y0 + 0.028, side > 0 ? z + arm + 0.02 : -z, '-y');
+    const zi = side * (z + arm);
+    const zo = side * (z + arm + reach);
     const outer = prof.map(([px, py]) => [back + (px - back) * 0.82, y0 + 0.006 + (py - y0) * 0.86]);
     const n = prof.length;
     for (let i = 0; i < n; i += 1) {
@@ -4108,7 +4605,7 @@ function dressR32(M, sh, s, lamps) {
   }
   lay(M, sh, 'dark', 'side', [[-0.5, 0.768], [-0.4, 0.768], [-0.4, 0.797], [-0.5, 0.797]], 0.004);
   lay(M, sh, 'briteDark', 'side', [[-0.49, 0.774], [-0.41, 0.774], [-0.41, 0.791], [-0.49, 0.791]], 0.007);
-  coupeMirrors(M, 0.45, 0.88, 0.77);
+  coupeMirrors(M, 0.45, 0.88, 0.77, { zMax: s.W / 2 - 0.002 });
 
   /* ---- the tail ---- */
   /* Two body coloured housings, each holding a pair of big round lamps
@@ -4222,7 +4719,7 @@ function dressE82(M, sh, s, lamps) {
   lay(M, sh, 'dark', 'side', [[-0.37, 0.858], [-0.23, 0.858], [-0.23, 0.886], [-0.37, 0.886]], 0.004);
   lay(M, sh, 'brite', 'side', [[-0.36, 0.864], [-0.24, 0.864], [-0.24, 0.88], [-0.36, 0.88]], 0.009);
   lay(M, sh, 'brite', 'side', [[0.92, 0.828], [1.0, 0.83], [1.0, 0.843], [0.92, 0.84]], 0.005);
-  coupeMirrors(M, 0.64, 1.0, 0.765, { len: 0.18, h: 0.11 });
+  coupeMirrors(M, 0.64, 1.0, 0.765, { len: 0.18, h: 0.11, zMax: s.W / 2 - 0.002 });
 
   /* ---- the tail ---- */
   /* The tail lamps, in layers as the headlamps are: a wedge across the
@@ -4384,7 +4881,13 @@ function keiTruckBody(M, s, o, lamps) {
     blockOnEnd(M, 'dark', ch.front, 1, 0.74, 0.82, -(hw - 0.42), hw - 0.42, 0.01);
     plate(M, ch.front, 1, 0.47);
   }
-  mirrors(M, { ...s, cab: [xb, L2 - 0.1], waist: 1.08 }, hw, 'dark');
+  /* No door mirrors: the cab's flank is the face of the truck's solid,
+   * so a mirror, folded or out, could only stand outside it. Mud flaps
+   * behind all four wheels, as a kei truck working the fields has them. */
+  const wz = wheelZ(s);
+  const tw = tyreWidth(s);
+  mudFlaps(M, s, s.axle[0], 0.45, wz - tw / 2 - 0.006, wz + tw / 2 + 0.006);
+  mudFlaps(M, s, s.axle[1], 0.51, wz - tw / 2 - 0.006, wz + tw / 2 + 0.006);
   /* The chassis under the bed, with the rear arch cut in it. */
   const cz = hw - 0.04;
   const chassis = [{ x: -L2 + 0.08, y: 0.5, c: 0, d: 0, edge: 'dark' }];
@@ -4439,7 +4942,8 @@ function keiTruckBody(M, s, o, lamps) {
     }
     lamps.rear.push([-L2 - 0.05, 0.7, z]);
   }
-  M.face('plate', [[-L2 - 0.01, 0.95, -0.2], [-L2 - 0.01, 0.95, 0.2], [-L2 - 0.01, 1.15, 0.2], [-L2 - 0.01, 1.15, -0.2]], { uvs: [[0, 0], [1, 0], [1, 1], [0, 1]], toward: [-1, 0, 0] });
+  M.face('plate', [[-L2 - 0.012, 0.95, -0.2], [-L2 - 0.012, 0.95, 0.2], [-L2 - 0.012, 1.15, 0.2], [-L2 - 0.012, 1.15, -0.2]], { uvs: plateUV(M), toward: [-1, 0, 0] });
+  M.face('dark', [[-L2 - 0.006, 0.936, -0.214], [-L2 - 0.006, 0.936, 0.214], [-L2 - 0.006, 1.164, 0.214], [-L2 - 0.006, 1.164, -0.214]], { toward: [-1, 0, 0] });
   M.box('brite', -L2 + 0.04, 0.44, -(hw - 0.06), -L2 + 0.1, 0.52, hw - 0.06);
   /* What is on the bed. */
   const load = o.load ?? 'crates';
@@ -4463,6 +4967,70 @@ function keiTruckBody(M, s, o, lamps) {
 /* ------------------------------------------------------------------ *
  * BUILDING ONE.
  * ------------------------------------------------------------------ */
+
+/*
+ * WHAT A CAR SAYS ABOUT WHO DRIVES IT, read off what buildCar is handed
+ * (the kind, the colour, the variant) and nothing else, never a random
+ * stream, so a car is the same car in every town, every replay and every
+ * engine, and the parked one and the moving one of an element agree.
+ *
+ *   plate    its plate, a cell of the sheet: a kei's is yellow, a kei
+ *            van's or kei truck's with a goods number; a white kei van is
+ *            a courier's, black; a white panel van is a delivery firm's
+ *            and the box lorry restocks the conbini, green with goods
+ *            numbers, and the minibus is the council's, green; the rest
+ *            are private, a large car's number on the coupes, which are
+ *            wider than a small car may be. Which of its class's numbers
+ *            it carries comes from its colour and variant.
+ *   taxi     a sedan in charcoal, mustard, forest green or silver, the
+ *            colours the town's cab firms paint theirs (so the one sedan
+ *            the town parks, at the clinic, is a cab waiting for a fare):
+ *            mirrors on its wings, a green plate, the vacancy sign lit on
+ *            its dashboard and the firm's crest on its front doors. Its
+ *            roof lantern is not drawn: it would stand 13 cm over the
+ *            roof, which is the top of every solid a sedan has
+ *            (PROGRESS.md has the argument).
+ *   roof     a kei in mint, mustard or tea wears a black roof, the two
+ *            tone a tall kei is sold in.
+ *   learner  a cream kei and a sky blue hatch carry the learner's leaf,
+ *            a first year's car, at the nose and on the back glass.
+ *   ladder   a kei van in any colour but white is a tradesman's, and
+ *            carries his ladder strapped down on its roof between the
+ *            rails, lower than they stand.
+ */
+const TAXI = new Set([CAR.charcoal, CAR.mustard, CAR.forest, CAR.silver]);
+const TWO_TONE = new Set([CAR.mint, CAR.mustard, CAR.tea]);
+const PLAIN = Object.freeze({ plate: PLATE.private[0], taxi: false, roof: null, learner: false, ladder: false });
+function storyOf(kind, col, variant) {
+  const taxi = kind === 'sedan' && TAXI.has(col);
+  let cells = PLATE.private;
+  if (kind === 'keivan' && col === CAR.white) {
+    cells = PLATE.keiHire;
+  } else if (kind === 'keivan' || kind === 'keitruck') {
+    cells = PLATE.keiGoods;
+  } else if (kind === 'kei') {
+    cells = PLATE.kei;
+  } else if (taxi) {
+    cells = PLATE.taxi;
+  } else if (kind === 'minibus') {
+    cells = PLATE.bus;
+  } else if (kind === 'boxtruck' || (kind === 'van' && col === CAR.white)) {
+    cells = PLATE.goods;
+  } else if ((MODEL[kind] ?? MODEL.kei).W > 1.7) {
+    cells = PLATE.large;
+  }
+  /* Which of the class's numbers: Math.imul is exact in every engine, so
+   * this is the same pick everywhere. */
+  const v = Math.round(Number(variant) || 0);
+  const pick = Math.imul((col >>> 0) ^ Math.imul(v, 0x9e3779b1), 0x2c1b3c6d) >>> 16;
+  return {
+    plate: cells[pick % cells.length],
+    taxi,
+    roof: kind === 'kei' && TWO_TONE.has(col) ? 'dark' : null,
+    learner: (kind === 'kei' && col === CAR.cream) || (kind === 'hatch' && col === CAR.skyblue),
+    ladder: kind === 'keivan' && col !== CAR.white,
+  };
+}
 
 const NO_CAST = new Set(['glass', 'band', 'glint', 'lampF', 'lampR', 'amber', 'clear', 'plate']);
 const ORDER = ['body', 'body2', 'stripe', 'accent', 'deep', 'dark', 'brite', 'briteDark', 'rim', 'bed', 'crate', 'crate2', 'sheet', 'rope', 'glass', 'band', 'glint', 'lampF', 'lampR', 'amber', 'clear', 'plate'];
@@ -4493,6 +5061,7 @@ export function buildCar(o = {}) {
   const col = livery ? livery.body : (o.color ?? (truck ? PAL.taxiYellow : CAR.white));
   const rimRole = livery && livery.rim ? 'rim' : 'brite';
   const M = new Mesher();
+  M.story = storyOf(kind, col, o.variant);
   let lamps = { front: [], rear: [] };
   if (truck) {
     keiTruckBody(M, s, o, lamps);
