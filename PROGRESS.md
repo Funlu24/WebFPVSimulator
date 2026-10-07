@@ -67374,3 +67374,22 @@ no build, no file format, no setting.
   (`makeRng(0x5c10d5)`). Never from the world's rng: draws after the clouds place scenery and colliders, so one more
   draw on it would move the world under every saved replay. The first bank's call is unchanged. Baked into the same
   no ink batch, so no new draw call.
+- Check, field: the collider set on `?map=custom` with the reference course, hashed in the page from
+  `__colliderBoxes()` and `__colliders()`, matches main (`3003:f8ac25799220fb78` both).
+
+### Pass 7, same day: lumpy tree canopies
+
+- `scene.js` `lumpCanopy`: each canopy blob's vertices move along their own radius by a smooth function of direction
+  and the tree's position, plus or minus about a fifth of the radius, flatter underneath. Three to four lobes per
+  blob, which is what a detail 1 icosphere can carry. No rng draw (the seed is the tree's x and z), so the world is
+  placed from the same draws as before.
+- Normals are three quarters the sphere's and a quarter the lumpy mesh's. The first try recomputed normals from the
+  lumps and the 42 vertex blob broke into flat facets, each its own toon band: it read as a rock. A second try at
+  higher frequency read as crumpled paper. Borrowing the sphere's normals is the usual trick for painted foliage: the
+  clumps show in the outline and the ink, and the canopy still shades as one mass.
+- Triangle count unchanged (still detail 1). Detail 2 was considered and dropped: about 386 near trees with an inked
+  hull and a shadow pass would have added over a million triangles a frame.
+- Colliders: still the undeformed radius from the geometry's parameters, which this does not touch. Check, field:
+  `__colliderBoxes()`, `__colliders()` and `__colliderShapes({near:50})` hashed in the page, identical to main
+  (`15353:3f246c8bbbddeaea` both). `lint:preload`, `lint:quality` (71 of 71), `lint:frame` (34 of 34) and
+  `lint:boot` (9 of 9) clean. `npm run verify` not run: render only.

@@ -1468,6 +1468,54 @@ function grassField(samples, rng, pitch) {
  * silhouette the post pass already inks from depth. Off for the far scatter
  * and the horizon, which is where most of the trees are.
  */
+/*
+ * Break a canopy blob's sphere into leaf clumps, 2026-10-07: a perfect
+ * icosphere reads as a ball on a stick, and the lumps are what make a
+ * stylised tree read as foliage. Every vertex moves along its own radius by
+ * a smooth function of its direction and the tree's place, so two vertices
+ * at one place (a uv seam) move together and the mesh stays closed.
+ *
+ * The normals stay mostly the sphere's. A 42 vertex blob shaded with its
+ * own lumpy normals breaks into flat facets, each with its own toon band,
+ * which reads as a rock. Painted foliage is shaded as one round mass with a
+ * clumped outline, the old trick of borrowing a sphere's normals for a
+ * bush, so the lumps show in the silhouette and the ink and only a quarter
+ * of their slope reaches the shading.
+ *
+ * It draws nothing from the world's rng (the seed is the tree's place), so
+ * the world, and every collider placed after it, is exactly as it was. The
+ * canopy's collider is still the undeformed radius from the geometry's
+ * parameters, and the lumps are within a fifth of it.
+ */
+function lumpCanopy(geo, r, seed) {
+  const pos = geo.attributes.position;
+  const unit = new Float32Array(pos.count * 3);
+  const v = new THREE.Vector3();
+  for (let k = 0; k < pos.count; k += 1) {
+    v.fromBufferAttribute(pos, k).normalize();
+    v.toArray(unit, k * 3);
+    const n =
+      Math.sin(v.x * 4.2 + seed) * Math.sin(v.y * 3.7 + seed * 1.3) * 0.6 +
+      Math.sin(v.z * 4.9 + seed * 0.7) * Math.cos(v.x * 2.8 - seed) * 0.4;
+    /* Flatter underneath, the way a canopy hangs. */
+    const under = v.y < -0.25 ? 0.85 : 1;
+    v.multiplyScalar(r * (1 + n * 0.19) * under);
+    pos.setXYZ(k, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const nrm = geo.attributes.normal;
+  for (let k = 0; k < nrm.count; k += 1) {
+    v.fromBufferAttribute(nrm, k).multiplyScalar(0.25);
+    v.x += unit[k * 3] * 0.75;
+    v.y += unit[k * 3 + 1] * 0.75;
+    v.z += unit[k * 3 + 2] * 0.75;
+    v.normalize();
+    nrm.setXYZ(k, v.x, v.y, v.z);
+  }
+  nrm.needsUpdate = true;
+}
+
 function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
   const g = new THREE.Group();
   const scale = (0.85 + rng() * 1.5) * bigness;
@@ -1496,7 +1544,7 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
      * edge, which is how this style draws a canopy. */
     let blobGeo = new THREE.IcosahedronGeometry(r, 1);
     blobGeo = mergeVertices(blobGeo);
-    blobGeo.computeVertexNormals();
+    lumpCanopy(blobGeo, r, x * 0.37 + z * 0.61 + i * 1.7);
     const blob = new THREE.Mesh(
       blobGeo,
       celMaterial({ color: tint, rim: 0.3 }),
