@@ -67723,3 +67723,13 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
   render stats probe above with and without the change; `npm run check:props` all passed (the kit changed),
   `npm run lint:quality` 71 of 71 (the quality table changed), `npm run lint:preload` up to date, `node --check` on the
   four files. Not run: `npm run verify`, render only.
+
+### Tried and dropped, same day: wood grain on the start blocks
+
+- A `comic: 'wood'` mark on the start block's two timber materials, carrying the stand's heading so the grain ran along
+  its boards: streaks from two octaves of value noise stretched along the grain and a wavering figure line every 2.5 cm,
+  both faded before their spacing reached a pixel. Shot in the launch view and at three cameras round the stands, with
+  and without. Dropped, not committed: in the launch view the wood a pilot sees is the cheeks' sides, a strip twenty
+  pixels tall and in shade, where the hatching is already the texture, and the change could not be told apart. A mark
+  in the shared shader for a surface nobody can see is cost without a picture.
+- `GRAPHICS-PLAN.md` now says where things stand after pass 15. Documentation only; no check needed for it.

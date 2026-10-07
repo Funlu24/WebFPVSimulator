@@ -54,14 +54,21 @@ loop: plan, a pass, screenshots, re-plan.
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
 
-## Where it stands after pass 4
+## Where it stands after pass 15
 
-Done: ink, hatching (single in shade, crossed in cast shadow), grit, brush marks (High), inked field clouds, harder
-grade on both pipelines. Low is unchanged except the clouds' rim; Medium has no brush marks.
+Done: ink, hatching (single in shade, crossed in cast shadow, thinning on surfaces seen edge on), grit, brush marks
+(High), occlusion (High), painted turf and stone on marked ground only, leaf clumps on every canopy, round eighty faced
+canopies (the town only near the eye), cumulus clouds with lit heads and flat bases on the race field, harder grade on
+both pipelines, and three passes of car detail. Low is unchanged except the clouds (their ink rim, shape and paint)
+and the yard's rounder canopies; Medium has no brush marks and no occlusion.
+
+Tried and dropped, with the reason in PROGRESS.md: grass blades (cost, and the owner's 2026-08-16 decision), dark
+landscape patches (read as cloud shadow), wood grain on the start blocks (too little wood shows in the launch view).
+
+In progress on their own branches: a fourth car pass (mirrors, bumpers, lamps, pillars) and the quad model.
 
 Next, once the owner has flown it and said which way to push:
 
-- The race field's ground: painted grass strokes and a dirt worn racing line, the flattest thing left.
-- Skies: posterized bands and a stronger horizon colour on the town and the yard.
 - Ink weight per object class: gates and the craft heaviest, scenery lighter.
-- A frame time comparison against main on a real Medium machine before this ships.
+- Skies: posterized bands and a stronger horizon colour on the town and the yard.
+- A frame time comparison against main on a real Medium machine and a phone on Low before this ships.
