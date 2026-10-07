@@ -53,3 +53,15 @@ loop: plan, a pass, screenshots, re-plan.
 - Ground: stronger grime and painted detail on concrete and grass.
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
+
+## Where it stands after pass 4
+
+Done: ink, hatching (single in shade, crossed in cast shadow), grit, brush marks (High), inked field clouds, harder
+grade on both pipelines. Low is unchanged except the clouds' rim; Medium has no brush marks.
+
+Next, once the owner has flown it and said which way to push:
+
+- The race field's ground: painted grass strokes and a dirt worn racing line, the flattest thing left.
+- Skies: posterized bands and a stronger horizon colour on the town and the yard.
+- Ink weight per object class: gates and the craft heaviest, scenery lighter.
+- A frame time comparison against main on a real Medium machine before this ships.
