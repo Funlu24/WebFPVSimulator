@@ -67946,3 +67946,192 @@ thousand on 1.01 to 1.40 million, every pass of the frame counted).
   stones from the town's `groundAuto`. What went wrong: one of the four cameras, 9 m up, sees roofs and no car, so it
   is no evidence about cars at all. Pictures are not committed.
 - Not run: `npm run verify`, because this is render only.
+
+## 2026-10-07 | craft | The 5 inch rebuilt as a bench built freestyle quad, in 25 draws where there were 81
+
+Asked by the coordinating session on the owner's behalf, as one part of the graphics pass ("make the entire game look
+better, backward compatibility is a must, move in the direction of Borderlands quality graphics", "keep going, it's
+nowhere near AAA quality graphics yet", "keep in mind performance and backward compatibility", "the models (cars etc)
+could do with lots of refinement"): refine the 5 inch quad, which is drawn on the launch pads, in the chase and replay
+views, as the replay ghost and in the Settings studio, and which read as plain boxes. The cars are another worker's.
+Branch `quad-model-pass` from dc3141a, not pushed. Render only: no physics, plant, module ABI or build change, so
+nothing here needed the owner's word before it started.
+
+### What changed
+
+`src/render/herocraft.js` only, rewritten. What it draws, at the old model's published dimensions and motor positions:
+
+- A carbon bottom plate with four separate arms on it, each narrowing to a neck and ending in a round motor pad. Edges
+  are chamfered INTO the outline (an inset bevel), so a chamfered plate is the same size as a square one, and the
+  chamfer is what catches the cel spec band and the rim light. A top plate on four sakura hex standoffs, with a window
+  the flight controller shows through, button heads, a cream chevron on the nose and a stripe down the back.
+- The stack between the plates: ESC and flight controller on sakura grommets, MOSFETs, the MCU, two status lamps, the
+  USB port and the stack nuts. Three motor leads down each arm under a cream zip tie, and each arm's lamp on a dark
+  housing, still a mesh of its own because the studio colours each lamp from its motor.
+- 2306 motors: a dark base, copper windings (a twelve tooth star on top; this is the `stator` the studio warms), a
+  gunmetal bell with a sakura band, a bell top cut with five windows the copper shows through, and four screws under
+  each pad.
+- Triblade props lofted from airfoil sections with real twist: 4.3 inches of geometric pitch, steep at the root
+  (capped at 0.60 rad, over the hub) and nearly flat at the tip, a swept mid chord, a rounded tip and a lighter tip
+  band. The twist's hand is PROP_SPIN, the number the shell spins the rotor by, so a rotor cannot be drawn with the
+  other hand's pitch. A moulded hub and an M5 nut with its nylon dome. Front props sakura, rear dark.
+- The blur discs keep their material, opacity and size, and gain an alpha ramp in RGBA vertex colours, clear at the hub
+  and dense at the rim: a spinning prop draws a ring with its tips, not a tinted coin. The ramp multiplies whatever
+  opacity a caller sets, so the studio's throttle fade and the ghost's own material still work.
+- A 19 mm micro camera, body, barrel, knurled focus ring, bezel and a shallow glass dome, between printed sakura TPU
+  side plates (tombstone shaped, a lightening hole, the pivot screws) on a chin bar. That is the nose from every angle,
+  the job the faceted pink dome did, done by the part a real five inch carries there.
+- The pack on a grip pad, cream labels on its sides, a strap with a buckle and its tail, the balance plug; the XT60
+  pigtail, red and black, to the plug behind the pack; the low ESR capacitor with its sleeve between the rear arms; a
+  TPU antenna mount with a boss, a stubby video antenna leaning back under a mint cap, and the receiver's two tubes.
+
+How it is drawn:
+
+- Everything that does not move is merged by FINISH rather than by colour: body (matte), metal, TPU and vinyl, each a
+  white cel material over vertex colours, plus one for the props and one for the camera. A part costs triangles, not a
+  draw. What stays a mesh of its own is what something else drives or reads: the rotors, the camera, the discs, the
+  lamps, the windings, the glass, and the antenna, which scripts/craft-check.js leaves out by its name.
+- Ink. celmat.js's outlineHull scales a copy about the mesh's own origin, which is wrong for a merged mesh whose origin
+  is the CG: 7 mm of ink past an arm's end and none down its sides. That is why the old model kept every arm and bell a
+  mesh of its own. A new `inkShell` pushes each welded vertex out along the mitre of its faces, the same width on every
+  face, keeps the part's own normals so post.js's edge pass finds the same creases, and is marked with `hullColor`
+  exactly as outlineHull marks its own, so craft-check leaves it out the same way. It is grown only from the parts that
+  make the silhouette (plates, arms, bells, pack, strap, cage, plug, capacitor, the camera housing), because every inked
+  triangle is drawn twice more.
+- Lite (the studio and the ghost): fewer rings, square edges, no ink, no shadow casters, none of the parts too small to
+  see in a 400 px preview. And a studio lift: the studio draws lite with no ink pass on a 0x1a241c backdrop, lit carbon
+  there measured the backdrop's own colour, and the frame was not drawn at all. In lite a dark colour's brightest
+  channel gains up to 48 levels, hue and order kept. The ghost replaces every material and ignores vertex colour, so the
+  lift reaches the studio and nothing else.
+- Parts are turned and moved by hand over their arrays (`place`, `moveInPlace`, `standInPlace`), not with clone,
+  rotateX, translate and applyQuaternion. See the build time below.
+
+Kept: `buildHeroCraft(opts)` returns `{ group, discs, blades, leds, cameraMount, stator, propSpin }`; `lite`, `fog`,
+`measure`, `worldScale` and `name` mean what they meant; the hidden measurement box (BoxGeometry, depth 0.155) and the
+four discs (CylinderGeometry of radius CRAFT_PROP_R, transparent MeshBasicMaterial) are direct children; `name =
+'antenna'` on the mast and the tip; each `blades` entry is a rotor with its own frame; each `leds` entry is `{ mesh,
+mat, front, base }`; motor order RR FR RL FL and positions; PROP_SPIN; the camera mount at CAMERA_MOUNT_FORWARD and
+CAMERA_MOUNT_UP. `src/game/collide.js`, `configs/airframes.js`, `src/native/` and the plant are untouched.
+
+### Counts, a Node build of each, before (dc3141a) and after
+
+    full   meshes 65 -> 21, outline hulls 16 -> 4 ink shells, draws 81 -> 25
+           triangles 3,462 -> 6,954, in hulls 1,004 -> 2,520, drawn 4,466 -> 9,474
+           shadow casters 37 -> 8, geometries 42 -> 25, materials 45 -> 22
+    lite   meshes and draws 65 -> 21, triangles 2,230 -> 3,468, shadow casters 0 -> 0, materials 29 -> 18
+
+post.js's ink prepass draws every layer 0 mesh again, so its draws fall from 81 to 25 too. The first cut of this model
+drew 26,330 triangles (15,674 and 10,656 in shells); inking only the silhouette parts and cutting rings brought it to
+9,474.
+
+### The envelope
+
+`npm run check:craft`, 20 of 20 on the final code: the 5 inch's drawn span 282.4 mm against 282.6 (281.9 and 282.6 on
+earlier runs of this model: a 24 sided disc measures 281.5 to 282.6 across, depending on its turn when it is measured),
+sweep 173.4 against 173.5, hull up 38.0 against drawn 36.0, hull down a known 15.0. In Node at rest, every visible part
+but ink and antenna: across 282.56 mm, reach 173.50, down -30.00 (the strap, pinned by the heights comment), all as
+before; up 34.80 where the old canopy reached 39.60. The whole drawn model with antenna and ink: top 58.2 mm against
+59.2 before (the antenna); bottom -31.6 against -30.7, which is ink under the strap, paint, out of craft-check's
+measure as the old hulls were, and 13 mm clear of the ground when the plant parks the craft. Check 15's craft walk,
+replayed in Node on `buildCraft('5inch')` in both trees: body 0.155 by 0.088 by 0.034, four discs, sweep 0.1735,
+identical. The blades clear the bells, closest 0.1 mm at the hub's lower edge.
+
+### Build time, CPU only, Node on this machine
+
+Built at boot (the world craft full, the ghost lite), when the studio opens (lite) and when a run swaps the airframe,
+never inside a frame. Each figure is a median over fresh processes run round robin against the old model, so that a
+busy moment lands on both alike; another worker's headless browser shared this machine's four cores for part of the
+afternoon.
+
+    cold, a fresh process's first build:       full 15.1 -> 44.5 ms    lite 13.2 -> 25.4 ms
+    warm, the median of nine after warming:    full  2.4 ->  6.8 ms    lite  1.3 ->  2.7 ms
+
+So the full model costs about three times the old one to build and lite about twice: some 30 ms more at boot on this
+machine for the world craft and up to 12 more for the ghost, and more on a phone. In one round robin series of cold
+full builds the first cut took 92.5 ms against the old model's 18.6; cutting the triangle budget brought it to 63.4,
+the ink shell's numeric weld with one matrix per part to 57.3, and placing parts by hand and measuring wires with 64
+samples to 49.4. Cutting the zip tie once for four arms came after that series. A CPU profile had put a
+fifth of a cold build in `BufferGeometry.clone()`, which builds a throwaway default part of the same kind (a 32 sided
+cylinder, a bevelled unit square) before copying over it, and a seventh in three.js's per vertex transforms on the
+plates. Doing both by hand bought a sixth or so, less than the profile promised, since a profile slows the code it
+samples. The placing is exact: with the wires left at 200 samples every attribute of every mesh matched the clone path
+to 7.5e-9 m, and 64 samples moved a wire's rings at most 7.7 micrometres. Frame time was not measured: headless frame
+timing means nothing here.
+
+### Tried and dropped
+
+- Silver bells, the old 0xd8d0c4: under the field's warm sun a light bell read as a cream cup. Gunmetal with the metal
+  finish's hard highlight reads as machined.
+- A closed camera cage, two solid cheeks and a bridge over the camera: a pink brick with a lens in it from the chase
+  camera. Tombstone plates with a hole let the camera's dark body show.
+- Two lightening slots in the top plate: more triangles than the rest of the plate, invisible over a dark stack.
+- The bell top as a plate with five round holes, about 600 triangles a motor. One flat face with five windows.
+- Motor screws as hex prisms, three times the triangles of a hex face that is only ever seen from below.
+- A six point blade section: twice the triangles for nothing a picture showed. Four points.
+- A stronger rim on lite, to make the frame show in the studio: the rim lights what turns away from the eye, and an
+  arm's top faces it. The studio lift instead.
+- The ink shell's first weld made a string for every vertex and a vector for every face. Numeric keys and flat lists
+  instead.
+- One matrix per part instead of four transforms, and dropping uv before unindexing: no gain I could measure on its
+  own, because the cost was in clone and in three's per vertex calls, not in the number of passes. Placing by hand
+  replaced both.
+- Wires measured with 24 samples: no faster than 64 that a cold build could measure, and rings moved 0.14 mm.
+- A 36 mm antenna mast, which stood at 72.0 mm, 12.8 mm over the old model's top. The antenna is out of craft-check's
+  measure by name, so the stubby is held under the old height by a comment and this note.
+
+### Run, in the same turn
+
+- `node --check src/render/herocraft.js`: clean.
+- `npm run check:craft`: 20 of 20, on the final code, and on two earlier states of it.
+- `npm run lint:preload`: up to date, boot 130 modules; no import changed.
+- A Node harness in scratch, not committed (three r160, the copy the import map serves): the counts, the extents, the
+  check 15 replay and the build times above, and every attribute of every mesh compared across each speed change
+  (the last one, cutting the zip tie once for four arms, left every attribute bit for bit the same).
+- `node scripts/shots.js`, driven by a scratch script, on dc3141a and on this branch at the same fixed cameras: front
+  three quarter, rear three quarter, top, low side, front, below, a motor, the stack, the nose, the chase camera, the
+  lite build and the ghost in the world's light, the pads view and the Settings studio, as drawn and stretched to the
+  viewport. Every run exits 1 on one console error, `net::ERR_CONNECTION_REFUSED` loading a resource in this
+  container, with no harness faults, and writes every picture. The before and after montages are in the project
+  files under `graphics-pass/quad/`, not committed.
+
+### Not run, and why
+
+- `npm run verify`: the brief said not to, and nothing here touches physics, the plant, the module ABI or the build.
+  Check 15's craft walk was replayed in Node instead (above), which is not the same as running it.
+- `lint:fc`, `lint:presets`, `lint:catalog`: no flight controller, preset or catalog change. `lint:frame`: no frame
+  conversion touched. `check:fresh`: deploy stamps, unchanged.
+- Frame time or GPU cost: headless frame timing means nothing. Not flown, and not seen on a real GPU or a phone.
+
+### What went wrong
+
+- The first pictures had the HUD over the craft. The shot script now hides every layer but the 3D view, and shows them
+  again for the studio.
+- The nose camera first sat inside the near plane and drew nothing. Moved out.
+- The lite bell top had a seam where the cap met the band's last ring: a lathe starts its circle a quarter turn from
+  where a shape's circle starts once the shape is laid flat. The cap's circle now starts a quarter turn early.
+- A timing table labelled its fastest run "first". Cold builds were measured in fresh processes after that.
+- Early cold timings were taken while another worker's headless browser had the machine's cores, and were out by
+  half: a state measured at 87 to 112 ms then measured 57 in a round robin series later. Every figure above is from
+  a round robin series, and the profile's shares were taken as pointers, not as savings.
+- The first cut was over budget, 26,330 drawn triangles and five times the old cold build, and its antenna stood over
+  the old model's top. All three were brought down, as above.
+
+### Found, not changed
+
+- The old bell's lathe profile ran top to bottom, so its faces pointed inward; a lathe faces outward only when its
+  profile runs bottom to top. Gone with the old model.
+- `src/render/craft.js`'s header says a map swap does not recompile the craft's "four cel materials". It was not four
+  before this pass either. Left, as it is outside this change.
+- `src/render/whoopcraft.js` passes 0.0005 to 0.0009 to celmat.js's `outlineHull` (`hull(tub, 0.0009, ink)` and six
+  more), whose second argument is a SCALE factor, 1.05 by default and 1.02 to 1.1 everywhere else it is called. So every
+  whoop hull is drawn at under a thousandth of its part's size, at the part's origin: the whoop has no ink hulls. It
+  reads as a width in metres, which is what this file's `inkShell` takes. Not changed: the whoop is not this pass, and
+  whether to fix it with a scale or with a shell like this one is a choice for whoever does it.
+
+### Against the graphics branch
+
+Read, not run: `claude/project-thread-edah8s`, fetched today at 020bcbe, merge base dc3141a, does not touch
+herocraft.js, ghostcraft.js, showcase.js, craftpose.js or craft.js. Its comic.js wraps MeshToonMaterial's
+onBeforeCompile and lights `diffuseColor.rgb`, which three has already multiplied by the vertex colour, so the vertex
+coloured finishes should take its lighting as one material per colour did. A merge of the two should meet the usual
+append conflict at the end of this file and nothing else in these files.
