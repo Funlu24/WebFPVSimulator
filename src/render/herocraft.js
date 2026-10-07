@@ -422,8 +422,13 @@ function tubeAlong(points, rings, radius, sides) {
  * in post.js's prepass) for a line nobody can see. So each finish keeps a
  * second, smaller merge of just the parts that make the silhouette, and the
  * shell is grown from that.
+ *
+ * Exported because src/render/whoopcraft.js inks the whoop with it. The weld
+ * reads the position array three vertices to a triangle, so `src` must be
+ * unindexed: herocraft's parts are, and the whoop's primitives are made so
+ * on their way in.
  */
-function inkShell(mesh, width, color, fog, src = mesh.geometry) {
+export function inkShell(mesh, width, color, fog, src = mesh.geometry) {
   const pos = src.getAttribute('position');
   const p = pos.array;
   const n = pos.count;

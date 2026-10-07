@@ -68188,3 +68188,35 @@ append conflict at the end of this file and nothing else in these files.
   `node scripts/shots.js` through the capture rig on all three maps, High, before (a worktree at 2946f0b) and after.
   Every shot run logged the one usual console error, the board's refused connection, and no shader error.
 - Not run: `npm run verify`, because this is render only, and a headless GPU says nothing about the four taps' cost.
+
+### Pass 17, same day: the whoop's ink, and the braces that lay across its props
+
+- `whoopcraft.js` passed a width in metres to celmat.js's `outlineHull`, which takes a scale factor, on every one of
+  its seven outline calls, from the first whoop commit (3536d2d) on. Each hull was its part at nine ten thousandths of
+  its size, a speck inside it, so the whoop never had an outline of its own: what was round it was the post pass's
+  edge line, the world's pen. It now wears the 5 inch's `inkShell` (exported from `herocraft.js` for it), the even
+  shell grown along the face mitres, with each indexed primitive unindexed for the shell and the copy disposed. The
+  widths are the 5 inch's line divided by MICRO_SCALE, 0.15 to 0.25 mm of the real aircraft, 0.5 to 0.9 mm in the
+  world, so the two machines are inked with one weight. The old numbers read as widths would have drawn three to four
+  times that; shot that way first, the ducts wore a five pixel ring in the close view, and it was dropped.
+- With the ink on, the first shot showed what the missing outline had been hiding, and what the clear blades had been
+  showing all along: the side webs and the diagonal braces ran 11 and 9 mm on into each bore, to 5.5 and 7.5 mm from
+  the motor, at the height the props turn at. From above, every duct had grey planks lying across its disc, now with a
+  black frame round each. Each brace now ends halfway through a duct wall, so a duct is a clear disc with its spider
+  under it. Moving them exposed the four lamps, which sat 3.5 mm inside the bores under the old braces, so they moved
+  to 38 percent of the way to a motor, under the plate's corners, seen from below beside the pack. The motor leads,
+  which stopped 2.5 mm short of the wall and now showed through the blades, run to the wall.
+- The belly straps were both on one line across the aircraft, offset sideways instead of along the pack: they
+  overlapped in the middle and stood 6 mm proud of the plate either side, the pair of grey tabs at the waist in every
+  view from above. They now stand apart along the pack. The lowest point of the machine is still the pack, so the
+  craft check's pinned 12.2 mm is unchanged.
+- Cost, counted in the page on the branch against main: 91 draws and 10,962 triangles either way; vertices 11,537 to
+  20,573, because a shell is an unindexed copy of its part where the scaled hull shared the part's buffers; a warm
+  build 4 to 5 ms either way, a cold one 10 ms to 18 ms. Low builds no ink, as before.
+- Checks: `node --check` on both files, `npm run check:craft` 20 of 20 (the whoop's span 82.2 mm against 82.6, the
+  sweep and the pinned hull gap as before), `npm run lint:preload` up to date. Shots through a whoop version of the
+  quad pass's rig (the 5 inch's flow on the field, the 5 inch moved away and a whoop built in the page at the lifted
+  spot, rotors frozen), High, before at 1d87d56 and after, and the Settings studio with the whoop seated. The usual one
+  refused board connection per run and nothing else.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and the measured machine is the
+  craft check's business, which ran.

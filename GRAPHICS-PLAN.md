@@ -54,16 +54,18 @@ loop: plan, a pass, screenshots, re-plan.
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
 
-## Where it stands after pass 16
+## Where it stands after pass 17
 
 Done: ink, hatching (single in shade, crossed in cast shadow, thinning on surfaces seen edge on), grit, brush marks
 (High), occlusion (High), an outer line heavier than the inner lines (High; the field only within 30 m), painted turf
-and stone on marked ground only, leaf clumps on every canopy, round eighty faced canopies (the town only near the eye),
-cumulus clouds with lit heads and flat bases on the race field, harder grade on both pipelines, four passes of car
-detail (plates by class, bumpers as parts, folded mirrors inside each solid, cabs, learners, two tone keis, a
-tradesman's ladder), and the 5 inch rebuilt as a bench built freestyle quad in 25 draw calls where there were 81. Low
-is unchanged except the clouds (their ink rim, shape and paint), the yard's rounder canopies and the new car and quad
-models; Medium has no brush marks, no occlusion and no outer line.
+and stone on marked ground only, leaf clumps on every canopy, round eighty faced canopies (the town only near the
+eye), cumulus clouds with lit heads and flat bases on the race field, harder grade on both pipelines, four passes of
+car detail (plates by class, bumpers as parts, folded mirrors inside each solid, cabs, learners, two tone keis, a
+tradesman's ladder), the 5 inch rebuilt as a bench built freestyle quad in 25 draw calls where there were 81, and the
+whoop inked for the first time, with the 5 inch's even shell, its braces ending at the duct walls instead of lying
+across the props, and its lamps and belly straps where they belong. Low is unchanged except the clouds (their ink rim,
+shape and paint), the yard's rounder canopies and the new car, quad and whoop models; Medium has no brush marks, no
+occlusion and no outer line.
 
 Tried and dropped, with the reason in PROGRESS.md: grass blades (cost, and the owner's 2026-08-16 decision), dark
 landscape patches (read as cloud shadow), wood grain on the start blocks (too little wood shows in the launch view),
@@ -75,6 +77,4 @@ Open for the owner: a taxi roof lantern needs a taller sedan solid, the built ma
 Next, once the owner has flown it and said which way to push:
 
 - Skies: posterized bands and a stronger horizon colour on the town and the yard.
-- The whoop: its outline hulls are drawn at under a thousandth of their parts' size (`whoopcraft.js` passes a
-  thickness where `outlineHull` takes a scale), so it has none; it wants the quad's even ink shell.
 - A frame time comparison against main on a real Medium machine and a phone on Low before this ships.
