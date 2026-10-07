@@ -1342,6 +1342,12 @@ export function buildHeroCraft(opts = {}) {
    * THE ANTENNA MOUNT, printed TPU on the back of the top plate, with the
    * boss the mast is clamped in. The mast leans back the way a pilot sets
    * one, clear of the props' wash.
+   *
+   * The antenna is a stubby, a 21 mm mast under a 10 mm cap, for height and
+   * not for looks. It is the tallest thing on the model, and because
+   * scripts/craft-check.js leaves it out of the measured machine by its
+   * name, nothing but this comment keeps it under the 59.2 mm the old
+   * model's mast reached. A first cut with a 36 mm mast stood at 72 mm.
    */
   const mastDir = new THREE.Vector3(-0.14, 1, 0.40).normalize();
   const mastFoot = new THREE.Vector3(0, 0.0300, 0.0490);
@@ -1434,7 +1440,7 @@ export function buildHeroCraft(opts = {}) {
    * measurement in scripts/craft-check.js. The receiver's two antenna
    * tubes are wire too, so they ride in the mast's mesh and its name. */
   {
-    const mastLen = 0.0360;
+    const mastLen = 0.0210;
     const wire = [];
     const mastGeo = new THREE.CylinderGeometry(0.0015, 0.0016, mastLen, lite ? 6 : 8);
     standInPlace(mastGeo, mastLen / 2, mastDir, mastFoot.x, mastFoot.y, mastFoot.z);
