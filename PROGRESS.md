@@ -68220,3 +68220,31 @@ append conflict at the end of this file and nothing else in these files.
   refused board connection per run and nothing else.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and the measured machine is the
   craft check's business, which ran.
+
+### Pass 18, same day: high streak cloud on the field's empty sky
+
+- From the ground the field's sky was the nine band gradient with the cumulus meshes in front of it, and between the
+  cumulus and the zenith nothing at all: half of every frame with the nose up, the largest unpainted area left in the
+  race view. The dome now paints cirrus there (`CIRRUS_GLSL` in `scene.js`, called from `skyDome`): a flat layer seen
+  in perspective, so the streaks run toward a vanishing point as real high cloud does, value noise stretched four to
+  one along a wind direction, bent by a coarser noise, broken into patches by a third, with a crisp painted edge, pale,
+  warmer toward the sun. It fades in from 8 to 30 percent of the way up, so the horizon band and the tree line are
+  unchanged, and thins again overhead so the zenith keeps its deepest blue.
+- Fixed to the world: every term is a view direction, so it turns with the camera and nothing else, no time, no rng,
+  no position, and it uses a fract hash and no sine, for the reason comic.js gives. The world rng is not touched, so no
+  tree, collider or cloud moved.
+- Off on Low through a uniform the dome reads at build (`uCirrus`), a uniform branch, so one program either way. A
+  graphics change between runs rebuilds the map and so the dome, the same path comic.js's level takes.
+- What went wrong on the way. The first version painted long sweeping bands at twice this strength and read as speed
+  lines, not cloud: cut to shorter, narrower wisps at 0.30 opacity in patches. Its hard edge stepped low in the sky
+  where the layer is foreshortened, so the edge is now widened by its own `fwidth`. And it returned early below the
+  horizon, which leaves `fwidth` undefined along that edge because neighbouring pixels took different branches: the
+  early return is gone, the mask already takes the layer to nothing there.
+- Cost: four value noise reads per sky pixel on Medium and High, on the dome only. Not measured on hardware: the rig's
+  SwiftShader timings say nothing about a GPU. Frame time on real machines is still the plan's next item.
+- Checks: `node --check`, `npm run lint:preload` up to date, `npm run lint:quality` 71 of 71. The sky rig (six views
+  from the ground and one from 30 m, race field, reference course) on High and Medium after, and on Low before (at
+  2946f0b) and after, diffed pixel by pixel: the only differences on Low are the feather flags, which wave with time,
+  and one before view the rig captured a frame early (it is the previous view's picture). The usual one refused board
+  connection per run and nothing else.
+- Not run: `npm run verify`. Render only, a shader on the sky dome: no physics, plant, ABI or build change.
