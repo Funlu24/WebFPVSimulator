@@ -188,7 +188,7 @@ const PRESETS = {
       pixelBudget: 1.55e6,
       minScale: 0.85,
       preferScale: null,
-      ink: true,
+      ink: false,
       fxaa: false,
       petals: true,
     },
@@ -205,7 +205,7 @@ const PRESETS = {
       shadowMap: 2048,
       shadowFilter: 'pcfsoft',
       shadowHalf: 72,
-      outline: true,
+      outline: false,
       bloom: true,
       /*
        * THE SAME CEILING THE CITY HAS HAD ALL ALONG, FOR THE SAME REASON.

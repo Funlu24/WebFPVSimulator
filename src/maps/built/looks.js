@@ -83,7 +83,7 @@ export const TIMES = {
     /* post.js's own, written out so a page that switches back to golden
      * (the builder's preview) puts them back. */
     ink: PAL.ink,
-    grade: { shadowTint: 0xada8d0, lightTint: 0xfff7e8, saturation: 1.12, lift: 0.032, vignette: 0.15, warmth: 0.05 },
+    grade: { shadowTint: 0xb4b4bc, lightTint: 0xfffaf2, saturation: 0.85, lift: 0.02, vignette: 0.15, warmth: 0.02 }, 
     flats: null,
     night: false,
     wire: 0x4c4658,

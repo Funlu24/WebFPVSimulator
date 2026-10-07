@@ -11615,15 +11615,19 @@ export async function boot({ loading, bootStart, mapId }) {
   /* Shadow pass on or off, so the ledger can attribute draw calls between the
    * colour pass and the shadow pass rather than guessing at the split.
    * Harness only. */
-  window.__shadows = (on) => {
+ window.__shadows = (on) => {
     shell.renderer.shadowMap.enabled = !!on;
     shell.renderer.shadowMap.needsUpdate = true;
     return shell.renderer.shadowMap.enabled;
   };
+
   window.__setMap = (id) => {
     ui.settings.map = id;
     return swapMap(id);
   };
+
+  // Gölgeleri kalıcı olarak burada açıyoruz:
+  window.__shadows(true);
   /*
    * The title camera's own loop, sampled off a clock rather than off the
    * frame rate, so a check can walk a whole attract cycle in one call and

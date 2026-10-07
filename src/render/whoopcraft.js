@@ -238,14 +238,14 @@ export function buildWhoopCraft(opts = {}) {
    * every flight controller is, and the project's sakura and mint stay where
    * they belong: a chrome accent and a live lamp.
    */
-  const frame = cel({ color: 0xb6bec2, rim: 0.34, spec: 0.30, specWidth: 0.016 });
-  const pcb = cel({ color: 0x243c2c, rim: 0.20, spec: 0.24 });
+  const frame = cel({ color: 0x353b31, rim: 0.34, spec: 0.30, specWidth: 0.016 });
+  const pcb = cel({ color: 0x1e241a, rim: 0.20, spec: 0.24 });
   const pcbTop = cel({ color: 0x1b2c22, rim: 0.18, spec: 0.20 });
   const chip = cel({ color: 0x14181a, rim: 0.22, spec: 0.30 });
   const solder = cel({ color: 0xc8cdd0, rim: 0.30, spec: 0.62, specWidth: 0.020 });
   const bell = cel({ color: 0xd6dade, rim: 0.32, spec: 0.74, specWidth: 0.022 });
   const stator = cel({ color: 0x30383c, rim: 0.24, spec: 0.22 });
-  const camBody = cel({ color: 0x171b1e, rim: 0.28, spec: 0.36 });
+  const camBody = cel({ color: 0x111111, rim: 0.28, spec: 0.36 });
   const camTrim = cel({ color: 0xe8a8b8, rim: 0.40, spec: 0.44, specWidth: 0.016 });
   const lens = cel({
     color: 0x0d1114,
@@ -255,7 +255,7 @@ export function buildWhoopCraft(opts = {}) {
     specColor: 0xf3ead4,
     side: THREE.DoubleSide,
   });
-  const battery = cel({ color: 0x161c18, rim: 0.22, spec: 0.16 });
+  const battery = cel({ color: 0x1f1f1f, rim: 0.22, spec: 0.16 });
   const label = cel({ color: 0xe8dcc0, rim: 0.24, spec: 0.28 });
   const wireRed = cel({ color: 0xc0483c, rim: 0.26, spec: 0.24 });
   const hubMat = cel({ color: 0x161c18, rim: 0.22, spec: 0.25 });

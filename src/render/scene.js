@@ -995,6 +995,7 @@ function pitchSurface(pitch, course, sponsorMarks) {
   }
   paintTurf();
 
+
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -1010,7 +1011,7 @@ function pitchSurface(pitch, course, sponsorMarks) {
    * it is under the 7.5 cm the quad parks at. */
   mesh.position.y = 0.02;
   mesh.receiveShadow = true;
-
+  
   /*
    * The marks arrive late, the same way the banners' do, and the pitch is
    * repainted ONCE when the last of them has settled rather than once per
