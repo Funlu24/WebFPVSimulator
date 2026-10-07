@@ -24,10 +24,14 @@
  * the boards, the wires), one for the machined metal, one for the printed
  * TPU, one for vinyl, each wearing its colours as vertex colours over a
  * white cel material. A part costs triangles, not a draw call, so the
- * screws and the zip ties are close to free. The moving parts are the four
- * rotors and the camera, which the shell turns, and the parts the shell
- * animates on their own: the lamps and the discs. See the counts in
- * PROGRESS.md for before and after.
+ * screws and the zip ties are close to free. What stays a mesh of its own
+ * is what something else drives: the four rotors and the camera, which the
+ * shell turns; the four discs and the four lamps, whose materials it
+ * fades and colours; the windings, whose glow the studio warms; the glass,
+ * which no finish shares; and the antenna, which scripts/craft-check.js
+ * leaves out of the measured machine by its name. Twenty one meshes and
+ * four ink shells where there were sixty five and sixteen. The triangle
+ * counts, before and after, are in PROGRESS.md.
  *
  * This file is part of WebFPVSimulator.
  *
@@ -138,18 +142,20 @@ const C = {
   inkWarm: 0x1a1214,
 };
 
-function bake(geo, x, y, z, rx, ry, rz) {
+/*
+ * A copy of a part, turned about x, then y, then z, then moved. One matrix
+ * and one pass over the vertices: rotateX, rotateY, rotateZ and translate
+ * are a pass each, and a model of a hundred and fifty parts built cold at
+ * boot pays for every pass in the interpreter. Turning x then y then z is
+ * the matrix Rz Ry Rx, which three.js calls the Euler order ZYX.
+ */
+const bakeEuler = new THREE.Euler();
+const bakeMatrix = new THREE.Matrix4();
+function bake(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
   const g = geo.clone();
-  if (rx) {
-    g.rotateX(rx);
-  }
-  if (ry) {
-    g.rotateY(ry);
-  }
-  if (rz) {
-    g.rotateZ(rz);
-  }
-  g.translate(x, y, z);
+  bakeMatrix.makeRotationFromEuler(bakeEuler.set(rx, ry, rz, 'ZYX'));
+  bakeMatrix.setPosition(x, y, z);
+  g.applyMatrix4(bakeMatrix);
   return g;
 }
 
@@ -164,8 +170,10 @@ function bake(geo, x, y, z, rx, ry, rz) {
  */
 const tint = new THREE.Color();
 function paint(geo, hex, flat = false) {
+  /* uv goes first: unindexing copies every attribute, and nothing here
+   * reads one. */
+  geo.deleteAttribute('uv');
   const g = geo.index ? geo.toNonIndexed() : geo;
-  g.deleteAttribute('uv');
   g.clearGroups();
   if (flat) {
     /* Unindexed, every face owns its vertices, so this gives each face its
@@ -210,6 +218,33 @@ function cyl(rTop, rBottom, h, seg, ends = 'both') {
     g.clearGroups();
   }
   return g;
+}
+
+/*
+ * THE STUDIO LIFT, for lite only. The Settings studio (showcase.js) draws
+ * the lite build with no ink pass, on a backdrop of 0x1a241c, and lit
+ * carbon there measured (28, 31, 19) to (35, 45, 36) against a backdrop of
+ * (26, 36, 28): the same colour, so the frame was not drawn at all and the
+ * aircraft was its pink parts floating. A stronger rim did not help, since
+ * the rim lights only what turns away from the eye and an arm's top faces
+ * it. So a dark colour is lifted: its brightest channel gains up to 48
+ * levels, less the brighter it already is and none from 80 up, and the
+ * other two are scaled with it, which keeps the hue and keeps the order
+ * (the grip still darker than the pack, the pack than the carbon). Lite is
+ * drawn by the studio and the ghost, and the ghost replaces every material
+ * and ignores vertex colour, so this reaches the studio and nothing else.
+ */
+function studioLift(hex) {
+  const r = (hex >> 16) & 255;
+  const g = (hex >> 8) & 255;
+  const b = hex & 255;
+  const top = Math.max(r, g, b, 1);
+  if (top >= 80) {
+    return hex;
+  }
+  const k = (top + 48 * (1 - top / 80)) / top;
+  const ch = (v) => Math.min(255, Math.round(v * k));
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
 }
 
 /* A rounded rectangle, as a path, for plates, the pack and the cutouts. */
@@ -286,62 +321,110 @@ function slab(shape, y0, y1, bev, curveSegments, bevelSegments = 1) {
  */
 function inkShell(mesh, width, color, fog, src = mesh.geometry) {
   const pos = src.getAttribute('position');
+  const p = pos.array;
   const n = pos.count;
-  const keyOf = (i) => `${Math.round(pos.getX(i) * 2e5)},${Math.round(pos.getY(i) * 2e5)},${Math.round(pos.getZ(i) * 2e5)}`;
-  const keys = new Array(n);
-  const faces = new Map();
-  const a = new THREE.Vector3();
-  const b = new THREE.Vector3();
-  const c = new THREE.Vector3();
-  for (let i = 0; i < n; i += 1) {
-    keys[i] = keyOf(i);
+  /* Weld to 5 micrometres. The key is one integer per position rather than
+   * a string: the first version keyed on strings and built a vector per
+   * face, and a full build took six times as long as the old model's. */
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < n * 3; i += 1) {
+    const q = Math.round(p[i] * 2e5);
+    lo = Math.min(lo, q);
+    hi = Math.max(hi, q);
   }
+  const base = hi - lo + 1;
+  if (base * base * base > Number.MAX_SAFE_INTEGER) {
+    throw new Error('herocraft: an ink shell too big to weld');
+  }
+  const id = new Int32Array(n);
+  const seen = new Map();
+  for (let i = 0; i < n; i += 1) {
+    const key = ((Math.round(p[i * 3] * 2e5) - lo) * base
+      + (Math.round(p[i * 3 + 1] * 2e5) - lo)) * base
+      + (Math.round(p[i * 3 + 2] * 2e5) - lo);
+    let k = seen.get(key);
+    if (k === undefined) {
+      k = seen.size;
+      seen.set(key, k);
+    }
+    id[i] = k;
+  }
+  /* The distinct face normals at each welded vertex, flat, three numbers
+   * a normal. */
+  const faces = Array.from({ length: seen.size }, () => []);
   for (let t = 0; t + 2 < n; t += 3) {
-    a.fromBufferAttribute(pos, t);
-    b.fromBufferAttribute(pos, t + 1).sub(a);
-    c.fromBufferAttribute(pos, t + 2).sub(a);
-    b.cross(c);
-    const len = b.length();
+    const o = t * 3;
+    const ux = p[o + 3] - p[o];
+    const uy = p[o + 4] - p[o + 1];
+    const uz = p[o + 5] - p[o + 2];
+    const vx = p[o + 6] - p[o];
+    const vy = p[o + 7] - p[o + 1];
+    const vz = p[o + 8] - p[o + 2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz);
     if (len < 1e-12) {
       continue;
     }
-    b.multiplyScalar(1 / len);
+    nx /= len;
+    ny /= len;
+    nz /= len;
     for (let k = 0; k < 3; k += 1) {
-      const key = keys[t + k];
-      let list = faces.get(key);
-      if (!list) {
-        list = [];
-        faces.set(key, list);
+      const list = faces[id[t + k]];
+      let dup = false;
+      for (let j = 0; j < list.length; j += 3) {
+        if (list[j] * nx + list[j + 1] * ny + list[j + 2] * nz > 0.996) {
+          dup = true;
+          break;
+        }
       }
-      if (!list.some((f) => f.dot(b) > 0.996)) {
-        list.push(b.clone());
+      if (!dup) {
+        list.push(nx, ny, nz);
       }
     }
   }
-  const push = new Map();
-  for (const [key, list] of faces) {
-    const m = new THREE.Vector3();
-    for (const f of list) {
-      m.add(f);
+  const push = new Float64Array(seen.size * 3);
+  for (let v = 0; v < faces.length; v += 1) {
+    const list = faces[v];
+    if (list.length === 0) {
+      continue;
     }
-    if (m.lengthSq() < 1e-10) {
-      m.copy(list[0]);
+    let mx = 0;
+    let my = 0;
+    let mz = 0;
+    for (let j = 0; j < list.length; j += 3) {
+      mx += list[j];
+      my += list[j + 1];
+      mz += list[j + 2];
     }
-    m.normalize();
+    if (mx * mx + my * my + mz * mz < 1e-10) {
+      mx = list[0];
+      my = list[1];
+      mz = list[2];
+    }
+    const ml = Math.hypot(mx, my, mz);
+    mx /= ml;
+    my /= ml;
+    mz /= ml;
     let least = 1;
-    for (const f of list) {
-      least = Math.min(least, m.dot(f));
+    for (let j = 0; j < list.length; j += 3) {
+      least = Math.min(least, mx * list[j] + my * list[j + 1] + mz * list[j + 2]);
     }
     /* Clamped, so a needle sharp vertex gets a spike three widths long and
      * not one a metre long. */
-    push.set(key, m.multiplyScalar(width / Math.max(least, 0.34)));
+    const s = width / Math.max(least, 0.34);
+    push[v * 3] = mx * s;
+    push[v * 3 + 1] = my * s;
+    push[v * 3 + 2] = mz * s;
   }
   const out = new Float32Array(n * 3);
   for (let i = 0; i < n; i += 1) {
-    const p = push.get(keys[i]);
-    out[i * 3] = pos.getX(i) + (p ? p.x : 0);
-    out[i * 3 + 1] = pos.getY(i) + (p ? p.y : 0);
-    out[i * 3 + 2] = pos.getZ(i) + (p ? p.z : 0);
+    const v = id[i] * 3;
+    out[i * 3] = p[i * 3] + push[v];
+    out[i * 3 + 1] = p[i * 3 + 1] + push[v + 1];
+    out[i * 3 + 2] = p[i * 3 + 2] + push[v + 2];
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(out, 3));
@@ -593,6 +676,8 @@ export function buildHeroCraft(opts = {}) {
   /* Chamfers, which are what catch the rim light on a cut edge, and which
    * a 400 pixel preview cannot show; lite draws its edges square. */
   const bev = (b) => (lite ? 0 : b);
+  /* Every colour a part is painted, through the studio lift in lite. */
+  const hue = (hex) => (lite ? studioLift(hex) : hex);
   const cel = (o) => celMaterial({ fog, cloudShadow: 0, ...o });
   /* A finish: a white cel material that takes its colour from the vertices
    * of whatever is merged into it. vertexColors is set after construction
@@ -633,7 +718,7 @@ export function buildHeroCraft(opts = {}) {
     specColor: 0xf3ead4,
     side: THREE.DoubleSide,
   });
-  const antenna = cel({ color: 0x1a241c, rim: 0.22 });
+  const antenna = cel({ color: hue(0x1a241c), rim: 0.22 });
   const antennaTip = cel({ color: C.mint, rim: 0.20, spec: 0.4 });
 
   /*
@@ -648,7 +733,7 @@ export function buildHeroCraft(opts = {}) {
   const parts = { body: [], metal: [], tpu: [], vinyl: [] };
   const inked = { body: [], metal: [], tpu: [], vinyl: [] };
   const add = (finishName, geo, hex, how = '') => {
-    const g = paint(geo, hex, how.includes('flat'));
+    const g = paint(geo, hue(hex), how.includes('flat'));
     parts[finishName].push(g);
     if (inkOn && how.includes('ink')) {
       inked[finishName].push(g);
@@ -738,11 +823,15 @@ export function buildHeroCraft(opts = {}) {
 
   /*
    * THE MOTORS. 2306s: a dark base on the arm pad, the copper windings
-   * showing in the gap under the bell and through the cooling holes in its
-   * top, a silver bell with a sakura anodised top band. Static, all four
+   * showing in the gap under the bell and through the windows in its top,
+   * a gunmetal bell with a sakura anodised band and top. Static, all four
    * merged: the bell of a real motor spins, but a round bell spinning looks
    * like a round bell standing still, and the four of them as one mesh is
    * three draw calls cheaper than four that turn.
+   *
+   * The bell was silver first, the old model's 0xd8d0c4. Under the field's
+   * warm sun a light bell read as a cream cup, and a dark one with the
+   * metal finish's hard highlight down its side reads as machined.
    */
   const windingGeo = (() => {
     if (lite) {
@@ -1212,9 +1301,9 @@ export function buildHeroCraft(opts = {}) {
      * back is inside the body and its front behind the bezel, and the knurl
      * is a ring on it, so none of the three has an end that shows. */
     const bodyShape = roundRect(new THREE.Shape(), -0.0095, -0.0080, 0.0095, 0.0080, 0.0022);
-    const camBody = paint(slab(bodyShape, -0.0095, 0.0095, bev(0.0012), 2), C.camBody);
-    const barrel = paint(bake(cyl(0.0068, 0.0072, 0.0145, lite ? 10 : 14, 'none'), 0, 0, -0.01525, Math.PI / 2, 0, 0), C.camBody);
-    const knurl = paint(bake(cyl(0.0077, 0.0077, 0.0032, lite ? 10 : 14, 'none'), 0, 0, -0.0150, Math.PI / 2, 0, 0), C.camRing, true);
+    const camBody = paint(slab(bodyShape, -0.0095, 0.0095, bev(0.0012), 2), hue(C.camBody));
+    const barrel = paint(bake(cyl(0.0068, 0.0072, 0.0145, lite ? 10 : 14, 'none'), 0, 0, -0.01525, Math.PI / 2, 0, 0), hue(C.camBody));
+    const knurl = paint(bake(cyl(0.0077, 0.0077, 0.0032, lite ? 10 : 14, 'none'), 0, 0, -0.0150, Math.PI / 2, 0, 0), hue(C.camRing), true);
     /* The bezel, a lathe turned to face forward: its back face, its rim,
      * and the lip the glass sits in. */
     const bezelGeo = new THREE.LatheGeometry([
