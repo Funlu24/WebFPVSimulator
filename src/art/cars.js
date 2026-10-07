@@ -75,12 +75,30 @@
  * paint it is by 3.8 to 5.1 cm on the r32 and 7.5 to 8.6 cm on the e82,
  * the most the old prisms' corner bevels left (about 4 and 7.7 cm).
  *
+ * THE THIRD PASS (2026-10-07), toward the stylised AAA look the owner
+ * asked for, every kind keeping its sizes, wheel places, pivot, material
+ * list and so its draw calls: arches cut in twelve facets where they had
+ * seven, so they read as curves from a chase camera, with the arch lips
+ * rolled over into the flank (round, smooth) instead of laid on it as
+ * washers; a swage line pressed along the flank of every town kind but
+ * the sedan, which has its chrome strip there, and along the kei truck's
+ * cab, with an undercut steep enough for the outline pass to ink it
+ * (swage), and the flank's light bent about that line, rolling under
+ * below it and leaning in above, so a slab's side takes the cel ramp in
+ * bands (prism's bend); a tailgate's shut line on the back of every town
+ * kind but the sedan; pressed ribs across a panel van's roof and ditch
+ * mouldings along the others' where nothing else stands on it; and wheels
+ * with a fat tyre lit round its shoulder and bulging sidewall, a rim
+ * flange standing out of the sidewall and a dish falling to a recessed
+ * face, inked at both rings. It costs 1.3 to 1.6 times the town kinds'
+ * triangles and nothing in draw calls; the coupes, already sculpted, gain
+ * only the wheels.
+ *
  * TWO LEVELS OF DETAIL. 'parked' (every parked car, the town's and a built
- * map's) draws the wheels at 12 sides with their outer faces only and
- * keeps a car within the vendored model's triangle count; 'full' (the
- * moving cars, a handful on a map) draws 16 sided wheels with both faces
- * and the rim's dish. A moving car's wheels are not in the body at all:
- * src/maps/built/cars.js draws them from carWheelGeometry as instances.
+ * map's) draws the wheels at 16 sides with their outer faces only; 'full'
+ * (the moving cars, a handful on a map) draws them with both faces. A
+ * moving car's wheels are not in the body at all: src/maps/built/cars.js
+ * draws them from carWheelGeometry as instances.
  *
  * THE CONVENTION, the vendored one: nose along +x, origin at ground level in
  * the middle of the footprint, y up; `ry` turns the nose to (cos ry, 0,
@@ -420,11 +438,31 @@ function slab(M, role, poly, z0, z1, { ends = true } = {}) {
  * arch can be dark inside while the bonnet is paint; the flanks and the
  * chamfers take `role`. Returns the flank polygon, inset, for whatever is
  * laid on it.
+ *
+ * `bend(y)`, when given, turns the flank's light without moving it: the
+ * flank stays the plane it was, so nothing laid on it moves, but each of
+ * its points carries the normal (0, bend(y), 1) and a smooth chamfer turns
+ * from its band to that. A bend that rises with y is a door skin that
+ * rolls under toward the sill and leans in toward the shoulder, which
+ * the cel ramp paints as two or three bands down the side where a plane
+ * took one flat tone: the slab gone round.
+ *
+ * A normal is only true between a triangle's corners where the bend is
+ * straight between them, so the heights at which it kinks (`bend.cuts`)
+ * are cut into the drawing: every edge of the outline crossing one gains a
+ * point there, which cuts the chamfers, and every triangle of the flank
+ * crossing one is split along it. Without that a triangle running from
+ * the sill to the roof spread the bend's kinks across itself, and the
+ * band came out wavy. The outline handed back is the one drawn without
+ * the cuts, which they leave where it was to a fifth of a millimetre.
  */
-function prism(M, role, pts, hw, { edgeRole = null, sides = [1, -1], round = false, smooth = false, segs = 2 } = {}) {
+function prism(M, role, pts0, hw, { edgeRole: er0 = null, sides = [1, -1], round = false, smooth = false, segs = 2, bend = null } = {}) {
+  const Q0 = inset(pts0.map((p) => [p.x, p.y]), pts0.map((p) => p.c ?? 0));
+  const { pts, of } = bend && bend.cuts ? cutOutline(pts0, bend.cuts) : { pts: pts0, of: null };
+  const edgeRole = er0 && of ? (i, ch) => er0(of[i], ch) : er0;
   const n = pts.length;
   const P = pts.map((p) => [p.x, p.y]);
-  const Q = inset(P, pts.map((p) => p.c ?? 0));
+  const Q = of ? inset(P, pts.map((p) => p.c ?? 0)) : Q0;
   const T = triangulate(Q);
   for (let i = 0; i < n; i += 1) {
     const j = (i + 1) % n;
@@ -460,6 +498,12 @@ function prism(M, role, pts, hw, { edgeRole = null, sides = [1, -1], round = fal
     di,
   ]);
   for (const s of sides) {
+    /* The flank's normal at height y on this side. */
+    const flankN = (y) => {
+      const t = bend ? bend(y) : 0;
+      const l = Math.sqrt(1 + t * t);
+      return [0, t / l, s / l];
+    };
     for (let i = 0; i < n; i += 1) {
       const j = (i + 1) % n;
       const pi = pts[i];
@@ -488,12 +532,21 @@ function prism(M, role, pts, hw, { edgeRole = null, sides = [1, -1], round = fal
         const c = at(B, j, db, pj);
         const d = at(B, i, db, pi);
         if (smooth) {
-          const na = [Math.cos(angle[k]) * ex, Math.cos(angle[k]) * ey, Math.sin(angle[k]) * s];
-          const nb = [Math.cos(angle[k + 1]) * ex, Math.cos(angle[k + 1]) * ey, Math.sin(angle[k + 1]) * s];
+          /* From the band's normal at ring 0 round to the flank's. */
+          const nrm = (ang, y) => {
+            const f = flankN(y);
+            const ca = Math.cos(ang);
+            const sa = Math.sin(ang);
+            return [ca * ex + sa * f[0], ca * ey + sa * f[1], sa * f[2]];
+          };
+          const na = nrm(angle[k], a[1]);
+          const nb = nrm(angle[k], b[1]);
+          const nc = nrm(angle[k + 1], c[1]);
+          const nd = nrm(angle[k + 1], d[1]);
           if (s > 0) {
-            M.face(r, [a, b, c, d], { normals: [na, na, nb, nb] });
+            M.face(r, [a, b, c, d], { normals: [na, nb, nc, nd] });
           } else {
-            M.face(r, [d, c, b, a], { normals: [nb, nb, na, na] });
+            M.face(r, [d, c, b, a], { normals: [nd, nc, nb, na] });
           }
         } else if (s > 0) {
           M.face(r, [a, b, c, d]);
@@ -503,9 +556,94 @@ function prism(M, role, pts, hw, { edgeRole = null, sides = [1, -1], round = fal
       }
     }
     const cap = Q.map((q) => [q[0], q[1], s * hw(q[0], q[1])]);
-    M.face(role, cap, { tris: T, toward: [0, 0, s] });
+    if (bend) {
+      /* Wound counter clockwise from +z, so on the -z side face() turns the
+       * winding and the normals round: what is handed in for that side is
+       * the normal it should have, turned round. The triangles crossing a
+       * cut are drawn apart, each piece its own face. */
+      const normals = Q.map((q) => [0, s * bend(q[1]), 1]);
+      const { keep, cut } = sliceTris(Q, T, bend.cuts ?? []);
+      M.face(role, cap, { tris: keep, toward: [0, 0, s], normals });
+      for (const t of cut) {
+        M.face(role, t.map((q) => [q[0], q[1], s * hw(q[0], q[1])]), { toward: [0, 0, s], normals: t.map((q) => [0, s * bend(q[1]), 1]) });
+      }
+    } else {
+      M.face(role, cap, { tris: T, toward: [0, 0, s] });
+    }
   }
-  return Q;
+  return Q0;
+}
+
+/* An outline with a point added wherever an edge crosses one of the
+ * heights `cuts`, its chamfer read off the edge's two ends, and for each
+ * point the index of the edge of the outline it came from (`of`), so an
+ * edge's role is still asked for by the outline's own numbering. */
+function cutOutline(pts, cuts) {
+  const out = [];
+  const of = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i += 1) {
+    const p = pts[i];
+    const q = pts[(i + 1) % n];
+    out.push(p);
+    of.push(i);
+    const ts = [];
+    for (const c of cuts) {
+      if ((p.y - c) * (q.y - c) < 0) {
+        ts.push((c - p.y) / (q.y - p.y));
+      }
+    }
+    ts.sort((a, b) => a - b);
+    for (const t of ts) {
+      const mix = (a, b) => (a ?? 0) + ((b ?? 0) - (a ?? 0)) * t;
+      out.push({ ...p, x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t, c: mix(p.c, q.c), d: mix(p.d, q.d) });
+      of.push(i);
+    }
+  }
+  return { pts: out, of };
+}
+
+/* A polygon's triangles (`T`, index triples into `Q`) split along the
+ * lines y = c for each c in `cuts`: `keep` the triples crossing none,
+ * `cut` the pieces of the rest as [x, y] triangles, counter clockwise as
+ * their parents were. A piece of no area is dropped. */
+function sliceTris(Q, T, cuts) {
+  const keep = [];
+  let cut = [];
+  for (let i = 0; i < T.length; i += 3) {
+    const tri = [Q[T[i]], Q[T[i + 1]], Q[T[i + 2]]];
+    if (cuts.some((c) => tri.some((p) => p[1] > c) && tri.some((p) => p[1] < c))) {
+      cut.push(tri);
+    } else {
+      keep.push(T[i], T[i + 1], T[i + 2]);
+    }
+  }
+  for (const c of cuts) {
+    const next = [];
+    for (const tri of cut) {
+      const up = tri.map((p) => p[1] > c);
+      const k = up.filter(Boolean).length;
+      if (k === 0 || k === 3) {
+        next.push(tri);
+        continue;
+      }
+      /* The corner alone on its side of the line, then the other two in
+       * the triangle's own order. */
+      const o = k === 1 ? up.indexOf(true) : up.indexOf(false);
+      const a = tri[o];
+      const b = tri[(o + 1) % 3];
+      const d = tri[(o + 2) % 3];
+      const at = (p, q) => {
+        const t = (c - p[1]) / (q[1] - p[1]);
+        return [p[0] + (q[0] - p[0]) * t, c];
+      };
+      const ab = at(a, b);
+      const ad = at(a, d);
+      next.push([a, ab, ad], [ab, b, d], [ab, d, ad]);
+    }
+    cut = next;
+  }
+  return { keep, cut: cut.filter((t) => Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) > 1e-10) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -979,6 +1117,12 @@ function chamferOf(s, tag) {
   return [0, 0];
 }
 
+/* How many facets an arch's curve is drawn in. Seven read as a polygon
+ * from a chase camera a car's length back; twelve read as a curve, and
+ * the arch lip, the well and the body share the count, so the lip's inner
+ * edge lies on the body's cut exactly. */
+const ARCH_K = 12;
+
 /* The arch over one axle: from where it leaves the sill, over the top,
  * back down to the sill. Where the arch's centre stands above the sill (a
  * lowered car) it wraps past a half circle and hugs the tyre. */
@@ -1013,11 +1157,11 @@ function lowerProfileP2(s, P, pts) {
   const n = s.nose;
   const t = s.tail;
   P(-L2 - t.face + 0.03, t.dam + 0.04, 'n', 'under');
-  for (const [x, y] of archPoints(s, s.axle[1], 7)) {
+  for (const [x, y] of archPoints(s, s.axle[1], ARCH_K)) {
     P(x, y, 'a', 'well');
   }
   pts[pts.length - 1].edge = 'under';
-  for (const [x, y] of archPoints(s, s.axle[0], 7)) {
+  for (const [x, y] of archPoints(s, s.axle[0], ARCH_K)) {
     P(x, y, 'a', 'well');
   }
   pts[pts.length - 1].edge = 'under';
@@ -1211,7 +1355,11 @@ const TAU = Math.PI * 2;
 /* A band of quads round the axle from radius ra at za to rb at zb, `N`
  * sides, lit smooth round the axle and flat across it: (nr, nz) is the
  * normal in the profile's own plane. */
-function lathe(M, role, ra, za, rb, zb, N, nr, nz, a0 = 0) {
+function lathe(M, role, ra, za, rb, zb, N, nr, nz, a0 = 0, nb = null) {
+  /* `nb`, when given, is [nr, nz] at the b edge, so one band can turn the
+   * light round a shoulder (a tyre's, a sidewall's bulge) in one ring of
+   * quads, smooth, where two rings of facets would cost twice as much. */
+  const [mr, mz] = nb ?? [nr, nz];
   for (let k = 0; k < N; k += 1) {
     const t0 = a0 + (k / N) * TAU;
     const t1 = a0 + ((k + 1) / N) * TAU;
@@ -1220,8 +1368,8 @@ function lathe(M, role, ra, za, rb, zb, N, nr, nz, a0 = 0) {
     const c1 = Math.cos(t1);
     const s1 = Math.sin(t1);
     const pts = [[ra * c0, ra * s0, za], [ra * c1, ra * s1, za], [rb * c1, rb * s1, zb], [rb * c0, rb * s0, zb]];
-    const normals = [[nr * c0, nr * s0, nz], [nr * c1, nr * s1, nz], [nr * c1, nr * s1, nz], [nr * c0, nr * s0, nz]];
-    M.face(role, pts, { normals, toward: [nr * (c0 + c1), nr * (s0 + s1), nz * 2] });
+    const normals = [[nr * c0, nr * s0, nz], [nr * c1, nr * s1, nz], [mr * c1, mr * s1, mz], [mr * c0, mr * s0, mz]];
+    M.face(role, pts, { normals, toward: [(nr + mr) * (c0 + c1), (nr + mr) * (s0 + s1), (nz + mz) * 2] });
   }
 }
 
@@ -1279,37 +1427,50 @@ function holes(M, n, r, size, z, a0 = 0) {
  */
 function wheel(M, s, detail, rimRole) {
   const full = detail === 'full';
-  const N = full ? 16 : 14;
+  const N = 16;
   const R = s.R;
   const h = tyreWidth(s) / 2;
   const sh = Math.min(0.04, R * 0.13);
   const style = s.wheel;
   const rimR = R * ({ double: 0.72, gtr: 0.7, truck: 0.6, bus: 0.6 }[style] ?? 0.63);
   const lip = style === 'gtr' ? 0.02 : 0.013;
-  /* The tyre: tread, shoulders, sidewalls. */
+  /* The tyre: tread, shoulders, sidewalls. The shoulder is one band lit
+   * round from the tread's normal to the sidewall's, and the sidewall
+   * turns its light from outward at the shoulder to a touch toward the
+   * axle at the bead, so the cel ramp paints a fat, bulging tyre in two
+   * bands where the first pass had a flat washer with a bevel. */
   lathe(M, 'dark', R, -(h - sh), R, h - sh, N, 1, 0);
-  lathe(M, 'dark', R, h - sh, R - sh, h, N, 0.7071, 0.7071);
-  lathe(M, 'dark', R - sh, h, rimR, h, N, 0, 1);
+  lathe(M, 'dark', R, h - sh, R - sh, h, N, 0.96, 0.28, 0, [0.42, 0.91]);
+  lathe(M, 'dark', R - sh, h, rimR, h - 0.004, N, 0.42, 0.91, 0, [-0.2, 0.98]);
   if (full) {
-    lathe(M, 'dark', R, -(h - sh), R - sh, -h, N, 0.7071, -0.7071);
+    lathe(M, 'dark', R, -(h - sh), R - sh, -h, N, 0.96, -0.28, 0, [0.42, -0.91]);
     disc(M, 'dark', R - sh, -h, N, -1);
   } else if (s.p2 || s.sculpt) {
     /* The tyre's inner face, flat, so a wheel seen from the other side of
      * the car or from behind is a tyre and not the edge of its tread. */
     disc(M, 'dark', R, -(h - sh), N, -1);
   }
-  /* The rim: its lip standing proud of the sidewall, the dish behind it,
-   * the face. */
+  /* The rim: its flange standing out of the sidewall, its lip standing proud
+   * of the sidewall, the dish falling from the lip to the face, so the
+   * face sits in a recess whose shadowed slope the ink can find. */
   const lipRole = style === 'steel' ? 'briteDark' : rimRole;
+  lathe(M, lipRole, rimR, h - 0.004, rimR, h + 0.004, N, 1, 0);
   lathe(M, lipRole, rimR, h + 0.004, rimR - lip, h + 0.004, N, 0, 1);
-  const faceZ = full ? h - 0.01 : h + 0.001;
-  const fr = rimR - lip;
-  if (full) {
-    lathe(M, 'briteDark', fr, h + 0.004, fr, faceZ, N, -1, 0);
-  }
+  const fr0 = rimR - lip;
+  /* The dish falls 14 mm over 8 mm: steep enough that its normal is
+   * past the outline pass's crease threshold against the face, so the
+   * ink rings the face as well as the lip. */
+  const dish = 0.008;
+  const faceZ = h - 0.01;
+  const fr = fr0 - dish;
+  const drop = h + 0.004 - faceZ;
+  const dl = Math.sqrt(drop * drop + dish * dish);
   const faceRole = {
     cap: 'brite', steel: 'briteDark', alloy5: rimRole, alloy6: rimRole, double: rimRole, gtr: rimRole, truck: 'brite', bus: 'brite',
   }[style] ?? rimRole;
+  /* The dish in the face's own paint, which the slope's normal turns a
+   * band darker: a recess, and no material a wheel did not have. */
+  lathe(M, faceRole, fr0, h + 0.004, fr, faceZ, N, -drop / dl, dish / dl);
   disc(M, faceRole, fr, faceZ, N, 1);
   const z = faceZ + 0.003;
   const hub = R * 0.13;
@@ -1606,6 +1767,133 @@ function onFlank(M, role, hw, x0, y0, x1, y1, lift) {
   }
 }
 
+/*
+ * THE SWAGE LINE: the crease pressed along a flank under the glass, the
+ * one line a comic artist draws down a car's side to say it is pressed
+ * steel and not a slab. A long shallow bevel rising out of the flank to
+ * a narrow face standing `st` proud, then an undercut lying nearly flat
+ * back into it, so the bevel takes the sky's band of the cel ramp and the
+ * undercut the violet one. The undercut faces 70 degrees down from the
+ * face above it, past the outline pass's crease threshold (src/render/
+ * post.js uNormalBias, about 63 degrees), so the ink draws the crease as
+ * a line; the bevel's 14 degrees stays clean. Its normals are flat. It
+ * runs along the flat of the flank (`flank`, the lower body's cap
+ * polygon, so it never crosses a chamfer), clear of the arch lips, and
+ * dies into the flank over its last 12 cm at either end. The shut lines
+ * at `shuts` are carried over it, so a door's edge cuts the crease as a
+ * pressed door's does, where the line would otherwise hide 4 to 5 cm of
+ * each. It returns the height of its top edge, or null where there is
+ * none, so what is laid on the flank above it can stand clear.
+ */
+function swageY(s) {
+  const archTop = 2 * s.R + s.arch.lift + s.arch.gap + (s.lip ? s.lip.w : 0);
+  let y = s.waist - 0.27;
+  if (y - 0.012 < archTop + 0.025) {
+    y = archTop + 0.037;
+  }
+  return y + 0.045 > s.waist - 0.11 ? null : y;
+}
+
+/* The flank's bend (see prism) about the swage's height, or where it
+ * would be: level there, rolling under below it and leaning in above,
+ * 2 units of tilt a metre, held to between 37 degrees down and 31 up.
+ * The holds are what the town's light needs to cross a band: the 3 band
+ * ramp steps at a dot of plus and minus a third, and the key light stands
+ * 39 degrees up, so the sunny flank, at 0.57 when flat, steps down a band
+ * where it has rolled under past about 19 degrees, 18 cm below the line,
+ * and the shaded one steps up a band where it leans in past about 19
+ * degrees, 18 cm above it. A gentler slope was tried first, 0.9 and then
+ * 1.4: neither crossed a band on a flank as short as a town car's, so
+ * neither showed.
+ *
+ * Between the holds the bend is straight in y, so a triangle of the flank
+ * that stays between them lights as the bend says, to the 2 or 3 degrees
+ * its normals' interpolation strays by, and its bands come out level. A
+ * triangle reaching past a hold spreads the kink across itself. With
+ * `cut` the kinks are the bend's `cuts`, which prism cuts the flank
+ * along. Only the kei truck's cab needs them: it is one flank from the
+ * step to the roof, and uncut its light strayed by up to 33 degrees from
+ * the bend's, a wavy band across the door. A town kind's lower body stops
+ * under the upper hold and reaches past the lower one only along its
+ * bumpers, where uncut the light strays by under 5 degrees, far from any
+ * band's edge, and cutting it cost 20 to 115 triangles a car. */
+function flankBend(ys, cut = false) {
+  const bend = (y) => Math.max(-0.75, Math.min(0.6, 2.0 * (y - ys)));
+  if (cut) {
+    bend.cuts = [ys - 0.375, ys + 0.3];
+  }
+  return bend;
+}
+
+function swage(M, s, hw, flank, shuts = []) {
+  const y = swageY(s);
+  if (y === null) {
+    return null;
+  }
+  /* Where the flat of the flank meets the line at y and at the bevel's
+   * top: the narrower of the two spans. */
+  const span = (yy) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    const n = flank.length;
+    for (let i = 0; i < n; i += 1) {
+      const a = flank[i];
+      const b = flank[(i + 1) % n];
+      if ((a[1] - yy) * (b[1] - yy) <= 0 && a[1] !== b[1]) {
+        const x = a[0] + ((yy - a[1]) / (b[1] - a[1])) * (b[0] - a[0]);
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+      }
+    }
+    return [lo, hi];
+  };
+  const [a0, a1] = span(y + 0.045);
+  const [b0, b1] = span(y - 0.012);
+  const x0 = Math.max(a0, b0) + 0.06;
+  const x1 = Math.min(a1, b1) - 0.06;
+  if (!(x1 - x0 > 0.6)) {
+    return null;
+  }
+  /* Its face is 1 mm off the flank and `st` more, which with the arch
+   * lips' 12 to 14 mm stand keeps it inside the car's width. */
+  const st = 0.011;
+  /* The section, top to bottom: [y, stand share], and the role of the
+   * strip below each point. */
+  const sec = [[y + 0.045, 0], [y, 1], [y - 0.008, 1], [y - 0.012, 0]];
+  const roles = ['body', 'body', 'deep'];
+  const xs = [[x0, 0], [x0 + 0.12, 1], [x1 - 0.12, 1], [x1, 0]];
+  /* The share of the stand at x, along the run and its two tapers. */
+  const k = (x) => Math.max(0, Math.min(1, (x - x0) / 0.12, (x1 - x) / 0.12));
+  for (const side of [1, -1]) {
+    for (let i = 0; i + 1 < xs.length; i += 1) {
+      const [xa, ka] = xs[i];
+      const [xb, kb] = xs[i + 1];
+      for (let j = 0; j + 1 < sec.length; j += 1) {
+        const [ya, ua] = sec[j];
+        const [yb, ub] = sec[j + 1];
+        const z = (kk, u) => side * (hw + 0.001 + st * kk * u);
+        M.face(roles[j], [[xa, ya, z(ka, ua)], [xb, ya, z(kb, ua)], [xb, yb, z(kb, ub)], [xa, yb, z(ka, ub)]], { toward: [0, j === 2 ? -1 : 1, side * 2] });
+      }
+    }
+    /* Each shut line over it, 4 mm off its faces as the line is off the
+     * flank, so the two meet where the stand runs out. */
+    for (const xc of shuts) {
+      const xa = xc - 0.009;
+      const xb = xc + 0.009;
+      if (xa < x0 || xb > x1) {
+        continue;
+      }
+      for (let j = 0; j + 1 < sec.length; j += 1) {
+        const [ya, ua] = sec[j];
+        const [yb, ub] = sec[j + 1];
+        const z = (x, u) => side * (hw + 0.005 + st * k(x) * u);
+        M.face('dark', [[xa, ya, z(xa, ua)], [xb, ya, z(xb, ua)], [xb, yb, z(xb, ub)], [xa, yb, z(xa, ub)]], { toward: [0, j === 2 ? -1 : 1, side * 2] });
+      }
+    }
+  }
+  return y + 0.045;
+}
+
 /* The door mirrors: a dark foot on the door's top front
  * corner, a dark arm, and a housing in paint that is round at its front
  * and flat at its back, where the glass is, and narrower at its outer end
@@ -1731,7 +2019,10 @@ function bumperLoft(M, s, sign, hw, role) {
    * is (0 on the flank, 1 across the end), how much of its stand it
    * keeps]. The stand eases off toward the arch, so the bumper dies into
    * the flank rather than stopping square. */
-  const half = [[xw, zb, 0, 1, 0, 0.4], [x0 - rx, zb, 0, 1, 0, 1]];
+  /* It eases in over two samples, so the end that faces the arch is a
+   * small step and not the square end of a block bolted on. */
+  const xm = xw + (x0 - rx - xw) * 0.45;
+  const half = [[xw, zb, 0, 1, 0, 0.14], [xm, zb, 0, 1, 0, 0.8], [x0 - rx, zb, 0, 1, 0, 1]];
   for (let k = 1; k <= m; k += 1) {
     const t = (k / m) * (Math.PI / 2);
     const nx = Math.sin(t) / rx;
@@ -1782,26 +2073,37 @@ function archLipP2(M, s, hw, ax) {
   const A = s.R + s.arch.gap;
   const yc = s.R + s.arch.lift;
   const { w, proud } = s.lip;
-  const inner = archPoints(s, ax, 5);
+  const inner = archPoints(s, ax, ARCH_K);
   const Ao = A + w;
   const outer = inner.map(([x, y]) => [ax + ((x - ax) * Ao) / A, yc + ((y - yc) * Ao) / A]);
   const dy = Math.max(0, s.sill - yc);
   const foot = Math.sqrt(Ao * Ao - dy * dy);
   outer[0] = [ax - foot, Math.max(s.sill, outer[0][1])];
   outer[outer.length - 1] = [ax + foot, Math.max(s.sill, outer[outer.length - 1][1])];
-  /* The inner edge is left open: the wheel stands in front of it. */
-  let pts = [...inner.map(([x, y]) => ({ x, y, edge: null })), ...outer.slice().reverse().map(([x, y]) => ({ x, y, edge: 'body' }))];
+  /* The inner edge is left open: the wheel stands in front of it. The
+   * outer edge rolls over into the flank (a chamfer in two smooth facets
+   * along it, and none along the inner edge), so the lip reads as a
+   * flare pressed out of the panel and not a washer laid on it; its foot
+   * at the sill stays square. */
+  const roll = [Math.min(w * 0.55, 0.026), Math.min(proud * 0.85, 0.016)];
+  let pts = [
+    ...inner.map(([x, y]) => ({ x, y, edge: null })),
+    ...outer.slice().reverse().map(([x, y], i, all) => {
+      const end = i === 0 || i === all.length - 1;
+      return { x, y, edge: 'body', c: end ? 0 : roll[0], d: end ? 0 : roll[1] };
+    }),
+  ];
   pts[inner.length - 1].edge = 'body';
   if (area2(pts.map((p) => [p.x, p.y])) < 0) {
     /* Reversed, an edge's role moves to the point before it. */
     const rev = pts.slice().reverse();
-    pts = rev.map((p, i) => ({ x: p.x, y: p.y, edge: rev[(i + 1) % rev.length].edge }));
+    pts = rev.map((p, i) => ({ x: p.x, y: p.y, c: p.c, d: p.d, edge: rev[(i + 1) % rev.length].edge }));
   }
   const hwL = (proud + 0.012) / 2;
   const t = new THREE.Matrix4();
   for (const side of [1, -1]) {
     M.at(t.makeTranslation(0, 0, side * (hw - 0.012 + hwL)));
-    prism(M, 'body', pts, () => hwL, { sides: [side], edgeRole: (i) => pts[i].edge });
+    prism(M, 'body', pts, () => hwL, { sides: [side], edgeRole: (i) => pts[i].edge, round: true, smooth: true });
   }
   M.at(null);
 }
@@ -2289,6 +2591,23 @@ function endsP2(M, s, prof, hw, lamps, ch) {
   const zf = hw - s.cham.n[1] - 0.005;
   const gy = s.tail.bumper + 0.03;
   onEnd(M, 'dark', ch.rear, -1, gy, gy + 0.012, -(zf - 0.2), zf - 0.2, 0.004);
+  /* The tailgate's shut line: up from that line just inboard of the tail
+   * lamps to the top of the lower body, and across at its foot, so from
+   * a chase camera the back of a hatch, a van or a kei reads as a door in
+   * a body and not a painted wall. The sedan's boot opens on the deck,
+   * where its own lines are, so it has none here. */
+  if (s.kind !== 'sedan') {
+    const zs = (F.rear.pods ?? []).filter((p) => p.lamp).flatMap((p) => p.poly.map((q) => Math.abs(q[0])));
+    const zt = zs.length ? Math.min(...zs) - 0.035 : 0;
+    const top = s.tail.edge - 0.03;
+    if (zt > 0.3 && top - gy > 0.15) {
+      for (const side of [1, -1]) {
+        const z = side * zt;
+        onEnd(M, 'dark', ch.rear, -1, gy, top, z - 0.008, z + 0.008, 0.0045);
+      }
+      onEnd(M, 'dark', ch.rear, -1, gy, gy + 0.014, -zt, zt, 0.0045);
+    }
+  }
   const L2 = s.L / 2;
   const er = 0.03;
   const ez = -(hw - 0.35);
@@ -2365,9 +2684,10 @@ function bodyOf(M, s) {
 
   /* ---- the lower body ---- */
   const prof = box ? truckCabProfile(s) : lowerProfile(s);
-  prism(M, 'body', prof, () => hw, {
+  const flank = prism(M, 'body', prof, () => hw, {
     round: true,
     smooth: true,
+    bend: flankBend(swageY(s) ?? s.waist - 0.29),
     edgeRole: (i, ch) => {
       const e = prof[i].edge;
       if (e === null) {
@@ -2403,6 +2723,37 @@ function bodyOf(M, s) {
   const ccap = prism(M, 'body', cabPts, (x, y) => hwC(y), {
     round: true, smooth: true, segs: 3, edgeRole: (i, ch) => (ch ? 'body' : cabPts[i].edge),
   });
+
+  /* The pressed ribs across a commercial's roof, the stiffening a panel
+   * van's long flat roof has: low bars in paint, square edged so each
+   * is a pair of ink lines seen from the air, which is where a pilot sees
+   * a roof from. */
+  if (s.kind === 'van' || s.kind === 'keivan') {
+    const zr = hwC(s.roof) - rc - 0.02;
+    const xa = rr + 0.12;
+    const xb = rf - 0.12;
+    const n = Math.max(2, Math.round((xb - xa) / 0.32));
+    for (let k = 0; k <= n; k += 1) {
+      const x = xa + ((xb - xa) * k) / n;
+      M.box('body', x - 0.024, s.roof - 0.004, -zr, x + 0.024, s.roof + 0.014, zr, '-y');
+    }
+  }
+
+  /* The roof's ditch mouldings, the dark strip down either side of a
+   * roof that has no rails, ribs or bus furniture on it: from a drone,
+   * which is where a pilot sees most cars from, they draw the roof's
+   * outline in, as the shut lines draw the doors on the flank. */
+  if (!s.rails && !s.bus && s.kind !== 'van' && s.kind !== 'keivan') {
+    const zd = hwC(s.roof) - rc - 0.045;
+    const xa = rr + (s.rear && s.rear.spoiler ? 0.16 : 0.08);
+    const xb = rf - 0.08;
+    if (xb - xa > 0.4 && zd > 0.2) {
+      for (const side of [1, -1]) {
+        const z = side * zd;
+        M.face('dark', [[xa, s.roof + 0.003, z - 0.011], [xa, s.roof + 0.003, z + 0.011], [xb, s.roof + 0.003, z + 0.011], [xb, s.roof + 0.003, z - 0.011]], { toward: [0, 1, 0] });
+      }
+    }
+  }
 
   /* ---- glass ---- */
   const chrome = s.glass.pillars === 'chrome';
@@ -2443,8 +2794,12 @@ function bodyOf(M, s) {
   if (s.slider !== undefined) {
     onFlank(M, 'dark', hw, s.slider - 0.55, s.waist - 0.05, s.slider + 0.55, s.waist - 0.03, 0.006);
   }
-  /* The side repeater behind the front arch. */
-  onFlank(M, 'amber', hw, s.axle[0] - A - 0.13, s.waist - 0.2, s.axle[0] - A - 0.07, s.waist - 0.175, 0.006);
+  const swaged = s.chromeStrip ? null : swage(M, s, hw, flank, lines);
+  /* The side repeater behind the front arch, lifted clear of the swage
+   * where the swage stands high over a tall arch (the hatch's and the
+   * wagon's), whose bevel would otherwise bury the lamp's foot. */
+  const ry = Math.max(s.waist - 0.2, swaged === null ? -Infinity : swaged + 0.008);
+  onFlank(M, 'amber', hw, s.axle[0] - A - 0.13, ry, s.axle[0] - A - 0.07, ry + 0.025, 0.006);
   if (s.chromeStrip) {
     onFlank(M, 'brite', hw, sillX0 + 0.05, s.waist - 0.3, sillX1 - 0.05, s.waist - 0.28, 0.007);
   }
@@ -2472,7 +2827,7 @@ function truckCabProfile(s) {
     pts.push({ x, y, c, d, edge });
   };
   P(x0, s.sill, 's', 'under');
-  for (const [x, y] of archPoints(s, s.axle[0], 7)) {
+  for (const [x, y] of archPoints(s, s.axle[0], ARCH_K)) {
     P(x, y, 'a', 'well');
   }
   pts[pts.length - 1].edge = 'under';
@@ -2503,7 +2858,7 @@ function lorry(M, s, lamps) {
   const b = s.box;
   const hw = s.W / 2;
   const chassis = [{ x: b.x0 + 0.04, y: s.sill, c: 0, d: 0, edge: 'dark' }];
-  for (const [x, y] of archPoints(s, s.axle[1], 7)) {
+  for (const [x, y] of archPoints(s, s.axle[1], ARCH_K)) {
     chassis.push({ x, y, c: 0, d: 0, edge: 'dark' });
   }
   chassis.push({ x: b.x1 + 0.02, y: s.sill, c: 0, d: 0, edge: 'dark' });
@@ -3941,7 +4296,10 @@ function keiTruckBody(M, s, o, lamps) {
   const P = (x, y, c, d, edge) => prof.push({ x, y, c, d, edge });
   P(xb, 0.44, 0, 0, 'under');
   const arch = { ...s, R: s.R, sill: 0.44, arch: { gap: 0.04, lift: 0.02 } };
-  for (const [x, y] of archPoints(arch, s.axle[0], 7)) {
+  /* What swageY reads to place the cab's swage, and the bend about it:
+   * the cab's arch, and a waist just under the door's glass. */
+  const swageAt = { R: s.R, arch: arch.arch, lip: { w: 0.035 }, waist: 1.15 };
+  for (const [x, y] of archPoints(arch, s.axle[0], ARCH_K)) {
     P(x, y, 0.02, 0.02, 'well');
   }
   prof[prof.length - 1].edge = 'under';
@@ -3963,7 +4321,7 @@ function keiTruckBody(M, s, o, lamps) {
   P(xb + 0.04, s.roof + 0.02, 0.06, 0.06, 'body');
   P(xb, s.roof - 0.06, 0.03, 0.03, 'body');
   const cap = prism(M, 'body', prof, () => hw, {
-    smooth: s.p2 === true, edgeRole: (i, ch) => (ch ? 'body' : ({ well: 'dark', under: 'dark', bumper: 'brite' }[prof[i].edge] ?? 'body')),
+    round: s.p2 === true, smooth: s.p2 === true, bend: s.p2 ? flankBend(swageY(swageAt) ?? 0.88, true) : null, edgeRole: (i, ch) => (ch ? 'body' : ({ well: 'dark', under: 'dark', bumper: 'brite' }[prof[i].edge] ?? 'body')),
   });
   /* The roof's lip, a thin cap a touch wider than the cab, where the
    * vendored truck had its own: the one crisp line over the cab. */
@@ -3994,9 +4352,14 @@ function keiTruckBody(M, s, o, lamps) {
     }
     glints(glass, 0.9, [[0.35, 0.12]], (q) => lay('glint', q, 0.012));
   }
-  /* The door's shut lines and handle, the step under it. */
+  /* The door's shut lines and handle, and the swage along the cab's
+   * flank at the height the town kinds carry theirs, under the handle,
+   * cut by the shut lines. */
   const doorX0 = xb + 0.08;
   const doorX1 = s.axle[0] + 0.34;
+  if (s.p2) {
+    swage(M, swageAt, hw, cap, [doorX0, doorX1]);
+  }
   for (const x of [doorX0, doorX1]) {
     onFlank(M, 'dark', hw, x - 0.009, 0.62, x + 0.009, 1.16, 0.005);
   }
@@ -4026,7 +4389,7 @@ function keiTruckBody(M, s, o, lamps) {
   const cz = hw - 0.04;
   const chassis = [{ x: -L2 + 0.08, y: 0.5, c: 0, d: 0, edge: 'dark' }];
   const rearArch = { ...s, sill: 0.5, arch: { gap: 0.04, lift: 0.02 } };
-  for (const [x, y] of archPoints(rearArch, s.axle[1], 7)) {
+  for (const [x, y] of archPoints(rearArch, s.axle[1], ARCH_K)) {
     chassis.push({ x, y, c: 0, d: 0, edge: 'dark' });
   }
   chassis.push({ x: xb + 0.02, y: 0.5, c: 0, d: 0, edge: 'dark' });

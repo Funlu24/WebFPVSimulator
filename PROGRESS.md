@@ -67430,3 +67430,124 @@ no build, no file format, no setting.
   lush), because a softer, nearer dark patch still read as camouflage on the gallery's sand and as a cloud shadow on a
   field that has real ones. Concrete, dirt and sand keep the fine grit alone. A first hue version on every surface
   turned the sand mustard. Shots: gallery nature row, race field, against main.
+## 2026-10-07 | art | Cars, third pass: round arches, swage lines, banded flanks, tailgates, roofs and fat tyres
+
+The owner said the vehicle models "could do with lots of refinement", as part of the push toward Borderlands and AAA
+stylised graphics, and asked for them to look markedly better up close and at chase distance. Constraints set with the
+request: every export and signature the same, the same sizes, wheelbase, wheel places and origin, so physics, colliders,
+traffic, replays and saved maps behave identically; at most about twice the triangles; no more draw calls; the toon
+materials only. Render only: nothing here reaches the physics, the module ABI or the build, so it did not need the
+owner's approval under the rule for those.
+
+### What changed (src/art/cars.js only)
+
+- **Arches in twelve facets** (`ARCH_K`), where the body had seven and the lip five, so an arch reads as a curve from a
+  chase camera and the lip's inner edge now lies exactly on the body's cut. The kei truck's cab and chassis and the box
+  lorry's cab and chassis share the count.
+- **Arch lips rolled over** into the flank (`archLipP2`: a chamfer along the outer edge, round and smooth, none along
+  the inner edge, square at the sill), a flare pressed out of the panel instead of a washer laid on it.
+- **Bumper ends eased** (`bumperLoft`): the stand at the arch is 0.14 of the bumper's where it was 0.4, through a middle
+  sample at 0.8, so the end facing the arch is a small step and not the square end of a block.
+- **A swage line** (`swage`) along the flank of every town kind but the sedan, which carries its chrome strip there,
+  and along the kei truck's cab: a long shallow bevel up to a narrow face 11 mm proud and an undercut lying nearly flat
+  back into the flank. The undercut faces 70 degrees down from the face above it, past the outline pass's crease
+  threshold (`uNormalBias` 1.05 in `src/render/post.js`, about 63 degrees), so the ink draws it; the bevel's 14 degrees
+  stays clean. It runs on the flat of the flank only, clear of the arch lips, inside the car's width, and dies into the
+  flank over its last 12 cm. The doors' shut lines are carried over it, 4 mm off its faces as they are off the flank, so
+  a door's edge cuts the crease. On the hatch and the wagon, whose tall arches push the line up, the side repeater is
+  lifted clear of it (by 3 and 3.5 cm), where the bevel would otherwise bury the lamp's foot.
+- **The flank's light bent about that line** (`prism`'s new `bend` option, `flankBend`): the flank keeps its geometry,
+  so nothing laid on it moves, and takes normals that roll under below the line and lean in above it, 2 units of tilt a
+  metre, held to 37 degrees down and 31 up. Under the town's key light the cel ramp then steps a band about 18 cm below
+  the line on the sunny side and 18 cm above it on the shaded side, so a slab's side reads as a body side with a
+  shoulder and a tumble under. On the town kinds it is normals only, no triangles; the sedan bends about where its line
+  would be. The kei truck's cab, one flank from the step to the roof, reaches past both holds, and its big triangles
+  smeared the kink across themselves (the light 33 degrees off the bend's in places, a wavy band across the door), so
+  for it prism cuts the outline and the triangles along the holds (`cutOutline`, `sliceTris`): 2.5 degrees off at
+  worst after, for 158 triangles. Uncut, the town kinds stray by under 5 degrees, near their bumpers and far from a
+  band's edge, and cutting them would have cost 20 to 115 triangles a car, so they are not cut.
+- **A tailgate's shut line** on the back of every town kind but the sedan, just inboard of the tail lamps (read from the
+  kind's own `FACES` rear pods) up to the top of the lower body, and across at the line over the bumper.
+- **Roofs**: pressed ribs across the van's and the kei van's roofs; a dark ditch moulding down either side of every
+  other roof that has no rails or bus furniture on it, so from a drone the roof's outline is drawn in.
+- **The kei truck's cab** chamfers are round (two facets, smooth) where they were one flat bevel.
+- **Wheels**: 16 sides parked, as a moving wheel already had (a parked one had 14). The shoulder is one band lit round
+  from the tread's normal to the sidewall's and the sidewall turns its light from outward to a touch toward the axle
+  (`lathe` takes a second normal for its far edge), so the cel ramp paints a fat tyre. The rim has a flange standing out
+  of the sidewall, its lip, and a dish falling 14 mm over 8 mm of its radius to a recessed face, in the face's own paint
+  so no wheel gains a material; the flange and the dish are both past the crease threshold, so the ink rings the rim
+  twice.
+
+### What did not change, and how that was checked
+
+Measured in Node with every kind built before (HEAD's file) and after, through a scratch loader that maps `three` to
+the CDN cache's copy (not committed): the same exports; `carWheelBase` identical for every kind; every car's x and z
+extents identical; the moving wheel geometry's bounds identical; the town hooks' names, `userData.vehicle`, positions
+and rotations identical; the lamp lists the same length; the material set of every kind's parked car and moving body
+identical, so no draw call is added anywhere; no NaN and every normal unit length, as before (the three hero hull
+counts of non unit normals are HEAD's too). Two things moved: a parked car's lowest point is now at the ground (14 sides
+put no vertex at the bottom, so the old tyre stood 7 to 9 mm up), and the r32's cambered tyre corner reaches 3 mm below
+it; and the roof ditch mouldings stand 3 mm over `s.roof`, which raises the sedan's and the wagon's drawn bounds by
+3 mm. The solids come from the tables, untouched.
+
+Triangles per car, and the meshes, which are the draw calls a car costs where nothing merges it. Parked is the whole
+car with its wheels in it; moving is a moving car's body, its four wheels drawn apart from `carWheelGeometry`; a wheel
+is one of those.
+
+| kind | parked, before | parked, after | moving body, before | moving body, after | a wheel | meshes, parked / moving |
+|---|---|---|---|---|---|---|
+| kei | 1897 | 2771 (1.46x) | 1233 | 1771 (1.44x) | 252 > 284 | 13 / 13, unchanged |
+| keivan | 1815 | 2763 (1.52x) | 1167 | 1779 (1.52x) | 248 > 280 | 13 / 13, unchanged |
+| hatch | 1719 | 2581 (1.50x) | 1091 | 1617 (1.48x) | 243 > 275 | 13 / 13, unchanged |
+| sedan | 1989 | 2785 (1.40x) | 1349 | 1809 (1.34x) | 246 > 278 | 13 / 13, unchanged |
+| wagon | 1691 | 2565 (1.52x) | 1043 | 1581 (1.52x) | 248 > 280 | 13 / 12, unchanged |
+| minivan | 1930 | 2788 (1.44x) | 1302 | 1824 (1.40x) | 243 > 275 | 13 / 13, unchanged |
+| van | 1837 | 2815 (1.53x) | 1189 | 1831 (1.54x) | 248 > 280 | 13 / 13, unchanged |
+| boxtruck | 1715 | 2363 (1.38x) | 979 | 1291 (1.32x) | 258 > 290 | 12 / 12, unchanged |
+| minibus | 1881 | 2739 (1.46x) | 1161 | 1683 (1.45x) | 266 > 298 | 13 / 13, unchanged |
+| r32 | 4376 | 4712 (1.08x) | 3748 | 3748 (1.00x) | 243 > 275 | 14 / 13, unchanged |
+| e82 | 4745 | 5081 (1.07x) | 4097 | 4097 (1.00x) | 248 > 280 | 14 / 13, unchanged |
+| keitruck | 1539 | 2405 (1.56x) | 891 | 1421 (1.59x) | 248 > 280 | 15 / 15, unchanged |
+
+No level of detail is needed for this: the worst is the kei truck's moving body at 1.59 times, under the twice that was
+set, and a wheel gained 32 triangles.
+
+In the city, `window.__budget` from seven cameras each on a parked town car, the same cameras before and after:
+draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame triangles up 4.1 to 5.3 percent (50 to
+60 thousand on 1.04 to 1.31 million, every pass of the frame counted).
+
+### Run, in the same turn
+
+- The Node counts and comparisons above.
+- `node scripts/shots.js` on the built map, the twelve kinds lined up beside the spawn by a scratch module (not
+  committed) and shot close, three quarter, side on, low, at chase distance and from a drone's height: 27 views before
+  (HEAD's file swapped in) and after. And on the city, seven views of parked town cars, before and after, with the
+  budget above. Retaken after each fix below, and the kei truck's and the city's once more from the committed file. The
+  best 18 pairs are in the project files, `graphics-pass/cars/`. No picture is committed. Every run exits 1 on a console
+  `net::ERR_CONNECTION_REFUSED` (a resource this container cannot reach) with no harness fault, before and after alike.
+- `npm run lint:preload`: up to date, boot 130 modules, city 76, built 34, 254 served. `node --check src/art/cars.js`.
+- Not run: `npm run verify`, because nothing here is physics, the plant, the ABI or the build, and no cheap check
+  imports `src/art/cars.js` (Node has no `three` here; the pictures and the scratch loader stand in). The verify check
+  that reads the cars' drawing is check 15's collider scan (phantom volume, holes and mean cover, drawn objects against
+  colliders): the cars' drawn bounds moved by 9 mm at most and the arches' cut by the difference between a 7 and a 12
+  sided polygon, and the thresholds' own record puts the city about 3000 m3 and 1270 holes inside those ceilings when
+  they were set. That is a judgement, not a measurement: it was not run.
+
+### What went wrong
+
+- The first tailpipe I added for the town kinds duplicated the one `endsP2` already draws. Removed before the pictures.
+- The rim's dish in `briteDark` opened a material the minibus's parked wheels did not have, a 14th mesh on the parked
+  minibus. Found by comparing the material sets; the dish is in the face's paint now.
+- A side on shot of the kei truck showed no swage, which looked like a stale module; it was the camera, level with a
+  crease that faces sideways. A three quarter view shows it.
+- The bend went in at 0.9 and then 1.4 units of tilt a metre and showed nothing: on a flank as short as a town car's
+  neither crossed a band of the ramp. Found by cropping the same panel before and after; raised to 2.
+- The swage hid 4 to 5 cm of every door shut line where it crossed it, and on the hatch and the wagon buried the side
+  repeater's foot. Both went unseen until a 3x crop of the kei's doors in the after pictures; fixed as above, and the
+  pictures retaken.
+- The kei truck's band came out wavy in a side on picture, which the bend's own comment said could not happen ("however
+  the flank's polygon is cut into triangles its bands come out level"). That held only between the holds. Measured in
+  Node (the interpolated normal against the bend at sample points of every flank triangle), cut along the holds for the
+  kei truck as above, and the comment rewritten to say what is true.
+- The scratch harness was deleted before the last retake and had to be rebuilt from the session's record; its first
+  rebuild had the cameras' first positions, not their last, which a pixel compare against the earlier pictures caught.
