@@ -54,7 +54,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {
-  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn,
+  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, SIL_GLSL, SIL_REACH,
 } from './comic.js';
 
 /*
@@ -163,6 +163,10 @@ const OutlineShader = {
      * the centre can each be half a code off, plus the slack. */
     #define COMIC_AO_QUANT ((uGeoFar - uGeoNear) * (1.5 / 65025.0))
     ${AO_GLSL}
+    #endif
+    #ifdef COMIC_SIL
+    #define COMIC_SIL_DEPTH(uv) (unpackDepth16(texture2D(tGeo, clamp(uv, vec2(0.0), vec2(1.0))).zw) * (uGeoFar - uGeoNear) + uGeoNear)
+    ${SIL_GLSL}
     #endif
 
     /* Only xy is stored. z is reconstructed positive, which is what a
@@ -274,6 +278,33 @@ const OutlineShader = {
       float nearness = 1.0 - smoothstep(0.010, 0.055, d0);
       float ne = smoothstep(uNormalBias, uNormalBias * 1.35, normalEdge) * nearness;
       float edge = clamp(max(de, ne), 0.0, 1.0) * uStrength * (1.0 - max(grass, grassNear));
+      #ifdef COMIC_SIL
+      /* The comic layer's outer line (src/render/comic.js, pass 16), on the
+       * four diagonal taps above, each with a wide tap beyond it. Not
+       * refused beside a sentinel as the line above is: the sky clears to
+       * the sentinel, and the skyline is where the outer line matters most.
+       * The allowance is two depth codes, which is what a near centre's
+       * ratios can be off by. It fades out between 12 and 30 m, nearer
+       * than the town's, for two reasons seen in the first shots of it:
+       * faded at 40 to 120 m, every edge of the bush rings and the far
+       * hedges was a silhouette against something much farther, and a
+       * heavy line round all of it turned the distance into a busy cartoon,
+       * aerial perspective in reverse; and a gate's sleeves at 60 m are
+       * five pixels wide, which an outer line two and a half deep from
+       * either side fills, so the pale gate went black. Inside 12 m, where
+       * the line is at full weight, the same sleeve is twenty five pixels
+       * wide and keeps its print inside it. */
+      {
+        float zr = uGeoFar - uGeoNear;
+        float zc = d0 * zr + uGeoNear;
+        vec2 tw = tp * ${SIL_REACH.toFixed(2)};
+        float sil = comicSilEdge(
+          comicSilDir(zc, d1 * zr + uGeoNear, vUv + vec2( tw.x,  tw.y)), comicSilDir(zc, d2 * zr + uGeoNear, vUv + vec2(-tw.x, -tw.y)),
+          comicSilDir(zc, d3 * zr + uGeoNear, vUv + vec2( tw.x, -tw.y)), comicSilDir(zc, d4 * zr + uGeoNear, vUv + vec2(-tw.x,  tw.y)),
+          zr * (2.0 / 65025.0) / zc);
+        edge = max(edge, sil * uStrength * (1.0 - grass) * (1.0 - smoothstep(12.0, 30.0, zc)));
+      }
+      #endif
       // never draw on the sky, and let very distant geometry go clean
       edge *= step(d0, 0.999) * (1.0 - smoothstep(0.16, 0.42, d0));
 
@@ -470,10 +501,12 @@ export function buildComposer(renderer, scene, camera, quality) {
     outline = new ShaderPass(OutlineShader);
     outline.uniforms.tGeo.value = normalTarget.texture;
     outline.uniforms.uResolution.value.set(w, h);
-    /* Occlusion on High only: the preset was set by buildFieldScene before
-     * this runs. A define, so Medium compiles none of it. */
+    /* Occlusion and the outer line on High only: the preset was set by
+     * buildFieldScene before this runs. Defines, so Medium compiles none of
+     * either. */
     if (comicAoOn()) {
       outline.material.defines.COMIC_AO = 1;
+      outline.material.defines.COMIC_SIL = 1;
       outline.material.needsUpdate = true;
     }
     composer.addPass(outline);

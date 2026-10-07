@@ -437,6 +437,58 @@ export const INK_WEIGHT = 1.55;
  * paper rather than as a hole in the frame. */
 export const INK_COLOR = 0x0d0f16;
 
+/*
+ * THE OUTER LINE (pass 16): an object's outline drawn with a heavier pen
+ * than the lines inside it, which is the most recognisable thing about the
+ * look the owner named. Both ink passes found a silhouette and a crease
+ * with one pen at one reach, so every line in the frame was one weight.
+ *
+ * Four more depth taps, each SIL_REACH times as far out as one of the
+ * pass's own four, ask one question per direction: is the centre the near
+ * side of a silhouette within that wider reach? Through the centre and its
+ * near tap goes a plane, in inverse depth, which is what a plane is linear
+ * in across the screen. On any plane at any angle the wide tap lies where
+ * that plane predicts and the residual is zero, so a road at a grazing
+ * angle stays clean, where a plain difference of depth would ink it. Across
+ * a ridge, where depth is continuous, the residual is a few hundredths.
+ * Across a silhouette it is about half the share by which the centre is
+ * nearer than what stands behind it, and against the sky that share is
+ * all of it. The second test, that the wide tap lies well behind the
+ * centre, keeps the line on the object's own side of its silhouette: the
+ * background beside an object is never the near side of anything.
+ *
+ * So a silhouette is inked SIL_REACH reaches deep and a crease one reach,
+ * and the heaviest lines are where an object stands against the sky or
+ * against something far behind it, which is how a comic artist weights
+ * them. Each pass fades it with distance in its own way (the field's much
+ * nearer, see src/render/post.js). High only, as the occlusion is: four
+ * taps. The including shader defines COMIC_SIL_DEPTH(uv) as the linear
+ * view depth in metres at uv.
+ */
+export const SIL_REACH = 1.8;
+export const SIL_GLSL = /* glsl */ `
+  /* dc the centre's depth, dn its near tap's, uvw the wide tap one
+   * SIL_REACH further out the same way. */
+  float comicSilDir( float dc, float dn, vec2 uvw ) {
+    float dw = COMIC_SIL_DEPTH( uvw );
+    float res = abs( ( dc / dn - 1.0 ) - ( dc / dw - 1.0 ) * ${(1 / SIL_REACH).toFixed(6)} );
+    return min( res, 1.0 - dc / dw );
+  }
+  /* The four directions' answers, s1 opposite s2 and s3 opposite s4, less
+   * an allowance q for the depth's own precision. Most of a line by a
+   * background a third again as far as the object, all of one against the
+   * sky. None where BOTH ends of a pair are past a silhouette, because then
+   * the object is thinner than the wider reach either side: a tube, a pole,
+   * a sign seen from far off. The line one reach deep already draws its
+   * edges, and the outer line would fill it in, which took a gate's pale
+   * frame to a black bar at fifty metres. */
+  float comicSilEdge( float s1, float s2, float s3, float s4, float q ) {
+    float s = max( max( s1, s2 ), max( s3, s4 ) );
+    float thin = max( min( s1, s2 ), min( s3, s4 ) );
+    return smoothstep( 0.10, 0.18, s - q ) * ( 1.0 - smoothstep( 0.10, 0.18, thin - q ) );
+  }
+`;
+
 const MARK = '/* COMIC_V1 */';
 const KEY = '|comic1';
 
@@ -809,6 +861,7 @@ if (!P[INSTALLED]) {
 export function comicPipeline(pipeline) {
   pipeline.inkWeight = INK_WEIGHT;
   pipeline.comicAo = comicAoOn() && addPipelineAo(pipeline);
+  pipeline.comicSil = comicAoOn() && addPipelineSil(pipeline);
   const ink = pipeline.ink && pipeline.ink.mat && pipeline.ink.mat.uniforms;
   if (ink) {
     if (ink.uInk) {
@@ -994,5 +1047,36 @@ ${INK_LINE_AT}`);
     updateAoCamera(mat.uniforms, this.camera, this.size.x, this.size.y);
     return render.apply(this, args);
   };
+  return true;
+}
+
+/* Where the outer line goes in the vendored ink pass: after its own two
+ * terms, before its haze fade, so the outer line fades with the rest. */
+const INK_FADE_AT = '      // let the background dissolve into the haze instead of getting busy';
+
+/* The outer line (SIL_GLSL) in the vendored ink pass, on its own four taps
+ * along the axes, each with a wide tap beyond it. */
+function addPipelineSil(pipeline) {
+  const mat = pipeline.ink && pipeline.ink.mat;
+  if (!mat) {
+    return false;
+  }
+  const fs = mat.fragmentShader;
+  if (!fs.includes(INK_MAIN_AT) || !fs.includes(INK_FADE_AT)) {
+    return false;
+  }
+  mat.fragmentShader = fs
+    .replace(INK_MAIN_AT, `    #define COMIC_SIL_DEPTH(uv) linearDepth(uv)
+${SIL_GLSL}
+${INK_MAIN_AT}`)
+    .replace(INK_FADE_AT, `      /* The comic layer's outer line: src/render/comic.js. */
+      {
+        vec2 tw = t * ${SIL_REACH.toFixed(2)};
+        edge = max( edge, comicSilEdge(
+          comicSilDir( dc, dl, vUv - vec2( tw.x, 0.0 ) ), comicSilDir( dc, dr, vUv + vec2( tw.x, 0.0 ) ),
+          comicSilDir( dc, du, vUv + vec2( 0.0, tw.y ) ), comicSilDir( dc, dd, vUv - vec2( 0.0, tw.y ) ), 0.0 ) );
+      }
+${INK_FADE_AT}`);
+  mat.needsUpdate = true;
   return true;
 }

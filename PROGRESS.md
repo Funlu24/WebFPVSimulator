@@ -68155,3 +68155,36 @@ append conflict at the end of this file and nothing else in these files.
   not the craft, and no camera in play sees the craft that high over grass at that distance.
 - Not run: `npm run verify`, because nothing here touches physics, the plant, the module ABI or the build. The craft
   pass replayed check 15's measurement in Node instead and found it identical.
+
+### Pass 16, same day: an outer line heavier than the lines inside it
+
+- `comic.js`: `SIL_GLSL`, the outer line, in both ink passes on High. Every line in the frame was one weight, because
+  both passes find a silhouette and a crease with one pen at one reach, and a heavier outline than inner line is the
+  most recognisable thing about the look asked for. Four more depth taps, each 1.8 times as far out as one of the
+  pass's own four, ask whether the centre is the near side of a silhouette within that wider reach. The test is a
+  plane through the centre and its near tap, in inverse depth, which a plane is linear in across the screen: on any
+  plane at any angle the residual is zero, so a road at a grazing angle stays clean; across a ridge it is a few
+  hundredths; across a silhouette it is about half the share by which the object is nearer than what is behind it.
+  A second test keeps the line on the object's side, and a third leaves it off anything thinner than the wider reach
+  either side, where both ends of a pair are past a silhouette.
+- The field's ink pass (`post.js`) gets it behind a `COMIC_SIL` define set with `COMIC_AO`; the town and the yard get
+  it inserted into the vendored ink pass at runtime by `comicPipeline`, as the occlusion is, after the pass's own two
+  terms and before its haze fade. Nothing under `vendored/` changes, and if an update moves the anchor line nothing is
+  inserted. Medium and Low compile none of it. Cost: four taps per pixel in one full resolution pass, High only.
+- What went wrong on the way, all seen in pairs against pass 15 at the same cameras:
+  - First cut, field faded with the ink's own range: every edge of the bush rings and the far hedges, 150 to 430 m
+    out, is a silhouette against something much farther, and a heavy line round all of it turned the distance into a
+    busy cartoon and the haze back into hard contrast. Faded at 40 to 120 m instead.
+  - Still at 40 to 120 m: a gate's sleeves at 60 m are about five pixels wide, and a line two and a half pixels deep
+    from either side filled them, so the pale gate frame went black at the distance a pilot reads the next gate from.
+    The thin test was added for that, and it was not enough: it only spares an object narrower than the wider reach
+    either side, and the sleeve is a little wider. So the field's outer line fades between 12 and 30 m, where a sleeve
+    is twenty five pixels wide at full weight. The gate at 60 m is back to pass 15's pale frame, measured by eye in an
+    eight times crop of both.
+  - The town and the yard keep their pipeline's own fade, 40 to 98 m, which their shots carried without either
+    fault: the round canopies, the roofs and the hoardings read as drawn objects with a heavy outline and thin inner
+    lines, and the facet lines on the canopies stay as fine as they were.
+- Checks: `node --check` on both files, `npm run lint:preload` up to date, `npm run lint:quality` 71 of 71 clean, and
+  `node scripts/shots.js` through the capture rig on all three maps, High, before (a worktree at 2946f0b) and after.
+  Every shot run logged the one usual console error, the board's refused connection, and no shader error.
+- Not run: `npm run verify`, because this is render only, and a headless GPU says nothing about the four taps' cost.
