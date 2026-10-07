@@ -4785,7 +4785,7 @@ function skyDome() {
 
 /* Chunky stylised clouds: clustered flattened icospheres, unlit, so they
  * stay bright and flat like painted shapes. */
-function clouds(rng) {
+function clouds(rng, count = 26, size = 1) {
   const g = new THREE.Group();
   /* One mesh per puff with a hard painted terminator keyed to world up,
    * plus a warm sun side rim. The previous build overlaid a second,
@@ -4838,11 +4838,11 @@ function clouds(rng) {
       }
     `,
   });
-  for (let i = 0; i < 26; i += 1) {
+  for (let i = 0; i < count; i += 1) {
     const cluster = new THREE.Group();
     const puffs = 4 + Math.floor(rng() * 5);
     for (let p = 0; p < puffs; p += 1) {
-      const r = 16 + rng() * 26;
+      const r = (16 + rng() * 26) * size;
       const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat);
       puff.position.set((rng() - 0.5) * 70, (rng() - 0.5) * 12, (rng() - 0.5) * 40);
       puff.scale.y = 0.52;
@@ -5151,6 +5151,12 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   /* Clouds, indoors, would be through the ceiling. */
   if (!indoor) {
     noInkBaker.bake(clouds(rng));
+    /* A second, larger bank from its OWN stream, 2026-10-07, for a sky
+     * that reads as weather rather than as a few stickers. Never from the
+     * world's rng: every draw on it after this point places scenery and
+     * colliders, so one more draw would move the world under every saved
+     * replay. */
+    noInkBaker.bake(clouds(makeRng(0x5c10d5), 16, 1.6));
   }
   /* Layer 0, not the no ink layer. Clouds used to write no depth into the
    * outline prepass, so the ink pass drew mountain silhouettes ACROSS the

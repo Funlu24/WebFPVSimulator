@@ -227,6 +227,18 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     float g = comicNoise( gq ) * 0.55 + comicNoise( q * 0.37 + 17.0 ) * 0.45;
     float gAmt = ( 1.0 - smoothstep( 0.35, 0.9, gfw ) ) * 0.16 + 0.05;
     col *= 1.0 + ( g - 0.5 ) * gAmt * uComicGrit;
+    /*
+     * Landscape scale patches on anything that faces up: a field is never
+     * one green and a yard is never one grey. Worn, wet, sun bleached and
+     * clover patches tens of metres across, the variation a painted
+     * backdrop has and a flat fill does not. Two octaves at 14 m and 4 m,
+     * on the up facing plane only, so walls keep their own grit.
+     */
+    if ( wn.y > max( wn.x, wn.z ) ) {
+      float m = comicNoise( p.xz * 0.07 + 41.0 ) * 0.6 + comicNoise( p.xz * 0.23 + 7.0 ) * 0.4;
+      m = smoothstep( 0.28, 0.72, m );
+      col *= 1.0 + ( m - 0.5 ) * 0.36 * uComicGrit;
+    }
   }
 
   if ( uComicHatch > 0.0 ) {

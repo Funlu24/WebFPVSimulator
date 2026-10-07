@@ -67364,3 +67364,13 @@ no build, no file format, no setting.
 - Tuning by shots: strength 1.0 was invisible; 6.0 proved it ran (dark pillar bases and beam corners in the bando);
   2.6 with a 1.2 m radius kept.
 - Cars are being refined in a separate worktree branch; not in this commit.
+
+### Pass 6, same day: ground patches, a second cloud bank
+
+- `comic.js` grit: on up facing surfaces, two more octaves of value noise at 14 m and 4 m, contrast stretched, plus or
+  minus 18 percent: worn and clover patches on the field, stains on the yard. First tries at 30 m and 9 m were too
+  broad to see (they read as light, not as ground). Off on Low with the rest of the grit.
+- `scene.js` field clouds: a second, larger bank (16 clusters at 1.6 times the puff size) from its OWN rng stream
+  (`makeRng(0x5c10d5)`). Never from the world's rng: draws after the clouds place scenery and colliders, so one more
+  draw on it would move the world under every saved replay. The first bank's call is unchanged. Baked into the same
+  no ink batch, so no new draw call.
