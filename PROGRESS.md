@@ -67284,3 +67284,35 @@ way round is a computer.
 Mat, 2026-10-06 14:43 UTC, in the thread, after being offered none, cheap, shots, verify or fly it: "push to main". It covers
 this change only (the raw axis and button readout in the stick report). Fetched main first: origin/main is an ancestor of
 this branch, so a fast forward.
+
+## 2026-10-07: graphics toward Borderlands, pass 1 (branch claude/project-thread-edah8s)
+
+Mat asked for the whole game to look better, moving toward Borderlands, with backward compatibility a must, worked as
+a loop of plan, pass, screenshots, re-plan. The plan is `GRAPHICS-PLAN.md`. This is render only: no physics, no ABI,
+no build, no file format, no setting.
+
+### What changed
+
+- `src/render/comic.js` (new): an accessor on `MeshToonMaterial.prototype` for `onBeforeCompile` and
+  `customProgramCacheKey`, so every toon material in every map (celmat on the field, the vendored `cel()` in the town
+  and the yard) gets world space pen hatching in shadow (a second, crossing set in cast shadow) and a two octave paint
+  grit, after the caller's own hook, which still runs first and unchanged. Strokes keep a constant pixel width and
+  spacing at any range by octave blending, and are broken into dashes. Uniforms are shared objects; Low sets them to
+  zero (`setComicQuality`, called where each map reads its preset). The cache key wrapper keeps each caller's own key,
+  and the setters unwrap a wrapper copied from another material (bake.js and kit.js copy hooks onto clones), so
+  materials that shared a program before still share one.
+- Field ink (`src/render/post.js`): near black `0x0d0f16`, strength 1.0, and the four ink fetches reach 1.55 texels near
+  the camera, tapering to one with range. Same five fetches. Grade: vibrance 0.34 and a perceptual S curve.
+- Town and yard (`comicPipeline` on the pipeline's own materials, vendored files untouched): ink near black, 1.55 times
+  the width, sensitivity times 0.82, inside creases 1.5 times heavier; grade saturation 1.26, lift 0.014.
+
+### Run, in the same turn
+
+- `lint:preload` (was stale for the new module; regenerated `src/fresh.js`), `lint:quality` 71 of 71, `lint:boot` 9 of 9,
+  `lint:frame` 34 of 34.
+- Shots, headless Chromium at High, 1280x720, before (a worktree of main at dc3141a) and after: the yard, the town and
+  the field on 2022 AU Nationals. Not committed (CLAUDE.md). First version's hatching read as a printed mesh: strokes
+  too fine and too close, crossing on every shaded face. Second: 11 px spacing, 1.9 px pen, dashed, crossing only in
+  cast shadow.
+- `npm run verify` not run: nothing in the physics, plant, ABI or build changed. The budget's P3, P4 and P5 were not
+  measured in this turn; by construction no pass, fetch or target was added.

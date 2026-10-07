@@ -35,6 +35,8 @@
  */
 
 import * as THREE from 'three';
+/* Installs the comic layer on every toon material before any is built. */
+import './comic.js';
 
 /*
  * Three.js samples the toon gradient map as

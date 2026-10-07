@@ -76,6 +76,7 @@ import * as THREE from 'three';
 import { PAL } from '../city/vendored/core/palette.js';
 import { Pipeline } from '../city/vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
+import { comicPipeline, setComicQuality } from '../../render/comic.js';
 import { buildSky } from '../city/vendored/core/sky.js';
 import { setOutlineResolution } from '../city/vendored/core/outline.js';
 import { cel, flat } from '../city/vendored/core/toon.js';
@@ -302,6 +303,8 @@ export class BuiltPipeline extends Pipeline {
     /* Stage F's manga layer, folded into the grade and the fxaa pass the
      * same way, on this pipeline's own materials: see src/render/manga.js. */
     this.manga = mangaPipeline(this);
+    /* The comic layer's pen and grade: see src/render/comic.js. */
+    comicPipeline(this);
   }
 
   setSize(w, h) {
@@ -344,7 +347,8 @@ export class BuiltPipeline extends Pipeline {
     this.fxaa.mat.uniforms.uTexel.value.copy(texel);
     this.ink.mat.uniforms.uNear.value = this.camera.near;
     this.ink.mat.uniforms.uFar.value = this.camera.far;
-    this.ink.mat.uniforms.uThickness.value = 1.05 + 0.55 * scale;
+    /* Times the comic layer's heavier pen (src/render/comic.js). */
+    this.ink.mat.uniforms.uThickness.value = (1.05 + 0.55 * scale) * (this.inkWeight || 1);
 
     this.renderer.setPixelRatio(shellPr);
     this.renderer.setSize(w, h, false);
@@ -1240,6 +1244,7 @@ export async function buildMap(shell, onProgress, options) {
   colliders.build();
   progress(0.9);
 
+  setComicQuality(q);
   const pipeline = new BuiltPipeline(renderer, scene, camera, {
     pixelBudget: q.city.pixelBudget,
     minScale: q.city.minScale,

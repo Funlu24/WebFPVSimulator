@@ -364,6 +364,7 @@
       'src/render/herocraft.js',
       'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js',
       'src/render/celmat.js',
+      'src/render/comic.js',
       'src/render/lens.js',
       'src/render/whoopcraft.js',
       'configs/airframes.js',

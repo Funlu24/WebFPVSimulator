@@ -53,6 +53,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { INK_WEIGHT, INK_COLOR } from './comic.js';
 
 /*
  * Depth is packed into two 8 bit channels rather than kept in a depth
@@ -107,14 +108,21 @@ const OutlineShader = {
     tDiffuse: { value: null },
     tGeo: { value: null },
     uResolution: { value: new THREE.Vector2(1, 1) },
-    uLineColor: { value: new THREE.Color(0x1a2230) },
+    /* The comic layer's ink (src/render/comic.js): near black, where it
+     * was a slate 0x1a2230 that read as shading rather than as a pen. */
+    uLineColor: { value: new THREE.Color(INK_COLOR) },
     uDepthBias: { value: 0.0016 },
     /* High enough that the roughly 42 degree facet dihedral of the low
      * poly canopies and rocks stays clean (normal delta about 0.7 per
      * sample pair) while true corners near 90 degrees (delta 1.4) still
      * ink. Facet creases were turning every near tree into a wire mesh. */
     uNormalBias: { value: 1.05 },
-    uStrength: { value: 0.85 },
+    uStrength: { value: 1.0 },
+    /* The pen's reach in texels: the four ink fetches sit this far out, so
+     * the line is this much wider for the same five fetches. It tapers to
+     * one texel with range, which is the comic artist's weight: heavy on
+     * what is near, fine on what is far. */
+    uInkWidth: { value: INK_WEIGHT },
     /* A twentieth of the ink threshold. Coverage is wanted on every
      * silhouette in the frame; ink is wanted only on the ones that read as
      * drawn. */
@@ -139,6 +147,7 @@ const OutlineShader = {
     uniform float uStrength;
     uniform float uAaBias;
     uniform float uAaAmount;
+    uniform float uInkWidth;
     ${PACK_GLSL}
 
     /* Only xy is stored. z is reconstructed positive, which is what a
@@ -158,10 +167,12 @@ const OutlineShader = {
        * texel outside the frame wraps and pulls in the opposite edge,
        * which paints a false band along the border. */
       vec4 g0 = texture2D(tGeo, vUv);
-      vec4 g1 = texture2D(tGeo, clamp(vUv + vec2( texel.x,  texel.y), vec2(0.0), vec2(1.0)));
-      vec4 g2 = texture2D(tGeo, clamp(vUv + vec2(-texel.x, -texel.y), vec2(0.0), vec2(1.0)));
-      vec4 g3 = texture2D(tGeo, clamp(vUv + vec2( texel.x, -texel.y), vec2(0.0), vec2(1.0)));
-      vec4 g4 = texture2D(tGeo, clamp(vUv + vec2(-texel.x,  texel.y), vec2(0.0), vec2(1.0)));
+      float penReach = mix(uInkWidth, 1.0, smoothstep(0.004, 0.06, unpackDepth16(g0.zw)));
+      vec2 tp = texel * penReach;
+      vec4 g1 = texture2D(tGeo, clamp(vUv + vec2( tp.x,  tp.y), vec2(0.0), vec2(1.0)));
+      vec4 g2 = texture2D(tGeo, clamp(vUv + vec2(-tp.x, -tp.y), vec2(0.0), vec2(1.0)));
+      vec4 g3 = texture2D(tGeo, clamp(vUv + vec2( tp.x, -tp.y), vec2(0.0), vec2(1.0)));
+      vec4 g4 = texture2D(tGeo, clamp(vUv + vec2(-tp.x,  tp.y), vec2(0.0), vec2(1.0)));
 
       float d0 = unpackDepth16(g0.zw);
       float d1 = unpackDepth16(g1.zw);
@@ -261,7 +272,9 @@ const GradeShader = {
     tDiffuse: { value: null },
     uDistort: { value: 0.055 },
     uVignette: { value: 0.16 },
-    uVibrance: { value: 0.22 },
+    uVibrance: { value: 0.34 },
+    /* An S curve about mid grey: the comic layer's harder light. */
+    uContrast: { value: 0.16 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -276,6 +289,7 @@ const GradeShader = {
     uniform float uDistort;
     uniform float uVignette;
     uniform float uVibrance;
+    uniform float uContrast;
 
     void main() {
       // FPV lens: mild barrel distortion, zoom compensated so the
@@ -305,6 +319,13 @@ const GradeShader = {
       float sat = mx > 0.001 ? (mx - mn) / mx : 0.0;
       float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(luma), c, 1.0 + uVibrance * (1.0 - sat));
+
+      /* Contrast, as a smoothstep S curve on each channel in a perceptual
+       * space (square root, then back), so the darks deepen under the ink
+       * and the lights stay off the clip. */
+      vec3 cp = sqrt(max(c, vec3(0.0)));
+      cp = mix(cp, cp * cp * (3.0 - 2.0 * cp), uContrast * step(cp, vec3(1.0)));
+      c = cp * cp;
 
       // Vignette, wide and shallow: frames the view without reading as a
       // dirty lens.

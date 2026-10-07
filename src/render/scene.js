@@ -45,6 +45,7 @@ import {
   celMaterial, outlineHull, updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
+import { setComicQuality } from './comic.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
 /* The obstacle dimensions come from the track module, which holds MultiGP's
@@ -4892,6 +4893,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * build: Low turns the drifting cloud shading off with the shadow maps
    * (quality.js, field.clouds), fill rate back on the machines Low is for. */
   setCelCloudShadows(q.field.clouds !== false);
+  setComicQuality(q);
   const renderer = shell.renderer;
   const camera = shell.camera;
   const progress = onProgress ?? (() => {});
