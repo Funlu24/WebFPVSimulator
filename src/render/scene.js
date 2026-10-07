@@ -4864,7 +4864,23 @@ function clouds(rng, count = 26, size = 1) {
       uniform vec3 uSun;
       void main() {
         vec3 n = normalize(vN);
-        vec3 col = mix(vec3(0.70, 0.77, 0.91), vec3(1.0, 0.98, 0.94), step(0.12, n.y));
+        /* Three painted bands, the way a cumulus is painted: the sunlit
+         * crown, a pale body, and the belly in the blue grey. They are
+         * keyed to an axis leaning from straight up toward the sun, not to
+         * up alone, so the lit side of every puff is the sun's side: a
+         * pilot looking away from the sun sees white heads, and looking
+         * into it sees shaded flanks under a bright lip, which is what
+         * makes a heap of spheres read as a lit volume. Two bands on world
+         * up, which is what this was, gave a pilot looking up at a cloud a
+         * grey pill with a white lip from every side (graphics pass 14).
+         * The belly is a little deeper and bluer than the old body, about
+         * 0.46 linear luminance against the sky's 0.375, so the shadow
+         * reads as a colour and not as a dirty white; the body band is
+         * about 0.59, under the crown's 0.697 and well under the gate
+         * ring's 0.826, so the ladder below holds. */
+        float k = dot(n, normalize(vec3(0.0, 1.0, 0.0) + normalize(uSun) * 0.9));
+        vec3 col = mix(vec3(0.63, 0.68, 0.88), vec3(0.86, 0.87, 0.94), smoothstep(-0.38, -0.32, k));
+        col = mix(col, vec3(1.0, 0.98, 0.94), smoothstep(0.20, 0.26, k));
         /* Sun side warmth, but not enough to clip. Measured, cloud tops
          * reached 255 255 253, luminance 0.999, so a piece of dressing in
          * the corner of the frame was brighter than the gate the pilot is
@@ -4888,16 +4904,74 @@ function clouds(rng, count = 26, size = 1) {
       }
     `,
   });
+  /*
+   * HEAPED HEADS AND A FLAT BASE (graphics pass 14). A cumulus is
+   * cauliflower on top and flat underneath, and a cluster of evenly
+   * flattened spheres was neither: a row of pills, about a third as tall as
+   * it was wide. Each cluster now keeps its flat spread of base puffs and
+   * gets two tiers heaped on them toward its middle, each tier smaller and
+   * rounder than the one under it, and every puff is cut off at a shared
+   * base a little under the cluster's middle, its cut face turned to face
+   * straight down so it takes the belly band.
+   *
+   * The world's rng is drawn exactly as before, the same number of draws in
+   * the same order, because the first bank is drawn on it and one more draw
+   * would move every tree and collider after it. The tiers are drawn from a
+   * stream of their own, seeded by the call, and the base cut moves
+   * vertices only, so it draws on nothing.
+   */
+  const heap = makeRng(0x3c1a7 + count * 131 + Math.round(size * 10));
+  const BASE = -7 * size;
+  const cut = (geo, py, sy) => {
+    const pos = geo.attributes.position;
+    const nrm = geo.attributes.normal;
+    for (let k = 0; k < pos.count; k += 1) {
+      /* In the cluster's frame the vertex is at py + y * sy. */
+      if (py + pos.getY(k) * sy < BASE) {
+        pos.setY(k, (BASE - py) / sy);
+        nrm.setXYZ(k, 0, -1, 0);
+      }
+    }
+    pos.needsUpdate = true;
+    nrm.needsUpdate = true;
+  };
+  const puff = (cluster, r, x, y, z, sy) => {
+    const geo = new THREE.IcosahedronGeometry(r, 1);
+    cut(geo, y, sy);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.scale.y = sy;
+    cluster.add(m);
+    return { x, z, r, top: y + r * sy };
+  };
+  /* A tier: n puffs, each on a puff of the tier below, drawn toward the
+   * cluster's middle so the heap rises there, its centre a little under
+   * its parent's top, so most of its upper half stands clear as a dome. */
+  const tier = (cluster, under, n, lo, span, sy) => {
+    const made = [];
+    for (let c = 0; c < n; c += 1) {
+      const t = under[Math.floor(heap() * under.length)];
+      const r = t.r * (lo + heap() * span);
+      made.push(puff(cluster, r,
+        t.x * 0.6 + (heap() - 0.5) * t.r * 0.6,
+        t.top - r * sy * 0.15,
+        t.z * 0.6 + (heap() - 0.5) * t.r * 0.4, sy));
+    }
+    return made;
+  };
   for (let i = 0; i < count; i += 1) {
     const cluster = new THREE.Group();
     const puffs = 4 + Math.floor(rng() * 5);
+    const base = [];
     for (let p = 0; p < puffs; p += 1) {
       const r = (16 + rng() * 26) * size;
-      const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat);
-      puff.position.set((rng() - 0.5) * 70, (rng() - 0.5) * 12, (rng() - 0.5) * 40);
-      puff.scale.y = 0.52;
-      cluster.add(puff);
+      const x = (rng() - 0.5) * 70;
+      const y = (rng() - 0.5) * 12;
+      const z = (rng() - 0.5) * 40;
+      base.push(puff(cluster, r, x, y, z, 0.52));
     }
+    const mid = tier(cluster, base, 2 + Math.floor(heap() * 3), 0.6, 0.2, 0.8);
+    tier(cluster, mid, 1 + Math.floor(heap() * 2), 0.55, 0.2, 0.9);
     const a = rng() * Math.PI * 2;
     const rad = 260 + rng() * 780;
     cluster.position.set(Math.cos(a) * rad, 190 + rng() * 190, Math.sin(a) * rad);

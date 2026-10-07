@@ -67659,3 +67659,35 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
   race field matches pass 12's Low within 0.6 percent of pixels by more than six levels, the flags and the pads.
   `npm run lint:catalog` could not run here: it reads Betaflight's sources, and `vendor/betaflight` is not checked out
   in this container. Not run: `npm run verify`, render only.
+
+### Pass 14, same day: clouds are cumulus, not pills
+
+- Looking up from the race field, every cloud was a grey blue pill with a thin white lip. Two causes. Each cluster was
+  four to eight spheres flattened to half height and spread sideways, so a cloud was about a third as tall as it was
+  wide with a smooth oval outline; and the paint was two bands on world up, so from below, where the belly is nearly
+  all of what a pilot sees, a cloud was the belly colour from every side.
+- The shape. Each cluster keeps its flat spread of base puffs and gets two tiers heaped on them toward its middle:
+  two to four puffs at 0.6 to 0.8 of the size of the puff each sits on, then one or two more at 0.55 to 0.75 of
+  theirs, each rounder than the tier under it, each centred a little under its parent's top so its dome stands clear.
+  Every puff is cut flat at a shared base a little under the cluster's middle, and the cut face is turned to face
+  straight down so it takes the belly band. The outline pass already inks each puff where it overlaps another, so the
+  heads read as lobes.
+- The world's rng is drawn exactly as before, the same draws in the same order, because the first bank is drawn on it
+  and every draw after it places trees, rocks and colliders. The tiers come from a stream of their own seeded by the
+  call, and the base cut moves vertices only. Checked on the real page, not argued: a probe hashed every mesh's vertex
+  buffer and world matrix on the race field with this pass and without it. Of 500 meshes, the only ones that differ
+  are the two cloud meshes and the craft's spinning parts, which differ between any two captures taken a different
+  number of frames in; the craft rests at the same spot to the last digit, and the collider count and kinds are the
+  same (2293). Two captures with this pass agree on all 500.
+- The paint. Three bands, keyed to an axis leaning from straight up toward the sun rather than to up alone: the lit
+  crown, a pale body and a periwinkle belly. Looking away from the sun a pilot sees white heads; looking into it,
+  shaded flanks under a bright lip. Measured on the ladder above: the crown and its sun warmth unchanged at 0.68 to
+  0.697, the body about 0.59, the belly about 0.46 against the sky's 0.375. The old body was 0.525, so the belly is a
+  step deeper; it is still a step above the sky and the gate ring at 0.826 is still the top of the frame.
+- Cost: the clouds go from about 20,000 triangles to about 36,000 in the same single draw (the scene holds 436,000), a
+  vertex shader that does nothing, and the same one fragment test. Draw calls unchanged.
+- Run, in the same turn: shots through two scratch camera scripts, six sky views from the ground at 6 to 45 degrees
+  up, toward and away from the sun, with and without the pass, and the race field's eight cameras at High against
+  pass 13's; the mesh hash probe above, three captures. `node --check src/render/scene.js`. `npm run lint:preload`
+  and `npm run lint:quality` (below). Not run: `npm run verify`, render only, and the world it could move is the
+  thing the hash probe measured.
