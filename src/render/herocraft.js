@@ -148,12 +148,15 @@ const C = {
  * The model is a hundred and fifty parts, built when the page boots, and at
  * boot every function here and in three.js runs cold, in the interpreter,
  * where a call costs more than the arithmetic inside it. three.js moves a
- * vertex through four calls, once for each of rotateX, rotateY, rotateZ and
- * translate, and BufferGeometry.clone() starts by building a throwaway
- * default part of the same kind, a 32 sided cylinder or a bevelled
- * extrusion of a unit square, only to copy over it. Measured cold in Node,
- * cloning was a fifth of the whole build and turning the plates a seventh.
- * So a part is turned and moved here in one pass with no calls in it.
+ * vertex through several calls (read it out, multiply, write it back), all
+ * over again for each of rotateX, rotateY, rotateZ and translate, and
+ * BufferGeometry.clone() starts by building a throwaway default part of the
+ * same kind, a 32 sided cylinder or a bevelled extrusion of a unit square,
+ * only to copy over it. In a CPU profile of a cold build in Node, cloning
+ * held a fifth of the samples and turning the plates a seventh. So a part
+ * is turned and moved here in one pass with no calls in it. That bought
+ * less than the profile promised, a profile being slower than the code it
+ * watches: a sixth or so of a cold build, measured without one.
  *
  * Turning about x, then y, then z is the matrix Rz Ry Rx, which three.js
  * calls the Euler order ZYX. `turn` reads n vectors from `src`, through
@@ -424,9 +427,10 @@ function inkShell(mesh, width, color, fog, src = mesh.geometry) {
   const pos = src.getAttribute('position');
   const p = pos.array;
   const n = pos.count;
-  /* Weld to 5 micrometres. The key is one integer per position rather than
-   * a string: the first version keyed on strings and built a vector per
-   * face, and a full build took six times as long as the old model's. */
+  /* Weld to 5 micrometres. The key is one integer per position and a face
+   * normal is three numbers in a flat list: the first version made a string
+   * for every vertex and a vector for every face, garbage the size of the
+   * model made at boot, and this one makes none. */
   let lo = Infinity;
   let hi = -Infinity;
   for (let i = 0; i < n * 3; i += 1) {
@@ -1064,11 +1068,39 @@ export function buildHeroCraft(opts = {}) {
 
   /*
    * THE WIRING AND THE LAMPS ON EACH ARM. Three motor leads run down the
-   * arm to the ESC's corner pad, held by two cream zip ties, and a lamp
-   * sits on the arm's rear edge. The lamp is a mesh of its own because the
-   * studio drives each one's colour from its motor's speed; the dark
-   * housing under it is merged with the frame.
+   * arm to the ESC's corner pad, held by a cream zip tie, and a lamp sits on
+   * the arm's rear edge. The lamp is a mesh of its own because the studio
+   * drives each one's colour from its motor's speed; the dark housing under
+   * it is merged with the frame.
+   *
+   * The tie goes round arm and leads 59 mm out, with its lock on the outer
+   * edge, in a square section because a tie is a flat band. The four arms
+   * are one arm turned, so the tie, its lock and the lamp's housing are cut
+   * once, in the arm's frame, and placed on each.
    */
+  const tieU = 0.0590;
+  const tieHalf = armHalfWidth(tieU) + 0.0003;
+  const tieGeo = detail ? (() => {
+    const y0 = PLATE_Y1 - 0.0006;
+    const y1 = ARM_Y1 + 0.0022;
+    const tie = new THREE.Shape();
+    tie.moveTo(-tieHalf - 0.0006, y0);
+    tie.lineTo(tieHalf + 0.0006, y0);
+    tie.lineTo(tieHalf + 0.0006, y1);
+    tie.lineTo(-tieHalf - 0.0006, y1);
+    tie.closePath();
+    const gap = new THREE.Path();
+    gap.moveTo(-tieHalf, PLATE_Y1);
+    gap.lineTo(-tieHalf, ARM_Y1 + 0.0016);
+    gap.lineTo(tieHalf, ARM_Y1 + 0.0016);
+    gap.lineTo(tieHalf, PLATE_Y1);
+    gap.closePath();
+    tie.holes.push(gap);
+    const g = new THREE.ExtrudeGeometry(tie, { depth: 0.0024, bevelEnabled: false, curveSegments: 1 });
+    return moveInPlace(g, 0, 0, -tieU - 0.0012);
+  })() : null;
+  const lockGeo = new THREE.BoxGeometry(0.0020, 0.0032, 0.0036);
+  const housingGeo = new THREE.BoxGeometry(0.0042, 0.0010, 0.0106);
   const ledMeshes = [];
   for (let m = 0; m < 4; m += 1) {
     const [mx, mz] = motors[m];
@@ -1090,37 +1122,12 @@ export function buildHeroCraft(opts = {}) {
         ];
         add('body', tubeAlong(curvePts, 5, 0.0008, 4), C.wire);
       }
-      /* One cream zip tie round arm and leads, with its lock on the outer
-       * edge: a square section, because a tie is a flat band. */
-      for (const u of [0.0590]) {
-        const hw = armHalfWidth(u) + 0.0003;
-        const y0 = PLATE_Y1 - 0.0006;
-        const y1 = ARM_Y1 + 0.0022;
-        const tie = new THREE.Shape();
-        tie.moveTo(-hw - 0.0006, y0);
-        tie.lineTo(hw + 0.0006, y0);
-        tie.lineTo(hw + 0.0006, y1);
-        tie.lineTo(-hw - 0.0006, y1);
-        tie.closePath();
-        const gap = new THREE.Path();
-        gap.moveTo(-hw, PLATE_Y1);
-        gap.lineTo(-hw, ARM_Y1 + 0.0016);
-        gap.lineTo(hw, ARM_Y1 + 0.0016);
-        gap.lineTo(hw, PLATE_Y1);
-        gap.closePath();
-        tie.holes.push(gap);
-        const g = new THREE.ExtrudeGeometry(tie, { depth: 0.0024, bevelEnabled: false, curveSegments: 1 });
-        moveInPlace(g, 0, 0, -u - 0.0012);
-        moveInPlace(g, 0, 0, 0, 0, psi, 0);
-        add('vinyl', g, C.livery);
-        const lock = new THREE.BoxGeometry(0.0020, 0.0032, 0.0036);
-        const at = armPoint(psi, side * (hw + 0.0014), (PLATE_Y1 + ARM_Y1) / 2, u);
-        add('vinyl', place(lock, at.x, at.y, at.z, 0, psi, 0), C.livery);
-        lock.dispose();
-      }
+      add('vinyl', place(tieGeo, 0, 0, 0, 0, psi, 0), C.livery);
+      const lockAt = armPoint(psi, side * (tieHalf + 0.0014), (PLATE_Y1 + ARM_Y1) / 2, tieU);
+      add('vinyl', place(lockGeo, lockAt.x, lockAt.y, lockAt.z, 0, psi, 0), C.livery);
     }
     const housing = armPoint(psi, side * 0.0048, ARM_Y1 + 0.0005, 0.0710);
-    add('body', place(new THREE.BoxGeometry(0.0042, 0.0010, 0.0106), housing.x, housing.y, housing.z, 0, psi, 0), C.carbonDeep);
+    add('body', place(housingGeo, housing.x, housing.y, housing.z, 0, psi, 0), C.carbonDeep);
     const ledMat = new THREE.MeshBasicMaterial({
       color: mz < 0 ? C.sakura : C.mint,
       fog,
@@ -1131,6 +1138,11 @@ export function buildHeroCraft(opts = {}) {
     led.rotation.y = psi;
     ledMeshes.push({ led, ledMat });
   }
+  if (tieGeo) {
+    tieGeo.dispose();
+  }
+  lockGeo.dispose();
+  housingGeo.dispose();
 
   /*
    * THE STACK, seen from the side between the plates: the ESC on its
