@@ -67328,3 +67328,14 @@ no build, no file format, no setting.
 - The screen derivatives the strokes need are now taken in uniform control flow, before the per pixel branch; a
   derivative inside a branch neighbours did not take is undefined in GLSL.
 - Shots: field, yard and town at High, after. Trees on the field now carry strokes on their shaded side.
+
+### Pass 3, same day: brush marks and inked clouds
+
+- `comic.js`: sparse, faint brush marks across the lit side of every toon surface (twice the hatching's spacing, a tenth
+  of its weight, on the grit switch, so off on Low). `comicSet` takes its spacing as an argument.
+- `scene.js`, the field's clouds: a slate ink rim on every puff from the view space facing, because clouds sit past the
+  distance where the ink pass fades out. On every preset; it is arithmetic in an unlit shader on a few hundred pixels.
+- `src/fresh.js` regenerated: the served list now carries `src/render/comic.js` too (pass 1 generated it before the
+  file was tracked).
+- Shots at High (field, yard, town), Low (field, yard: no strokes, no grit, as intended) and Medium (town: strokes).
+  `lint:preload` clean after regenerating. `npm run verify` not run (render only).

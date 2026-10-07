@@ -193,8 +193,8 @@ float comicLine( float x, float y, float fw, float w ) {
  * range grows, so strokes neither pop nor crowd. The pen's weight wanders
  * with a world noise, which is the difference between a pen and a ruler.
  */
-float comicSet( float x0, float y0, float fw0, float wobble, float weight ) {
-  float lod = clamp( log2( uComicPeriod * fw0 ), -3.0, 10.0 );
+float comicSet( float x0, float y0, float fw0, float wobble, float weight, float period ) {
+  float lod = clamp( log2( period * fw0 ), -3.0, 10.0 );
   float lf = floor( lod );
   float t = lod - lf;
   float sA = exp2( -lf );
@@ -238,12 +238,22 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
       float wob = ( comicNoise( q * 0.9 ) - 0.5 ) * 0.7;
       float wt = mix( 0.7, 1.35, comicNoise( q * 2.3 + 5.0 ) );
       /* First set at 45 degrees, from the first hint of shade. */
-      float h1 = comicSet( xa, xb, fwa, wob, wt ) * smoothstep( 0.0, 0.35, shade );
+      float h1 = comicSet( xa, xb, fwa, wob, wt, uComicPeriod ) * smoothstep( 0.0, 0.35, shade );
       /* The crossing set only in deep shadow: a cast shadow, not the dark
        * side of the ramp, or every shaded face reads as a net. */
-      float h2 = comicSet( xb, xa, fwb, -wob, wt ) * ( 1.0 - smoothstep( 0.12, 0.24, lit ) );
+      float h2 = comicSet( xb, xa, fwb, -wob, wt, uComicPeriod ) * ( 1.0 - smoothstep( 0.12, 0.24, lit ) );
       float cov = max( h1, h2 ) * fade * uComicHatch;
       col = mix( col, col * 0.18 + uComicInk * 0.5, cov * uComicDepth );
+    }
+    /*
+     * Brush marks on the lit side too, sparse and faint, running across the
+     * hatching: a painted surface shows the brush everywhere, and a lit
+     * face that is one flat fill is the plastic look this replaces. Twice
+     * the hatching's spacing, a tenth of its weight, on the grit's switch.
+     */
+    if ( uComicGrit > 0.0 && fade > 0.0 ) {
+      float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
+      col *= 1.0 - bm * 0.11 * fade * uComicGrit * ( 1.0 - shade );
     }
   }
   return col;
