@@ -68135,3 +68135,23 @@ herocraft.js, ghostcraft.js, showcase.js, craftpose.js or craft.js. Its comic.js
 onBeforeCompile and lights `diffuseColor.rgb`, which three has already multiplied by the vertex colour, so the vertex
 coloured finishes should take its lighting as one material per colour did. A merge of the two should meet the usual
 append conflict at the end of this file and nothing else in these files.
+
+### Merged, same day: the quad model pass on the graphics branch
+
+- `quad-model-pass` (a8aaf91 over five WIP commits, made from dc3141a) merged into the graphics branch with a merge
+  commit. The only conflict was PROGRESS.md again, both sections kept, the craft entry last.
+- Read before merging: `src/render/herocraft.js` only, its leading comment still carries the GPLv3 grant, no dashes,
+  no random stream, no physics module touched (it imports `CRAFT_ARM` and `CRAFT_PROP_R` for sizes, as before). The
+  only overlap with this branch is `celMaterial`, which the craft calls as it did, so every finish now gets the comic
+  chunk as every other toon material does.
+- Checks run on the merged tree: `node --check src/render/herocraft.js`, `npm run lint:preload` (up to date),
+  `npm run check:craft` (20 of 20).
+- Shots on the merged tree through the craft pass's own cameras (pads, close views with the rotors frozen, chase,
+  lite, ghost, the Settings studio): the vertex coloured finishes take the hatching and the ink as one material per
+  colour did, and the studio preview still shows the frame against its backdrop. Two things seen and left: the blur
+  discs' rims take the comic pen, heavier near the camera, which on a close view can read like a duct; the outline
+  pass inked the old discs the same way, only thinner. And in the close views, where the craft is lifted 0.62 m clear
+  of its block, the occlusion draws a dark halo on the grass round each disc; that is the occlusion's depth range,
+  not the craft, and no camera in play sees the craft that high over grass at that distance.
+- Not run: `npm run verify`, because nothing here touches physics, the plant, the module ABI or the build. The craft
+  pass replayed check 15's measurement in Node instead and found it identical.
