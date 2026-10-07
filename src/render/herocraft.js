@@ -143,20 +143,107 @@ const C = {
 };
 
 /*
- * A copy of a part, turned about x, then y, then z, then moved. One matrix
- * and one pass over the vertices: rotateX, rotateY, rotateZ and translate
- * are a pass each, and a model of a hundred and fifty parts built cold at
- * boot pays for every pass in the interpreter. Turning x then y then z is
- * the matrix Rz Ry Rx, which three.js calls the Euler order ZYX.
+ * PLACING A PART, by hand over its arrays.
+ *
+ * The model is a hundred and fifty parts, built when the page boots, and at
+ * boot every function here and in three.js runs cold, in the interpreter,
+ * where a call costs more than the arithmetic inside it. three.js moves a
+ * vertex through four calls, once for each of rotateX, rotateY, rotateZ and
+ * translate, and BufferGeometry.clone() starts by building a throwaway
+ * default part of the same kind, a 32 sided cylinder or a bevelled
+ * extrusion of a unit square, only to copy over it. Measured cold in Node,
+ * cloning was a fifth of the whole build and turning the plates a seventh.
+ * So a part is turned and moved here in one pass with no calls in it.
+ *
+ * Turning about x, then y, then z is the matrix Rz Ry Rx, which three.js
+ * calls the Euler order ZYX. `turn` reads n vectors from `src`, through
+ * `index` when there is one, and writes them turned, and moved by (x, y, z),
+ * to `dst`, which may be `src` itself when there is no index. A normal is
+ * turned, not moved, and comes out unit length.
  */
-const bakeEuler = new THREE.Euler();
-const bakeMatrix = new THREE.Matrix4();
-function bake(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
-  const g = geo.clone();
-  bakeMatrix.makeRotationFromEuler(bakeEuler.set(rx, ry, rz, 'ZYX'));
-  bakeMatrix.setPosition(x, y, z);
-  g.applyMatrix4(bakeMatrix);
-  return g;
+const placeEuler = new THREE.Euler();
+const placeMatrix = new THREE.Matrix4();
+function turn(dst, src, index, n, e, x, y, z, unit) {
+  for (let i = 0; i < n; i += 1) {
+    const v = (index ? index[i] : i) * 3;
+    const px = src[v];
+    const py = src[v + 1];
+    const pz = src[v + 2];
+    let ox = e[0] * px + e[4] * py + e[8] * pz;
+    let oy = e[1] * px + e[5] * py + e[9] * pz;
+    let oz = e[2] * px + e[6] * py + e[10] * pz;
+    if (unit) {
+      const l = Math.sqrt(ox * ox + oy * oy + oz * oz) || 1;
+      ox /= l;
+      oy /= l;
+      oz /= l;
+    }
+    dst[i * 3] = ox + x;
+    dst[i * 3 + 1] = oy + y;
+    dst[i * 3 + 2] = oz + z;
+  }
+}
+
+/* A part turned by the matrix elements `e` and moved by (x, y, z) where it
+ * lies, for a part built once and used once: a plate, the bezel. */
+function transformInPlace(geo, e, x, y, z) {
+  const p = geo.getAttribute('position');
+  turn(p.array, p.array, null, p.count, e, x, y, z, false);
+  const nrm = geo.getAttribute('normal');
+  if (nrm) {
+    turn(nrm.array, nrm.array, null, nrm.count, e, 0, 0, 0, true);
+  }
+  return geo;
+}
+
+/* Turned about x, then y, then z, then moved. */
+function moveInPlace(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const e = placeMatrix.makeRotationFromEuler(placeEuler.set(rx, ry, rz, 'ZYX')).elements;
+  return transformInPlace(geo, e, x, y, z);
+}
+
+/* Lifted `lift` up its own y, stood up along the unit vector `dir`, then
+ * moved: a part built standing on its axis, leaned to where it goes, as the
+ * antenna mast is. The lift turns with the part, so it is added as the
+ * turned y axis, which is the matrix's second column. */
+const standQuat = new THREE.Quaternion();
+const standUp = new THREE.Vector3(0, 1, 0);
+function standInPlace(geo, lift, dir, x, y, z) {
+  const e = placeMatrix.makeRotationFromQuaternion(standQuat.setFromUnitVectors(standUp, dir)).elements;
+  return transformInPlace(geo, e, x + e[4] * lift, y + e[5] * lift, z + e[6] * lift);
+}
+
+/* A copy of a part, turned and moved, for a part built once and used many
+ * times: an arm, a bell, a screw. The copy is ready to merge, with no index,
+ * no uv and no groups (see paint below), so making it so costs nothing more.
+ * Every other attribute, a blade's colours, is carried across unchanged. */
+function place(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const e = placeMatrix.makeRotationFromEuler(placeEuler.set(rx, ry, rz, 'ZYX')).elements;
+  const index = geo.index ? geo.index.array : null;
+  const n = index ? index.length : geo.getAttribute('position').count;
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(geo.attributes)) {
+    if (name === 'uv') {
+      continue;
+    }
+    const a = geo.getAttribute(name);
+    const size = a.itemSize;
+    const d = new Float32Array(n * size);
+    if (name === 'position') {
+      turn(d, a.array, index, n, e, x, y, z, false);
+    } else if (name === 'normal') {
+      turn(d, a.array, index, n, e, 0, 0, 0, true);
+    } else {
+      for (let i = 0; i < n; i += 1) {
+        const v = (index ? index[i] : i) * size;
+        for (let k = 0; k < size; k += 1) {
+          d[i * size + k] = a.array[v + k];
+        }
+      }
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(d, size));
+  }
+  return out;
 }
 
 /*
@@ -283,9 +370,23 @@ function slab(shape, y0, y1, bev, curveSegments, bevelSegments = 1) {
     bevelSegments,
     curveSegments,
   });
-  geo.rotateX(-Math.PI / 2);
-  geo.translate(0, y0 + bev, 0);
-  return geo;
+  return moveInPlace(geo, 0, y0 + bev, 0, -Math.PI / 2);
+}
+
+/*
+ * A wire: a tube along a smooth curve through `points`, `rings` rings long.
+ * TubeGeometry spaces its rings by arc length, and a curve measures its own
+ * length the first time it is asked, with two hundred samples unless it is
+ * told otherwise: two hundred points on the curve worked out for a tube of
+ * five rings, which made the wiring one of the costliest things in the model
+ * to build. Sixty four samples put every ring within nine micrometres of
+ * where two hundred did. Twenty four were no faster that a cold build could
+ * measure, and moved a ring by a seventh of a millimetre.
+ */
+function tubeAlong(points, rings, radius, sides) {
+  const path = new THREE.CatmullRomCurve3(points);
+  path.arcLengthDivisions = 64;
+  return new THREE.TubeGeometry(path, rings, radius, sides, false);
 }
 
 /*
@@ -584,7 +685,7 @@ function rotorGeometry(dir, front, lite) {
   const parts = [];
   const blade = bladeGeometry(lite ? BLADE_ROWS_LITE : BLADE_ROWS, dir, bodyHex, tipHex);
   for (let b = 0; b < 3; b += 1) {
-    parts.push(bake(blade, 0, 0, 0, 0, (b * Math.PI * 2) / 3, 0));
+    parts.push(place(blade, 0, 0, 0, 0, (b * Math.PI * 2) / 3, 0));
   }
   blade.dispose();
   /* The hub, bottom to top, so LatheGeometry faces outward. Its underside
@@ -598,8 +699,8 @@ function rotorGeometry(dir, front, lite) {
   ], seg);
   parts.push(paint(hub, bodyHex));
   /* The M5 lock nut: a hex, faceted, with its nylon dome. */
-  parts.push(paint(bake(cyl(0.0040, 0.0040, 0.0034, 6, 'top'), 0, 0.0052, 0), C.steel, true));
-  parts.push(paint(bake(cyl(0.0024, 0.0033, 0.0013, lite ? 6 : 8, 'top'), 0, 0.00755, 0), C.steel));
+  parts.push(paint(place(cyl(0.0040, 0.0040, 0.0034, 6, 'top'), 0, 0.0052, 0), C.steel, true));
+  parts.push(paint(place(cyl(0.0024, 0.0033, 0.0013, lite ? 6 : 8, 'top'), 0, 0.00755, 0), C.steel));
   const geo = mergeGeometries(parts, false);
   for (const p of parts) {
     p.dispose();
@@ -779,7 +880,7 @@ export function buildHeroCraft(opts = {}) {
     const arm = slab(armShape(), PLATE_Y1, ARM_Y1, bev(0.0007), lite ? 4 : 6);
     for (const [mx, mz] of motors) {
       const psi = Math.atan2(-mx, -mz);
-      add('body', bake(arm, 0, 0, 0, 0, psi, 0), C.carbon, 'ink');
+      add('body', place(arm, 0, 0, 0, 0, psi, 0), C.carbon, 'ink');
     }
     arm.dispose();
 
@@ -798,8 +899,8 @@ export function buildHeroCraft(opts = {}) {
     const head = cyl(0.0029, 0.0030, 0.0012, segSmall, 'top');
     for (const sz of [-0.059, 0.049]) {
       for (const sx of [-0.013, 0.013]) {
-        add('metal', bake(post, sx, (PLATE_Y1 + TOP_Y0) / 2, sz), C.sakura, 'flat');
-        add('metal', bake(head, sx, TOP_Y1 + 0.0006, sz), C.steel);
+        add('metal', place(post, sx, (PLATE_Y1 + TOP_Y0) / 2, sz), C.sakura, 'flat');
+        add('metal', place(head, sx, TOP_Y1 + 0.0006, sz), C.steel);
       }
     }
     post.dispose();
@@ -836,7 +937,7 @@ export function buildHeroCraft(opts = {}) {
   const windingGeo = (() => {
     if (lite) {
       const g = cyl(0.0118, 0.0118, BELL_Y1 - BASE_Y1, 8, 'top');
-      g.translate(0, (BELL_Y1 - BASE_Y1) / 2, 0);
+      moveInPlace(g, 0, (BELL_Y1 - BASE_Y1) / 2, 0);
       return g;
     }
     /* Twelve teeth, each a wound pole, which is what a stator looks like
@@ -859,10 +960,9 @@ export function buildHeroCraft(opts = {}) {
     }
     s.closePath();
     const star = new THREE.ShapeGeometry(s, 1);
-    star.rotateX(-Math.PI / 2);
-    star.translate(0, h, 0);
+    moveInPlace(star, 0, h, 0, -Math.PI / 2);
     const side = cyl(0.0116, 0.0116, h, 12, 'none');
-    side.translate(0, h / 2, 0);
+    moveInPlace(side, 0, h / 2, 0);
     for (const p of [star, side]) {
       p.deleteAttribute('uv');
     }
@@ -925,24 +1025,23 @@ export function buildHeroCraft(opts = {}) {
       capShape.holes.push(win);
     }
     const cap = new THREE.ShapeGeometry(capShape, seg / 2);
-    cap.rotateX(-Math.PI / 2);
-    cap.translate(0, CAP_Y1, 0);
+    moveInPlace(cap, 0, CAP_Y1, 0, -Math.PI / 2);
     /* The four motor screws under the pad, the 16 mm pattern, for the
      * shots from below: a hexagon each, face down, a millimetre under the
      * arm. They are only ever seen from underneath, where a head is its
      * face, and a prism each was three times the triangles. */
     const screw = new THREE.CircleGeometry(0.0027, 6);
-    screw.rotateX(Math.PI / 2);
+    moveInPlace(screw, 0, 0, 0, Math.PI / 2);
     for (const [mx, mz] of motors) {
-      add('body', bake(base, mx, (ARM_Y1 + BASE_Y1) / 2, mz), C.motorBase);
-      add('metal', bake(skin, mx, 0, mz), C.bell, 'ink');
-      add('metal', bake(band, mx, 0, mz), C.sakura, 'ink');
-      add('metal', bake(cap, mx, 0, mz), C.sakura);
-      windings.push(bake(windingGeo, mx, BASE_Y1, mz));
+      add('body', place(base, mx, (ARM_Y1 + BASE_Y1) / 2, mz), C.motorBase);
+      add('metal', place(skin, mx, 0, mz), C.bell, 'ink');
+      add('metal', place(band, mx, 0, mz), C.sakura, 'ink');
+      add('metal', place(cap, mx, 0, mz), C.sakura);
+      windings.push(place(windingGeo, mx, BASE_Y1, mz));
       if (detail) {
         for (let k = 0; k < 4; k += 1) {
           const ang = Math.PI / 4 + (k * Math.PI) / 2;
-          add('metal', bake(screw, mx + Math.cos(ang) * 0.0113, PLATE_Y1 - 0.0010, mz + Math.sin(ang) * 0.0113), C.darkSteel);
+          add('metal', place(screw, mx + Math.cos(ang) * 0.0113, PLATE_Y1 - 0.0010, mz + Math.sin(ang) * 0.0113), C.darkSteel);
         }
       }
     }
@@ -989,8 +1088,7 @@ export function buildHeroCraft(opts = {}) {
             STACK_Z + Math.sign(mz) * 0.0150 - off * 0.5,
           ),
         ];
-        const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 5, 0.0008, 4, false);
-        add('body', tube, C.wire);
+        add('body', tubeAlong(curvePts, 5, 0.0008, 4), C.wire);
       }
       /* One cream zip tie round arm and leads, with its lock on the outer
        * edge: a square section, because a tie is a flat band. */
@@ -1012,17 +1110,17 @@ export function buildHeroCraft(opts = {}) {
         gap.closePath();
         tie.holes.push(gap);
         const g = new THREE.ExtrudeGeometry(tie, { depth: 0.0024, bevelEnabled: false, curveSegments: 1 });
-        g.translate(0, 0, -u - 0.0012);
-        g.rotateY(psi);
+        moveInPlace(g, 0, 0, -u - 0.0012);
+        moveInPlace(g, 0, 0, 0, 0, psi, 0);
         add('vinyl', g, C.livery);
         const lock = new THREE.BoxGeometry(0.0020, 0.0032, 0.0036);
         const at = armPoint(psi, side * (hw + 0.0014), (PLATE_Y1 + ARM_Y1) / 2, u);
-        add('vinyl', bake(lock, at.x, at.y, at.z, 0, psi, 0), C.livery);
+        add('vinyl', place(lock, at.x, at.y, at.z, 0, psi, 0), C.livery);
         lock.dispose();
       }
     }
     const housing = armPoint(psi, side * 0.0048, ARM_Y1 + 0.0005, 0.0710);
-    add('body', bake(new THREE.BoxGeometry(0.0042, 0.0010, 0.0106), housing.x, housing.y, housing.z, 0, psi, 0), C.carbonDeep);
+    add('body', place(new THREE.BoxGeometry(0.0042, 0.0010, 0.0106), housing.x, housing.y, housing.z, 0, psi, 0), C.carbonDeep);
     const ledMat = new THREE.MeshBasicMaterial({
       color: mz < 0 ? C.sakura : C.mint,
       fog,
@@ -1042,8 +1140,8 @@ export function buildHeroCraft(opts = {}) {
    */
   {
     const board = new THREE.BoxGeometry(0.0360, 0.0016, 0.0360);
-    add('body', bake(board, 0, 0.0078, STACK_Z), C.pcb);
-    add('body', bake(board, 0, 0.0148, STACK_Z), C.pcbDeep);
+    add('body', place(board, 0, 0.0078, STACK_Z), C.pcb);
+    add('body', place(board, 0, 0.0148, STACK_Z), C.pcbDeep);
     board.dispose();
     /* Each grommet is pinched between two boards or a board and the plate,
      * so neither of its ends can be seen. */
@@ -1052,10 +1150,10 @@ export function buildHeroCraft(opts = {}) {
     const nut = cyl(0.0028, 0.0028, 0.0018, 6, 'top');
     for (const sx of [-0.01525, 0.01525]) {
       for (const sz of [-0.01525, 0.01525]) {
-        add('tpu', bake(grommet, sx, 0.0113, STACK_Z + sz), C.sakuraDeep);
-        add('tpu', bake(lower, sx, 0.0025, STACK_Z + sz), C.sakuraDeep);
+        add('tpu', place(grommet, sx, 0.0113, STACK_Z + sz), C.sakuraDeep);
+        add('tpu', place(lower, sx, 0.0025, STACK_Z + sz), C.sakuraDeep);
         if (detail) {
-          add('vinyl', bake(nut, sx, 0.0165, STACK_Z + sz), C.livery, 'flat');
+          add('vinyl', place(nut, sx, 0.0165, STACK_Z + sz), C.livery, 'flat');
         }
       }
     }
@@ -1066,22 +1164,22 @@ export function buildHeroCraft(opts = {}) {
       const fet = new THREE.BoxGeometry(0.0050, 0.0011, 0.0040);
       for (const sx of [-0.0118, 0.0118]) {
         for (const sz of [-0.0100, -0.0040, 0.0040, 0.0100]) {
-          add('body', bake(fet, sx, 0.0091, STACK_Z + sz), C.chip);
+          add('body', place(fet, sx, 0.0091, STACK_Z + sz), C.chip);
         }
       }
       fet.dispose();
       const pad = new THREE.BoxGeometry(0.0050, 0.0005, 0.0050);
       for (const sx of [-0.0150, 0.0150]) {
         for (const sz of [-0.0150, 0.0150]) {
-          add('metal', bake(pad, sx, 0.0088, STACK_Z + sz), C.steel);
+          add('metal', place(pad, sx, 0.0088, STACK_Z + sz), C.steel);
         }
       }
       pad.dispose();
-      add('body', bake(new THREE.BoxGeometry(0.0072, 0.0012, 0.0072), 0, 0.0162, STACK_Z - 0.002), C.chip);
-      add('body', bake(new THREE.BoxGeometry(0.0030, 0.0010, 0.0030), 0.0048, 0.0161, STACK_Z + 0.006), C.chip);
-      add('body', bake(new THREE.BoxGeometry(0.0016, 0.0008, 0.0012), -0.0052, 0.0160, STACK_Z + 0.0075), C.mint);
-      add('body', bake(new THREE.BoxGeometry(0.0016, 0.0008, 0.0012), -0.0030, 0.0160, STACK_Z + 0.0075), C.sakura);
-      add('metal', bake(new THREE.BoxGeometry(0.0070, 0.0030, 0.0090), -0.0160, 0.0171, STACK_Z - 0.004), C.steel);
+      add('body', place(new THREE.BoxGeometry(0.0072, 0.0012, 0.0072), 0, 0.0162, STACK_Z - 0.002), C.chip);
+      add('body', place(new THREE.BoxGeometry(0.0030, 0.0010, 0.0030), 0.0048, 0.0161, STACK_Z + 0.006), C.chip);
+      add('body', place(new THREE.BoxGeometry(0.0016, 0.0008, 0.0012), -0.0052, 0.0160, STACK_Z + 0.0075), C.mint);
+      add('body', place(new THREE.BoxGeometry(0.0016, 0.0008, 0.0012), -0.0030, 0.0160, STACK_Z + 0.0075), C.sakura);
+      add('metal', place(new THREE.BoxGeometry(0.0070, 0.0030, 0.0090), -0.0160, 0.0171, STACK_Z - 0.004), C.steel);
     }
   }
 
@@ -1093,26 +1191,26 @@ export function buildHeroCraft(opts = {}) {
    */
   {
     for (const [dx, hex] of [[-0.0040, C.wireRed], [-0.0076, C.wire]]) {
-      const lead = new THREE.CatmullRomCurve3([
+      const lead = [
         new THREE.Vector3(dx, 0.0080, 0.0200),
         new THREE.Vector3(dx, 0.0050, 0.0400),
         new THREE.Vector3(dx, 0.0015, 0.0600),
         new THREE.Vector3(dx, -0.0050, 0.0790),
         new THREE.Vector3(dx, -0.0130, 0.0800),
         new THREE.Vector3(dx, -0.0140, 0.0760),
-      ]);
-      add('body', new THREE.TubeGeometry(lead, lite ? 6 : 9, 0.0016, lite ? 4 : 5, false), hex);
+      ];
+      add('body', tubeAlong(lead, lite ? 6 : 9, 0.0016, lite ? 4 : 5), hex);
     }
     const plug = roundRect(new THREE.Shape(), -0.0140, -0.0760, 0.0020, -0.0500, 0.0014);
     add('body', slab(plug, -0.0180, -0.0100, bev(0.0008), 2), C.xt60, 'ink');
     /* Lying along z, so the cylinder's top is its back end, which wears
      * the steel end disc. */
     const capBody = cyl(0.0050, 0.0050, 0.0190, lite ? 8 : 12, 'bottom');
-    add('body', bake(capBody, 0.0052, 0.0032, 0.0510, Math.PI / 2, 0, 0), C.capacitor, 'ink');
+    add('body', place(capBody, 0.0052, 0.0032, 0.0510, Math.PI / 2, 0, 0), C.capacitor, 'ink');
     capBody.dispose();
-    add('metal', bake(cyl(0.0046, 0.0046, 0.0008, lite ? 8 : 12, 'top'), 0.0052, 0.0032, 0.0608, Math.PI / 2, 0, 0), C.steel);
+    add('metal', place(cyl(0.0046, 0.0046, 0.0008, lite ? 8 : 12, 'top'), 0.0052, 0.0032, 0.0608, Math.PI / 2, 0, 0), C.steel);
     if (detail) {
-      add('vinyl', bake(cyl(0.00515, 0.00515, 0.0040, 12, 'none'), 0.0052, 0.0032, 0.0470, Math.PI / 2, 0, 0), C.livery);
+      add('vinyl', place(cyl(0.00515, 0.00515, 0.0040, 12, 'none'), 0.0052, 0.0032, 0.0470, Math.PI / 2, 0, 0), C.livery);
     }
   }
 
@@ -1132,10 +1230,10 @@ export function buildHeroCraft(opts = {}) {
     add('body', slab(gripShape, PACK_Y1, PLATE_Y0, 0, 2), C.grip);
     for (const sx of [-1, 1]) {
       const label = new THREE.BoxGeometry(0.0004, 0.0140, 0.0240);
-      add('vinyl', bake(label, sx * 0.01765, -0.0175, -0.0100), C.livery);
+      add('vinyl', place(label, sx * 0.01765, -0.0175, -0.0100), C.livery);
       label.dispose();
       const line = new THREE.BoxGeometry(0.0004, 0.0016, 0.0240);
-      add('vinyl', bake(line, sx * 0.01780, -0.0175, -0.0100), C.sakura);
+      add('vinyl', place(line, sx * 0.01780, -0.0175, -0.0100), C.sakura);
       line.dispose();
     }
     /*
@@ -1165,7 +1263,7 @@ export function buildHeroCraft(opts = {}) {
     u.lineTo(-xi, yTop);
     u.closePath();
     const strapGeo = new THREE.ExtrudeGeometry(u, { depth: 0.0180, bevelEnabled: false, curveSegments: lite ? 1 : 2 });
-    strapGeo.translate(0, 0, 0.0060);
+    moveInPlace(strapGeo, 0, 0, 0.0060);
     add('body', strapGeo, C.strap, 'ink');
     if (yb - t !== STRAP_FLOOR && Math.abs(yb - t - STRAP_FLOOR) > 1e-9) {
       throw new Error('herocraft: the strap is not the floor the plant parks on');
@@ -1174,13 +1272,12 @@ export function buildHeroCraft(opts = {}) {
     const buckle = roundRect(new THREE.Shape(), -0.0110, -0.0240, 0.0110, -0.0110, 0.0015);
     buckle.holes.push(roundRect(new THREE.Path(), -0.0080, -0.0205, 0.0080, -0.0180, 0.0008));
     const bg = new THREE.ExtrudeGeometry(buckle, { depth: 0.0011, bevelEnabled: false, curveSegments: 1 });
-    bg.rotateY(Math.PI / 2);
-    bg.translate(xo, 0, 0.0150);
+    moveInPlace(bg, xo, 0, 0.0150, 0, Math.PI / 2, 0);
     add('metal', bg, C.steel);
     if (detail) {
-      add('body', bake(new THREE.BoxGeometry(0.0010, 0.0090, 0.0170), xo + 0.0015, -0.0140, 0.0150), C.strap);
+      add('body', place(new THREE.BoxGeometry(0.0010, 0.0090, 0.0170), xo + 0.0015, -0.0140, 0.0150), C.strap);
       /* The balance lead's plug, tucked on the back of the pack. */
-      add('vinyl', bake(new THREE.BoxGeometry(0.0110, 0.0045, 0.0050), 0.0080, -0.0120, 0.0505), C.livery);
+      add('vinyl', place(new THREE.BoxGeometry(0.0110, 0.0045, 0.0050), 0.0080, -0.0120, 0.0505), C.livery);
     }
   }
 
@@ -1222,18 +1319,18 @@ export function buildHeroCraft(opts = {}) {
       curveSegments: curve,
     });
     if (lite) {
-      cg.translate(0, 0, -0.0005);
+      moveInPlace(cg, 0, 0, -0.0005);
     }
     /* Shape x is "how far forward", so turned a quarter about y the shape's
      * x lands on -z and the extrusion on +x. */
-    cg.rotateY(Math.PI / 2);
+    moveInPlace(cg, 0, 0, 0, 0, Math.PI / 2, 0);
     for (const sx of [-1, 1]) {
-      add('tpu', bake(cg, sx > 0 ? 0.0105 : -0.0117, 0, 0), C.sakura, 'ink');
+      add('tpu', place(cg, sx > 0 ? 0.0105 : -0.0117, 0, 0), C.sakura, 'ink');
       /* The pivot screw, where the camera turns: its head shows on the
        * outside of the plate, so that is the end it keeps. Turned a quarter
        * about z the cylinder's top points along -x, its bottom along +x. */
       const screw = cyl(0.0021, 0.0021, 0.0010, segSmall, sx > 0 ? 'bottom' : 'top');
-      add('metal', bake(screw, sx * 0.0127, up, -fwd, 0, 0, Math.PI / 2), C.steel);
+      add('metal', place(screw, sx * 0.0127, up, -fwd, 0, 0, Math.PI / 2), C.steel);
       screw.dispose();
     }
     cg.dispose();
@@ -1252,9 +1349,7 @@ export function buildHeroCraft(opts = {}) {
     const block = roundRect(new THREE.Shape(), -0.0060, -0.0560, 0.0060, -0.0420, 0.0020);
     add('tpu', slab(block, TOP_Y1, 0.0290, bev(0.0008), 2), C.sakura, 'ink');
     const boss = cyl(0.0030, 0.0035, 0.0070, segSmall, 'top');
-    boss.translate(0, 0.0035, 0);
-    boss.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), mastDir));
-    boss.translate(mastFoot.x, mastFoot.y - 0.0035, mastFoot.z);
+    standInPlace(boss, 0.0035, mastDir, mastFoot.x, mastFoot.y - 0.0035, mastFoot.z);
     add('tpu', boss, C.sakura);
   }
 
@@ -1302,8 +1397,8 @@ export function buildHeroCraft(opts = {}) {
      * is a ring on it, so none of the three has an end that shows. */
     const bodyShape = roundRect(new THREE.Shape(), -0.0095, -0.0080, 0.0095, 0.0080, 0.0022);
     const camBody = paint(slab(bodyShape, -0.0095, 0.0095, bev(0.0012), 2), hue(C.camBody));
-    const barrel = paint(bake(cyl(0.0068, 0.0072, 0.0145, lite ? 10 : 14, 'none'), 0, 0, -0.01525, Math.PI / 2, 0, 0), hue(C.camBody));
-    const knurl = paint(bake(cyl(0.0077, 0.0077, 0.0032, lite ? 10 : 14, 'none'), 0, 0, -0.0150, Math.PI / 2, 0, 0), hue(C.camRing), true);
+    const barrel = paint(place(cyl(0.0068, 0.0072, 0.0145, lite ? 10 : 14, 'none'), 0, 0, -0.01525, Math.PI / 2, 0, 0), hue(C.camBody));
+    const knurl = paint(place(cyl(0.0077, 0.0077, 0.0032, lite ? 10 : 14, 'none'), 0, 0, -0.0150, Math.PI / 2, 0, 0), hue(C.camRing), true);
     /* The bezel, a lathe turned to face forward: its back face, its rim,
      * and the lip the glass sits in. */
     const bezelGeo = new THREE.LatheGeometry([
@@ -1312,8 +1407,7 @@ export function buildHeroCraft(opts = {}) {
       new THREE.Vector2(0.0073, 0.0006),
       new THREE.Vector2(0.0062, 0.0011),
     ], lite ? 10 : 14);
-    bezelGeo.rotateX(-Math.PI / 2);
-    bezelGeo.translate(0, 0, -0.0228);
+    moveInPlace(bezelGeo, 0, 0, -0.0228, -Math.PI / 2);
     const bezel = paint(bezelGeo, C.bezel);
     const geo = mergeGeometries([camBody, barrel, knurl, bezel], false);
     const housing = new THREE.Mesh(geo, camMat);
@@ -1329,8 +1423,7 @@ export function buildHeroCraft(opts = {}) {
     cameraMount.add(housing);
     /* The glass: a shallow dome whose crown is the lens point. */
     const dome = new THREE.SphereGeometry(0.0090, lite ? 10 : 14, lite ? 2 : 3, 0, Math.PI * 2, 0, 0.70);
-    dome.rotateX(-Math.PI / 2);
-    dome.translate(0, 0, -0.0242 + 0.0090);
+    moveInPlace(dome, 0, 0, -0.0242 + 0.0090, -Math.PI / 2);
     const glass = new THREE.Mesh(dome, lens);
     cameraMount.add(glass);
   }
@@ -1341,20 +1434,15 @@ export function buildHeroCraft(opts = {}) {
    * measurement in scripts/craft-check.js. The receiver's two antenna
    * tubes are wire too, so they ride in the mast's mesh and its name. */
   {
-    const up = new THREE.Vector3(0, 1, 0);
     const mastLen = 0.0360;
     const wire = [];
     const mastGeo = new THREE.CylinderGeometry(0.0015, 0.0016, mastLen, lite ? 6 : 8);
-    mastGeo.translate(0, mastLen / 2, 0);
-    mastGeo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, mastDir));
-    mastGeo.translate(mastFoot.x, mastFoot.y, mastFoot.z);
+    standInPlace(mastGeo, mastLen / 2, mastDir, mastFoot.x, mastFoot.y, mastFoot.z);
     wire.push(mastGeo);
     for (const sx of [-1, 1]) {
       const d = new THREE.Vector3(sx * 0.62, 0.38, 0.69).normalize();
       const tube = new THREE.CylinderGeometry(0.0010, 0.0010, 0.0300, lite ? 5 : 6);
-      tube.translate(0, 0.0150, 0);
-      tube.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, d));
-      tube.translate(sx * 0.0040, 0.0170, 0.0520);
+      standInPlace(tube, 0.0150, d, sx * 0.0040, 0.0170, 0.0520);
       wire.push(tube);
     }
     for (const g of wire) {
@@ -1370,16 +1458,14 @@ export function buildHeroCraft(opts = {}) {
      * top end is under the dome. */
     const capGeo = cyl(0.0032, 0.0028, 0.0072, lite ? 6 : 8, 'bottom');
     const top = new THREE.SphereGeometry(0.0032, lite ? 6 : 8, lite ? 2 : 3, 0, Math.PI * 2, 0, Math.PI / 2);
-    top.translate(0, 0.0036, 0);
+    moveInPlace(top, 0, 0.0036, 0);
     capGeo.deleteAttribute('uv');
     top.deleteAttribute('uv');
     const capMerged = mergeGeometries([capGeo.toNonIndexed(), top.toNonIndexed()], false);
     capGeo.dispose();
     top.dispose();
-    capMerged.translate(0, 0.0036, 0);
-    capMerged.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, mastDir));
     const capAt = mastFoot.clone().addScaledVector(mastDir, mastLen - 0.0010);
-    capMerged.translate(capAt.x, capAt.y, capAt.z);
+    standInPlace(capMerged, 0.0036, mastDir, capAt.x, capAt.y, capAt.z);
     const tip = new THREE.Mesh(capMerged, antennaTip);
     tip.name = 'antenna';
     group.add(tip);
