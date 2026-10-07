@@ -67316,3 +67316,15 @@ no build, no file format, no setting.
   cast shadow.
 - `npm run verify` not run: nothing in the physics, plant, ABI or build changed. The budget's P3, P4 and P5 were not
   measured in this turn; by construction no pass, fetch or target was added.
+
+### Pass 2, same day: the field's hatching
+
+- Found by the shots: the race field had no strokes at all. The tone was the sun's share of sun plus sky, and the field's
+  strong sun put a canopy's dark side at about 0.79 of that, above the 0.62 where strokes start. Probed in the page by
+  moving the thresholds (strokes appeared on lit grass at 0.9 to 0.97, never on the canopies at 0.7 to 0.8).
+- Now the tone is directDiffuse over what the first directional light would give this colour square on and unshadowed:
+  the ramp's band times the shadow map, which is about a third on the dark side of either map's ramp and zero in cast
+  shadow. Strokes from 0.62 down to 0.40, the crossing set under 0.24 to 0.12.
+- The screen derivatives the strokes need are now taken in uniform control flow, before the per pixel branch; a
+  derivative inside a branch neighbours did not take is undefined in GLSL.
+- Shots: field, yard and town at High, after. Trees on the field now carry strokes on their shaded side.

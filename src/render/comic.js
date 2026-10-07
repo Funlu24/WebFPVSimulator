@@ -45,13 +45,16 @@
  * cheap half of triplanar mapping, which is what a comic artist does too:
  * walls get one direction, floors another.
  *
- * WHERE IS SHADOW. The toon lighting has already split the light into what
- * the sun gave this fragment (directDiffuse, after the ramp and the shadow
- * map) and what the sky gave it (indirectDiffuse). The sun's share of the
- * total is near one on a lit face, about half on the dark side of the ramp
- * and near zero in a cast shadow, on every map whatever its sun's strength,
- * because it is a ratio. That share is the tone, and the strokes are its
- * ink.
+ * WHERE IS SHADOW. The toon lighting has already worked out what the sun
+ * gave this fragment (directDiffuse, after the ramp and the shadow map).
+ * Divided by what the sun WOULD give this colour square on and unshadowed
+ * (the first directional light's colour through the same Lambert term),
+ * that is the ramp's own band times the shadow map: about one lit, about a
+ * third on the dark side of either map's ramp, zero in a cast shadow,
+ * whatever the map's sun strength or sky. The first version used the sun's
+ * share of sun plus sky instead, and the field's strong sun put its dark
+ * side at 0.79 of that, so the field's trees never got a stroke. That
+ * fraction is the tone, and the strokes are its ink.
  *
  * Render only. Nothing here reads or writes the physics state, and no
  * shader here samples a texture, so the budget's P4 cannot move.
@@ -86,7 +89,7 @@ export const COMIC = {
   hatch: { value: 1 },
   grit: { value: 1 },
   ink: { value: new THREE.Color(0x0b0c12) },
-  litLo: { value: 0.30 },
+  litLo: { value: 0.40 },
   litHi: { value: 0.62 },
   /* How far a stroke darkens what is under it, and its width in pixels. */
   depth: { value: 0.78 },
@@ -190,8 +193,7 @@ float comicLine( float x, float y, float fw, float w ) {
  * range grows, so strokes neither pop nor crowd. The pen's weight wanders
  * with a world noise, which is the difference between a pen and a ruler.
  */
-float comicSet( float x0, float y0, float wobble, float weight ) {
-  float fw0 = max( fwidth( x0 ), 1e-6 );
+float comicSet( float x0, float y0, float fw0, float wobble, float weight ) {
   float lod = clamp( log2( uComicPeriod * fw0 ), -3.0, 10.0 );
   float lf = floor( lod );
   float t = lod - lf;
@@ -201,7 +203,7 @@ float comicSet( float x0, float y0, float wobble, float weight ) {
   return mix( a, b, t );
 }
 
-vec3 comicShade( vec3 col, vec3 direct, vec3 indirect, vec3 nView, vec3 viewPos ) {
+vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos ) {
   vec3 p = vComicWorld;
   vec3 wn = abs( inverseTransformDirection( nView, viewMatrix ) );
   /* The plane the strokes are drawn in: the one the surface faces most. */
@@ -220,19 +222,26 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 indirect, vec3 nView, vec3 viewPos 
     col *= 1.0 + ( g - 0.5 ) * gAmt * uComicGrit;
   }
 
-  if ( uComicHatch > 0.0 && fade > 0.0 ) {
+  if ( uComicHatch > 0.0 ) {
+    /* The screen derivatives first, in uniform control flow: a derivative
+     * taken inside a branch that neighbouring pixels did not take is
+     * undefined in GLSL, and the branch below is per pixel. */
+    float xa = ( q.x + q.y ) * 4.2;
+    float xb = ( q.x - q.y ) * 4.2;
+    float fwa = max( fwidth( xa ), 1e-6 );
+    float fwb = max( fwidth( xb ), 1e-6 );
     float dl = dot( direct, vec3( 0.2126, 0.7152, 0.0722 ) );
-    float il = dot( indirect, vec3( 0.2126, 0.7152, 0.0722 ) );
-    float lit = dl / ( dl + il + 1e-4 );
+    float sl = dot( sunFull, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float lit = sl > 1e-5 ? dl / sl : 1.0;
     float shade = 1.0 - smoothstep( uComicLitLo, uComicLitHi, lit );
-    if ( shade > 0.0 ) {
+    if ( shade > 0.0 && fade > 0.0 ) {
       float wob = ( comicNoise( q * 0.9 ) - 0.5 ) * 0.7;
       float wt = mix( 0.7, 1.35, comicNoise( q * 2.3 + 5.0 ) );
       /* First set at 45 degrees, from the first hint of shade. */
-      float h1 = comicSet( ( q.x + q.y ) * 4.2, ( q.x - q.y ) * 4.2, wob, wt ) * smoothstep( 0.0, 0.35, shade );
+      float h1 = comicSet( xa, xb, fwa, wob, wt ) * smoothstep( 0.0, 0.35, shade );
       /* The crossing set only in deep shadow: a cast shadow, not the dark
        * side of the ramp, or every shaded face reads as a net. */
-      float h2 = comicSet( ( q.x - q.y ) * 4.2, ( q.x + q.y ) * 4.2, -wob, wt ) * smoothstep( 0.82, 0.98, shade );
+      float h2 = comicSet( xb, xa, fwb, -wob, wt ) * ( 1.0 - smoothstep( 0.12, 0.24, lit ) );
       float cov = max( h1, h2 ) * fade * uComicHatch;
       col = mix( col, col * 0.18 + uComicInk * 0.5, cov * uComicDepth );
     }
@@ -242,8 +251,12 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 indirect, vec3 nView, vec3 viewPos 
 `;
 
 const FRAG_BODY = /* glsl */ `
-	outgoingLight = comicShade( outgoingLight, reflectedLight.directDiffuse,
-		reflectedLight.indirectDiffuse, normal, vViewPosition );
+	#if NUM_DIR_LIGHTS > 0
+		outgoingLight = comicShade( outgoingLight, reflectedLight.directDiffuse,
+			directionalLights[ 0 ].color * BRDF_Lambert( diffuseColor.rgb ), normal, vViewPosition );
+	#else
+		outgoingLight = comicShade( outgoingLight, vec3( 1.0 ), vec3( 1.0 ), normal, vViewPosition );
+	#endif
 `;
 
 function inject(shader) {
