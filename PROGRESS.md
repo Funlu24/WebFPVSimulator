@@ -67404,3 +67404,16 @@ no build, no file format, no setting.
   concave amount by 1.3 (was 1.5). The silhouettes keep the heavier, darker pen; the kit's creases are back near
   main's, a tenth keener. Shots, town and yard at High: blossom facets faint again, the yard's structural creases and
   hatching unchanged.
+
+### Pass 9, same day: brush marks off the ground, and a grass texture that did not work
+
+- `comic.js`: the lit side brush marks no longer draw on surfaces that face up. Seen from a flier's height the ground
+  is at a grazing angle, and parallel world strokes at a constant screen spacing ran to the vanishing point as long
+  thin lines: the field read as a ruled or ploughed floor and the yard's concrete as lined paper. Walls keep them; the
+  ground keeps its hatching in shadow and its grit and patches in the light.
+- Tried and dropped, not committed: a grass texture on green ground for low passes, three ways. Round tufts with a lit
+  crown and a dark rim read as dimples, like a golf ball. One stroke per half metre cell was too sparse to read as
+  anything. Flat dabs on two lattices read as dark spots and were gone by four or five metres out, because a pattern
+  that must not crawl has to fade where the ground is foreshortened, which is everywhere a pilot looks. A real grass
+  look wants a texture with mipmaps or geometry, not this layer.
+- Shots, field, town and yard at High, against main. `npm run verify` not run: render only.

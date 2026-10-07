@@ -269,8 +269,15 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * hatching: a painted surface shows the brush everywhere, and a lit
      * face that is one flat fill is the plastic look this replaces. Twice
      * the hatching's spacing, a tenth of its weight. High only.
+     *
+     * Not on what faces up. Ground seen at a flier's grazing angle draws
+     * parallel world strokes as lines running to the vanishing point, and
+     * a field of them read as a ruled floor or a ploughed one, not as
+     * paint (pass 9). The ground keeps its hatching in shadow and its
+     * grit and patches in the light.
      */
-    if ( uComicBrush > 0.0 && fade > 0.0 ) {
+    float wall = 1.0 - step( max( wn.x, wn.z ), wn.y );
+    if ( uComicBrush > 0.0 && fade * wall > 0.0 ) {
       float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
       col *= 1.0 - bm * 0.11 * fade * uComicBrush * ( 1.0 - shade );
     }
