@@ -115,11 +115,11 @@ const SPEC = {
   /* the town's canopy tones: the cherry's blossom on the high key ramp,
    * and two leaf greens for the flower boxes. The street tree and the pine
    * carry their own greens in src/props/street.js. */
-  blossom0: { c: PAL.blossomLight, bands: 'soft', tint: 0xe2c3d2, noReceive: true },
-  blossom1: { c: PAL.blossom, bands: 'soft', tint: 0xd8b2c6, noReceive: true },
-  blossom2: { c: PAL.blossomDeep, bands: 'soft', tint: 0xc99cba, noReceive: true },
-  leaf0: { c: 0x8cb884, tint: 0x5f7390, noReceive: true },
-  leaf1: { c: 0x5f9470, tint: 0x4f6488, noReceive: true },
+  blossom0: { c: PAL.blossomLight, bands: 'soft', tint: 0xe2c3d2, noReceive: true, foliage: true },
+  blossom1: { c: PAL.blossom, bands: 'soft', tint: 0xd8b2c6, noReceive: true, foliage: true },
+  blossom2: { c: PAL.blossomDeep, bands: 'soft', tint: 0xc99cba, noReceive: true, foliage: true },
+  leaf0: { c: 0x8cb884, tint: 0x5f7390, noReceive: true, foliage: true },
+  leaf1: { c: 0x5f9470, tint: 0x4f6488, noReceive: true, foliage: true },
   /* course furniture: the pennant's mast and the printed panels' edge,
    * which K.pennant and K.panel name; the rest is src/props/course.js's */
   flagMast: { c: 0x9aa0a8, tint: TD }, panelEdge: { c: 0x3d4461, tint: 0x3f3a50 },
@@ -304,6 +304,16 @@ export function propMaterial(name, look = null) {
     OWNED.add(m);
   } else if (s.net) {
     m = flat({ color: dim ? dimmed(0xffffff, look.flats) : 0xffffff, map: netTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide, cache: false });
+    OWNED.add(m);
+  } else if (s.foliage) {
+    /*
+     * A canopy tone takes the comic pass's leaf clumps, which is a mark in
+     * its userData (src/render/comic.js, FOLIAGE). So it is the kit's own
+     * material, not the shared cache's: the town's canopies are built from
+     * the same arguments and cel() would hand both the same object.
+     */
+    m = cel({ color: s.c, bands: s.bands ?? 3, tint: s.tint ?? T, cache: false });
+    m.userData.comicFoliage = true;
     OWNED.add(m);
   } else {
     m = cel({ color: s.c, bands: s.bands ?? 3, tint: s.tint ?? T });

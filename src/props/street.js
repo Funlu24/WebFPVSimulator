@@ -303,13 +303,13 @@ export const MATERIALS = {
    * receives shadow, for the reason trees.js gives at length: a ramp only
    * shapes direct light, and a shadowed deep green blob goes to ink. */
   stGroveWood: { c: PAL.trunkDark, tint: 0x6f5a80 },
-  stGrove0: { c: 0x8cb884, tint: 0x5b6f8c, noReceive: true },
-  stGrove1: { c: 0x5f9470, tint: 0x5b6f8c, noReceive: true },
-  stGrove2: { c: PAL.cedar, tint: 0x5b6f8c, noReceive: true },
+  stGrove0: { c: 0x8cb884, tint: 0x5b6f8c, noReceive: true, foliage: true },
+  stGrove1: { c: 0x5f9470, tint: 0x5b6f8c, noReceive: true, foliage: true },
+  stGrove2: { c: PAL.cedar, tint: 0x5b6f8c, noReceive: true, foliage: true },
   stCedarWood: { c: PAL.cedarBark, tint: 0x6f5a80 },
-  stCedar0: { c: PAL.cedarLit, tint: 0x59657f, noReceive: true },
-  stCedar1: { c: PAL.cedar, tint: 0x59657f, noReceive: true },
-  stCedar2: { c: PAL.cedarDeep, tint: 0x59657f, noReceive: true },
+  stCedar0: { c: PAL.cedarLit, tint: 0x59657f, noReceive: true, foliage: true },
+  stCedar1: { c: PAL.cedar, tint: 0x59657f, noReceive: true, foliage: true },
+  stCedar2: { c: PAL.cedarDeep, tint: 0x59657f, noReceive: true, foliage: true },
   /* The utility pole: the town's concrete, and its near black hardware. */
   stPole: { c: 0xd6d2d8, tint: 0x6a6288 },
   stPoleDark: { c: PAL.black, bands: 2, tint: 0x4b4560 },

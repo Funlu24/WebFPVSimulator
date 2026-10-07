@@ -1752,6 +1752,45 @@ function dropCarFit(carFit) {
   carFit.length = 0;
 }
 
+/*
+ * THE CANOPIES TAKE THE COMIC PASS'S LEAF CLUMPS (render/comic.js, FOLIAGE).
+ *
+ * By name: the five canopy sets trees.js builds, for the town and for the
+ * two places, which use the same builders. On a COPY of the material, one
+ * per material however many sets share it. cel() hands the same material to
+ * anything built with the same arguments, and bakeColourToVertices gives
+ * the merged material it makes the userData of the first material it folds
+ * in, the object itself and not a copy, so a mark on a shared material
+ * could put leaves on a wall. The copy keeps the hook and the program key,
+ * which Material.copy does not carry, exactly as the bake's own copies do.
+ * Each set is its own draw already, so this adds a handful of materials and
+ * no draw call. Before the bake and the chunking, so every chunk of a set
+ * carries the copy.
+ */
+const CANOPY = /^(sakura|grove|cedar|bamboo|shrub)Canopy\d+$/;
+
+function markCanopies(root) {
+  const made = new Map();
+  root.traverse((o) => {
+    if (!o.isInstancedMesh || !CANOPY.test(o.name) || Array.isArray(o.material)) {
+      return;
+    }
+    const m = o.material;
+    let c = made.get(m);
+    if (!c) {
+      c = m.clone();
+      c.onBeforeCompile = m.onBeforeCompile;
+      if (typeof m.customProgramCacheKey === 'function') {
+        c.customProgramCacheKey = m.customProgramCacheKey;
+      }
+      c.userData = { ...m.userData, comicFoliage: true };
+      made.set(m, c);
+    }
+    o.material = c;
+  });
+  return made.size;
+}
+
 function buildColliders(world) {
   const colliders = new Colliders();
   let noTop = 0;
@@ -2273,6 +2312,7 @@ export async function buildMap(shell, onProgress, options) {
    * two places get their own field, over their own ground, for the reason in
    * ./places/blossom.js. */
   const places = buildPlaces(world, { petals: q.city.petals });
+  markCanopies(world.root);
   progress(0.87);
   await yieldToPaint();
 
@@ -2404,7 +2444,10 @@ export async function buildMap(shell, onProgress, options) {
   };
   progress(0.94);
 
-  setComicQuality(q);
+  /* groundAuto: the bake has folded colour into vertices and merged the
+   * town's roads, walls and cars into shared materials, so its ground
+   * cannot be marked material by material (render/comic.js, GROUND). */
+  setComicQuality(q, { groundAuto: true });
   const pipeline = new CityPipeline(renderer, scene, camera, {
     /*
      * 2.6e6 on High, not the town's own 4.6e6.

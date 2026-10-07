@@ -67615,3 +67615,47 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
   yard at High, the town at High. On Low the ground matches an 08:21 capture within a 2 percent fuzz; the only differing pixels
   are the clouds of pass 6, the canopies of pass 7 and a flag in the wind. `npm run lint:preload` up to date,
   `npm run lint:quality` 71 of 71 clean, `node --check` on both files. Not run: `npm run verify`, render only.
+
+### Pass 13, same day: ground is marked, not guessed, and the trees get leaf clumps
+
+- Found in pass 12's own shots of the yard: the detail map put turf on anything green that faces up, so the yard's
+  green containers had a lawn on their roofs, and every other roof, bonnet and canopy top took the road's stones.
+  The colour guess is gone where it can go. `comic.js` reads a per material mark, `userData.comicGround`, through a
+  uniform of the material's own (three keeps a material's uniforms per material while the program is shared, so this
+  costs no program), read at every draw. Only marked ground takes the turf, the stones and pass 10's patches; inside
+  a marked material colour still picks turf or stones, because the race field's terrain is one material painted grass
+  and rock by its vertices. Marked: the race field's terrain and pitch (`celMaterial`'s new `comic` option, which is
+  in `celKey`, so the merger never buckets a marked material with an unmarked one) and a built map's ground and roads
+  (`markGround` in `built/index.js`, not in `built/ground.js`, which the landing page copies byte for byte).
+- The town is the exception and says so. Its bake folds colour into vertices and merges every material that differs
+  only in colour into one, so its roads, walls and cars leave the bake as the same material. Keeping ground apart
+  would split those merges into more draw calls, the thing the town is shortest of, so the town passes
+  `setComicQuality(q, { groundAuto: true })` and keeps pass 12's colour rule. Every other map clears it when it builds.
+- Shot, the yard's containers from the same four cameras as pass 12: the green roof is paint again, the orange and
+  white roofs lost the stones, the concrete round them kept them. The race field's turf and the town are unchanged.
+- Leaf clumps. The detail map's spare alpha channel now holds overlapping clumps, each lighter at its crown and
+  inked along part of its foot, laid in order so each covers the ones before it, with a rim lobed by value noise so a
+  clump is a bunch of leaves and not a coin. Same seed stream, drawn after the other three channels, so they are
+  unchanged. Settled to a mean of one half like the others. Sampled triplanar (three fetches) on materials marked
+  `userData.comicFoliage`, at an 11 m tile, half as strong where the sun does not reach, warm crown and cool foot on
+  green leaves and value alone on blossom (the hue shift turned blossom lavender and the canopy read as marble).
+  Marked: the race field's canopies, the town's five canopy sets by name (`markCanopies` in `city/index.js`, on a copy
+  of each material, because `cel()` hands one material to everything built with the same arguments and the bake gives
+  its merged material the first material's userData object itself), and the props kit's canopy tones (`foliage: true`
+  in the kit's and `street.js`'s tables, made outside the shared cache for the same reason).
+- What was tried first: a 6.7 m tile with a pen round every clump read as fish scales; fewer pens, bigger clumps and
+  lobed rims read as leaves.
+- Cost: three fetches of the same cached texture on canopy pixels, Medium and High only, and two fewer on everything
+  that is not ground (pass 12 fetched them for every toon fragment and multiplied walls by zero). Low builds no
+  texture and is unchanged.
+- Not fixed, and the next thing for trees: the town's and the kit's canopies are twenty sided icosahedra, and their
+  facets read as cut gems whatever is painted on them. Rounding them is a vendored change for the town (more
+  triangles in the set the town's budget is tightest on) and a drawing change for the kit, so it is left for a pass
+  of its own.
+- Run, in the same turn: `npm run lint:preload` up to date (boot 131, city 76, built 34, 255 served), `npm run
+  lint:quality` 71 of 71 clean, `npm run check:props` all passed (the kit's material table changed), `node --check` on
+  the seven files. Shots through scratch camera scripts: the yard's containers, tree close-ups on the race field at
+  four cameras through three tries, the race field at High, Medium and Low, the town and the yard at High. On Low the
+  race field matches pass 12's Low within 0.6 percent of pixels by more than six levels, the flags and the pads.
+  `npm run lint:catalog` could not run here: it reads Betaflight's sources, and `vendor/betaflight` is not checked out
+  in this container. Not run: `npm run verify`, render only.

@@ -1003,7 +1003,7 @@ function pitchSurface(pitch, course, sponsorMarks) {
   geo.rotateX(-Math.PI / 2);
   /* Same material family as the terrain, so the pitch takes the same cel
    * ramp and the same cloud shadows and does not read as a decal. */
-  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, transparent: true });
+  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, transparent: true, comic: 'ground' });
   mat.map = tex;
   const mesh = new THREE.Mesh(geo, mat);
   /* Two centimetres up. The ground under the pitch is levelled to exactly
@@ -1380,7 +1380,9 @@ function terrain(height, samples, pitch) {
     }
   }
   geo.attributes.color.needsUpdate = true;
-  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34 });
+  /* comic: its vertices paint it grass and rock, and the comic pass gives
+   * each its own texture (comic.js, GROUND). */
+  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, comic: 'ground' });
   mat.vertexColors = true;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
@@ -1547,7 +1549,7 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
     lumpCanopy(blobGeo, r, x * 0.37 + z * 0.61 + i * 1.7);
     const blob = new THREE.Mesh(
       blobGeo,
-      celMaterial({ color: tint, rim: 0.3 }),
+      celMaterial({ color: tint, rim: 0.3, comic: 'foliage' }),
     );
     const a = rng() * Math.PI * 2;
     const spread = i === 0 ? 0 : (0.35 + rng() * 0.55) * scale;

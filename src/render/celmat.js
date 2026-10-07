@@ -262,7 +262,7 @@ export const FLAG_SAIL_CLOTH = 0.085;
 
 /*
  * opts: color, rim (0..1), rimColor, spec (0..1), specWidth, cloudShadow,
- * map, alphaTest, cloth, key
+ * map, alphaTest, cloth, key, comic ('ground' or 'foliage')
  *
  * `map` needs `key`, and that is enforced rather than documented. The
  * scenery merger buckets geometry by celKey and celKey is the options
@@ -415,6 +415,14 @@ ${RIM_CHUNK}
    */
   mat.customProgramCacheKey = () => `cel${clothDecl}${clothBody}`;
   mat.userData.cel = true;
+  /* What the comic pass draws on it (render/comic.js, GROUND and FOLIAGE).
+   * An option rather than a mark set afterwards, so it is in celKey below
+   * and the merger never buckets a marked material with an unmarked one. */
+  if (opts.comic === 'ground') {
+    mat.userData.comicGround = true;
+  } else if (opts.comic === 'foliage') {
+    mat.userData.comicFoliage = true;
+  }
   /* Stable identity for the scenery merger: two materials built from the
    * same options are interchangeable, so their meshes can share one draw.
    * A texture is not JSON, so a keyed material states its own identity and

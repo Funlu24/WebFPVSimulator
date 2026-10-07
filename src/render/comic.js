@@ -107,7 +107,44 @@ export const COMIC = {
    * built the texture, so a page that never sets a preset samples nothing. */
   detail: { value: 0 },
   detailMap: { value: null },
+  /* 1 where a map's ground cannot be marked material by material, and its
+   * up facing surfaces are told apart by colour instead. See GROUND. */
+  groundAuto: { value: 0 },
 };
+
+/*
+ * GROUND. The detail map and the field's patches go on ground, and what is
+ * ground is said, not guessed: a material is ground when its
+ * userData.comicGround is true. Read at every draw, so a mark set after the
+ * first frame still counts, and a clone made by Material.copy carries it.
+ *
+ * Guessed from colour, which is what pass 12 did, green paint was turf: the
+ * yard's green containers had a lawn on their roofs. Marked, a green roof is
+ * a roof. Inside a marked material colour still decides between the two
+ * kinds of ground, because the field's terrain is one material painted grass
+ * and rock by its vertices.
+ *
+ * The town cannot be marked this way. Its bake folds colour into vertices
+ * and merges every material that differs only in colour into one, so its
+ * roads, its walls and its cars come out of the bake as the same material,
+ * and keeping ground apart would split those merges into more draw calls,
+ * which is the thing the town is shortest of. The town says so with
+ * setComicQuality(q, { groundAuto: true }), and there every surface that
+ * faces up is ground and colour decides which kind, as in pass 12.
+ */
+export function markGround(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) {
+      return;
+    }
+    const list = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of list) {
+      if (m) {
+        m.userData.comicGround = true;
+      }
+    }
+  });
+}
 
 /* Per preset. Low is the integrated laptop and the phone that has already
  * given up shadows and ink for fill rate; it keeps none of this, and the
@@ -123,8 +160,10 @@ const LEVELS = {
   high: { hatch: 1, grit: 1, brush: 1, detail: 1 },
 };
 
-export function setComicQuality(q) {
+export function setComicQuality(q, { groundAuto = false } = {}) {
   const id = q && q.id ? q.id : 'high';
+  /* Every map sets this when it builds, so leaving the town clears it. */
+  COMIC.groundAuto.value = groundAuto ? 1 : 0;
   const lv = LEVELS[id] || LEVELS.high;
   COMIC.hatch.value = lv.hatch;
   COMIC.grit.value = lv.grit;
@@ -164,6 +203,10 @@ export function setComicQuality(q) {
  *      concrete, dirt and sand.
  *   b  the turf strokes' hue, warm (dry) or cool (lush), so a lawn up close
  *      is several greens, which is how a painter does one.
+ *   a  leaf clumps (pass 13): overlapping discs, each lighter at its top and
+ *      inked along its lower edge, each laid over the ones before it, which
+ *      is the scalloped canopy a comic draws for a tree. Up is +v, so a
+ *      clump hangs the right way up on a canopy's side.
  */
 const DETAIL_N = 512;
 
@@ -277,6 +320,72 @@ function buildDetailMap() {
     stroke(stone, rnd() * N, rnd() * N, ux, uy, r * (1 + rnd()), r, val, 0.8, null);
   }
 
+  /* Clumps of two sizes, big ones first so the small ones sit on them:
+   * a canopy reads as masses with smaller masses on their edges. Each
+   * clump's rim is lobed by value noise read round it (a 32 square
+   * lattice, wrapping), so it is a bunch of leaves and not a coin. */
+  const leaf = new Float32Array(N * N).fill(0.5);
+  const LOBE = 32;
+  const lobes = new Float32Array(LOBE * LOBE);
+  for (let i = 0; i < lobes.length; i += 1) {
+    lobes[i] = rnd();
+  }
+  const lobe = (x, y) => {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    let tx = x - ix;
+    let ty = y - iy;
+    tx = tx * tx * (3 - 2 * tx);
+    ty = ty * ty * (3 - 2 * ty);
+    const at = (a, b) => lobes[(((b % LOBE) + LOBE) % LOBE) * LOBE + (((a % LOBE) + LOBE) % LOBE)];
+    const a = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * tx;
+    const b = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * tx;
+    return a + (b - a) * ty;
+  };
+  for (let i = 0; i < 900; i += 1) {
+    const cx = rnd() * N;
+    const cy = rnd() * N;
+    const R = i < 300 ? 22 + rnd() * 14 : 11 + rnd() * 10;
+    const base = 0.44 + rnd() * 0.14;
+    /* Not every clump is inked, and not with the same pen: a line round
+     * every one reads as fish scales. */
+    const pen = rnd() < 0.62 ? 1.5 + rnd() * 1.3 : 0;
+    const ink = 0.7 + rnd() * 0.3;
+    const lx = rnd() * LOBE;
+    const ly = rnd() * LOBE;
+    const reach = Math.ceil(R * 1.2 + 1);
+    const bx = Math.floor(cx);
+    const by = Math.floor(cy);
+    for (let oy = -reach; oy <= reach; oy += 1) {
+      for (let ox = -reach; ox <= reach; ox += 1) {
+        const dx = bx + ox + 0.5 - cx;
+        const dy = by + oy + 0.5 - cy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        /* The rim's radius in this pixel's direction: the noise is read at
+         * the unit direction scaled up, so a round trip crosses a few
+         * lattice cells and the rim has four to six lobes. */
+        const inv = d > 1e-6 ? 1 / d : 0;
+        const Rl = R * (0.84 + 0.3 * lobe(lx + dx * inv * 2.6, ly + dy * inv * 2.6));
+        const cov = Math.min(1, Math.max(0, Rl + 0.5 - d));
+        if (cov <= 0) {
+          continue;
+        }
+        /* -1 at the clump's foot, 1 at its crown. */
+        const up = dy / R;
+        let v = base + up * 0.19;
+        /* The pen along the foot: the lower half of the rim, heaviest
+         * straight underneath and lifting off towards the sides. */
+        if (pen > 0) {
+          const edge = Math.min(1, Math.max(0, (d - (Rl - pen)) / 1.2));
+          const foot = Math.min(1, Math.max(0, (0.1 - up) / 0.5));
+          v += (0.06 - v) * edge * foot * ink;
+        }
+        const k = (((by + oy) % N + N) % N) * N + (((bx + ox) % N + N) % N);
+        leaf[k] += (v - leaf[k]) * cov;
+      }
+    }
+  }
+
   /* Settle each channel to a mean of one half at a set spread, so the
    * coarsest mip is neutral whatever the strokes added up to. */
   const settle = (buf, spread) => {
@@ -297,6 +406,7 @@ function buildDetailMap() {
   settle(turf, 0.15);
   settle(stone, 0.13);
   settle(hue, 0.16);
+  settle(leaf, 0.17);
 
   const data = new Uint8Array(N * N * 4);
   const byte = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
@@ -304,7 +414,7 @@ function buildDetailMap() {
     data[i * 4] = byte(turf[i]);
     data[i * 4 + 1] = byte(stone[i]);
     data[i * 4 + 2] = byte(hue[i]);
-    data[i * 4 + 3] = 255;
+    data[i * 4 + 3] = byte(leaf[i]);
   }
   const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.wrapS = THREE.RepeatWrapping;
@@ -363,6 +473,9 @@ uniform float uComicFadeNear;
 uniform float uComicFadeFar;
 uniform float uComicDetail;
 uniform sampler2D uComicDetailMap;
+uniform float uComicGround;
+uniform float uComicGroundAuto;
+uniform float uComicFoliage;
 
 /* No sine in either: a sine's precision is the driver's, and a stroke
  * should land in the same place on every GPU. */
@@ -426,6 +539,8 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
    */
   float facing = abs( dot( normalize( nView ), normalize( viewPos ) ) );
   float square = smoothstep( 0.12, 0.38, facing );
+  /* Ground, marked or, in the town, everything (GROUND, above). */
+  float ground = max( uComicGround, uComicGroundAuto );
 
   if ( uComicGrit > 0.0 ) {
     /* Paint grit: two octaves of mottle in the base colour, the hand
@@ -445,7 +560,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * Faded out by 160 m. Past that the patches shrink to a few pixels,
      * and air takes the contrast out of distant ground anyway (pass 10).
      */
-    if ( wn.y > max( wn.x, wn.z ) ) {
+    if ( ground > 0.0 && wn.y > max( wn.x, wn.z ) ) {
       float m = comicNoise( p.xz * 0.07 + 41.0 ) * 0.6 + comicNoise( p.xz * 0.23 + 7.0 ) * 0.4;
       m = smoothstep( 0.22, 0.78, m );
       float near = 1.0 - smoothstep( 50.0, 160.0, dist );
@@ -461,14 +576,15 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
 
   /*
    * The ground's detail map (pass 12, buildDetailMap): turf on green ground,
-   * stones on everything else that faces up. Two fetches at scales that do
-   * not divide each other (a 2.7 m tile and a 7.9 m one turned 37 degrees),
-   * so neither tile's repeat lines up into a grid seen from height. Fetched
-   * whatever the surface faces, inside this uniform branch only: a fetch
-   * with implicit derivatives in a branch that neighbouring pixels did not
-   * take is undefined, and walls are cheap to sample and multiply by zero.
+   * stones on the rest of the ground that faces up. Two fetches at scales
+   * that do not divide each other (a 2.7 m tile and a 7.9 m one turned 37
+   * degrees), so neither tile's repeat lines up into a grid seen from
+   * height. Fetched whatever the surface faces, inside this branch only,
+   * which is uniform: a fetch with implicit derivatives in a branch that
+   * neighbouring pixels did not take is undefined, and walls are cheap to
+   * sample and multiply by zero. What is not ground skips both fetches.
    */
-  if ( uComicDetail > 0.0 ) {
+  if ( uComicDetail * ground > 0.0 ) {
     vec2 du = p.xz * 0.37;
     vec2 dv = vec2( p.x * 0.799 - p.z * 0.602, p.x * 0.602 + p.z * 0.799 ) * 0.127 + vec2( 0.31, 0.77 );
     vec4 d1 = texture2D( uComicDetailMap, du );
@@ -481,6 +597,40 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     vec3 grass = ( 1.0 + blades ) * ( vec3( 1.0 ) + vec3( 0.07, 0.03, -0.12 ) * warm );
     vec3 detail = mix( vec3( 1.0 + stones * 0.65 ), grass, turf );
     col *= mix( vec3( 1.0 ), detail, up * uComicDetail );
+  }
+
+  /*
+   * FOLIAGE (pass 13): the detail map's leaf clumps on a material marked
+   * userData.comicFoliage: the race field's canopies (scene.js), the
+   * town's (city/index.js, markCanopies) and the props kit's (kit.js). A
+   * canopy is a round mass, so the clumps are fetched in all three world
+   * planes and blended by how much the surface faces each (triplanar), an
+   * 11 m tile, which puts clumps half a metre to a metre and a half across
+   * and four to eight of them across a tree. Each clump's crown is lighter
+   * and its inked foot darker, a painted canopy's light and shade. What is
+   * not foliage skips the three fetches; past a few tens of metres the
+   * mipmaps settle the tile to its neutral mean, so the tree line far off
+   * keeps the colour it had.
+   */
+  if ( uComicDetail * uComicFoliage > 0.0 ) {
+    vec3 fq = p * 0.09;
+    vec3 tw = wn * wn;
+    tw *= tw;
+    tw /= tw.x + tw.y + tw.z;
+    float lx = texture2D( uComicDetailMap, fq.zy ).a;
+    float lz = texture2D( uComicDetailMap, fq.xy + vec2( 0.43, 0.17 ) ).a;
+    float ly = texture2D( uComicDetailMap, fq.xz + vec2( 0.71, 0.59 ) ).a;
+    float clump = lx * tw.x + lz * tw.z + ly * tw.y - 0.5;
+    /* Half as strong in the shade, where the hatching is the texture. */
+    float fl = dot( direct, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float fs = dot( sunFull, vec3( 0.2126, 0.7152, 0.0722 ) );
+    float flit = fs > 1e-5 ? fl / fs : 1.0;
+    clump *= mix( 0.5, 1.0, smoothstep( uComicLitLo, uComicLitHi, flit ) );
+    /* On green leaves the crown goes warm and the foot cool. On blossom,
+     * which is pale and pink, that turned the feet lavender and the canopy
+     * read as marble, so anything not green takes the value alone. */
+    float leafy = smoothstep( 0.01, 0.06, col.g - max( col.r, col.b ) );
+    col *= vec3( 1.0 ) + clump * mix( vec3( 0.75 ), vec3( 1.3, 1.05, 0.7 ), leafy );
   }
 
   if ( uComicHatch > 0.0 ) {
@@ -537,7 +687,7 @@ const FRAG_BODY = /* glsl */ `
 	#endif
 `;
 
-function inject(shader) {
+function inject(shader, material) {
   if (shader.fragmentShader.includes(MARK)) {
     return;
   }
@@ -562,6 +712,20 @@ function inject(shader) {
   shader.uniforms.uComicFadeFar = COMIC.fadeFar;
   shader.uniforms.uComicDetail = COMIC.detail;
   shader.uniforms.uComicDetailMap = COMIC.detailMap;
+  /* The material's own, and the only one here that is not shared: three
+   * keeps a material's uniforms per material while the program is shared,
+   * so every material reads its own mark through one program. */
+  shader.uniforms.uComicGround = {
+    get value() {
+      return material.userData.comicGround ? 1 : 0;
+    },
+  };
+  shader.uniforms.uComicGroundAuto = COMIC.groundAuto;
+  shader.uniforms.uComicFoliage = {
+    get value() {
+      return material.userData.comicFoliage ? 1 : 0;
+    },
+  };
   shader.vertexShader = vs
     .replace('#include <common>', `#include <common>\n${VERT_HEAD}`)
     .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_BODY}`);
@@ -590,7 +754,7 @@ if (!P[INSTALLED]) {
         if (user) {
           user.call(self, shader, renderer);
         }
-        inject(shader);
+        inject(shader, self);
       };
       hook.comicUser = user;
       return hook;

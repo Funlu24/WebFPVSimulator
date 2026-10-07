@@ -76,7 +76,7 @@ import * as THREE from 'three';
 import { PAL } from '../city/vendored/core/palette.js';
 import { Pipeline } from '../city/vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
-import { comicPipeline, setComicQuality } from '../../render/comic.js';
+import { comicPipeline, setComicQuality, markGround } from '../../render/comic.js';
 import { buildSky } from '../city/vendored/core/sky.js';
 import { setOutlineResolution } from '../city/vendored/core/outline.js';
 import { cel, flat } from '../city/vendored/core/toon.js';
@@ -1149,6 +1149,11 @@ export async function buildMap(shell, onProgress, options) {
   if (roads.batches) {
     scene.add(roads.group);
   }
+  /* Both are ground, paint and all, for the comic pass's turf, stones and
+   * patches; nothing else here is (render/comic.js, GROUND). Marked here
+   * and not in ./ground.js, which the landing page copies byte for byte. */
+  markGround(ground.group);
+  markGround(roads.group);
   progress(0.2);
   await yieldToPaint();
 
