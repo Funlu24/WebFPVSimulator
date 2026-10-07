@@ -112,7 +112,7 @@ const C = {
   sakura: 0xe8a8b8,
   sakuraDeep: 0xc47888,
   mint: 0x7dffb4,
-  bell: 0xd8d0c4,
+  bell: 0x4a534d,
   steel: 0xbcb4a2,
   darkSteel: 0x3a423c,
   motorBase: 0x262e28,
@@ -184,6 +184,34 @@ function paint(geo, hex, flat = false) {
   return g;
 }
 
+/*
+ * A cylinder with only the ends that can be seen. Most round parts here
+ * stand on something or are capped by something, a standoff between the
+ * plates, a grommet between the boards, a screw head against the arm, and
+ * three.js draws both ends of every cylinder whether or not anything could
+ * ever see them. `ends` says which to keep: 'both', 'top', 'bottom' or
+ * 'none'. CylinderGeometry groups its index as the side (material 0), the
+ * top (1) and the bottom (2), so dropping an end is dropping its group.
+ */
+function cyl(rTop, rBottom, h, seg, ends = 'both') {
+  const g = new THREE.CylinderGeometry(rTop, rBottom, h, seg, 1, ends === 'none');
+  if (ends === 'top' || ends === 'bottom') {
+    const drop = ends === 'top' ? 2 : 1;
+    const idx = g.index.array;
+    const keep = [];
+    for (const grp of g.groups) {
+      if (grp.materialIndex !== drop) {
+        for (let i = grp.start; i < grp.start + grp.count; i += 1) {
+          keep.push(idx[i]);
+        }
+      }
+    }
+    g.setIndex(keep);
+    g.clearGroups();
+  }
+  return g;
+}
+
 /* A rounded rectangle, as a path, for plates, the pack and the cutouts. */
 function roundRect(path, x0, y0, x1, y1, r) {
   path.moveTo(x0 + r, y0);
@@ -196,18 +224,6 @@ function roundRect(path, x0, y0, x1, y1, r) {
   path.lineTo(x0, y0 + r);
   path.quadraticCurveTo(x0, y0, x0 + r, y0);
   return path;
-}
-
-/* A slot with round ends, as a hole. */
-function slotPath(cx, y0, y1, w) {
-  const p = new THREE.Path();
-  const r = w / 2;
-  p.moveTo(cx - r, y0 + r);
-  p.lineTo(cx - r, y1 - r);
-  p.absarc(cx, y1 - r, r, Math.PI, 0, true);
-  p.lineTo(cx + r, y0 + r);
-  p.absarc(cx, y0 + r, r, 0, Math.PI, true);
-  return p;
 }
 
 /*
@@ -260,9 +276,15 @@ function slab(shape, y0, y1, bev, curveSegments, bevelSegments = 1) {
  * the part has, and a smoothed shell would erase them. It is marked with
  * hullColor exactly as outlineHull marks its own, so scripts/craft-check.js
  * leaves it out of the measured machine for the same reason: it is paint.
+ *
+ * `src` is the geometry the shell is grown from, which need not be the
+ * mesh's own: a finish merges the screws and the wires with the plates, and
+ * a shell round a screw is a hundred triangles drawn twice (once here, once
+ * in post.js's prepass) for a line nobody can see. So each finish keeps a
+ * second, smaller merge of just the parts that make the silhouette, and the
+ * shell is grown from that.
  */
-function inkShell(mesh, width, color, fog) {
-  const src = mesh.geometry;
+function inkShell(mesh, width, color, fog, src = mesh.geometry) {
   const pos = src.getAttribute('position');
   const n = pos.count;
   const keyOf = (i) => `${Math.round(pos.getX(i) * 2e5)},${Math.round(pos.getY(i) * 2e5)},${Math.round(pos.getZ(i) * 2e5)}`;
@@ -360,34 +382,42 @@ function inkShell(mesh, width, color, fog) {
  * edge, thickness. All metres. The tip band starts at 0.0555, which is where
  * the colour changes: the last tenth of a blade is the part that draws the
  * ring a spinning prop leaves, so it is painted lighter, the way a lot of
- * real props are.
+ * real props are. The two rows either side of that line are a millimetre
+ * apart so the colour changes there rather than fading over a centimetre.
+ * The station at 12 mm is narrower than a real blade is there on purpose:
+ * it is over the bell, and at the capped pitch a wider chord puts its
+ * trailing edge into the bell's top. From 22 mm out the blade is clear of
+ * the motor and takes its full width.
+ *
+ * The section is four points, leading edge, crown, trailing edge and belly,
+ * with the normals smoothed round it. At a millimetre and a half thick that
+ * shades as an airfoil from any distance the chase camera gets to, and a
+ * finer one was twice the triangles for nothing a picture could show.
  */
 const BLADE_ROWS = [
   [0.0050, 0.0074, 0.0000, 0.0016],
-  [0.0100, 0.0112, 0.0002, 0.0016],
-  [0.0170, 0.0134, 0.0006, 0.0015],
-  [0.0250, 0.0136, 0.0011, 0.0013],
-  [0.0330, 0.0128, 0.0016, 0.0012],
-  [0.0410, 0.0116, 0.0021, 0.0011],
-  [0.0480, 0.0102, 0.0026, 0.0010],
-  [0.0540, 0.0088, 0.0030, 0.0009],
-  [0.0560, 0.0083, 0.0031, 0.0009],
-  [0.0595, 0.0066, 0.0033, 0.0008],
-  [0.0614, 0.0046, 0.0034, 0.0007],
-  [0.0625, 0.0020, 0.0034, 0.0006],
+  [0.0120, 0.0120, 0.0003, 0.0016],
+  [0.0220, 0.0146, 0.0009, 0.0014],
+  [0.0340, 0.0140, 0.0017, 0.0012],
+  [0.0460, 0.0118, 0.0025, 0.0010],
+  [0.0548, 0.0095, 0.0030, 0.0009],
+  [0.0560, 0.0091, 0.0031, 0.0009],
+  [0.0604, 0.0066, 0.0034, 0.0008],
+  [0.0625, 0.0022, 0.0034, 0.0006],
 ];
-const BLADE_ROWS_LITE = [0, 2, 4, 6, 8, 10, 11].map((i) => BLADE_ROWS[i]);
+const BLADE_ROWS_LITE = [0, 2, 4, 6, 8].map((i) => BLADE_ROWS[i]);
 const BLADE_TIP_START = 0.0555;
 /* 4.3 inches of geometric pitch, and the steepest the root is drawn. */
 const BLADE_PITCH = 0.109;
 const BLADE_PITCH_CAP = 0.60;
 
-function bladeGeometry(rows, dir, bodyHex, tipHex, lite) {
+function bladeGeometry(rows, dir, bodyHex, tipHex) {
   /* Chord stations, leading edge (0) to trailing edge (1), and the section's
-   * top and bottom at each, as a fraction of the thickness. */
-  const us = lite ? [0, 0.35, 1] : [0, 0.15, 0.4, 0.72, 1];
-  const top = lite ? [0, 1.0, 0] : [0, 0.80, 1.0, 0.62, 0];
-  const bot = lite ? [0, -0.25, 0] : [0, -0.22, -0.20, -0.10, 0];
+   * top and bottom at each, as a fraction of the thickness: the crown a
+   * third of the way back, the belly nearly flat. */
+  const us = [0, 0.33, 1];
+  const top = [0, 1.0, 0];
+  const bot = [0, -0.25, 0];
   const ringLen = us.length * 2 - 2;
   const positions = [];
   const colours = [];
@@ -467,26 +497,26 @@ function bladeGeometry(rows, dir, bodyHex, tipHex, lite) {
 function rotorGeometry(dir, front, lite) {
   const bodyHex = front ? C.propFront : C.propRear;
   const tipHex = front ? C.propFrontTip : C.propRearTip;
-  const seg = lite ? 8 : 14;
+  const seg = lite ? 8 : 12;
   const parts = [];
-  const blade = bladeGeometry(lite ? BLADE_ROWS_LITE : BLADE_ROWS, dir, bodyHex, tipHex, lite);
+  const blade = bladeGeometry(lite ? BLADE_ROWS_LITE : BLADE_ROWS, dir, bodyHex, tipHex);
   for (let b = 0; b < 3; b += 1) {
     parts.push(bake(blade, 0, 0, 0, 0, (b * Math.PI * 2) / 3, 0));
   }
   blade.dispose();
-  /* The hub, bottom to top, so LatheGeometry faces outward. */
+  /* The hub, bottom to top, so LatheGeometry faces outward. Its underside
+   * sits a tenth of a millimetre over the bell's cap and is never seen, so
+   * the profile starts at the hub's bottom edge rather than its axis. */
   const hub = new THREE.LatheGeometry([
-    new THREE.Vector2(0.0001, -0.0035),
-    new THREE.Vector2(0.0060, -0.0035),
-    new THREE.Vector2(0.0066, -0.0027),
-    new THREE.Vector2(0.0064, 0.0027),
+    new THREE.Vector2(0.0062, -0.0035),
+    new THREE.Vector2(0.0065, 0.0026),
     new THREE.Vector2(0.0050, 0.0035),
     new THREE.Vector2(0.0001, 0.0035),
   ], seg);
   parts.push(paint(hub, bodyHex));
   /* The M5 lock nut: a hex, faceted, with its nylon dome. */
-  parts.push(paint(bake(new THREE.CylinderGeometry(0.0040, 0.0040, 0.0034, 6), 0, 0.0052, 0), C.steel, true));
-  parts.push(paint(bake(new THREE.CylinderGeometry(0.0024, 0.0033, 0.0013, lite ? 6 : 10), 0, 0.00755, 0), C.bell));
+  parts.push(paint(bake(cyl(0.0040, 0.0040, 0.0034, 6, 'top'), 0, 0.0052, 0), C.steel, true));
+  parts.push(paint(bake(cyl(0.0024, 0.0033, 0.0013, lite ? 6 : 8, 'top'), 0, 0.00755, 0), C.steel));
   const geo = mergeGeometries(parts, false);
   for (const p of parts) {
     p.dispose();
@@ -554,8 +584,15 @@ export function buildHeroCraft(opts = {}) {
   const inkOn = !lite;
   const shade = !lite;
   const detail = !lite;
-  const seg = lite ? 10 : 18;
-  const curve = lite ? 3 : 6;
+  /* Segments round a big round part (a bell, the barrel) and round a small
+   * one (a screw head, a grommet), and how finely a flat part's corners are
+   * cut. These three numbers are most of the triangle budget. */
+  const seg = lite ? 10 : 16;
+  const segSmall = lite ? 6 : 8;
+  const curve = lite ? 2 : 3;
+  /* Chamfers, which are what catch the rim light on a cut edge, and which
+   * a 400 pixel preview cannot show; lite draws its edges square. */
+  const bev = (b) => (lite ? 0 : b);
   const cel = (o) => celMaterial({ fog, cloudShadow: 0, ...o });
   /* A finish: a white cel material that takes its colour from the vertices
    * of whatever is merged into it. vertexColors is set after construction
@@ -571,7 +608,6 @@ export function buildHeroCraft(opts = {}) {
   if (opts.worldScale) {
     group.scale.setScalar(1 / WORLD_SCALE);
   }
-  const ink = (mesh, width, color = C.ink) => (inkOn ? inkShell(mesh, width, color, fog) : mesh);
 
   /*
    * Four finishes for everything that does not move, and what each is for.
@@ -600,9 +636,23 @@ export function buildHeroCraft(opts = {}) {
   const antenna = cel({ color: 0x1a241c, rim: 0.22 });
   const antennaTip = cel({ color: C.mint, rim: 0.20, spec: 0.4 });
 
+  /*
+   * `how` is a few words: 'flat' shades the part as facets (a hex nut, a
+   * knurled ring), 'ink' puts it in the finish's ink shell. Only the parts
+   * that make the silhouette are inked: the plates and arms, the motors,
+   * the pack and its strap, the cage, the plug and the capacitor. A screw
+   * or a wire on a dark plate needs no line of its own, and every inked
+   * triangle is drawn twice more, once in the shell and once again in the
+   * ink prepass.
+   */
   const parts = { body: [], metal: [], tpu: [], vinyl: [] };
-  const add = (finishName, geo, hex, flat) => {
-    parts[finishName].push(paint(geo, hex, flat));
+  const inked = { body: [], metal: [], tpu: [], vinyl: [] };
+  const add = (finishName, geo, hex, how = '') => {
+    const g = paint(geo, hex, how.includes('flat'));
+    parts[finishName].push(g);
+    if (inkOn && how.includes('ink')) {
+      inked[finishName].push(g);
+    }
   };
 
   const a = MOTOR_ARM;
@@ -637,29 +687,33 @@ export function buildHeroCraft(opts = {}) {
    */
   {
     const bottom = roundRect(new THREE.Shape(), -0.0170, -0.056, 0.0170, 0.094, 0.006);
-    add('body', slab(bottom, PLATE_Y0, PLATE_Y1, 0.0005, curve), C.carbon);
+    add('body', slab(bottom, PLATE_Y0, PLATE_Y1, bev(0.0005), curve), C.carbon, 'ink');
 
-    const arm = slab(armShape(), PLATE_Y1, ARM_Y1, lite ? 0.0005 : 0.0007, curve + 2);
+    /* The pad round the motor is the arm's one curve a chase camera sees
+     * whole, so it is cut finer than the plates' corners. */
+    const arm = slab(armShape(), PLATE_Y1, ARM_Y1, bev(0.0007), lite ? 4 : 6);
     for (const [mx, mz] of motors) {
       const psi = Math.atan2(-mx, -mz);
-      add('body', bake(arm, 0, 0, 0, 0, psi, 0), C.carbon);
+      add('body', bake(arm, 0, 0, 0, 0, psi, 0), C.carbon, 'ink');
     }
     arm.dispose();
 
-    /* The top plate, with the window the flight controller shows through
-     * and two lightening slots, which is what stops it reading as a lid. */
+    /* The top plate, with the window the flight controller shows through,
+     * which is what stops it reading as a lid. It had two lightening slots
+     * as well, and they cost more triangles than the rest of the plate:
+     * a dark slot over a dark stack, they did not show in any picture. */
     const top = roundRect(new THREE.Shape(), -0.0175, -0.056, 0.0175, 0.066, 0.006);
     top.holes.push(roundRect(new THREE.Path(), -0.0085, -0.014, 0.0085, 0.012, 0.003));
-    top.holes.push(slotPath(-0.0105, 0.024, 0.046, 0.0034));
-    top.holes.push(slotPath(0.0105, 0.024, 0.046, 0.0034));
-    add('body', slab(top, TOP_Y0, TOP_Y1, 0.0006, curve), C.carbon);
+    add('body', slab(top, TOP_Y0, TOP_Y1, bev(0.0006), 2), C.carbon, 'ink');
 
-    /* Anodised standoffs, hex, and the button heads on the top plate. */
-    const post = new THREE.CylinderGeometry(0.0025, 0.0025, TOP_Y0 - PLATE_Y1, 6);
-    const head = new THREE.CylinderGeometry(0.0029, 0.0030, 0.0012, lite ? 8 : 12);
+    /* Anodised standoffs, hex, and the button heads on the top plate. A
+     * standoff's ends are under a plate at both ends, and a head's
+     * underside is on the plate. */
+    const post = cyl(0.0025, 0.0025, TOP_Y0 - PLATE_Y1, 6, 'none');
+    const head = cyl(0.0029, 0.0030, 0.0012, segSmall, 'top');
     for (const sz of [-0.059, 0.049]) {
       for (const sx of [-0.013, 0.013]) {
-        add('metal', bake(post, sx, (PLATE_Y1 + TOP_Y0) / 2, sz), C.sakura, true);
+        add('metal', bake(post, sx, (PLATE_Y1 + TOP_Y0) / 2, sz), C.sakura, 'flat');
         add('metal', bake(head, sx, TOP_Y1 + 0.0006, sz), C.steel);
       }
     }
@@ -679,7 +733,7 @@ export function buildHeroCraft(opts = {}) {
     chev.closePath();
     add('vinyl', slab(chev, TOP_Y1 - 0.0001, TOP_Y1 + 0.0003, 0, 1), C.livery);
     const stripe = roundRect(new THREE.Shape(), -0.0025, -0.040, 0.0025, -0.020, 0.0008);
-    add('vinyl', slab(stripe, TOP_Y1 - 0.0001, TOP_Y1 + 0.0003, 0, 2), C.livery);
+    add('vinyl', slab(stripe, TOP_Y1 - 0.0001, TOP_Y1 + 0.0003, 0, 1), C.livery);
   }
 
   /*
@@ -692,12 +746,15 @@ export function buildHeroCraft(opts = {}) {
    */
   const windingGeo = (() => {
     if (lite) {
-      const g = new THREE.CylinderGeometry(0.0118, 0.0118, BELL_Y1 - BASE_Y1, 10);
+      const g = cyl(0.0118, 0.0118, BELL_Y1 - BASE_Y1, 8, 'top');
       g.translate(0, (BELL_Y1 - BASE_Y1) / 2, 0);
       return g;
     }
     /* Twelve teeth, each a wound pole, which is what a stator looks like
-     * through the holes. */
+     * through the windows. Only its top is drawn as a star: from the side
+     * the windings show through a 2 mm gap under the bell, where a round
+     * copper band and a toothed one are the same picture. */
+    const h = BELL_Y1 - BASE_Y1;
     const s = new THREE.Shape();
     const teeth = 12;
     for (let k = 0; k < teeth * 2; k += 1) {
@@ -712,49 +769,91 @@ export function buildHeroCraft(opts = {}) {
       }
     }
     s.closePath();
-    const g = new THREE.ExtrudeGeometry(s, { depth: BELL_Y1 - BASE_Y1, bevelEnabled: false });
-    g.rotateX(-Math.PI / 2);
+    const star = new THREE.ShapeGeometry(s, 1);
+    star.rotateX(-Math.PI / 2);
+    star.translate(0, h, 0);
+    const side = cyl(0.0116, 0.0116, h, 12, 'none');
+    side.translate(0, h / 2, 0);
+    for (const p of [star, side]) {
+      p.deleteAttribute('uv');
+    }
+    const g = mergeGeometries([star.toNonIndexed(), side.toNonIndexed()], false);
+    star.dispose();
+    side.dispose();
     return g;
   })();
   const windings = [];
   {
-    const base = new THREE.CylinderGeometry(0.0134, 0.0138, BASE_Y1 - ARM_Y1, seg);
-    /* Bottom to top, so the lathe faces outward: the skin, then the band. */
+    /* The base stands on the arm's pad and the bell hangs over its top. */
+    const base = cyl(0.0134, 0.0138, BASE_Y1 - ARM_Y1, seg, 'top');
+    /* Bottom to top, so the lathe faces outward: the silver skin, then the
+     * sakura band, which rolls over the shoulder to the rim of the top. */
     const skin = new THREE.LatheGeometry([
-      new THREE.Vector2(0.0128, BELL_Y0),
-      new THREE.Vector2(0.0138, BELL_Y0),
-      new THREE.Vector2(0.0140, BELL_Y0 + 0.0010),
+      new THREE.Vector2(0.0131, BELL_Y0),
+      new THREE.Vector2(0.0140, BELL_Y0 + 0.0009),
       new THREE.Vector2(0.0140, RING_Y0),
     ], seg);
     const band = new THREE.LatheGeometry([
       new THREE.Vector2(0.0140, RING_Y0),
-      new THREE.Vector2(0.0140, BELL_Y1 - 0.0009),
-      new THREE.Vector2(0.0134, BELL_Y1),
-      new THREE.Vector2(0.0128, BELL_Y1),
+      new THREE.Vector2(0.0140, BELL_Y1 - 0.0006),
+      new THREE.Vector2(0.0132, BELL_Y1 + 0.0003),
+      new THREE.Vector2(0.0127, CAP_Y1),
     ], seg);
-    /* The bell's top, with five round cooling holes. */
+    /*
+     * The bell's top: five windows between five spokes, the way a 2306's
+     * bell is cut, with the windings showing copper through them. It is
+     * one flat face rather than a plate: a plate with five round holes in
+     * it was six hundred triangles a motor, and the walls of a hole 1.2 mm
+     * deep are not a thing a chase camera can see. The rim of the face is
+     * the band's last ring exactly, `seg` points on the same circle, so
+     * there is no seam: a lathe puts its first point at a quarter turn from
+     * where a shape's circle starts once the shape is laid flat, so the
+     * circle starts a quarter turn early. The hub of the prop covers the
+     * middle.
+     */
     const capShape = new THREE.Shape();
-    capShape.absarc(0, 0, 0.0129, 0, Math.PI * 2, false);
+    capShape.absarc(0, 0, 0.0127, -Math.PI / 2, Math.PI * 1.5, false);
     for (let k = 0; k < 5; k += 1) {
-      const ang = (k / 5) * Math.PI * 2 + 0.3;
-      const hole = new THREE.Path();
-      hole.absarc(Math.cos(ang) * 0.0094, Math.sin(ang) * 0.0094, 0.0024, 0, Math.PI * 2, true);
-      capShape.holes.push(hole);
+      const mid = (k / 5) * Math.PI * 2 + Math.PI / 10;
+      const win = new THREE.Path();
+      const r0 = 0.0069;
+      const r1 = 0.0109;
+      const outer = [-0.42, 0, 0.42];
+      const inner = [0.30, -0.30];
+      outer.forEach((d, i) => {
+        const x = Math.cos(mid + d) * r1;
+        const y = Math.sin(mid + d) * r1;
+        if (i === 0) {
+          win.moveTo(x, y);
+        } else {
+          win.lineTo(x, y);
+        }
+      });
+      for (const d of inner) {
+        win.lineTo(Math.cos(mid + d) * r0, Math.sin(mid + d) * r0);
+      }
+      win.closePath();
+      capShape.holes.push(win);
     }
-    const cap = slab(capShape, BELL_Y1 - 0.0005, CAP_Y1, 0.0003, lite ? 4 : 6);
+    const cap = new THREE.ShapeGeometry(capShape, seg / 2);
+    cap.rotateX(-Math.PI / 2);
+    cap.translate(0, CAP_Y1, 0);
     /* The four motor screws under the pad, the 16 mm pattern, for the
-     * shots from below. */
-    const screw = new THREE.CylinderGeometry(0.0027, 0.0027, 0.0014, 6);
+     * shots from below: a hexagon each, face down, a millimetre under the
+     * arm. They are only ever seen from underneath, where a head is its
+     * face, and a prism each was three times the triangles. */
+    const screw = new THREE.CircleGeometry(0.0027, 6);
+    screw.rotateX(Math.PI / 2);
     for (const [mx, mz] of motors) {
       add('body', bake(base, mx, (ARM_Y1 + BASE_Y1) / 2, mz), C.motorBase);
-      add('metal', bake(skin, mx, 0, mz), C.bell);
-      add('metal', bake(band, mx, 0, mz), C.sakura);
+      add('metal', bake(skin, mx, 0, mz), C.bell, 'ink');
+      add('metal', bake(band, mx, 0, mz), C.sakura, 'ink');
       add('metal', bake(cap, mx, 0, mz), C.sakura);
       windings.push(bake(windingGeo, mx, BASE_Y1, mz));
       if (detail) {
         for (let k = 0; k < 4; k += 1) {
           const ang = Math.PI / 4 + (k * Math.PI) / 2;
-          add('metal', bake(screw, mx + Math.cos(ang) * 0.0113, PLATE_Y1 - 0.0007, mz + Math.sin(ang) * 0.0113), C.darkSteel, true);
+          add('metal', bake(screw, mx + Math.cos(ang) * 0.0113, PLATE_Y1 - 0.0010, mz + Math.sin(ang) * 0.0113), C.darkSteel);
         }
       }
     }
@@ -801,14 +900,28 @@ export function buildHeroCraft(opts = {}) {
             STACK_Z + Math.sign(mz) * 0.0150 - off * 0.5,
           ),
         ];
-        const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 7, 0.0008, 5, false);
+        const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 5, 0.0008, 4, false);
         add('body', tube, C.wire);
       }
-      for (const u of [0.0590, 0.0840]) {
+      /* One cream zip tie round arm and leads, with its lock on the outer
+       * edge: a square section, because a tie is a flat band. */
+      for (const u of [0.0590]) {
         const hw = armHalfWidth(u) + 0.0003;
+        const y0 = PLATE_Y1 - 0.0006;
+        const y1 = ARM_Y1 + 0.0022;
         const tie = new THREE.Shape();
-        roundRect(tie, -hw - 0.0006, PLATE_Y1 - 0.0006, hw + 0.0006, ARM_Y1 + 0.0022, 0.0006);
-        tie.holes.push(roundRect(new THREE.Path(), -hw, PLATE_Y1, hw, ARM_Y1 + 0.0016, 0.0003));
+        tie.moveTo(-hw - 0.0006, y0);
+        tie.lineTo(hw + 0.0006, y0);
+        tie.lineTo(hw + 0.0006, y1);
+        tie.lineTo(-hw - 0.0006, y1);
+        tie.closePath();
+        const gap = new THREE.Path();
+        gap.moveTo(-hw, PLATE_Y1);
+        gap.lineTo(-hw, ARM_Y1 + 0.0016);
+        gap.lineTo(hw, ARM_Y1 + 0.0016);
+        gap.lineTo(hw, PLATE_Y1);
+        gap.closePath();
+        tie.holes.push(gap);
         const g = new THREE.ExtrudeGeometry(tie, { depth: 0.0024, bevelEnabled: false, curveSegments: 1 });
         g.translate(0, 0, -u - 0.0012);
         g.rotateY(psi);
@@ -843,15 +956,17 @@ export function buildHeroCraft(opts = {}) {
     add('body', bake(board, 0, 0.0078, STACK_Z), C.pcb);
     add('body', bake(board, 0, 0.0148, STACK_Z), C.pcbDeep);
     board.dispose();
-    const grommet = new THREE.CylinderGeometry(0.0026, 0.0026, 0.0054, lite ? 6 : 10);
-    const lower = new THREE.CylinderGeometry(0.0024, 0.0026, 0.0090, lite ? 6 : 10);
-    const nut = new THREE.CylinderGeometry(0.0028, 0.0028, 0.0018, 6);
+    /* Each grommet is pinched between two boards or a board and the plate,
+     * so neither of its ends can be seen. */
+    const grommet = cyl(0.0026, 0.0026, 0.0054, segSmall, 'none');
+    const lower = cyl(0.0024, 0.0026, 0.0090, segSmall, 'none');
+    const nut = cyl(0.0028, 0.0028, 0.0018, 6, 'top');
     for (const sx of [-0.01525, 0.01525]) {
       for (const sz of [-0.01525, 0.01525]) {
         add('tpu', bake(grommet, sx, 0.0113, STACK_Z + sz), C.sakuraDeep);
         add('tpu', bake(lower, sx, 0.0025, STACK_Z + sz), C.sakuraDeep);
         if (detail) {
-          add('vinyl', bake(nut, sx, 0.0165, STACK_Z + sz), C.livery, true);
+          add('vinyl', bake(nut, sx, 0.0165, STACK_Z + sz), C.livery, 'flat');
         }
       }
     }
@@ -897,16 +1012,18 @@ export function buildHeroCraft(opts = {}) {
         new THREE.Vector3(dx, -0.0130, 0.0800),
         new THREE.Vector3(dx, -0.0140, 0.0760),
       ]);
-      add('body', new THREE.TubeGeometry(lead, lite ? 8 : 14, 0.0016, lite ? 5 : 7, false), hex);
+      add('body', new THREE.TubeGeometry(lead, lite ? 6 : 9, 0.0016, lite ? 4 : 5, false), hex);
     }
     const plug = roundRect(new THREE.Shape(), -0.0140, -0.0760, 0.0020, -0.0500, 0.0014);
-    add('body', slab(plug, -0.0180, -0.0100, 0.0008, 2), C.xt60);
-    const capBody = new THREE.CylinderGeometry(0.0050, 0.0050, 0.0190, lite ? 8 : 14);
-    add('body', bake(capBody, 0.0052, 0.0032, 0.0510, Math.PI / 2, 0, 0), C.capacitor);
+    add('body', slab(plug, -0.0180, -0.0100, bev(0.0008), 2), C.xt60, 'ink');
+    /* Lying along z, so the cylinder's top is its back end, which wears
+     * the steel end disc. */
+    const capBody = cyl(0.0050, 0.0050, 0.0190, lite ? 8 : 12, 'bottom');
+    add('body', bake(capBody, 0.0052, 0.0032, 0.0510, Math.PI / 2, 0, 0), C.capacitor, 'ink');
     capBody.dispose();
-    add('metal', bake(new THREE.CylinderGeometry(0.0046, 0.0046, 0.0008, lite ? 8 : 14), 0.0052, 0.0032, 0.0608, Math.PI / 2, 0, 0), C.steel);
+    add('metal', bake(cyl(0.0046, 0.0046, 0.0008, lite ? 8 : 12, 'top'), 0.0052, 0.0032, 0.0608, Math.PI / 2, 0, 0), C.steel);
     if (detail) {
-      add('vinyl', bake(new THREE.CylinderGeometry(0.00515, 0.00515, 0.0040, 14, 1, true), 0.0052, 0.0032, 0.0470, Math.PI / 2, 0, 0), C.livery);
+      add('vinyl', bake(cyl(0.00515, 0.00515, 0.0040, 12, 'none'), 0.0052, 0.0032, 0.0470, Math.PI / 2, 0, 0), C.livery);
     }
   }
 
@@ -919,9 +1036,11 @@ export function buildHeroCraft(opts = {}) {
    */
   {
     const packShape = roundRect(new THREE.Shape(), -0.0175, -0.048, 0.0175, 0.026, 0.004);
-    add('body', slab(packShape, PACK_Y0, PACK_Y1, 0.0028, curve, lite ? 1 : 2), C.pack);
+    add('body', slab(packShape, PACK_Y0, PACK_Y1, 0.0028, curve, lite ? 1 : 2), C.pack, 'ink');
+    /* A millimetre and a half of rubber between pack and plate: its edge is
+     * all that shows, so it is square. */
     const gripShape = roundRect(new THREE.Shape(), -0.0165, -0.045, 0.0165, 0.023, 0.003);
-    add('body', slab(gripShape, PACK_Y1, PLATE_Y0, 0.0003, curve), C.grip);
+    add('body', slab(gripShape, PACK_Y1, PLATE_Y0, 0, 2), C.grip);
     for (const sx of [-1, 1]) {
       const label = new THREE.BoxGeometry(0.0004, 0.0140, 0.0240);
       add('vinyl', bake(label, sx * 0.01765, -0.0175, -0.0100), C.livery);
@@ -956,16 +1075,16 @@ export function buildHeroCraft(opts = {}) {
     u.absarc(-xi + ri, yb + ri, ri, -Math.PI / 2, -Math.PI, true);
     u.lineTo(-xi, yTop);
     u.closePath();
-    const strapGeo = new THREE.ExtrudeGeometry(u, { depth: 0.0180, bevelEnabled: false, curveSegments: lite ? 2 : 4 });
+    const strapGeo = new THREE.ExtrudeGeometry(u, { depth: 0.0180, bevelEnabled: false, curveSegments: lite ? 1 : 2 });
     strapGeo.translate(0, 0, 0.0060);
-    add('body', strapGeo, C.strap);
+    add('body', strapGeo, C.strap, 'ink');
     if (yb - t !== STRAP_FLOOR && Math.abs(yb - t - STRAP_FLOOR) > 1e-9) {
       throw new Error('herocraft: the strap is not the floor the plant parks on');
     }
     /* The buckle on the right side, and the strap's tail through it. */
     const buckle = roundRect(new THREE.Shape(), -0.0110, -0.0240, 0.0110, -0.0110, 0.0015);
     buckle.holes.push(roundRect(new THREE.Path(), -0.0080, -0.0205, 0.0080, -0.0180, 0.0008));
-    const bg = new THREE.ExtrudeGeometry(buckle, { depth: 0.0011, bevelEnabled: false, curveSegments: 2 });
+    const bg = new THREE.ExtrudeGeometry(buckle, { depth: 0.0011, bevelEnabled: false, curveSegments: 1 });
     bg.rotateY(Math.PI / 2);
     bg.translate(xo, 0, 0.0150);
     add('metal', bg, C.steel);
@@ -977,46 +1096,60 @@ export function buildHeroCraft(opts = {}) {
   }
 
   /*
-   * THE CAMERA CAGE, printed TPU, sakura: two cheeks the camera pivots
-   * between, a chin bar under the lens and a bridge over the front of the
-   * top plate. It is the nose of the aircraft from every angle a pilot sees
+   * THE CAMERA CAGE, printed TPU, sakura: two side plates the camera
+   * pivots between, standing on the nose of the bottom plate, and a chin
+   * bar across their feet in front of the lens. Each plate is a tombstone
+   * round the pivot with a lightening hole under it, which is the shape
+   * a printed mount has and what lets the camera's own dark body show from
+   * the side. It is the nose of the aircraft from every angle a pilot sees
    * it from, which is the job the dome used to do, done by the part a real
-   * five inch puts there.
+   * five inch puts there. A first cut was a closed box, two solid cheeks
+   * joined by a bridge over the camera, and from the chase camera that was
+   * a pink brick with a lens in it.
    */
   {
+    const fwd = CAMERA_MOUNT_FORWARD;
+    const up = CAMERA_MOUNT_UP;
+    const r = 0.0105;
     const cheek = new THREE.Shape();
-    cheek.moveTo(0.0640, PLATE_Y1);
-    cheek.lineTo(0.0905, PLATE_Y1);
-    cheek.quadraticCurveTo(0.0950, PLATE_Y1, 0.0950, PLATE_Y1 + 0.0045);
-    cheek.lineTo(0.0950, 0.0130);
-    cheek.quadraticCurveTo(0.0950, 0.0285, 0.0820, 0.0290);
-    cheek.lineTo(0.0680, 0.0290);
-    cheek.quadraticCurveTo(0.0640, 0.0290, 0.0640, 0.0250);
-    cheek.closePath();
+    cheek.moveTo(fwd - r, PLATE_Y1);
+    cheek.lineTo(fwd + r - 0.0020, PLATE_Y1);
+    cheek.lineTo(fwd + r, PLATE_Y1 + 0.0020);
+    cheek.lineTo(fwd + r, up);
+    cheek.absarc(fwd, up, r, 0, Math.PI, false);
+    cheek.lineTo(fwd - r, PLATE_Y1);
+    const hole = new THREE.Path();
+    hole.absarc(fwd, 0.0058, 0.0032, 0, Math.PI * 2, true);
+    cheek.holes.push(hole);
+    /* Lite has no chamfer, so its plate is extruded the full 2.2 mm and
+     * moved to where the chamfered one starts, the same slab either way. */
     const cg = new THREE.ExtrudeGeometry(cheek, {
-      depth: 0.0012,
-      bevelEnabled: true,
+      depth: lite ? 0.0022 : 0.0012,
+      bevelEnabled: !lite,
       bevelThickness: 0.0005,
       bevelSize: 0.0005,
       bevelOffset: -0.0005,
       bevelSegments: 1,
       curveSegments: curve,
     });
+    if (lite) {
+      cg.translate(0, 0, -0.0005);
+    }
     /* Shape x is "how far forward", so turned a quarter about y the shape's
      * x lands on -z and the extrusion on +x. */
     cg.rotateY(Math.PI / 2);
     for (const sx of [-1, 1]) {
-      add('tpu', bake(cg, sx > 0 ? 0.0105 : -0.0117, 0, 0), C.sakura);
-      /* The pivot screw, where the camera turns. */
-      const screw = new THREE.CylinderGeometry(0.0021, 0.0021, 0.0010, lite ? 6 : 10);
-      add('metal', bake(screw, sx * 0.0127, CAMERA_MOUNT_UP, -CAMERA_MOUNT_FORWARD, 0, 0, Math.PI / 2), C.steel);
+      add('tpu', bake(cg, sx > 0 ? 0.0105 : -0.0117, 0, 0), C.sakura, 'ink');
+      /* The pivot screw, where the camera turns: its head shows on the
+       * outside of the plate, so that is the end it keeps. Turned a quarter
+       * about z the cylinder's top points along -x, its bottom along +x. */
+      const screw = cyl(0.0021, 0.0021, 0.0010, segSmall, sx > 0 ? 'bottom' : 'top');
+      add('metal', bake(screw, sx * 0.0127, up, -fwd, 0, 0, Math.PI / 2), C.steel);
       screw.dispose();
     }
     cg.dispose();
-    const chin = roundRect(new THREE.Shape(), -0.0127, 0.0900, 0.0127, 0.0950, 0.0015);
-    add('tpu', slab(chin, PLATE_Y1, 0.0042, 0.0006, curve), C.sakura);
-    const bridge = roundRect(new THREE.Shape(), -0.0127, 0.0640, 0.0127, 0.0700, 0.0018);
-    add('tpu', slab(bridge, TOP_Y1, 0.0290, 0.0007, curve), C.sakura);
+    const chin = roundRect(new THREE.Shape(), -0.0122, fwd + r - 0.0045, 0.0122, fwd + r - 0.0005, 0.0012);
+    add('tpu', slab(chin, PLATE_Y1, 0.0040, bev(0.0005), 2), C.sakura, 'ink');
   }
 
   /*
@@ -1028,8 +1161,8 @@ export function buildHeroCraft(opts = {}) {
   const mastFoot = new THREE.Vector3(0, 0.0300, 0.0490);
   {
     const block = roundRect(new THREE.Shape(), -0.0060, -0.0560, 0.0060, -0.0420, 0.0020);
-    add('tpu', slab(block, TOP_Y1, 0.0290, 0.0008, curve), C.sakura);
-    const boss = new THREE.CylinderGeometry(0.0030, 0.0035, 0.0070, lite ? 8 : 12);
+    add('tpu', slab(block, TOP_Y1, 0.0290, bev(0.0008), 2), C.sakura, 'ink');
+    const boss = cyl(0.0030, 0.0035, 0.0070, segSmall, 'top');
     boss.translate(0, 0.0035, 0);
     boss.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), mastDir));
     boss.translate(mastFoot.x, mastFoot.y - 0.0035, mastFoot.z);
@@ -1037,12 +1170,12 @@ export function buildHeroCraft(opts = {}) {
   }
 
   /*
-   * Merge each finish into one mesh. Ink shells go on the four that carry
-   * the silhouette; the vinyl lies flat on other parts and does not need
-   * its own line.
+   * Merge each finish into one mesh, and grow its ink shell from the parts
+   * marked 'ink' in it. The vinyl lies flat on other parts and has none.
    */
-  const merged = (name, mat, castShadow) => {
+  const merged = (name, mat, castShadow, width, color = C.ink) => {
     const geo = mergeGeometries(parts[name], false);
+    const line = inked[name].length ? mergeGeometries(inked[name], false) : null;
     for (const p of parts[name]) {
       p.dispose();
     }
@@ -1052,12 +1185,16 @@ export function buildHeroCraft(opts = {}) {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = castShadow && shade;
     group.add(mesh);
+    if (line) {
+      inkShell(mesh, width, color, fog, line);
+      line.dispose();
+    }
     return mesh;
   };
-  ink(merged('body', bodyMat, true), 0.0008);
-  ink(merged('metal', metalMat, true), 0.0006);
-  ink(merged('tpu', tpuMat, true), 0.0007, C.inkWarm);
-  merged('vinyl', vinylMat, false);
+  merged('body', bodyMat, true, 0.0008);
+  merged('metal', metalMat, true, 0.0006);
+  merged('tpu', tpuMat, true, 0.0007, C.inkWarm);
+  merged('vinyl', vinylMat, false, 0);
 
   /*
    * THE CAMERA, on the mount the shell tilts by the pilot's camera angle.
@@ -1070,28 +1207,39 @@ export function buildHeroCraft(opts = {}) {
   cameraMount.position.set(0, CAMERA_MOUNT_UP, -CAMERA_MOUNT_FORWARD);
   group.add(cameraMount);
   {
-    const cam = [];
+    /* The body, the barrel and the bezel make the outline; the knurled
+     * ring sits on the barrel and is drawn inside that line. The barrel's
+     * back is inside the body and its front behind the bezel, and the knurl
+     * is a ring on it, so none of the three has an end that shows. */
     const bodyShape = roundRect(new THREE.Shape(), -0.0095, -0.0080, 0.0095, 0.0080, 0.0022);
-    cam.push(paint(slab(bodyShape, -0.0095, 0.0095, 0.0012, curve), C.camBody));
-    const barrel = new THREE.CylinderGeometry(0.0068, 0.0072, 0.0145, seg);
-    cam.push(paint(bake(barrel, 0, 0, -0.01525, Math.PI / 2, 0, 0), C.camBody));
-    barrel.dispose();
-    const knurl = new THREE.CylinderGeometry(0.0077, 0.0077, 0.0032, lite ? 10 : 16);
-    cam.push(paint(bake(knurl, 0, 0, -0.0150, Math.PI / 2, 0, 0), C.camRing, true));
-    knurl.dispose();
-    const bezel = new THREE.TorusGeometry(0.0062, 0.0011, lite ? 5 : 7, seg);
-    cam.push(paint(bake(bezel, 0, 0, -0.0228), C.bezel));
-    bezel.dispose();
-    const geo = mergeGeometries(cam, false);
-    for (const p of cam) {
-      p.dispose();
-    }
+    const camBody = paint(slab(bodyShape, -0.0095, 0.0095, bev(0.0012), 2), C.camBody);
+    const barrel = paint(bake(cyl(0.0068, 0.0072, 0.0145, lite ? 10 : 14, 'none'), 0, 0, -0.01525, Math.PI / 2, 0, 0), C.camBody);
+    const knurl = paint(bake(cyl(0.0077, 0.0077, 0.0032, lite ? 10 : 14, 'none'), 0, 0, -0.0150, Math.PI / 2, 0, 0), C.camRing, true);
+    /* The bezel, a lathe turned to face forward: its back face, its rim,
+     * and the lip the glass sits in. */
+    const bezelGeo = new THREE.LatheGeometry([
+      new THREE.Vector2(0.0060, -0.0011),
+      new THREE.Vector2(0.0074, -0.0009),
+      new THREE.Vector2(0.0073, 0.0006),
+      new THREE.Vector2(0.0062, 0.0011),
+    ], lite ? 10 : 14);
+    bezelGeo.rotateX(-Math.PI / 2);
+    bezelGeo.translate(0, 0, -0.0228);
+    const bezel = paint(bezelGeo, C.bezel);
+    const geo = mergeGeometries([camBody, barrel, knurl, bezel], false);
     const housing = new THREE.Mesh(geo, camMat);
     housing.castShadow = shade;
-    ink(housing, 0.0005);
+    if (inkOn) {
+      const line = mergeGeometries([camBody, barrel, bezel], false);
+      inkShell(housing, 0.0005, C.ink, fog, line);
+      line.dispose();
+    }
+    for (const p of [camBody, barrel, knurl, bezel]) {
+      p.dispose();
+    }
     cameraMount.add(housing);
     /* The glass: a shallow dome whose crown is the lens point. */
-    const dome = new THREE.SphereGeometry(0.0090, seg, lite ? 3 : 4, 0, Math.PI * 2, 0, 0.70);
+    const dome = new THREE.SphereGeometry(0.0090, lite ? 10 : 14, lite ? 2 : 3, 0, Math.PI * 2, 0, 0.70);
     dome.rotateX(-Math.PI / 2);
     dome.translate(0, 0, -0.0242 + 0.0090);
     const glass = new THREE.Mesh(dome, lens);
@@ -1129,9 +1277,10 @@ export function buildHeroCraft(opts = {}) {
     }
     mast.name = 'antenna';
     group.add(mast);
-    /* The cap: a stubby circular polarised antenna's housing, mint. */
-    const capGeo = new THREE.CylinderGeometry(0.0032, 0.0028, 0.0072, lite ? 8 : 12);
-    const top = new THREE.SphereGeometry(0.0032, lite ? 8 : 12, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    /* The cap: a stubby circular polarised antenna's housing, mint. Its
+     * top end is under the dome. */
+    const capGeo = cyl(0.0032, 0.0028, 0.0072, lite ? 6 : 8, 'bottom');
+    const top = new THREE.SphereGeometry(0.0032, lite ? 6 : 8, lite ? 2 : 3, 0, Math.PI * 2, 0, Math.PI / 2);
     top.translate(0, 0.0036, 0);
     capGeo.deleteAttribute('uv');
     top.deleteAttribute('uv');
