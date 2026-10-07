@@ -217,6 +217,16 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
   vec2 q = wn.y > max( wn.x, wn.z ) ? p.xz : ( wn.x > wn.z ? p.zy : p.xy );
   float dist = length( viewPos );
   float fade = 1.0 - smoothstep( uComicFadeNear, uComicFadeFar, dist );
+  /*
+   * How square on the surface is to the eye. Strokes laid in the world on
+   * a wall or a road seen nearly edge on are foreshortened into lines
+   * running to the vanishing point, packed tight, and the crossing set
+   * then reads as a net stretched over the street (pass 11, the town's
+   * alleys). An artist does not hatch a plane seen edge on, so the
+   * strokes thin out below about twenty degrees of facing.
+   */
+  float facing = abs( dot( normalize( nView ), normalize( viewPos ) ) );
+  float square = smoothstep( 0.12, 0.38, facing );
 
   if ( uComicGrit > 0.0 ) {
     /* Paint grit: two octaves of mottle in the base colour, the hand
@@ -270,7 +280,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
       /* The crossing set only in deep shadow: a cast shadow, not the dark
        * side of the ramp, or every shaded face reads as a net. */
       float h2 = comicSet( xb, xa, fwb, -wob, wt, uComicPeriod ) * ( 1.0 - smoothstep( 0.12, 0.24, lit ) );
-      float cov = max( h1, h2 ) * fade * uComicHatch;
+      float cov = max( h1, h2 ) * fade * square * uComicHatch;
       col = mix( col, col * 0.18 + uComicInk * 0.5, cov * uComicDepth );
     }
     /*
@@ -288,7 +298,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     float wall = 1.0 - step( max( wn.x, wn.z ), wn.y );
     if ( uComicBrush > 0.0 && fade * wall > 0.0 ) {
       float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
-      col *= 1.0 - bm * 0.11 * fade * uComicBrush * ( 1.0 - shade );
+      col *= 1.0 - bm * 0.11 * fade * square * uComicBrush * ( 1.0 - shade );
     }
   }
   return col;

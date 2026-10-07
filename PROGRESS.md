@@ -67551,3 +67551,39 @@ draw calls identical in every one (560, 472, 856, 714, 693, 692, 620), frame tri
   kei truck as above, and the comment rewritten to say what is true.
 - The scratch harness was deleted before the last retake and had to be rebuilt from the session's record; its first
   rebuild had the cameras' first positions, not their last, which a pixel compare against the earlier pictures caught.
+
+## 2026-10-07: graphics toward Borderlands, pass 11, and the cars merged (branch claude/project-thread-edah8s)
+
+### Pass 11: hatching thins out on a surface seen edge on
+
+- Found in the town's alleys with the cars' shots: a wall or a road seen nearly edge on foreshortens the world space
+  strokes into lines running to the vanishing point, packed tight, and the crossing set then reads as a net stretched
+  over the street.
+- `comic.js` `comicShade`: hatch coverage and the walls' brush marks are multiplied by how square on the surface is to
+  the eye, `smoothstep(0.12, 0.38, |n . v|)`, so strokes thin out below about twenty degrees of facing. Tone, grit and
+  patches are untouched. Same uniforms, same program key, no new texture or pass.
+- Shots, town at High, the same two cameras with HEAD's `comic.js` swapped back in and with this one (scratch, not
+  committed): an alley wall seen edge on lost its rain of dashes, and a close wall's strokes clear before the vanishing
+  point instead of packing into a dark smear there. A car park camera is unchanged but for its grazing edges.
+
+### The cars' third pass, merged
+
+- Merged the cars entry above into this branch (merge commit, no conflicts) and shot the town's parked cars with the
+  ink on, six cameras, against the same cameras on main. The yard's cars are traffic, so a fixed camera catches a
+  different car on main than on the branch, and there is no yard pair. Pictures: project files,
+  `graphics-pass/round3/`. None committed.
+
+### Found, not fixed: a dotted line on a wall a hand's width away
+
+- A camera parked 0.2 m from an alley wall shows a dotted dark line along the wall near eye level. Main draws it too,
+  fainter; this branch's heavier pen makes it darker. A raycast from the camera hits one merged mesh across the whole
+  height, which neither proves nor rules out a seam in it. A drone that close to a wall is about to hit it, and it was
+  not looked for further out, so it is left alone and written down.
+
+### Run, in the same turn
+
+- `npm run lint:preload` up to date (boot 131 modules, city 76, built 34, 255 served). `npm run lint:quality` 71 of
+  71 clean. `node --check src/render/comic.js`.
+- `node scripts/shots.js` through a scratch camera script: the town's cars on this branch and on main, the alley A/B.
+- Not run: `npm run verify`, because this is render only (no physics, plant, ABI or build), and a headless GPU says
+  nothing about frame time.
