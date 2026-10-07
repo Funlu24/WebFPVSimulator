@@ -214,3 +214,40 @@ while a roll combined with the gyroscopic pitch coupling the props really do
 produce changes heading with body r near zero. Measuring heading would test
 the thing the check is named after. Both options are changes to `tests/`,
 which is not the simulator implementer's to edit.
+
+## 7. P4 post chain taps per pixel, ceiling 14, on the High preset. RECORDED FOR THE OWNER, NOT ACTED ON.
+
+Found on 2026-10-07 in graphics pass 19, while making the town's ink read a
+canopy blob's code. `src/render/budget.js` counted the taps of a pass by
+reading its fragment source, and it missed three things: `texelFetch`, any
+fetch reached through a function like macro, and the difference between an
+`#ifdef` block a material compiles and one it does not. The comic layer's
+occlusion (eight taps) and outer line (four) reach the depth through
+`COMIC_AO_DEPTH` and `COMIC_SIL_DEPTH`, both High only, so the ledger kept
+reporting the field's outline pass at 8 taps and P4 at 10 after both went in.
+Counted honestly, as the counter now does:
+
+| map, preset | outline or ink pass | P4 (passes at the canvas's size) | ceiling |
+|---|---|---|---|
+| field, High | 20 | **22** | 14 |
+| field, Medium | 8 | 9 | 14 |
+| town, High | 23, at 1.5 times the canvas | 9 | 14 |
+| town, Medium | 11, at 1.3 times the canvas | 1 | 14 |
+
+The derivation of 14 in `prompts/lowspec-aaa-loop.md` is the integrated
+floor's bandwidth: "The outline pass alone is 10, and it earns them; this
+leaves headroom for a grade and an antialiasing resolve and nothing else".
+The machine that derivation names is Medium's (`src/render/quality.js`: a
+2020 laptop iGPU), and Medium is at 9. High is sized for an RTX 3060, Intel
+Xe or M1, and its occlusion and outer line are the two things the owner's
+2026-10-07 ask for a Borderlands look most depends on after the ink itself.
+
+Two notes for whoever rules. P4 counts only passes at the canvas's own size,
+so the town's ink pass, which supersamples at 1.5 on a 1x screen and so
+costs more than a full resolution pass, is never in it. And the counts are
+static: the canopy code's five fetches run on canopy pixels with a crease
+strong enough to draw, one on other such pixels, none elsewhere.
+
+What a human should decide: whether the 14 binds High, or Medium only. If it
+binds High, the occlusion goes to four taps (noisier) and the field's outer
+line comes off, which brings the field's outline pass to 12 and P4 to 14.

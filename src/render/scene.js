@@ -4865,6 +4865,10 @@ function skyDome(q = null) {
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
+    /* The streak cloud's fwidth. WebGL 2 has derivatives built in and three
+     * ignores this there; on WebGL 1, which three falls back to and main
+     * draws on, it is what lets the dome compile at all. */
+    extensions: { derivatives: true },
     uniforms: {
       uHigh: { value: new THREE.Color(SKY_HIGH) },
       uHorizon: { value: new THREE.Color(HORIZON) },

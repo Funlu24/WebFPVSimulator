@@ -68248,3 +68248,61 @@ append conflict at the end of this file and nothing else in these files.
   and one before view the rig captured a frame early (it is the previous view's picture). The usual one refused board
   connection per run and nothing else.
 - Not run: `npm run verify`. Render only, a shader on the sky dome: no physics, plant, ABI or build change.
+
+### Pass 19, same day: the town's canopies ink as round blobs, and the budget counts every fetch
+
+- The town's cherry and grove canopies inked their facets: twenty faced blobs as cut gems in the distance, the eighty
+  faced ones near the eye (pass 15) as geodesic domes with a dot at every vertex, worst toward each blob's rim, where a
+  small turn between faces is a large change of depth. The town's ink reads creases from depth alone, and depth cannot
+  tell a facet from an edge. What it needed to know is whether both sides of a crease are the same blob.
+- So each round blob writes a code into the alpha of the town's half float scene target, which every opaque surface
+  sets to one and nothing downstream reads (the ink writes one over it): one of 128 values from 0.25 to 0.75, hashed
+  from where its instance stands, in a tail after three's last fragment chunk and only where the material is opaque
+  (`FRAG_TAIL` and `comicBlobCode` in `src/render/comic.js`). The ink pass reads the code at its centre and its four
+  taps with `texelFetch`, and a convex crease whose taps are all the centre's own blob is dropped
+  (`comicPipeline(pipeline, { blobs: true })`, the town's pipeline only). Outlines, the line between two blobs and the
+  line where a blob meets a branch or a wall are two codes and ink as before; a diff of the High shots before and after
+  changes only the facet lines.
+- `markCanopies` marks the cherry and grove sets (`comicBlob`) and not the cedars, bamboo or shrubs, which are faceted
+  on purpose. It now copies a material once per kind as well as once per original, so a shrub that shares a grove's
+  paint gets a copy without the mark.
+- Presets: High and Medium. Low draws no ink in the town (`q.city.ink`), so it is unchanged, which the Low shots show.
+- Cost: no draw call, no new program (a per material uniform and a flat varying on the shared toon program, and a hash
+  of the instance's origin per vertex). In the ink pass, one exact fetch on a pixel whose convex creases could draw at
+  all and four more on such a pixel that is a blob; the static count of the town's ink pass is 11 on Medium (was 6)
+  and 23 on High.
+- Now that nothing inside a near blob competes with its outline, the outline is visibly a polygon of sixteen or so
+  sides. Finer near blobs would round it, at roughly four times the near canopies' triangles: not done.
+- Found on the way, and fixed in the instrument: `src/render/budget.js` counted a pass's taps by reading its source and
+  missed `texelFetch`, missed every fetch reached through a function like macro, and counted `#ifdef` blocks whether
+  the material compiled them or not. It now counts all three properly (a small preprocessor driven by the material's
+  own defines; unit checked in Node on a sample with and without the define, 2 and 4 taps). The comic layer's
+  occlusion and outer line reach the depth through `COMIC_AO_DEPTH` and `COMIC_SIL_DEPTH`, so since they went in, both
+  High only, the ledger has shown the field's outline pass at 8 taps and P4 at 10. Counted honestly: field High 20 and
+  P4 **22**, against the ceiling of 14 in `prompts/lowspec-aaa-loop.md`; field Medium 8 and P4 9. No threshold
+  changed. Recorded as dispute 7 in `.loop/threshold-disputes.md`, with the derivation, and put to the owner: whether
+  14 binds High, whose machines are an RTX 3060, Xe or M1, or Medium, the machine the 14 was derived for. If it binds
+  High, the occlusion goes to four taps and the field's outer line comes off. `tests/verify.js` reads p1, p2, p5 and
+  p10 from the same ledger and nothing here changes those.
+- Found on the way, and the larger thing in this pass: since pass 1 this branch drew no world on a browser without
+  WebGL 2. The shell asks for a WebGL 2 context, and three r160 falls back to WebGL 1 when a browser will not give one
+  (an old phone, a blocklisted driver). Main draws there. With webgl2 refused in headless Chromium, main's title over
+  the field and over the town, flight on the field, the town and the yard, and the share page's orbit of the town all
+  came back with no shader error. This branch did not: the comic layer is WebGL 2 GLSL (fwidth with no derivatives
+  extension since pass 1, and now a flat varying and texelFetch), so every toon material failed to compile. The town's
+  orbit logged 94 shader errors, and the field's title showed black trees on no ground. `comicGL2(renderer)` in
+  `src/render/comic.js` now keeps all of it off a WebGL 1 renderer: the toon chunk is not injected, the town and yard
+  pipelines skip the occlusion, outer line and blob edits (their pen and grade are uniforms and stay), the field's
+  post chain compiles without `COMIC_AO` and `COMIC_SIL`, and the sky dome asks three for derivatives
+  (`extensions: { derivatives: true }`, which three ignores on WebGL 2), so the streak cloud draws there too. After:
+  no shader error on any of the runs above, the share page's orbit of the field included, and the pictures show each
+  world drawn with the new models. On WebGL 2 nothing moves: the town's close canopy shots are pixel identical to this
+  pass's own, the far ones differ by the falling petals, and the field's sky by the flags.
+- Checks: `node --check` on the files changed; shots of two trees in the town at two cameras each on High, Medium and
+  Low, before at 0d202ff (a worktree) and after; a pixel diff of the High pairs; a rerun on High after the last shader
+  edit, which differs from the first only by the falling petals; the yard's four views before and after, which differ
+  only where its traffic drove; the field's six sky views, shot alone, which differ only at the flags; the budget probe
+  (`window.__budget`) on the field and the town at High and Medium, old counter and new; and the WebGL 1 runs above,
+  main and branch, by a scratch probe that wraps `getContext` before the page's first line. The usual one refused
+  board connection per run.
+- Not run: `npm run verify`. Render and a measurement script only: no physics, plant, ABI or build change.

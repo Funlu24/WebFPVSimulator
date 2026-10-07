@@ -476,8 +476,9 @@ class CityPipeline extends Pipeline {
     /* Stage F's manga layer, folded into the grade and the fxaa pass on
      * this pipeline's own materials: see src/render/manga.js. */
     this.manga = mangaPipeline(this);
-    /* The comic layer's pen and grade: see src/render/comic.js. */
-    comicPipeline(this);
+    /* The comic layer's pen and grade: see src/render/comic.js. The
+     * blobs option is the ink half of markCanopies' comicBlob. */
+    comicPipeline(this, { blobs: true });
   }
 
   setSize(w, h) {
@@ -1766,6 +1767,14 @@ function dropCarFit(carFit) {
  * Each set is its own draw already, so this adds a handful of materials and
  * no draw call. Before the bake and the chunking, so every chunk of a set
  * carries the copy.
+ *
+ * The cherry and grove sets, the round blobs, are also marked comicBlob
+ * (graphics pass 19): each blob writes a code the ink reads, so the creases
+ * between its own faces are not inked and it outlines as one round shape
+ * (render/comic.js, A CANOPY BLOB'S CODE). The cedars, the bamboo and the
+ * shrubs are faceted on purpose and keep their creases, so a material is
+ * copied once per kind as well as once per original: a shrub that happens
+ * to share a grove's paint gets a copy without the mark.
  */
 const CANOPY = /^(sakura|grove|cedar|bamboo|shrub)Canopy\d+$/;
 
@@ -1776,19 +1785,29 @@ function markCanopies(root) {
       return;
     }
     const m = o.material;
-    let c = made.get(m);
+    const blob = ROUND_CANOPY.test(o.name);
+    let kinds = made.get(m);
+    if (!kinds) {
+      kinds = new Map();
+      made.set(m, kinds);
+    }
+    let c = kinds.get(blob);
     if (!c) {
       c = m.clone();
       c.onBeforeCompile = m.onBeforeCompile;
       if (typeof m.customProgramCacheKey === 'function') {
         c.customProgramCacheKey = m.customProgramCacheKey;
       }
-      c.userData = { ...m.userData, comicFoliage: true };
-      made.set(m, c);
+      c.userData = { ...m.userData, comicFoliage: true, comicBlob: blob };
+      kinds.set(blob, c);
     }
     o.material = c;
   });
-  return made.size;
+  let size = 0;
+  made.forEach((kinds) => {
+    size += kinds.size;
+  });
+  return size;
 }
 
 /*

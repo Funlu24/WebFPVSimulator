@@ -54,7 +54,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {
-  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, SIL_GLSL, SIL_REACH,
+  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, comicGL2, SIL_GLSL,
+  SIL_REACH,
 } from './comic.js';
 
 /*
@@ -503,8 +504,9 @@ export function buildComposer(renderer, scene, camera, quality) {
     outline.uniforms.uResolution.value.set(w, h);
     /* Occlusion and the outer line on High only: the preset was set by
      * buildFieldScene before this runs. Defines, so Medium compiles none of
-     * either. */
-    if (comicAoOn()) {
+     * either. Not on WebGL 1, where dFdx needs an extension this pass does
+     * not ask for: see comicGL2. */
+    if (comicAoOn() && comicGL2(renderer)) {
       outline.material.defines.COMIC_AO = 1;
       outline.material.defines.COMIC_SIL = 1;
       outline.material.needsUpdate = true;

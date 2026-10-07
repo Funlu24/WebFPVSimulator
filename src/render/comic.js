@@ -494,24 +494,39 @@ const KEY = '|comic1';
 
 const VERT_HEAD = /* glsl */ `
 varying vec3 vComicWorld;
+flat varying float vComicBlob;
+/* The blob code below: where the object's origin stands, on an eighth of a
+ * metre grid, hashed. Every vertex of one instance computes it from the
+ * same matrices, so it is the same bits on all of them. */
+float comicBlobCode( vec3 c ) {
+  vec3 p3 = fract( floor( c * 8.0 ) * vec3( 0.1031, 0.1030, 0.0973 ) );
+  p3 += dot( p3, p3.yzx + 33.33 );
+  return fract( ( p3.x + p3.y ) * p3.z );
+}
 `;
 
 const VERT_BODY = /* glsl */ `
   {
     vec4 comicW = vec4( transformed, 1.0 );
+    vec4 comicO = vec4( 0.0, 0.0, 0.0, 1.0 );
     #ifdef USE_BATCHING
       comicW = batchingMatrix * comicW;
+      comicO = batchingMatrix * comicO;
     #endif
     #ifdef USE_INSTANCING
       comicW = instanceMatrix * comicW;
+      comicO = instanceMatrix * comicO;
     #endif
     vComicWorld = ( modelMatrix * comicW ).xyz;
+    vComicBlob = comicBlobCode( ( modelMatrix * comicO ).xyz );
   }
 `;
 
 const FRAG_HEAD = /* glsl */ `
 ${MARK}
 varying vec3 vComicWorld;
+flat varying float vComicBlob;
+uniform float uComicBlob;
 uniform float uComicHatch;
 uniform float uComicGrit;
 uniform float uComicBrush;
@@ -739,6 +754,44 @@ const FRAG_BODY = /* glsl */ `
 	#endif
 `;
 
+/*
+ * A CANOPY BLOB'S CODE, for the town's ink (graphics pass 19).
+ *
+ * The town's cherry and grove canopies are blobs of twenty or eighty flat
+ * faces, shaded round, and its ink pass finds creases in depth alone: the
+ * turn between two faces is a crease, so every blob was inked as a cut gem
+ * or a geodesic dome, worst toward its rim, where a small turn is a large
+ * change of depth. Finer blobs only move the lines toward the rim (pass 15
+ * went from twenty faces to eighty, near the eye). What the ink needs to
+ * know is the thing depth cannot tell it: whether both sides of a crease
+ * are the same blob.
+ *
+ * So a blob writes that into the one channel nothing else reads. The town
+ * draws into a half float target whose alpha every opaque surface sets to
+ * one and nothing downstream uses (the ink writes one over it), and a
+ * material marked comicBlob writes a code there instead: 0.25 to 0.75, one
+ * of 128 values, hashed from where its instance stands, so two blobs side
+ * by side almost never share one (and where they do, the concave line where
+ * they meet and the far side's line still draw). The ink pass reads the
+ * code at its centre and its four taps, and a convex crease whose taps are
+ * all the centre's own blob is a facet, not a line. The outline, the line
+ * between two blobs, and the line where a blob meets a branch or a wall are
+ * all two codes, so they ink as before.
+ *
+ * Blended surfaces drawn over a blob mix its code away and get their lines
+ * back, which is the right answer for them. The code is written only where
+ * the material is opaque, and only after three's last chunk, so nothing
+ * else in the frame changes. The ink half is in comicPipeline's blobs
+ * option; a map that marks nothing pays one fetch on a crease's pixels.
+ */
+const FRAG_TAIL = /* glsl */ `
+	#ifdef OPAQUE
+		if ( uComicBlob > 0.0 ) {
+			gl_FragColor.a = 0.25 + floor( vComicBlob * 128.0 ) / 256.0;
+		}
+	#endif
+`;
+
 function inject(shader, material) {
   if (shader.fragmentShader.includes(MARK)) {
     return;
@@ -778,12 +831,35 @@ function inject(shader, material) {
       return material.userData.comicFoliage ? 1 : 0;
     },
   };
+  shader.uniforms.uComicBlob = {
+    get value() {
+      return material.userData.comicBlob ? 1 : 0;
+    },
+  };
   shader.vertexShader = vs
     .replace('#include <common>', `#include <common>\n${VERT_HEAD}`)
     .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_BODY}`);
   shader.fragmentShader = fs
     .replace('#include <common>', `#include <common>\n${FRAG_HEAD}`)
-    .replace('#include <opaque_fragment>', `${FRAG_BODY}\n\t#include <opaque_fragment>`);
+    .replace('#include <opaque_fragment>', `${FRAG_BODY}\n\t#include <opaque_fragment>`)
+    .replace('#include <dithering_fragment>', `#include <dithering_fragment>\n${FRAG_TAIL}`);
+}
+
+/*
+ * WEBGL 1. The shell asks for a WebGL 2 context, and three.js r160 falls
+ * back to WebGL 1 when a browser will not give one, as an old phone or a
+ * blocklisted driver will not. Main draws there: the title, the field, the
+ * town and the share page's orbit all render on WebGL 1 with no shader
+ * error, which was checked by refusing webgl2 in headless Chromium. This
+ * layer is WebGL 2 GLSL throughout (fwidth and dFdx with no derivatives
+ * extension, a flat varying, texelFetch), and on WebGL 1 every toon
+ * material failed to compile and drew nothing. So on a WebGL 1 renderer
+ * none of it is compiled in and the world draws the way main draws it. A
+ * renderer this cannot read is taken as WebGL 2, which is what it asked
+ * for.
+ */
+export function comicGL2(renderer) {
+  return !(renderer && renderer.capabilities && renderer.capabilities.isWebGL2 === false);
 }
 
 /*
@@ -806,7 +882,9 @@ if (!P[INSTALLED]) {
         if (user) {
           user.call(self, shader, renderer);
         }
-        inject(shader, self);
+        if (comicGL2(renderer)) {
+          inject(shader, self);
+        }
       };
       hook.comicUser = user;
       return hook;
@@ -858,10 +936,14 @@ if (!P[INSTALLED]) {
  * manga.js edits them. Nothing under vendored/ changes. The pipelines'
  * setSize multiplies its own line width by pipeline.inkWeight.
  */
-export function comicPipeline(pipeline) {
+export function comicPipeline(pipeline, { blobs = false } = {}) {
+  /* The pen and the grade below are uniforms and draw on WebGL 1 as they
+   * do on 2. The three shader edits are WebGL 2 GLSL, so see comicGL2. */
+  const gl2 = comicGL2(pipeline.renderer);
   pipeline.inkWeight = INK_WEIGHT;
-  pipeline.comicAo = comicAoOn() && addPipelineAo(pipeline);
-  pipeline.comicSil = comicAoOn() && addPipelineSil(pipeline);
+  pipeline.comicAo = gl2 && comicAoOn() && addPipelineAo(pipeline);
+  pipeline.comicSil = gl2 && comicAoOn() && addPipelineSil(pipeline);
+  pipeline.comicBlobs = gl2 && blobs && addPipelineBlobs(pipeline);
   const ink = pipeline.ink && pipeline.ink.mat && pipeline.ink.mat.uniforms;
   if (ink) {
     if (ink.uInk) {
@@ -1077,6 +1159,57 @@ ${INK_MAIN_AT}`)
           comicSilDir( dc, du, vUv + vec2( 0.0, tw.y ) ), comicSilDir( dc, dd, vUv - vec2( 0.0, tw.y ) ), 0.0 ) );
       }
 ${INK_FADE_AT}`);
+  mat.needsUpdate = true;
+  return true;
+}
+
+/* Where the vendored ink pass sums its convex creases, exactly as
+ * src/maps/city/vendored/core/post.js has it. */
+const INK_CONVEX_AT = '      float convex  = max( 0.0,  sx ) + max( 0.0,  sy );';
+
+/*
+ * The ink half of a canopy blob's code (FRAG_TAIL above), on every preset
+ * that inks: one exact fetch of the scene's alpha on a pixel whose convex
+ * creases are strong enough to draw anything, and four more only where that
+ * pixel is a blob, a branch whole canopies take together. texelFetch, so no
+ * filtering mixes two codes at a tap and the branch needs no derivatives.
+ */
+const BLOB_GLSL = /* glsl */ `
+  float comicBlobAt( vec2 uv ) {
+    ivec2 s = textureSize( tDiffuse, 0 );
+    return texelFetch( tDiffuse, clamp( ivec2( uv * vec2( s ) ), ivec2( 0 ), s - 1 ), 0 ).a;
+  }
+  float comicBlobSame( float c, vec2 uvA, vec2 uvB ) {
+    return step( abs( comicBlobAt( uvA ) - c ), 0.001 ) * step( abs( comicBlobAt( uvB ) - c ), 0.001 );
+  }
+  /* The convex creases along each axis, less any whose centre and both taps
+   * are one blob. */
+  float comicBlobConvex( vec2 uv, vec2 t, float cx, float cy ) {
+    if ( cx + cy > uSens * 0.32 ) {
+      float c = comicBlobAt( uv );
+      if ( c < 0.8 ) {
+        cx *= 1.0 - comicBlobSame( c, uv - vec2( t.x, 0.0 ), uv + vec2( t.x, 0.0 ) );
+        cy *= 1.0 - comicBlobSame( c, uv + vec2( 0.0, t.y ), uv - vec2( 0.0, t.y ) );
+      }
+    }
+    return cx + cy;
+  }
+`;
+
+function addPipelineBlobs(pipeline) {
+  const mat = pipeline.ink && pipeline.ink.mat;
+  if (!mat) {
+    return false;
+  }
+  const fs = mat.fragmentShader;
+  if (!fs.includes(INK_MAIN_AT) || !fs.includes(INK_CONVEX_AT)) {
+    return false;
+  }
+  mat.fragmentShader = fs
+    .replace(INK_MAIN_AT, `${BLOB_GLSL}
+${INK_MAIN_AT}`)
+    .replace(INK_CONVEX_AT, `      /* The comic layer's canopy blobs: src/render/comic.js. */
+      float convex  = comicBlobConvex( vUv, t, max( 0.0,  sx ), max( 0.0,  sy ) );`);
   mat.needsUpdate = true;
   return true;
 }
