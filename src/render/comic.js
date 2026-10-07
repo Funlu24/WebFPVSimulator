@@ -506,6 +506,11 @@ const KEY = '|comic1';
 const VERT_HEAD = /* glsl */ `
 varying vec3 vComicWorld;
 flat varying float vComicBlob;
+#ifdef COMIC_BLOB_BAKED
+  /* A baked blob's code, the same value on every vertex of one blob (the
+   * kit's leaf, graphics pass 23). */
+  attribute float comicBlob;
+#endif
 /* The blob code below: where the object's origin stands, on an eighth of a
  * metre grid, hashed. Every vertex of one instance computes it from the
  * same matrices, so it is the same bits on all of them. */
@@ -529,7 +534,11 @@ const VERT_BODY = /* glsl */ `
       comicO = instanceMatrix * comicO;
     #endif
     vComicWorld = ( modelMatrix * comicW ).xyz;
-    vComicBlob = comicBlobCode( ( modelMatrix * comicO ).xyz );
+    #ifdef COMIC_BLOB_BAKED
+      vComicBlob = comicBlob;
+    #else
+      vComicBlob = comicBlobCode( ( modelMatrix * comicO ).xyz );
+    #endif
   }
 `;
 
@@ -960,6 +969,16 @@ const LIT_SPAN = 0.14;
  * Since pass 21, on a map that draws edge highlights, every other opaque
  * toon surface writes its sun there too (LIT_BASE above), and the ink is
  * still the only thing that reads it.
+ *
+ * A built map's trees (pass 23) are blobs too, round on Low and clumps on
+ * Medium and High, but the prop kit bakes every blob of a tone into one
+ * mesh, so they have one origin between them and the hash above would give
+ * a whole canopy one code. Their codes come from the geometry instead: the kit's leaf() hands
+ * each blob a float attribute, one value on all of its vertices, and a
+ * material marked comicBlobBaked reads that (COMIC_BLOB_BAKED). That is a
+ * define, so those materials compile a program of their own, one for the
+ * map; it keeps the attribute out of every other toon program, where a
+ * missing attribute would read whatever the context last left there.
  */
 const FRAG_TAIL = /* glsl */ `
 	#ifdef OPAQUE
@@ -1017,8 +1036,9 @@ function inject(shader, material) {
       return material.userData.comicBlob ? 1 : 0;
     },
   };
+  const baked = material.userData.comicBlobBaked ? '#define COMIC_BLOB_BAKED\n' : '';
   shader.vertexShader = vs
-    .replace('#include <common>', `#include <common>\n${VERT_HEAD}`)
+    .replace('#include <common>', `#include <common>\n${baked}${VERT_HEAD}`)
     .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_BODY}`);
   shader.fragmentShader = fs
     .replace('#include <common>', `#include <common>\n${FRAG_HEAD}`)
@@ -1093,7 +1113,9 @@ if (!P[INSTALLED]) {
         } else if (self._comicUserHook) {
           k = self._comicUserHook.toString();
         }
-        return k + KEY;
+        /* A baked canopy's material compiles its own program (see
+         * FRAG_TAIL's note on pass 23), so its key says so. */
+        return k + KEY + (self.userData.comicBlobBaked ? '|baked' : '');
       };
       key.comicUserKey = this._comicUserKey || null;
       return key;

@@ -68486,3 +68486,70 @@ append conflict at the end of this file and nothing else in these files.
   comic layer; WebGL 2 flight on the yard and the town at High and Medium with none, and the race field's shots at
   High with none, all on the final shader. The usual one refused board connection per run.
 - Not run: `npm run verify`. Render only: no physics, plant, ABI or build change.
+
+### Pass 23, same day: the yard's trees, each blob inked as one shape and drawn as a clump
+
+- What read weakest after pass 22, from a fresh round of shots, was the yard's trees. A yard cherry is nineteen to
+  twenty four blobs on its forks and a street tree sixteen to twenty one, the town's generators restated in
+  `src/props/street.js`, drawn since pass 15 as eighty faced blobs, and the yard's ink still drew every facet: a line
+  at each turn between two faces, a black dot at every vertex, and since pass 21 a pale lip on the sunlit side of a
+  facet's crease. From under a cherry it was a bunch of geodesic balloons, and at twenty metres every blob was
+  spotted.
+- The town stopped this in pass 19 with a code per blob in its scene target's alpha, hashed from where each instance
+  stands. The yard's kit bakes every blob of a tone into one mesh with one origin, so that hash would give a whole
+  canopy one code. The kit's `leaf()` now gives each blob its code as a float on every one of its vertices
+  (`codedLeaf` in `src/props/kit.js`), handed out in draw order 53 apart round 128 values, so any 128 blobs in a row
+  have 128 codes and a tree's blobs never share one; a material marked `comicBlobBaked` reads the attribute in place
+  of the hash through a define (`COMIC_BLOB_BAKED` in `src/render/comic.js`), and the yard's pipeline now runs the ink
+  half (`comicPipeline(this, { blobs: true })`, as the town's does). Each canopy tone has a twin material that only
+  `leaf()` draws with, so every part in its batches carries the attribute: `bake()` keeps only the attributes every
+  part shares, and a flower box's ball in `blossom1` would have dropped it for the whole batch. Medium and High; Low
+  draws no ink in the yard.
+- With the facets gone each blob was a clean, smooth balloon, which is no better. So on Medium and High (the quality
+  table's new `leafClumps`) each blob is a sphere broken into lumps (`clumpBlob`), as the race field's trees were
+  earlier the same day: one lump over each vertex of an icosahedron, nudged off it, a quarter of them left out and the
+  rest each with its own height and width under a round cap profile, over a floor; eight such shapes, under each
+  blob's own spin and squash. Normals half the sphere's and half the lumps', so each lump catches the light without
+  the blob breaking into a band per facet. 180 faces on 92 shared vertices, where the round blob is 80 faces on 240
+  unshared ones. No trigonometry and nothing from the world's rng. Low keeps the round blob.
+- The solids are not touched: `treeSpec`, `treeLayout` and every collider are as they were, and `check:props` passes.
+  The clump keeps each blob's solid, a sphere of 0.78 of its smaller radius, inside what is drawn by construction. In
+  the shape's own frame that sphere is inside an ellipsoid 0.78 up and 0.78 times 0.92 across for any blob no rounder
+  than 0.92 (every tree here is flatter; a rounder blob would be drawn round), the valleys lie outside it, and the
+  shape is measured: if any face came nearer than 1.03 of that ellipsoid, the shape would be scaled out until none
+  did. Checked apart from the code that does it by casting 4,000 rays from the centre of each of the eight shapes at
+  the squashes the trees use (0.68, 0.8, 0.88, 0.92): the nearest surface is never under 1.03 of the solid's radius.
+  The lumps' tops reach 1.04 of a blob's radius where the round blob's vertices reached 0.92, which is the side of
+  the contract the module already takes for a canopy (the outermost tips are drawn and not solid), and the shapes'
+  mean radius is about the round blob's, so a tree is about as full as it was.
+- Cost, counted on the yard at golden hour, High, from one view: scene triangles 192,675 to 217,875 (13 percent
+  more), the canopies' 20,790 to 45,990; meshes (521), materials (319) and draw calls (225 to 226, the same spread
+  before and after) unchanged. One program more by construction, the canopy tones' (the define); the session's
+  program count cannot show it, because it moves by up to 15 between two runs of one commit (68 to 84). On Low the
+  triangles are the same as before. Timed on SwiftShader with the
+  rig of pass 22 on three tree views (a cherry at ten metres, three at twenty, and from under one), before (fad9e72, a
+  worktree) and after, two runs each, interleaved: High 977, 870 and 564 ms a frame before and 1000, 910 and 598 after
+  (2, 5 and 6 percent), Medium 656, 572 and 358 before and 691, 564 and 381 after (5, minus 1, and 6 percent), each
+  good to about 5 percent. Again a guide to arithmetic and not to a real machine.
+- What went wrong on the way. The first clumps followed the field's recipe (lumps from 0.84 to 1.0 of the radius,
+  normals three quarters the sphere's) and changed nothing anyone would see at the gallery's range; the lumps had to be
+  bolder, which is why their floor is an ellipsoid fitted to the solid rather than a sphere. The first proof of the
+  solid measured how near each face's plane came to the centre, and the plane of a face down the steep side of a lump
+  passes close to it, so every shape was scaled out by a quarter and the trees grew; the ray cast caught it, and the
+  test is now each face's nearest point. A finer sphere (320 faces) was tried and drew nearly the same picture with
+  78 percent more canopy triangles than the one kept.
+- Not done, and the owner's call: fuller crowns. A yard cherry is sparse because of where its blobs are, and each blob
+  comes with its solid. Drawing more blobs would be leaves with nothing solid in them, which this module's contract
+  rules out ("Decoration that is not solid is thin or out of reach"), and more solids would change how every saved map
+  with a tree in it flies.
+- Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
+  `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date; `npm run check:props` all passed;
+  `node scripts/memory-check.js --map=built` passed (the yard lazy and freed). Shots before (fad9e72, a worktree) and
+  after: the gallery's cherry and street tree on High, and six views of the yard's trees (a cherry at ten metres, three
+  at twenty, a street tree, another by the road, from under a cherry and from above) on High, Medium and Low. Low:
+  five views pixel identical and the sixth different only where the traffic drove (1548 pixels round a car). The
+  town's three parked views on High differ from pass 22's by the falling petals, and the race field's five gate views
+  by the gates' waving sleeves and their shadows, as between any two runs. Headless Chromium with webgl2 refused:
+  flight on the yard at High, no shader error, the same 32 warnings as pass 22's run. WebGL 2: flight on the yard at
+  High, Medium and Low and on the town at High, no shader error. The usual one refused board connection per run.
+- Not run: `npm run verify`. Render only: no physics, plant, ABI or build change, and no solid moved.

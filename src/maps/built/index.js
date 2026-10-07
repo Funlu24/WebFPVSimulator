@@ -304,8 +304,10 @@ export class BuiltPipeline extends Pipeline {
     /* Stage F's manga layer, folded into the grade and the fxaa pass the
      * same way, on this pipeline's own materials: see src/render/manga.js. */
     this.manga = mangaPipeline(this);
-    /* The comic layer's pen and grade: see src/render/comic.js. */
-    comicPipeline(this);
+    /* The comic layer's pen and grade: see src/render/comic.js. The
+     * blobs option is the ink half of the codes the kit's leaf() gives
+     * a tree's canopy blobs (src/props/kit.js). */
+    comicPipeline(this, { blobs: true });
   }
 
   setSize(w, h) {
@@ -1168,7 +1170,7 @@ export async function buildMap(shell, onProgress, options) {
    * hundred draw calls at most and a chunk switched off takes all of its
    * batches with it.
    */
-  const kit = new PropKit(kitLook(look.timeId));
+  const kit = new PropKit(kitLook(look.timeId), { clumps: q.city.leafClumps !== false });
   for (const it of placed.items) {
     kit.begin(it.x, it.y, it.z, it.yaw, chunkKeyOf(it));
     kit.element(it.el);

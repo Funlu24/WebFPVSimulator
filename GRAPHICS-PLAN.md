@@ -55,10 +55,12 @@ loop: plan, a pass, screenshots, re-plan.
   22 on a built map's paved ground (inked cracks on High, stains with a tide
   line on Medium and High); the town's ground cannot be marked apart from its
   roofs, and the field's is turf.
+- Trees: the yard's cherries and street trees, inked as one shape a blob and drawn as clumps of lumps in pass 23
+  (Medium and High). Fuller crowns are the owner's call (below).
 - The craft: heavier hull outline and a hatched underside.
 - HUD in the same hand (ink outlined OSD text: POLISH-PLAN.md item 4).
 
-## Where it stands after pass 22
+## Where it stands after pass 23
 
 Done: ink, hatching (single in shade, crossed in cast shadow, thinning on surfaces seen edge on), grit, brush marks
 (High), occlusion (High), an outer line heavier than the inner lines (High; the field only within 30 m), painted turf
@@ -74,10 +76,11 @@ the duct walls instead of lying across the props, and its lamps and belly straps
 highlights in the town and the yard (Medium and High): on a convex crease between a face in more sun and a face in
 less, the brighter face's half of the line is a pale, warm lip and the other half stays ink, and on a built map's
 paved ground, laid in the world so nothing repeats, inked cracks that run, fork and stop (High) and stains with a
-darker tide line (Medium and High). Low is unchanged
+darker tide line (Medium and High), and the yard's tree blobs inked as one shape each, not their facets, and drawn as
+clumps of lumps with their solids unchanged inside them (Medium and High). Low is unchanged
 except the clouds (their ink rim, shape and paint, and the town's and the yard's heaps), the yard's rounder canopies
 and the new car, quad and whoop models; Medium has no brush marks, no occlusion, no outer line and no cracks, and
-keeps the edge highlights and the stains. A browser without
+keeps the edge highlights, the stains and the yard's clumps. A browser without
 WebGL 2, which main draws on through three's fallback and which this branch left with no world until pass 19, gets
 none of the comic layer and draws as main does, with the new models, the heaped clouds and, on Medium and High, the
 streak cloud.
@@ -89,10 +92,13 @@ for the town and the yard (a flat card skews into a wedge toward the edge of an 
 it more), edge highlights on the race field (its bloom reads the scene's alpha, and its aliased prepass normals
 speckled the start blocks with white).
 
-Open for the owner: a taxi roof lantern needs a taller sedan solid, the built map's parked cars' folded mirrors stand
-7 cm out of the solid's step, and the quad takes about 30 ms more to build at boot and when Settings opens. And the
-post taps on High: counted honestly (pass 19), the field's outline pass reads 20 taps a pixel and P4 is 22 against a
-ceiling of 14 derived for Medium's machine, which is at 9. Dispute 7 in `.loop/threshold-disputes.md`.
+Open for the owner: the yard's cherries are sparse because of where their blobs are, and every blob comes with its
+solid, so a fuller crown means either leaves with nothing solid in them, which `src/props/street.js` rules out, or
+more solids, which change how every saved map with a tree in it flies. A taxi roof lantern needs a taller sedan solid,
+the built map's parked cars' folded mirrors stand 7 cm out of the solid's step, and the quad takes about 30 ms more to
+build at boot and when Settings opens. And the post taps on High: counted honestly (pass 19), the field's outline pass
+reads 20 taps a pixel and P4 is 22 against a ceiling of 14 derived for Medium's machine, which is at 9. Dispute 7 in
+`.loop/threshold-disputes.md`.
 
 Next, once the owner has flown it and said which way to push:
 

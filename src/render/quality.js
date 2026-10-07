@@ -146,6 +146,10 @@ const PRESETS = {
        * twenty, within this many metres of a cell's nearest point; 0 keeps
        * twenty everywhere. See roundCanopiesNear in src/maps/city/index.js. */
       leafRound: 0,
+      /* A built map's canopy blobs drawn as clumps of lumps rather than
+       * smooth round blobs: 180 faces a blob where the round one has 80.
+       * See clumpBlob in src/props/kit.js. */
+      leafClumps: false,
       cullRadius: 50,
       fogNear: 22,
       fogFar: 46,
@@ -187,6 +191,7 @@ const PRESETS = {
       shadowProxyCell: 24,
       foliageKeep: 0.30,
       leafRound: 25,
+      leafClumps: true,
       cullRadius: 58,
       fogNear: 22,
       fogFar: 53,
@@ -245,6 +250,7 @@ const PRESETS = {
       shadowProxyCell: 24,
       foliageKeep: 0.48,
       leafRound: 25,
+      leafClumps: true,
       cullRadius: 70,
       fogNear: 22,
       fogFar: 65,
