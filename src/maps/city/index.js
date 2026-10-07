@@ -1871,8 +1871,9 @@ const ROUND_CANOPY = /^(sakura|grove)Canopy\d+$/;
 const TOWN_CLUMPS = [0, 1, 2, 3, 4, 6, 7];
 
 /* The clump for a set, by its kind and its tone: the cherries' three tones
- * take the first three shapes and the groves' the next three. `made` holds
- * this town's, one a shape. */
+ * take the first three shapes and the groves' four (the fourth is the
+ * willows' pale green) the other four. `made` holds this town's, one a
+ * shape. */
 function nearClump(name, made) {
   const tone = Number(name.slice(name.lastIndexOf('Canopy') + 6)) || 0;
   const k = TOWN_CLUMPS[((name.startsWith('grove') ? 3 : 0) + tone) % TOWN_CLUMPS.length];

@@ -68562,9 +68562,10 @@ append conflict at the end of this file and nothing else in these files.
   was a bunch of smooth, pale balloons, which is the fault pass 23 had just taken out of the yard.
 - On Medium and High (the quality table's `leafClumps`, which the yard has read since pass 23) the twin that
   `roundCanopiesNear` in `src/maps/city/index.js` swaps in near the eye is now one of the yard's clumps of lumps: the
-  cherries' three tones take three shapes and the groves' three tones three more, under every blob's own turn and
-  squash, so no two blobs read alike. The swap is pass 15's, the mesh's geometry pointer written when a cull cell
-  crosses `leafRound` (25 m), so there is no new draw call, program or material. Low swaps nothing, as before.
+  cherries' three tones take three shapes and the groves' four tones (the fourth is the willows') the other four,
+  under every blob's own turn and squash, so no two blobs read alike. The swap is pass 15's, the mesh's geometry
+  pointer written when a cull cell crosses `leafRound` (25 m), so there is no new draw call, program or material. Low
+  swaps nothing, as before.
 - `clumpBlob` and its constants moved out of `src/props/kit.js` into a module of their own, `src/render/clump.js`,
   unchanged, because the kit's module pulls in the whole prop catalogue and the town fetches nothing from
   `src/props` (memory-check's rule). The kit imports it from there, and `npm run gen:preload` added the module to the
@@ -68613,16 +68614,17 @@ append conflict at the end of this file and nothing else in these files.
   that reason.
 - What went wrong on the way. A scripted edit to a comment assumed where its lines broke and stopped on its own
   assertion; it was redone against the file's own text. The first draft of the comments said the lumps' tops reach
-  1.04 of the radius (1.01 to 1.06: the check scales some shapes out), that a clump at 0.92 reaches 0.96 (0.975),
-  that the fallback was "as on main" (the near twin is this branch's) and nothing about the valleys; each was
-  measured and corrected before the commit. Two of the eight town cameras sit inside a building and are not used as
-  evidence. On Low, three shots caught the previous camera in one of the two runs (the park view where the cherry
-  should be), which is the harness and not the frame. The pairing script had pass 23's labels written into it; a new
-  one takes them as arguments. The first timing run was the window count above and was stopped for it, and a wait
-  loop that matched its own command line never ended and was stopped by hand. The leak above. And the first commit of
-  this entry put the gap at four to nine centimetres, from blob radii worked out for a tree at scale 1; the town's
-  cherries are drawn at 0.92 to 1.5 and its groves at 1.0 to 2.5, so the next commit corrected it from the vendored
-  spots' own scales.
+  1.04 of the radius (1.01 to 1.06: the check scales some shapes out), that a clump at 0.92 reaches 0.96 (0.975), that
+  the fallback was "as on main" (the near twin is this branch's) and nothing about the valleys; each was measured and
+  corrected before the commit. Two of the eight town cameras sit inside a building and are not used as evidence. On
+  Low, three shots caught the previous camera in one of the two runs (the park view where the cherry should be), which
+  is the harness and not the frame. The pairing script had pass 23's labels written into it; a new one takes them as
+  arguments. The first timing run was the window count above and was stopped for it, and a wait loop that matched its
+  own command line never ended and was stopped by hand. The leak above. And the first commit of this entry put the gap
+  at four to nine centimetres, from blob radii worked out for a tree at scale 1; the town's cherries are drawn at 0.92
+  to 1.5 and its groves at 1.0 to 2.5, so the next commit corrected it from the vendored spots' own scales. It also
+  said the groves had three tones, and so did the comment on `nearClump`; the willows' pale green is a fourth, which
+  takes the seventh shape, and both were corrected in the commit after that.
 - Checks: `node --check` on every file changed; `npm run lint:quality` 71 of 71; `npm run lint:frame` 34 passed;
   `npm run lint:boot` 9 of 9; `npm run lint:preload` up to date after `npm run gen:preload`; `npm run check:props` all
   passed (the kit changed); `node scripts/memory-check.js` passed at Low, the town and Your map lazy and freed, and a
