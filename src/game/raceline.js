@@ -31,11 +31,37 @@
  * worse. The cost is the lap time of the line at a stated cornering load
  * (speedProfile) plus a penalty, large enough to be a wall, for touching a
  * frame or a pole, crossing an opening the lap was not sent through, going
- * back through one, or leaving the room. (An unbuilt gap in the lattice is an
- * opening the Race scores but that has no pipe to see, so a stray through one
- * is a price and not a wall: PEN_GAP.) Coordinate descent with a shrinking
- * step, in knot order, so the answer is the same on every machine that has
- * the same Math.
+ * back through one, or leaving the room. An opening is any level of any
+ * structure the lap flies, framed or a gap in the lattice (see THE RULES).
+ * Coordinate descent with a shrinking step, in knot order, so the answer is
+ * the same on every machine that has the same Math.
+ *
+ * THE RULES IT KEEPS. RaceGOW's published rules (the four documents linked
+ * from racegow.com, read on 2026-10-08; the "Track Building Rules and
+ * Information" one is quoted in src/trackbuilder/racegow.js) say two things
+ * about the flying, in its General Track Rules, and nothing else:
+ *
+ *   5. "Tracks must be built and flown exactly as shown, no modifications
+ *      allowed." (The Basic Concept says the same of the flythrough video:
+ *      "fly them as shown".)
+ *   7. "You cannot intentionally fly through any gates in the opposite
+ *      direction to shorten your line. For example if you have to go past a
+ *      gate and then back through it, you cannot just fly through it backward
+ *      and then spin 180 back through the gate like a "cheese" move that many
+ *      angle pilots use in place of a split-S or corkscrew type maneuver on
+ *      Velocidrone."
+ *
+ * There is no penalty and no gate miss rule, and no word about an opening
+ * with no pipe round it (Gate Rule 2 says a gate is "fully enclosed"), so the
+ * rules do not forbid a pass through a gap in the lattice. Nor do RaceGOW's
+ * own flythroughs keep to the lap: TRACK-FROM-GIF.md, step 8, records them
+ * crossing openings more often than the lap scores them. The line is stricter
+ * than both on purpose: the game scores a gap as an opening and lights it as
+ * one, a trail through one the way the lap does not is the shortcut rule 7
+ * names, and a trail through one at a moment the lap does not is a route that
+ * is not the one shown. So a framed opening and a gap are alike a wall out of
+ * turn and the wrong way, and a track whose line cannot be found without
+ * crossing one gets no line.
  *
  * WHAT IT IS NOT. It is not a time optimal trajectory: the search moves a
  * knot's place, heading and tangent length, not the line itself, and the
@@ -152,20 +178,12 @@ const OUT_DS = 0.05;
 const CRUMB_DT = 0.15;
 
 /* Penalties, in seconds of lap time. A wall, not a price. A crossing of an
- * opening out of turn is a flat sixty. Being closer to a solid than the
+ * opening out of turn, or the wrong way, is a flat sixty, whether the opening
+ * has a frame or is a gap in the lattice. Being closer to a solid than the
  * aircraft and its margin allow costs a steep ramp, so a millimetre of it is
  * already dear and a centimetre is not worth any lap, and the ramp is there
  * (and not a cliff) so the search can feel which way is out. */
 const PEN_STRAY = 60;
-
-/* A crossing of an unbuilt opening out of turn, or the wrong way. A gap in the
- * lattice has no pipe to see, so the pilot cannot tell that a trail went
- * through one early, and in a lattice of them (RaceGOW5 Track 7 asks for a
- * flight up through one cell and back down through it, past the gaps on every
- * side of it) a line that crossed none would be a loop over the top of the
- * room. So it is a price and not a wall: a few seconds, which a hairpin beside
- * the gap costs less than and a loop round the tower costs more than. */
-const PEN_GAP = 3;
 
 /* A knot is on the plane of its own opening; for the test of which side of it
  * a point is on, it counts as this far ahead of the plane when the leg is
@@ -471,7 +489,7 @@ function windowsOf(course) {
       firstStation.set(st.elementId, st);
     }
   }
-  const put = (id, k, x, baseY, z, yaw, pitch, centreY, clearW, clearH, soft) => {
+  const put = (id, k, x, baseY, z, yaw, pitch, centreY, clearW, clearH) => {
     const centre = [x, baseY + centreY, z];
     const r = Math.hypot(clearW, clearH) / 2 + 0.2;
     out.push({
@@ -485,16 +503,16 @@ function windowsOf(course) {
       lo: [centre[0] - r, centre[1] - r, centre[2] - r],
       hi: [centre[0] + r, centre[1] + r, centre[2] + r],
       keys: new Set([`${id}#${k}`]),
-      soft,
     });
   };
   for (const s of course.structures) {
     /* An unbuilt opening, a gap in the lattice with no pipe of its own, is
-     * still a gate the lap is sent through and a pilot sees as one when it is
-     * the target, so it is a window like the others. (It was left out at
-     * first, and the check that finds a line's openings again from the Race's
-     * own frames found the lines of the four rooms that fly through gaps
-     * crossing them out of turn and the wrong way.) */
+     * still an opening the lap is sent through and the game scores and lights
+     * as one, so it is a window like the others and a pass of it out of turn
+     * is as much a stray as a pass of a frame (THE RULES, in the header). The
+     * line's own check, which finds a line's openings again from the Race's
+     * frames, found the lines of four rooms crossing gaps out of turn when
+     * they were left out of the solver's windows. */
     if (s.kind !== 'aperture') {
       continue;
     }
@@ -506,7 +524,7 @@ function windowsOf(course) {
     const stack = Math.max(1, Math.round(d.stack ?? 1));
     for (let k = 0; k < stack; k += 1) {
       const sill = d.sillH + k * d.levelPitch;
-      put(s.id, k, s.x, s.baseY, s.z, st.yaw, st.pitch ?? 0, sill + d.clearH / 2, d.clearW, d.clearH, Boolean(s.unbuilt));
+      put(s.id, k, s.x, s.baseY, s.z, st.yaw, st.pitch ?? 0, sill + d.clearH / 2, d.clearW, d.clearH);
     }
   }
   /* One hole is one window. A course may stand two or three gates on the same
@@ -526,9 +544,6 @@ function windowsOf(course) {
       for (const key of w.keys) {
         twin.keys.add(key);
       }
-      /* A hole that is a built frame for any of the gates standing on it is a
-       * frame. */
-      twin.soft = twin.soft && w.soft;
     } else {
       merged.push(w);
     }
@@ -1021,20 +1036,16 @@ function legPenalty(leg, ctx, kA, kB, tally) {
         tieB = -ON_PLANE * kB.sense;
       }
       if (crosses(w, P, i, i + 1, tieA, tieB)) {
-        pen += w.soft ? PEN_GAP : PEN_STRAY;
+        pen += PEN_STRAY;
         if (tally) {
           const za = (P[i * 3] - w.centre[0]) * w.travel[0] + (P[i * 3 + 1] - w.centre[1]) * w.travel[1]
             + (P[i * 3 + 2] - w.centre[2]) * w.travel[2];
-          if (w.soft) {
-            tally.gaps += 1;
-          } else {
-            tally.strays += 1;
-            tally.where.push(`${w.key}@${tally.leg}`);
-          }
+          tally.strays += 1;
+          tally.where.push(`${w.key}@${tally.leg}`);
           /* A step back off the opening a leg leaves, or a way in from the
            * wrong side of the one it arrives at, is backward by definition. */
           tally.list.push({
-            w, leg: tally.leg, own, soft: w.soft, dir: own || za >= 0 ? -1 : 1,
+            w, leg: tally.leg, own, dir: own || za >= 0 ? -1 : 1,
           });
         }
       }
@@ -1428,7 +1439,7 @@ function* search(course, ctx, strategy, options) {
     const out = [];
     for (let j = 0; j < nk; j += 1) {
       const tally = {
-        clear: 0, strays: 0, gaps: 0, where: [], list: [], leg: j,
+        clear: 0, strays: 0, where: [], list: [], leg: j,
       };
       legPenalty(legs[j], ctx, knots[j], knots[(j + 1) % nk], tally);
       out.push(...tally.list);
@@ -1466,9 +1477,17 @@ function* search(course, ctx, strategy, options) {
   /* Where the knots the author gave make the lap cross a hole out of turn and
    * moving them cannot stop it, send the line round the hole. A step back
    * through the opening a leg itself leaves or arrives at is a turn the search
-   * has to straighten, not a hole to go round. */
+   * has to straighten, not a hole to go round.
+   *
+   * A detour is kept for what the lap costs once the search has settled round
+   * it, not for what it costs the moment it is put in. On RaceGOW5 Track 7,
+   * where seven of the ten openings are gaps, the first detour leaves both
+   * strays standing and it is the next two that clear them, so a detour judged
+   * on its own cost left the lap with both. One that does not pay once settled
+   * is taken out again, with everything the settling moved, and the search
+   * stops. */
   for (let attempt = 0; attempt < MAX_DETOURS; attempt += 1) {
-    const list = strays().filter((st) => !st.own && !st.soft);
+    const list = strays().filter((st) => !st.own);
     if (!list.length) {
       break;
     }
@@ -1492,12 +1511,25 @@ function* search(course, ctx, strategy, options) {
       }
       removeAt(at, 1);
     }
-    if (!bestCand || bestCost >= before - 1e-7) {
+    if (!bestCand) {
       break;
     }
+    const keptKnots = knots.slice();
+    const keptParams = Float64Array.from(p);
     insertAt(at, [bestCand]);
     best = cost();
     yield* descend(STEPS.slice(1));
+    if (options.log) {
+      options.log(`  settled at ${best.toFixed(2)} against ${before.toFixed(2)}`);
+    }
+    if (!(best < before - 1e-7)) {
+      knots.length = 0;
+      knots.push(...keptKnots);
+      p = keptParams;
+      rebuildAll();
+      best = cost();
+      break;
+    }
   }
   return finish(course, ctx, knots, states, baseline, sweeps);
 }
@@ -1526,7 +1558,7 @@ function finish(course, ctx, knots, states, baseline, sweeps) {
   const nk = states.length;
   const legs = [];
   const tally = {
-    clear: 0, strays: 0, gaps: 0, where: [], list: [], leg: 0,
+    clear: 0, strays: 0, where: [], list: [], leg: 0,
   };
   let penalty = 0;
   for (let j = 0; j < nk; j += 1) {
@@ -1594,7 +1626,6 @@ function finish(course, ctx, knots, states, baseline, sweeps) {
     penalty,
     strays: tally.strays,
     strayAt: tally.where,
-    gaps: tally.gaps,
     shortBy: tally.clear,
     sweeps,
     lapS,

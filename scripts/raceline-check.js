@@ -169,11 +169,11 @@ function leastClearance(dense, solids) {
  * margin it shrinks every hole by). A point exactly on the plane counts as
  * ahead of it, which is where the line's own start sits.
  *
- * A hole is built (a frame, which a pilot sees) or a gap in the lattice (no
- * pipe, which a pilot sees only while it is the target). The two are judged
- * apart: the built ones strictly, and the gaps by the course's own passes
- * all being there in order, with whatever else the line does at a gap
- * counted and not refused, as the solver prices it (PEN_GAP).
+ * A hole is built (a frame) or a gap in the lattice (no pipe of its own). They
+ * are judged alike, as one list: RaceGOW's rules say a course is flown
+ * "exactly as shown" and forbid a pass through a gate the other way to shorten
+ * the line, and the game scores a gap as it does a frame (src/game/raceline.js,
+ * THE RULES). They are still counted apart, so a failure says which it was.
  */
 function openingOrder(course, dense) {
   const race = new Race(gatesOf(course), course.trackClass);
@@ -215,6 +215,7 @@ function openingOrder(course, dense) {
   }
   const isGap = (e) => holes.get(e.slice(0, -1)).gap;
   return {
+    all: { expected, found },
     built: {
       expected: expected.filter((e) => !isGap(e)),
       found: found.filter((e) => !isGap(e)),
@@ -231,7 +232,10 @@ function openingOrder(course, dense) {
  * not, for the message. */
 function sameRound(found, expected) {
   if (found.length !== expected.length) {
-    return { ok: false, why: `${found.length} openings gone through, ${expected.length} asked for` };
+    return {
+      ok: false,
+      why: `${found.length} openings gone through, ${expected.length} asked for: line ${found.join(' ')}, course ${expected.join(' ')}`,
+    };
   }
   for (let r = 0; r < found.length; r += 1) {
     let same = true;
@@ -244,27 +248,6 @@ function sameRound(found, expected) {
   }
   const at = found.findIndex((f, i) => f !== expected[i]);
   return { ok: false, why: `first difference at ${at}: line ${found[at]}, course ${expected[at]}` };
-}
-
-/* Whether every pass the course asks for is among the line's, in order, going
- * round: the expected list is a subsequence of the found one from some
- * rotation of it. */
-function containsRound(found, expected) {
-  if (!expected.length) {
-    return { ok: true };
-  }
-  for (let r = 0; r < Math.max(1, found.length); r += 1) {
-    let at = 0;
-    for (let i = 0; i < found.length && at < expected.length; i += 1) {
-      if (found[(i + r) % found.length] === expected[at]) {
-        at += 1;
-      }
-    }
-    if (at === expected.length) {
-      return { ok: true };
-    }
-  }
-  return { ok: false, why: `the course's passes ${expected.join(' ')} are not all there in order in ${found.join(' ')}` };
 }
 
 /* ------------------------------------------------------------------ *
@@ -569,16 +552,19 @@ for (const doc of docs) {
   const verdict = verifyRaceLine(course, r);
   check('the real Race credits three laps of it', verdict.ok, `${verdict.laps} of ${verdict.wanted}`);
 
+  /* The openings are judged as one list, a frame and a gap alike (see
+   * openingOrder), and each kind again on its own so a failure names it. */
   const order = openingOrder(course, r.dense);
-  const round = sameRound(order.built.found, order.built.expected);
+  const round = sameRound(order.all.found, order.all.expected);
   check(
-    'it goes through the course\'s built gates in order and through no other, never the wrong way',
+    'it goes through the course\'s openings in order and through no other, never the wrong way',
     round.ok,
     round.why,
   );
-  const gapRound = containsRound(order.gaps.found, order.gaps.expected);
-  check('it goes through each gap in the lattice the course asks for, in order', gapRound.ok, gapRound.why);
-  const extra = order.gaps.found.length - order.gaps.expected.length;
+  const builtRound = sameRound(order.built.found, order.built.expected);
+  check('  of them the built gates', builtRound.ok, builtRound.why);
+  const gapRound = sameRound(order.gaps.found, order.gaps.expected);
+  check('  of them the gaps in the lattice', gapRound.ok, gapRound.why);
 
   const solids = solidsOf(course);
   check('every solid of the room is one the line can avoid', solids.unmodelled.length === 0, JSON.stringify(solids.unmodelled));
@@ -623,7 +609,7 @@ for (const doc of docs) {
   }
 
   console.log(`        lap ${r.lapS.toFixed(2)} s, ${r.count} crumbs, ${course.stations.length} gates, least clearance ${least.toFixed(3)} m, solved in ${ms.toFixed(0)} ms`);
-  console.log(`        passes through gaps out of turn or the wrong way: ${extra} here, ${r.gaps} by the solver's windows`);
+  console.log(`        openings gone through: ${order.built.found.length} built, ${order.gaps.found.length} gaps; the solver counts ${r.strays} out of turn`);
 
   if (FLY) {
     // eslint-disable-next-line no-await-in-loop

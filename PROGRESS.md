@@ -69177,6 +69177,7 @@ inertia in its attitude, so loop heavy tracks come out slow and tracks of short 
   A route that crossed none was contrived on Track 7 (two hard strays were left), so a stray through an unbuilt gap is a
   price (3 s) and not a wall. THIS IS MY CALL AND NOT THE OWNER'S, and it has not been put to them: Track 7's line
   crosses two gaps out of turn, which a pilot cannot see because a gap has no pipe. A built opening is still a wall.
+  [Reversed the same day on the owner's ask to follow RaceGOW's rules: a gap is a wall now. See the next entry.]
 - The plant replay misled me for a while. With the rig's own tracker (the one the prototype of this morning used and
   I trusted) Tracks 3 and 7 credited two laps of four, which read as a line the plant could not follow. It was the
   tracker. Its throttle trim integrates climb rate, so a trim wound by one moment stayed wound and held the craft
@@ -69207,3 +69208,105 @@ inertia in its attitude, so loop heavy tracks come out slow and tracks of short 
 - `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`.
 - `scripts/breadcrumb-proto.js`, the prototype in the entry above, is removed. What it did lives on in the check's
   `--fly`, and the file is in 53aa025.
+
+## 2026-10-08 | racing | Race line: held to RaceGOW's rules, so a gap in the lattice is a wall (draft PR #48)
+
+The owner, 14:37Z: "re the unbuilt gap crossing, go read the racegow rules here https://www.racegow.com/ make sure we
+adhear to that". That reverses the one judgement call in the entry above, where a pass through an unbuilt gap out of
+turn was a 3 s price and I wrote that it was my call and not the owner's. Still on the draft PR and not on main. No
+physics, plant, module ABI or build change, so `npm run verify` was not run (see the end).
+
+### What the rules say
+
+Read whole, as text, on 2026-10-08: the four documents linked from racegow.com (the Basic Concept and classes, the
+General Rules with the Code of Ethics and the season scoring, the RaceGOW6 micro tiers one, and "Track Building Rules
+and Information", Google doc 1RDksQXnRSFZk1Xtg7ERQPjo_-OQ_DxJzZDR5UEtFjFY, which `src/trackbuilder/racegow.js` already
+quotes). They were fetched with curl and read directly. WebFetch was redirected and its summary paraphrased, so nothing
+was taken from it.
+
+- General Track Rule 5: "Tracks must be built and flown exactly as shown, no modifications allowed. Mirror image
+  builds are not allowed". The Basic Concept says the same of the video: "fly them as shown in the flythrough video".
+- General Track Rule 7: "You cannot intentionally fly through any gates in the opposite direction to shorten your
+  line. For example if you have to go past a gate and then back through it, you cannot just fly through it backward and
+  then spin 180 back through the gate like a "cheese" move that many angle pilots use in place of a split-S or
+  corkscrew type maneuver on Velocidrone."
+- Rule 6 leaves the turn direction free where none is specified. Gate Rule 2: a gate "must be fully enclosed". The
+  score is the best three consecutive laps, the Code of Ethics is an honour system with zero tolerance, and there is no
+  penalty list and no gate miss rule.
+- Nothing about an opening with no pipe round it. So the rules do not forbid a pass through a gap in the lattice, and
+  my 3 s price was not their position on it either way. It was my argument (a pilot cannot see a stray through
+  something with no pipe), made without reading them.
+
+### What the line does now, and why it is stricter than the rules
+
+A framed opening and a gap are alike a wall out of turn and the wrong way. The reasons are ours and not the rules':
+the game scores a gap and lights it as an opening, so a pass through one the way the lap does not is the shortcut rule 7
+names, and a pass of one at a moment the lap does not is a route that is not the one shown (rule 5).
+
+That is stricter than RaceGOW's own flythroughs. TRACK-FROM-GIF.md step 8 records them crossing openings more often
+than the lap scores them (Track 6 five times under its left bar where the lap scores two, Track 3 four where it scores
+two), and Track 7's own builder line, the solver's baseline, crosses five openings out of turn on this reading (five
+walls, a penalty of 300 s). Whether the trail should be this strict or only as strict as rule 7 (never backward) is the
+owner's to say. The looser reading is the old behaviour at 7ccbe63, and putting it back is a change and not a switch.
+
+### What changed
+
+- `src/game/raceline.js`: `PEN_GAP` and the `soft` flag on a window are gone, so a gap's window is a wall like a
+  frame's in `legPenalty`, the tallies and the result (`gaps` is no longer a field of it). The header says what the
+  rules are and why the line is stricter. The detour loop covers gaps, and a detour is kept for what the lap costs once
+  the search has settled round it and not for what it costs the moment it goes in; one that does not pay is taken out
+  again with everything the settling moved. (Judged at the moment it went in, the first detour on Track 7 looks like a
+  loss, because it is the next two that clear the strays.)
+- `scripts/raceline-check.js`: the openings are one list, framed and gap alike, and the line must go through them in the
+  course's order and the right way and through no other, found again from the Race's own frames as before. Built and
+  gap are also checked on their own so that a failure names the kind. The "each gap, in order" test is gone: it was the
+  check agreeing with the price.
+
+### Run, in the same turn
+
+- `node scripts/raceline-check.js` (6 s): 91 checks, all pass, on all eight RaceGOW5 presets. With `--fly` (14 s): 99,
+  all pass, and every room credits four laps of four, at 1.08 to 1.17 times the line's time (Track 1 1.08, 2 1.13,
+  3 1.11, 4 1.17, 5 1.09, 6 1.08, 7 1.12, 8 1.10).
+- Against the committed solver (7ccbe63, run beside it on this machine), the 17 tracks on the board: eleven clean laps
+  are identical to the hundredth of a second, RaceGOW5 Track 7 goes from 36.09 s to 37.13 s, and Powerloop 1 (4 strays)
+  and 3 cubes (13) still refuse, Powerloop with a different refused answer. Garagetrack twice and Whoop Tech Flow,
+  which Node refuses for a barrier and a flag, give the identical line on both solvers with that piece ignored (43.84,
+  27.15 and 43.84 s), so no track without a lattice gap moved.
+- Track 7's line crosses no opening out of turn now (the old one crossed two gaps). It is 63.6 m against 61.9, reaches
+  the same 4.12 m at its highest, and asks the same of a point mass at 10 Hz (3.52 g at worst, in one kink both lines
+  share, and the thrust pointing down for 0.5 percent of the lap against 0.6).
+- Cost: Track 7 solves in about 0.9 s of CPU against 0.4, and Track 6 in 1.75 s against 0.85 for the same 51.57 s line.
+  Strategy "first" now ends unclean on Track 6 (3 strays, 1.4 s) and "always" finds the line in 0.46 s, while Track 3
+  and Track 7 need "first", so trying them the other way round moves the cost from one track to another. At 5 ms a
+  frame, under the "Working out the race line." notice, the wait on Track 6 goes from about three seconds to about six
+  (computed from the CPU time, as before, and not measured at 60 Hz or in a browser).
+- Also pass: `lint:preload`, `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71),
+  `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4) and `lint:partners`
+  (88). The changed files hold no em or en dash and keep their GPLv3 headers.
+
+### What went wrong
+
+- The 3 s price was a call made without reading the rules. It left Track 7's line crossing two gaps it should not have,
+  and the check agreed with it because I had written the check to the price.
+- Putting the walls in broke Track 6 before it fixed Track 7. A detour accepted on a loose test cleared Track 7 and
+  slowed Track 6 to 53.58 s, and a strict test refused the first detour on Track 7, which is the right one. The test
+  that works is the settled one above.
+- I guessed that Track 6's extra detours came from the solver's coarse 0.25 m sampling of its legs and tried 0.05 m. It
+  was wrong (Track 6 came out at 53.31 s) and it is reverted. The cost is the unclean first strategy.
+- Track 7's plant replay printed a worst error of 4.55 m, against 1.0 to 2.1 m for every other room, and I took it for
+  something in the line. It is the check's follower: its throttle trim winds up on a height error. In a scratch copy
+  with the trim gain at nothing, a quarter and a half of its value, the same line is flown 4 laps of 4 with a worst error
+  of 1.71, 1.27 and 1.96 m (1.18, 1.08 and 1.13 times the line's time, against 4.55 m and 1.12 at full). The check
+  asserts the laps and not that figure, and the follower's gains were fixed before this line existed, so I did not
+  change them to flatter it. It is still printed, and it is the follower and not a hump in the line.
+
+### Not measured, not run
+
+- Whether the official Track 7 flythrough passes the openings in the lap's order and no other. The sim's own knots, taken
+  from the GIF, do not on this reading, so the trail is the strict reading of the lap and may differ from the route the
+  video shows.
+- No frame cost on a real GPU or a low end laptop, and the longer solve was timed in Node. A human following the trail.
+  A collision in the plant replay (empty sky). Touch devices.
+- `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`, and `lint:shell`, which
+  fails on main as the entry above says and was not run again. `node scripts/shots.js`: the render did not change, but
+  the line it draws on Track 7 did, so flying it is the check that sees that.
