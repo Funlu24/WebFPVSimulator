@@ -69374,3 +69374,37 @@ append conflict at the end of this file and nothing else in these files.
   depth, and pictures.
 - What went wrong: the Low run stopped at the container's thirty minute limit for a background job after its street
   views. It was not run again, because the far plane's answer was already plain and the dome reorder is not kept.
+
+### Item 5: the town's sign sheets carry their own mip levels, on Medium and High
+
+- What changed, in `src/maps/city/bake.js` (`atlasTextures`, `packShelves`, and two new helpers): with levels asked
+  for, every tile is packed for ATLAS_LEVELS = 4 levels below its base, its origin and padded size on a 16 pixel grid
+  with a 16 pixel gutter of its own replicated edge on every side, corners included (`drawTilePadded`). Each level is
+  the one above halved by the canvas's bilinear filter at exactly half size, which is the two by two average, so no
+  average ever straddles two tiles (`sheetLevels`). three gets the five levels as `texture.mipmaps`, with
+  `generateMipmaps = false` and `LinearMipmapLinearFilter`, and WebGL 2 allocates exactly those five with texStorage.
+  The long MIPMAPS comment now says what is true. Without levels the sheet is packed and filtered exactly as before.
+- Where it is on: WebGL 2 on Medium and High (`atlasMips` in `src/maps/city/index.js`). WebGL 1 keeps the old sheet,
+  because three would shrink a sheet whose sides are not powers of two to the power of two below, which halves every
+  sign. Low keeps the old sheet too, for memory, below.
+- The cost, from `atlascensus.mjs` (`after/item5/census/`; the hunt's `census.mjs` reads `generateMipmaps` and would
+  call a texture with levels of its own "no mips", so it is not the instrument here): the town on Medium, 7 sheets
+  either way, 31.1 M pixels at level zero before and 34.9 M after (the 16 pixel gutters and the alignment), 46.4 M with
+  the levels; texture memory 197.3 MB to 258.4 MB. The three big sheets, 4088x4068, 4088x1660 and 4012x1172 before,
+  are 4096x4096, 4096x1792 and 3936x1840 with five levels each. Draw calls and triangles do not move (456 and
+  1,326,850 at the spawn street). The levels' canvases are kept beside the sheet's, as the sheet's always was, because
+  three uploads from them again after a lost context: another 46 MB outside the JS heap, and in Chrome a large canvas
+  can itself live in GPU memory.
+- That is why Low does not have them yet. Low is the 4 GB laptop's preset, and the half sheets the hunt pairs with the
+  levels, which would more than pay them back there, soften every sign up close, so they wait for the owner's
+  pictures. The question was never posted and the half sheets on Low were never shot: the work stopped first.
+- What it buys is fetch work at distance, which this container cannot time: SwiftShader exaggerates texture fetches
+  (the low end pass), and the hunt says to measure this one on the laptop. So no time is claimed. Settings, Input to
+  screen in the town on Medium before and after is the measurement.
+- Pictures: the same page run with and without the levels was stopped unfinished, so no picture is claimed.
+- WebGL 1: not run. The code builds the levels only when `renderer.capabilities.isWebGL2` and the quality is not Low.
+- Checks: `check:town-patrons` 24 passed, 0 failed (`check-town-patrons-item5.log`). Nothing else was run on it.
+- What went wrong: the first before and after pictures were two page loads, one per build, and the town's petals,
+  crossing barrier and swaying lanterns stood in different places in the two, so 1 to 6 percent of every view differed
+  for reasons that were not the change. The pairs were being shot again in one page, switching the sheets'
+  filter, when the work stopped.

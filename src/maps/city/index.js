@@ -2620,6 +2620,13 @@ export async function buildMap(shell, onProgress, options) {
      * shell can press one of the town's buttons. */
     releaseStillRigs: true,
     shadowProxyCell: q.shadows ? q.city.shadowProxyCell : 0,
+    /* The sign sheets' own mip levels: see MIPMAPS in ./bake.js for why
+     * WebGL 1 keeps the sheet without them. Not on Low yet: the levels and
+     * their wider gutters cost texture memory, 197 MB to 258 MB in the town
+     * on Medium, and Low is the 4 GB laptop's preset. Half sheets with
+     * levels would more than pay that back there, and they soften every
+     * sign up close, so that waits for the owner's pictures. */
+    atlasMips: renderer.capabilities.isWebGL2 === true && q.id !== 'low',
   });
   const thinned = thinFoliage(world.root, { keep: foliageKeep });
   const chunked = chunkInstanced(world.root, { cell: CULL_CELL });

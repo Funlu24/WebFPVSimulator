@@ -764,14 +764,35 @@ export function bakeColourToVertices(root, animated) {
  *   registered with the first. That is worth doing and it is not worth doing
  *   first, so those materials are counted as misses and left alone.
  *
- * MIPMAPS ARE OFF ON THE SHEET AND THAT IS A REAL COST, not an oversight. A
- * mip level averages across tile boundaries no matter how wide the gutter is,
- * because level n reaches 2^n pixels, so a sign at distance would pick up its
- * neighbour on the sheet. The alternatives are bleeding, or a gutter that
- * wastes most of the sheet, or no mips. Without mips a distant sign aliases
- * instead, which the fog at 65 m keeps short and which is the failure that
- * looks like the town rather than like a bug. The gutter is still there, at
- * two pixels of replicated edge, for the bilinear filter at level zero.
+ * MIPMAPS ARE BUILT PER TILE, AND STOP AT LEVEL FOUR, because a chain made
+ * from the whole sheet cannot be had. A full chain averages across tile
+ * boundaries no matter how wide the gutter is, because level n reaches 2^n
+ * pixels, so a sign at distance would pick up its neighbour on the sheet.
+ * Until the frame cost pass of 2026-10-08 the sheet had no mips for that
+ * reason, and paid for it twice: a distant sign aliased, and every fetch at
+ * distance was a full resolution fetch into a sheet four thousand pixels
+ * wide, which is cache misses, and texture bandwidth is what an integrated
+ * GPU sharing system memory is short of.
+ *
+ * What is true now. Every tile is placed for ATLAS_LEVELS levels below its
+ * base: its origin and its padded size are multiples of 2^ATLAS_LEVELS, 16
+ * pixels, and it carries a gutter of that width of its own replicated edge on
+ * every side, corners included. Level n is the level above it halved with a
+ * two by two average, and because every tile boundary lands on an even pixel
+ * at every level down to the last, no average ever straddles two tiles: each
+ * tile's level n is its own, at its origin divided by 2^n, inside a gutter
+ * of its own edge that is still one pixel wide at the last level, which is
+ * what the bilinear filter needs. Three gets the levels as `texture.mipmaps`
+ * and WebGL 2 allocates exactly those five with texStorage, so no level that
+ * could bleed ever exists. A tile minified more than sixteen times stays on
+ * level four, which the fog leaves to the last few metres of Medium's 53.
+ * The cost is memory: a third more for the levels, plus the wider gutters,
+ * measured in PROGRESS.md.
+ *
+ * WebGL 1 cannot mip a sheet whose sides are not powers of two without three
+ * shrinking it to the power of two below, which would halve every sign, so
+ * there the sheet is packed and filtered exactly as it was before: two pixels
+ * of replicated edge for the bilinear filter at level zero, no levels.
  *
  * COLOUR IS FOLDED HERE rather than left for bakeColourToVertices, because
  * that pass refuses anything carrying a `map` and it is right to: two meshes
@@ -791,16 +812,25 @@ function atlasGroupKey(m, tex) {
   ].join('|');
 }
 
+/* Levels below the base on a sheet, when the renderer can have them. See
+ * MIPMAPS above for why it is a short chain and not a full one. */
+const ATLAS_LEVELS = 4;
+
 /* Shelf packing, tallest first. A sheet here holds a few hundred small
  * canvases whose sizes repeat heavily, 108 of the town's textures are
  * 128 by 128, so the shelves come out nearly full and a better packer would
- * buy very little. */
-function packShelves(items, maxSize, gutter) {
+ * buy very little. `align` rounds each tile's size up to a multiple of
+ * itself; with a gutter that is a multiple of it too, every origin, every
+ * shelf and both sides of the sheet come out multiples of it, which is what
+ * lets a sheet be halved ATLAS_LEVELS times without an average crossing a
+ * tile. */
+function packShelves(items, maxSize, gutter, align = 1) {
+  const up = (v) => Math.ceil(v / align) * align;
   const sorted = [...items].sort((a, b) => b.h - a.h || b.w - a.w);
   const sheets = [];
   for (const it of sorted) {
-    const w = it.w + gutter * 2;
-    const h = it.h + gutter * 2;
+    const w = up(it.w) + gutter * 2;
+    const h = up(it.h) + gutter * 2;
     if (w > maxSize || h > maxSize) {
       it.sheet = -1;
       continue;
@@ -844,7 +874,8 @@ function packShelves(items, maxSize, gutter) {
    * first version allocated a full 4096 square canvas per sheet whatever went
    * on it, which for this town's 28.8 megapixels of packable texture was five
    * sheets and 335 MB of it blank. Nothing here needs a power of two: the
-   * sheet clamps and carries no mipmaps.
+   * sheet clamps, and its levels need only sides that halve evenly
+   * ATLAS_LEVELS times, which the alignment above gives.
    */
   for (const sheet of sheets) {
     sheet.w = Math.max(1, ...sheet.shelves.map((sh) => sh.x));
@@ -865,10 +896,68 @@ function drawTile(ctx, image, x, y, w, h, gutter) {
   }
 }
 
-export function atlasTextures(root, animated, { maxSize = 4096, gutter = 2 } = {}) {
+/* The same padding for a sheet that carries levels: the gutter on every side
+ * plus the alignment padding on the right and at the bottom, corners
+ * included, each side one stretched copy of the edge row or column. Smoothing
+ * is off for the stretch so every padded pixel is the edge pixel exactly. The
+ * corners matter here and did not at level zero alone: a level's two by two
+ * average of a blank corner would put the sheet's background one texel off a
+ * tile's corner, where the bilinear filter reaches. */
+function drawTilePadded(ctx, image, x, y, w, h, gutter, padW, padH) {
+  ctx.drawImage(image, x, y, w, h);
+  const right = padW - w + gutter;
+  const below = padH - h + gutter;
+  const iw = image.width;
+  const ih = image.height;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, 0, 0, iw, 1, x, y - gutter, w, gutter);
+  ctx.drawImage(image, 0, ih - 1, iw, 1, x, y + h, w, below);
+  ctx.drawImage(image, 0, 0, 1, ih, x - gutter, y, gutter, h);
+  ctx.drawImage(image, iw - 1, 0, 1, ih, x + w, y, right, h);
+  ctx.drawImage(image, 0, 0, 1, 1, x - gutter, y - gutter, gutter, gutter);
+  ctx.drawImage(image, iw - 1, 0, 1, 1, x + w, y - gutter, right, gutter);
+  ctx.drawImage(image, 0, ih - 1, 1, 1, x - gutter, y + h, gutter, below);
+  ctx.drawImage(image, iw - 1, ih - 1, 1, 1, x + w, y + h, right, below);
+  ctx.imageSmoothingEnabled = true;
+}
+
+/* Level 0 is the sheet itself; each level after it is the one above halved,
+ * a destination pixel's centre landing exactly between four source pixels,
+ * so the bilinear filter is the two by two average. 'low' is asked for by
+ * name because it is the bilinear one in Chrome: a wider resampler reaches
+ * past the block, which the gutter absorbs at every halving but the last,
+ * where it is two pixels wide. */
+function sheetLevels(canvas, levels) {
+  const out = [canvas];
+  let prev = canvas;
+  for (let n = 1; n <= levels; n += 1) {
+    const c = document.createElement('canvas');
+    c.width = prev.width / 2;
+    c.height = prev.height / 2;
+    const ctx = c.getContext('2d');
+    if (!ctx) {
+      return null;
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'low';
+    ctx.drawImage(prev, 0, 0, c.width, c.height);
+    out.push(c);
+    prev = c;
+  }
+  return out;
+}
+
+/* `levels` is ATLAS_LEVELS where the renderer can mip a sheet (WebGL 2) and 0
+ * where it cannot; at 0 the sheet is exactly what it was before it had
+ * levels, two pixels of gutter and LinearFilter. */
+export function atlasTextures(root, animated, { maxSize = 4096, gutter = 2, levels = 0 } = {}) {
+  const align = levels > 0 ? 1 << levels : 1;
+  if (levels > 0) {
+    gutter = align;
+  }
   const moving = animated ?? new Set();
   const stats = {
-    sheets: 0, sheetPixels: 0, packed: 0, meshes: 0, groups: 0,
+    sheets: 0, sheetPixels: 0, levels, levelPixels: 0, packed: 0, meshes: 0, groups: 0,
     skippedRepeat: 0, skippedUv: 0, skippedSecondMap: 0, skippedNoCanvas: 0,
   };
   if (typeof document === 'undefined' || !document.createElement) {
@@ -954,7 +1043,7 @@ export function atlasTextures(root, animated, { maxSize = 4096, gutter = 2 } = {
       continue;
     }
     const items = [...g.textures.values()];
-    const sheets = packShelves(items, maxSize, gutter);
+    const sheets = packShelves(items, maxSize, gutter, align);
     if (!sheets.length) {
       continue;
     }
@@ -971,12 +1060,26 @@ export function atlasTextures(root, animated, { maxSize = 4096, gutter = 2 } = {
         if (it.sheet !== sheet.index) {
           continue;
         }
-        drawTile(ctx, it.tex.image, it.x, it.y, it.w, it.h, gutter);
+        if (levels > 0) {
+          drawTilePadded(ctx, it.tex.image, it.x, it.y, it.w, it.h, gutter,
+            Math.ceil(it.w / align) * align, Math.ceil(it.h / align) * align);
+        } else {
+          drawTile(ctx, it.tex.image, it.x, it.y, it.w, it.h, gutter);
+        }
       }
+      const chain = levels > 0 ? sheetLevels(canvas, levels) : null;
       const atlas = new THREE.CanvasTexture(canvas);
       atlas.colorSpace = g.sample.map.colorSpace;
       atlas.magFilter = g.sample.map.magFilter;
-      atlas.minFilter = THREE.LinearFilter;
+      if (chain) {
+        atlas.mipmaps = chain;
+        atlas.minFilter = THREE.LinearMipmapLinearFilter;
+        for (const c of chain) {
+          stats.levelPixels += c.width * c.height;
+        }
+      } else {
+        atlas.minFilter = THREE.LinearFilter;
+      }
       atlas.generateMipmaps = false;
       atlas.wrapS = THREE.ClampToEdgeWrapping;
       atlas.wrapT = THREE.ClampToEdgeWrapping;
@@ -1194,6 +1297,7 @@ export function* bakeCitySteps(world, {
   casterMinRadius = 0,
   casterMinRadiusInstanced = casterMinRadius,
   atlasSize = 4096,
+  atlasMips = false,
   releaseStillRigs = false,
   shadowProxyCell = 0,
 } = {}) {
@@ -1220,7 +1324,7 @@ export function* bakeCitySteps(world, {
   /* Textures first, because it is the pass that turns a texture from a reason
    * two meshes cannot merge into a tile they share, and both passes below key
    * on the material it leaves behind. */
-  const atlas = atlasTextures(root, animated, { maxSize: atlasSize });
+  const atlas = atlasTextures(root, animated, { maxSize: atlasSize, levels: atlasMips ? ATLAS_LEVELS : 0 });
   yield 'atlas';
   const painted = bakeColourToVertices(root, animated);
   yield 'colour';
