@@ -6920,7 +6920,14 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * (KHR_parallel_shader_compile) between timer ticks, so the loading bar keeps moving, the links finish on the
    * driver's threads, and the first frame finds programs that are ready. Without the extension it falls back to
    * waiting a beat and then polling, which costs nothing the synchronous path did not. */
-  await renderer.compileAsync(scene, camera);
+  const parallelCompile = renderer.extensions.has('KHR_parallel_shader_compile');
+  if (parallelCompile) {
+    await renderer.compileAsync(scene, camera);
+  } else {
+    /* three logs a warning every time compileAsync is asked without the extension, and the page's console must stay
+     * clean (verify's world-scale reads it), so a driver without it takes the synchronous path main used. */
+    renderer.compile(scene, camera);
+  }
   progress(1);
 
   /*

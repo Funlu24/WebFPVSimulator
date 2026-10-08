@@ -517,7 +517,7 @@ function preloadMapModules(id) {
  */
 async function precompileWorld(shell, map, loading) {
   const r = shell.renderer;
-  if (!map.scene || !r || typeof r.compileAsync !== 'function' || map.id === 'field' || map.id === 'custom') {
+  if (!map.scene || !r || typeof r.compileAsync !== 'function' || !r.extensions.has('KHR_parallel_shader_compile') || map.id === 'field' || map.id === 'custom') {
     return;
   }
   try {
