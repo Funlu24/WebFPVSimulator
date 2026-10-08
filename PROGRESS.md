@@ -69408,3 +69408,32 @@ append conflict at the end of this file and nothing else in these files.
   crossing barrier and swaying lanterns stood in different places in the two, so 1 to 6 percent of every view differed
   for reasons that were not the change. The pairs were being shot again in one page, switching the sheets'
   filter, when the work stopped.
+
+### Item 8: the yard casts its shadows from one proxy per chunk
+
+- What changed, in `src/maps/built/index.js` (`buildShadowProxies`, after the marks are painted and before the cull
+  cells are measured): every casting batch in a chunk that the shadow pass cannot tell apart (same face choice and
+  index format, no alpha tested or displacement map, no depth material of its own, not wireframe, clipped, skinned,
+  morphed or mirrored) is merged into one position only mesh, a child of its chunk, and the batches stop casting. The
+  cull that switches a chunk off switches its proxy off with it, as it did the batches. Unlike the town's proxies,
+  these draw nothing in the colour pass: three takes an object into the colour pass on the same tests as the shadow
+  pass, so the proxy empties its draw range in onBeforeRender, which only the colour pass calls (the shadow pass calls
+  onBeforeShadow), and puts it back in onAfterRender. The colour pass is left a call of zero triangles per proxy in
+  view.
+- The numbers, Medium, the census view, `census-root.mjs yard medium` against the branch tip before this item
+  (`after/item8/census/`): draws into the 1024 shadow map 184 to 52 a frame; colour draws 146 to 155, the nine new ones
+  the proxies in view at zero triangles; calls in the ledger 331 to 208. `casters.mjs` (`after/item8/casters/`) says
+  where the 52 come from: the chunks' 201 casting batches are 19 proxies of the same 131,768 triangles, with none kept
+  back; what still casts for itself is outside the chunks, 22 car meshes and their 4 instanced wheel draws, the craft's
+  8 meshes and a kerb. The prompt leaves the cars alone, which is why it is 52 and not about 10.
+- Not done from the prompt: shadows off for anything under half a metre. It is a change to the picture, every small
+  prop loses its shadow, and at Medium's 12 cm texel a half metre prop casts a shadow four texels wide, which a pilot
+  low over the yard sees. With the merge the chunks are 19 draws whatever their size, so it would save triangles in
+  the shadow pass and no draws.
+- The prompt asks for the proxy to be rebuilt when the builder edits the map. There is no live edit: the yard is built
+  by buildMap from the builder's document for every flight, and the proxies with it.
+- Pictures: eight yard views in one page (`after/item8/proxy8`), the proxies casting against the batches casting,
+  are identical except two patches of 5 and 17 pixels, and two renders of the same state differ in the same two
+  patches (12 and 13 pixels), so those are something still moving. The census, over and down views were cut off by
+  the run's time limit.
+- Checks: `check:builder` not run. PR 50 carries its own version of this item.

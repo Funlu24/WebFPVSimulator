@@ -73,6 +73,7 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PAL } from '../city/vendored/core/palette.js';
 import { Pipeline } from '../city/vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
@@ -546,6 +547,128 @@ function wirePairs(items, reach) {
     }
   }
   return out;
+}
+
+/*
+ * THE SHADOW PROXIES, the town's answer to a shadow pass that costs more
+ * draws than the picture. The kit bakes one batch per material per chunk,
+ * and every batch that casts is a draw in the shadow pass as well as in the
+ * colour pass: the frame cost pass of 2026-10-08 counted 184 shadow draws at
+ * 1024 against 146 colour draws on Medium.
+ *
+ * The shadow pass reads only a few things of a material: which faces it
+ * draws (the material's shadowSide, or else the side opposite its own),
+ * whether an alpha tested map cuts holes in it or a displacement map moves
+ * it, whether it is drawn as wireframe or clipped, and whether it is
+ * visible; and of the mesh, whether it brings a depth material of its own or
+ * is skinned or morphed. Every casting batch in a chunk that differs in none
+ * of those is the same draw to the shadow pass, so they are merged here into
+ * one position only mesh per chunk, per face choice and per index format
+ * (mergeGeometries returns null on a mixed set; buildShadowProxies in
+ * src/maps/city/bake.js learned that the hard way, and this follows it). The
+ * batches stop casting. Anything that differs keeps casting for itself, and
+ * so do the cars, which are not in the chunks. Shapes are not thinned:
+ * a half metre box casts four texels at Medium's 12 cm, so it stays.
+ *
+ * Two differences from the town's. A proxy here is a child of its chunk, so
+ * the cull that switches a chunk off switches its shadow off with it,
+ * exactly as it did the batches'. And it draws nothing in the colour pass.
+ * three puts an object in the colour pass on the same tests it uses for the
+ * shadow pass (visible, layers, material.visible), so the hooks are the only
+ * difference there is to work with: onBeforeRender is the colour pass's and
+ * not the shadow pass's (that one is onBeforeShadow). An empty draw range in
+ * the one hook, put back in its pair, leaves a call of zero triangles where
+ * the town draws every casting triangle a second time, invisibly, which is a
+ * cost a laptop that is short of GPU cannot spare.
+ */
+const SHADOW_SIDE = { [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide };
+
+function buildShadowProxies(props) {
+  const stats = { proxies: 0, from: 0, kept: 0, triangles: 0 };
+  const materials = new Map();
+  const materialFor = (side) => {
+    let m = materials.get(side);
+    if (!m) {
+      m = new THREE.MeshBasicMaterial();
+      m.colorWrite = false;
+      m.depthWrite = false;
+      m.shadowSide = side;
+      m.name = 'shadowProxy';
+      materials.set(side, m);
+    }
+    return m;
+  };
+  const skipColour = function () {
+    this.geometry.drawRange.count = 0;
+  };
+  const restore = function () {
+    this.geometry.drawRange.count = Infinity;
+  };
+  props.updateMatrixWorld(true);
+  for (const chunk of props.children) {
+    const buckets = new Map();
+    for (const o of chunk.children) {
+      if (!o.isMesh || o.isInstancedMesh || !o.castShadow || !o.visible) {
+        continue;
+      }
+      const mat = o.material;
+      const geo = o.geometry;
+      if (Array.isArray(mat) || !mat.visible || !geo || !geo.attributes.position) {
+        continue;
+      }
+      /* A mirrored batch is drawn with its winding flipped back by three,
+       * which a merge would lose, so it would cast from its other faces. */
+      if (o.customDepthMaterial || o.isSkinnedMesh || geo.morphAttributes.position
+        || mat.alphaHash || mat.displacementMap || mat.wireframe || mat.clippingPlanes
+        || ((mat.map || mat.alphaMap) && mat.alphaTest > 0) || o.matrix.determinant() < 0) {
+        stats.kept += 1;
+        continue;
+      }
+      const side = mat.shadowSide !== null && mat.shadowSide !== undefined ? mat.shadowSide : SHADOW_SIDE[mat.side];
+      const key = `${side}|${geo.index ? 1 : 0}`;
+      let list = buckets.get(key);
+      if (!list) {
+        list = { side, geos: [] };
+        buckets.set(key, list);
+      }
+      const src = geo.attributes.position;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(src.array.slice(), src.itemSize));
+      if (geo.index) {
+        g.setIndex(new THREE.BufferAttribute(geo.index.array.slice(), 1));
+      }
+      /* Its own matrix and not its world one: the proxy is its sibling, so
+       * whatever the chunk and the props group carry is applied to both. */
+      g.applyMatrix4(o.matrix);
+      list.geos.push(g);
+      o.castShadow = false;
+      stats.from += 1;
+    }
+    for (const b of buckets.values()) {
+      const geo = b.geos.length === 1 ? b.geos[0] : mergeGeometries(b.geos, false);
+      if (b.geos.length > 1) {
+        for (const g of b.geos) {
+          g.dispose();
+        }
+      }
+      if (!geo) {
+        continue;
+      }
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, materialFor(b.side));
+      mesh.name = 'shadowProxy';
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      mesh.matrixAutoUpdate = false;
+      mesh.onBeforeRender = skipColour;
+      mesh.onAfterRender = restore;
+      chunk.add(mesh);
+      stats.proxies += 1;
+      stats.triangles += geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+    }
+  }
+  stats.triangles = Math.round(stats.triangles);
+  return stats;
 }
 
 /*
@@ -1193,6 +1316,10 @@ export async function buildMap(shell, onProgress, options) {
   const marks = paintPartnerMarks(props, placed, partnerSpots, look);
   const patronMarks = paintPatronMarks(props, placed, patronSpots, look);
   const allMarks = [...marks, ...patronMarks];
+  /* After the marks, which are paint and cast nothing, and before the cull
+   * cells are measured from the chunks' children (a proxy's bounds are
+   * inside its batches', so they measure the same). */
+  const proxies = q.shadows ? buildShadowProxies(props) : null;
   scene.add(props);
   progress(0.8);
 
@@ -1502,6 +1629,7 @@ export async function buildMap(shell, onProgress, options) {
       cullRadius,
       fog: { near: fogNear, far: fogFar },
       shadowExtent: half,
+      shadowProxies: proxies,
       skyRadius,
       cameraFar,
       pipelineScale: pipeline.scale,
