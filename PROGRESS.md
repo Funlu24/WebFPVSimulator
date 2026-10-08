@@ -69437,3 +69437,18 @@ append conflict at the end of this file and nothing else in these files.
   patches (12 and 13 pixels), so those are something still moving. The census, over and down views were cut off by
   the run's time limit.
 - Checks: `check:builder` not run. PR 50 carries its own version of this item.
+
+### Stopped here: PR 50 carries the pass
+
+- PR 50 (the thread "Implement sim performance changes") builds the same hunt items and is the one the project keeps.
+  The coordinator asked this thread to stop and close PR 51 at 13:43Z; the note reached it at 19:03Z, because it was
+  in one long run and messages to a thread wait for its run to end. PR 51 is closed. Mat answered the item 4 card in
+  this thread "Yes, do it" at 15:01Z; that answer has been passed to PR 50's thread, and item 4 is not on this branch.
+- Items 5 and 8 above were committed after the stop so the work is not lost with the container, and are less proven
+  than the items before them; each says what was and was not shown.
+- Not on this branch: item 10 (the town bake copying one bucket at a time, and a fit cache in the vendored
+  `core/textures.js`), kept as a patch with its checks in `/mnt/project-files/perf-hunt/pr51-extras/`; the item 11
+  and 14 pictures (shot, never compared); item 13's console recipe, in the same folder's README.
+- What went wrong: five hours of this thread's work duplicated another thread's, because it did not read its own
+  thread during a long run. A long run now reads its thread and its notifications every half hour or so (team memory,
+  `long-turn-hides-relays`).
