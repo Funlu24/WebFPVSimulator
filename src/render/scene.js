@@ -4808,8 +4808,8 @@ function skyDome(q = null) {
   const geo = new THREE.SphereGeometry(1500, 40, 24);
   /* The streak cloud on Medium and High, compiled in rather than switched
    * by a uniform: Low's dome is main's program. It was a uniform branch
-   * until the sweep after graphics pass 25, which found a software renderer
-   * paying for code behind a branch it never took (src/render/comic.js,
+   * until the sweep after graphics pass 25, which found Low paying, in a
+   * software renderer, for comic code it never drew (src/render/comic.js,
    * chunkOn), and a preset change builds the dome again anyway. */
   const cirrus = !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({

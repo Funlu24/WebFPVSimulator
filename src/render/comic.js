@@ -177,8 +177,9 @@ const LEVELS = {
  * there anyway, with its knobs at zero, so the machines that boot on Low (a
  * phone, a laptop with no usable GPU) paid for strokes nobody drew. Measured
  * in headless Chromium, whose renderer is software, the whoop room on Low
- * drew a frame in about 250 ms where main draws it in 110, with the same
- * draw calls and triangles, and in 110 with the chunk left out. So on Low
+ * drew a frame in 231 to 246 ms where main drew it in 112 to 117, with the
+ * same draw calls and triangles, and with the chunk compiled out it draws
+ * in 108 to 110, where main drew in 110 to 115 in the same run. So on Low
  * the hook adds nothing and the program is main's, and the program cache
  * key below says which of the two a material has. A material that outlives
  * a world (the craft) is compiled again in the next one: see
