@@ -69064,3 +69064,61 @@ append conflict at the end of this file and nothing else in these files.
 - Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
+
+### The performance pass from the 2026-10-08 hunt (draft PR #50)
+
+Implements the hunt's findings in order, one commit per item, on `claude/project-thread-lq1t4u` from main at da4e4b7.
+Nothing here is on main. Render and shell side only: no physics, plant, module ABI or build change, so `npm run verify`
+was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milliseconds are not claimed; counts are.
+
+- Item 2, index the baked merges (eaf0197). Field, Medium: non indexed triangles 313,735 to 9,441; the 99,192
+  triangle hull mesh 297,576 vertices to 80,179; top mesh attribute bytes 32.1 MB to 11.6 MB. Parked shots differ from
+  main only where two runs of main differ (clouds, flags). `lint:quality`, `check:room`, `check:props` pass.
+- Item 9, no outdoor terrain grid in the room (2ca9b51). The terrain mesh stays (the ambient occlusion pass reads its
+  vertices) at two cells a side; the height field is untouched. Room scene triangles 117,358 to 11,566; three parked
+  views are pixel identical to main. `check:room`, `lint:quality` pass.
+- Item 12, one state view and one report view (a067ddd). The gamepad half is NOT done: input.js polls the roster on
+  purpose ("rather than trusted to gamepadconnected", Chrome hides a pad until it moves) and a slower pad poll changes
+  input latency, which is the owner's call. `input:selftest` 380, `check:plant:selftest`, `check:world-golden` pass.
+  `lint:input` is 245 of 246, and the one failure (builder chooser, "a key pressed at the question") fails the same
+  way on da4e4b7.
+- Item 3, parallel shader compile (446ccd0). Field and room wait on `compileAsync`; the town and yard, which were never
+  compiled ahead, now compile their whole graph in `precompileWorld` (main.js) against a render target, because three
+  keys programs on the target: against the canvas it linked 282 programs in the town. Programs at ready, then after a
+  flight: town main 125 then 131, branch 157 then 157; yard main 62 then 93, branch 104 then 104; field 46 both.
+  Nothing links in flight any more. First frame under SwiftShader: town 54.8 s to 49.6 s in one run (a later profiled
+  run read 65 s, so call it noise), yard 17.3 s to 22.4 s (more programs linked up front on the same cores), field
+  unchanged. A driver with parallel compile should do better than this, and that is unmeasured here. Not done: keeping
+  programs across a world swap. WebGL 1 boots on all three with zero Shader Error lines. `lint:boot`, `check:fresh`,
+  `lint:preload` pass.
+- Item 7, petals and blossom (bb73454). Half the field a step, each half with the time it waited, because the field
+  is stateful (wind, respawn) and a vertex shader would have changed what it simulates. Town flight profile: petals.js
+  123 ms to 18 ms, blossom.js 44 ms to 10 ms self time. Petals still fall between two shots. `check:world-town` passes.
+  The vendored `PATCH-world-petals.diff` is regenerated (edef203).
+- Item 8, yard shadow proxies (edef203). 1024 map draws 184 to 52 (the rest are cars, wheels and the craft); colour
+  draws 146 to 155. Shadows in frame pixel identical to main. `lint:memory`, `lint:quality` pass. `check:builder`
+  fails one check ("and the ring is at its foot") the same way on da4e4b7.
+- Item 10: tried, not committed. A `fitText` cache took fitText self time from 3030 ms to 2859 ms in the town boot, so
+  the texts do not repeat enough to pay for it. Geometry is already freed at merge in `bakeCitySteps`, and the build
+  already yields there, so there was nothing cheap left.
+- Item 6: not done. The far plane cannot come in: the sky dome is 500 m and the hills live past the fog by design
+  (the comment above CAMERA_FAR). Tiling the merge was measured by an earlier round (MERGE_CELL 80 to 240 lost at
+  every value, 4145 to 4162 against 3831, "the frame is short of draw calls, not triangles"); see the note above in
+  this file. Nothing was re-measured.
+- Item 5: mipmaps not done. Tiles aligned to 16 px with a 16 px gutter grow the sheets by roughly half and the chain
+  adds a third, so texture memory would go up by about two thirds in the town, against the standing low end priority.
+  Half resolution sheets on Low are the visible option: pictures in `/mnt/project-files/perf-hunt/after/item5/` (the
+  spawn views barely show a sign, so they differ by under 0.1 percent).
+- Item 1A, one scene pass: not started, and where it is hard. Multiple render targets need (a) a second output in
+  every material the colour pass draws, the toon hook and every ShaderMaterial (sky, glow, flags), with no way to
+  verify that a material that omits the output leaves the attachment alone, which WebGL leaves undefined; (b) a per
+  attachment clear (three clears all attachments to one colour, the second needs (0,0,1,0) with the horizon colour
+  on the first), by hand through the context; (c) blending on transparent materials applying to both outputs; (d) the
+  composer's ping pong targets cloned from an MRT target. That is more than two days without a GPU to see undefined
+  behaviour on. 1C, half resolution prepasses, was tried locally and not committed: thin lines (poles, tubes) break
+  up and thicken, pictures in `/mnt/project-files/perf-hunt/after/item1c/`. Not recommended.
+- Item 4: the owner has a decision card in the thread; nothing written, because the plant reads this height.
+- What went wrong: the first `precompileWorld` linked 282 programs in the town (wrong render target); the first
+  room pixel diffs were against the menu overlay and said nothing until the overlay was hidden; a 15 minute timeout
+  killed `check:builder` once.
+- Not run: `npm run verify`, `lint:shell`, `lint:responsive`, a flight on real hardware.
