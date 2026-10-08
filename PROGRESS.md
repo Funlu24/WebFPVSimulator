@@ -68717,9 +68717,45 @@ append conflict at the end of this file and nothing else in these files.
 - WebGL 1 (getContext refusing `webgl2`, as a browser without it): the field and the room on the title, the town and
   the yard in flight, at Medium and High. Every world drew, no shader error, no page error, the only console error the
   refused board ping.
-- Cost: every world on every preset timed again with the fixes, main and branch alternating, one at a time. The room
-  is done: on Low it draws in 108 to 110 ms where main drew in 110 to 115 in the same run, so Low is main again. The
-  rest of the table follows in the next commit.
+- Cost: every world on every preset timed again with the fixes, main and the branch one at a time, the order of each
+  pair alternating, ten drawn frames on each fixed view (the field's gate and overview, the room's card view and
+  corner, the town's park and overview, the yard's low, top and tree views), the browser profiles deleted between
+  runs. The frame times are headless Chromium's software renderer, where the CPU stands in for the GPU and pays for
+  every pixel's arithmetic at its own speed, so they are the comic layer's arithmetic at its worst, and only the ratio
+  between main and the branch means anything; two runs of one build differ by up to 12 percent.
+
+  | World | Preset | Draw calls | Triangles | Frame, main then branch, per view (ms) |
+  | --- | --- | --- | --- | --- |
+  | Field | Low | +1 | +6% | 107, 107; 122, 118 |
+  | Field | Medium | +2 | +5% | 252, 480; 295, 460 |
+  | Field | High | +2 | +5% | 350, 640; 375, 670 |
+  | Room | Low | same | same | 115, 108; 110, 110 |
+  | Room | Medium | same | same | 192, 452; 182, 412 |
+  | Room | High | same | same | 270, 538; 245, 435 |
+  | Town | Low | 3 to 4% fewer | +9% | 270, 272; 308, 283 |
+  | Town | Medium | 3% fewer | +19 to 20% | 525, 1210; 573, 1682 |
+  | Town | High | 3% fewer | +19 to 20% | 578, 1692; 763, 2252 |
+  | Yard | Low | 6 to 33% fewer | +44 to 172% | 143, 140; 142, 142; 122, 115 |
+  | Yard | Medium | 4 to 5% fewer | +48 to 93% | 310, 757; 372, 883; 275, 607 |
+  | Yard | High | 3 to 8% fewer | +52 to 89% | 475, 938; 537, 1307; 408, 903 |
+
+  Low is main again on every world, every view within 8 percent either way, inside the spread. Medium and High take
+  1.6 to 3.0 times main's frame in this renderer: the field 1.6 to 1.9, the room 1.8 to 2.4, the yard 2.0 to 2.4 and
+  the town 2.3 to 3.0. Draw calls are never more than two above main, and fewer in the town and the yard (the clouds,
+  and the quad where it is drawn). Triangles rise most in the yard, whose canopies are round on Low and clumps above
+  it; its tree view's 172 percent on Low is 22,309 to 60,701 triangles at the same frame time.
+- Whether that renderer also pays for code behind a uniform branch it never takes, which would make its numbers worse
+  than a GPU's, was tested once: the room on Medium with the grime block, which nothing in the room takes, compiled
+  in and compiled out, three runs each, alternating. In, it drew in 373 to 487 ms, mean 432; out, in 270 to 422,
+  mean 368. Suggestive and inside the spread, so the table is not discounted for it.
+- On a real GPU the comic layer's share of the frame is smaller, because arithmetic is cheap there next to the rest
+  of a frame's work, but not nothing. Read from the source, not measured: the chunk adds a few hundred operations a
+  pixel in shade (the pen's wander and weight, which are two noises, and two stroke sets) and about half that in
+  light (the grit's two noises, and two fetches on the ground), on top of main's toon shading. A weak integrated GPU
+  on Medium will feel it and a discrete one should not. Auto graphics, on by default, lowers the resolution and then
+  the preset when a machine falls behind, so the worst case is a softer picture, not a slide show. The board's course
+  thumbnails (`src/share/orbit.js`) are built on Low, so they now pay nothing for it either; the share card is one
+  frame at High. Frame rate on real hardware against main is the check this container cannot make.
 - The builder's 3D preview of the golden yard: 167,201 triangles where main draws 122,825, 36 percent more, of which
   45,990 are the canopy clumps. It has no preset to switch them on, so every machine draws them; whether it should is
   the owner's call, and it is still open.
