@@ -68686,18 +68686,19 @@ append conflict at the end of this file and nothing else in these files.
   `/mnt/project-files/graphics-pass/sweep/`.
 - Found and fixed: Low paid for the comic layer it does not draw. `src/render/comic.js` compiled its chunk into every
   toon program on every preset and set its knobs to zero on Low, and the field's sky dome carried the streak cloud
-  behind a uniform branch. Headless Chromium renders in software, which is also what a machine with no usable GPU
-  gets and why it boots on Low, and there the whoop room on Low drew a frame in 231 to 246 ms where main drew it in
-  112 to 117, with the same draw calls, triangles and programs. The field on Low was 73 to 121 percent slower than
-  main, the town 70 to 72, the yard 54 to 117. Now
-  Low compiles none of it: the hook adds nothing and the program cache key says so (`chunkOn`, `comicChunkOn`), the
-  town's and the yard's ink skip the canopy codes no material writes there, and the field's dome compiles the streak
-  cloud in only on Medium and High (`COMIC_CIRRUS`). A preset change builds the world again, so the world's materials
-  follow it; the craft outlives the world, so `evictSessionRoots` in `src/render/shell.js` now marks every session
-  root's materials to compile again in the next world. Checked with the program keys exposed for one run (an
-  experiment, reverted): booted on Low, no program carries the chunk; switched to High in the session, every one of
-  the scene's toon materials and the craft's 14 do; back to Low, the scene's are Low's again and so are the craft's,
-  but for three that had not been drawn since, which take it at their next draw.
+  behind a uniform branch. Headless Chromium renders in software, which is also what a machine with no usable GPU gets
+  and why it boots on Low, and there the whoop room on Low drew a frame in 231 to 246 ms where main drew it in 112 to
+  117, with the same draw calls, triangles and programs. The field on Low was 73 to 121 percent slower than main, the
+  town 70 to 72, the yard 54 to 117. Now Low compiles none of it: the hook adds nothing and the program cache key says
+  so (`chunkOn`, `comicChunkOn`), the town's and the yard's ink no longer read the canopy codes, which no material
+  writes on Low, and the field's dome compiles the streak cloud in only on Medium and High (`COMIC_CIRRUS`). A preset
+  change builds the world again, so the world's materials follow it; the craft outlives the world, so
+  `evictSessionRoots` in `src/render/shell.js` now marks every session root's materials to compile again in the next
+  world. Checked with the program keys exposed for one run (an experiment, reverted): booted on Low, no program
+  carries the chunk; switched to High in the session, every one of the scene's toon materials and the craft's 14 do;
+  back to Low, the scene's are Low's again and so are the craft's, but for three in the town, still on High's program
+  when read. Those were not drawn in between, and a material marked to compile does it at its next draw, so they are
+  expected, not seen, to change there.
 - Found and fixed: the whoop room's course inked solid. Its tubes are a few pixels across, and the outline's crease
   term reads a tube's own curve as a fold, so it inks most of every tube, on main too. In main's slate at 0.85 a grey
   tube still read as grey and the red pole as red; in the comic layer's near black at full strength they went black,
@@ -68709,11 +68710,24 @@ append conflict at the end of this file and nothing else in these files.
   is what found the cause. A crease term that tells a curve from a fold would let the room have the comic ink, and is
   left for a pass of its own because it changes every world's line. The whoop gate card (`assets/gate/whoop.jpg`),
   kept as shipped in pass 25 for this, is regenerated with the fix.
-- Checks, 38 of the repository's own on the branch head: 34 pass. The four that fail fail on main too, with the same
-  output: `lint:shell` (the same seven overflow and fold problems, line for line), `lint:input` (1 of 246, the builder
-  chooser's V key test, the same JSON), `lint:devices` (three problems; main had the same three and a fourth, a drawer
-  on the tablet portrait room), and `lint:catalog`, which needs `vendor/betaflight`, absent from this container.
-  The final verify and the re-runs of the cheap checks on the tree with these fixes follow in the next commit.
+- Checks, 38 of the repository's own on the branch head before the fixes: 34 pass. The four that fail fail on main
+  too, with the same output: `lint:shell` (the same seven overflow and fold problems, line for line), `lint:input` (1
+  of 246, the builder chooser's V key test, the same JSON), `lint:devices` (three problems; main had the same three
+  and a fourth, a drawer on the tablet portrait room), and `lint:catalog`, which needs `vendor/betaflight`, absent
+  from this container. On the tree with the fixes (81000c5): `npm run verify` 17 of 17, the build skipped (no emcc, no
+  `vendor/betaflight`), every world golden run bit identical, and map isolation's field at 118 draw calls and 974,191
+  triangles before and after a round trip to the town, as at 28a057d. Seventeen targeted checks all pass:
+  `lint:quality`, `lint:frame`, `lint:preload`, `lint:boot`, `check:room` (71), `micro:check`, `check:craft` (20 of
+  20), `check:orbit`, `check:props`, `check:world`, `lint:memory`, `check:longflight`, `check:takeoff`, `check:seat`,
+  `check:crash`, `lint:attract` and `check:fresh` (18).
+- Low after the fix, photographed against the branch before it (5efafbd) on the same container: the yard's low, top
+  and tree views and the town's park view draw pixel for pixel as they did, but for the traffic and a futon that
+  sways on a balcony rail. Against main, Low differs where the branch always has: the grade (the field's vibrance
+  and contrast curve and the town's saturation and lift are uniforms in passes Low already runs), the clouds, the
+  yard's round canopies and the new models. Neither the town nor the yard draws ink on Low, on main or here, so
+  leaving the blob codes out there changes no line. The town's and the field's second views did not take in three of
+  those runs (the camera was still where the first view left it, a frame count wait that is too short on a fast
+  world), and those pictures are not counted.
 - WebGL 1 (getContext refusing `webgl2`, as a browser without it): the field and the room on the title, the town and
   the yard in flight, at Medium and High. Every world drew, no shader error, no page error, the only console error the
   refused board ping.
@@ -68767,4 +68781,7 @@ append conflict at the end of this file and nothing else in these files.
 - What went wrong: the first fix for the room (the reach alone) did nothing; the first timing pass ran out of disk
   and its last runs failed, and its numbers before that were what showed Low's cost; a wait that killed its own shell
   with a pattern that matched its own command line, again.
-- Not run yet: the final verify, which follows.
+- Not run again on the tree with the fixes: the other 21 of the 38, which ran at the head before them. The three that
+  fail on main too and the catalog lint are layout, input and the vendored sources, which the fixes do not touch;
+  the rest passed there, and the longest of them, `check:builder`, is a page that never loads the comic layer (nothing
+  `src/trackbuilder/start.js` imports reaches `src/render/comic.js`), so the fixes cannot reach it.
