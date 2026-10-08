@@ -109,6 +109,8 @@ export class Sim {
     this.e = exports;
     this.statePtr = 0;
     this.stateDoubles = 0;
+    this.stateView = undefined;
+    this.stateViewBuf = null;
   }
 
   abiVersion() {
@@ -196,8 +198,14 @@ export class Sim {
     if (code !== SIM_OK) {
       return { code, state: null };
     }
-    const view = new Float64Array(this.e.memory.buffer, this.statePtr, n);
-    return { code, state: new Float64Array(view) };
+    /* One view over the state block, rebuilt only when the module's memory grows and the buffer changes identity,
+     * instead of one per step at 1 kHz. The copy stays: callers keep the previous state beside the current one. */
+    const buf = this.e.memory.buffer;
+    if (this.stateView === undefined || this.stateViewBuf !== buf || this.stateView.length !== n) {
+      this.stateView = new Float64Array(buf, this.statePtr, n);
+      this.stateViewBuf = buf;
+    }
+    return { code, state: this.stateView.slice() };
   }
 
   // Returns { code, bytes } with the raw little-endian state block bytes,

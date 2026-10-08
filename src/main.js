@@ -1965,7 +1965,13 @@ export async function boot({ loading, bootStart, mapId }) {
       worldReportPtr = sim.e.malloc(11 * 8);
     }
     sim.e.sim_world_report(worldReportPtr);
-    worldReport.set(new Float64Array(sim.e.memory.buffer, worldReportPtr, 11));
+    /* One view, rebuilt only when the module's memory grows and the buffer changes identity: this runs every step. */
+    const buf = sim.e.memory.buffer;
+    if (worldReportView === null || worldReportViewBuf !== buf) {
+      worldReportView = new Float64Array(buf, worldReportPtr, 11);
+      worldReportViewBuf = buf;
+    }
+    worldReport.set(worldReportView);
     return worldReport;
   }
 
@@ -2996,6 +3002,8 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   const worldReport = new Float64Array(11);
   let worldReportPtr = 0;
+  let worldReportView = null;
+  let worldReportViewBuf = null;
   const frameReport = emptyWorldReport(new Float64Array(11));
   const passStats = {
     steps: 0,
