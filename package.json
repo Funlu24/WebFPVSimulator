@@ -35,6 +35,7 @@
     "check:crash-pacing": "node scripts/crash-pacing.js",
     "check:takeoff": "node scripts/takeoff-check.js",
     "check:longflight": "node scripts/longflight-check.js",
+    "check:tune": "node scripts/tune-check.js",
     "check:world": "node scripts/world-check.js",
     "check:world-golden": "node scripts/world-golden.js",
     "check:world-golden:selftest": "node scripts/world-golden.js --selftest",
@@ -79,6 +80,7 @@
     "music:selftest": "node scripts/music-selftest.js",
     "stats:selftest": "node scripts/stats-selftest.js",
     "support:selftest": "node scripts/support-selftest.js",
+    "tune:selftest": "node scripts/tune-selftest.js",
     "seat:selftest": "node scripts/seat-selftest.js",
     "test:edge": "node edge/selftest.js",
     "lint:nouns": "node scripts/noun-lint.js",
@@ -93,6 +95,7 @@
     "trick:proven": "node scripts/trick-sweep.js --all --write",
     "check:craft": "node scripts/craft-check.js",
     "check:seat": "node scripts/seat-check.js",
-    "feel:response": "node scripts/stick-response.js"
+    "feel:response": "node scripts/stick-response.js",
+    "feel:measure": "node scripts/tune-measure.js"
   }
 }

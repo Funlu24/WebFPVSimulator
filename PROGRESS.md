@@ -69064,3 +69064,174 @@ append conflict at the end of this file and nothing else in these files.
 - Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
+
+## 2026-10-08 | tuning, board | Flight feel tuning: Air grip, the end of flight question and tune tickets (branch claude/project-thread-yofdnj, draft PRs here and in the board's repository)
+
+The owner, 11:44Z and 11:51Z in the flight feel thread: two more on screen sliders, "air grippyness, carry or momentum"
+and "motor power /kv", shown on the ground like the Weight slider; at the end of a flight the pilot is asked whether
+they got a better flight feel than stock and, if so, whether they can submit their tune with comments, with a no or an
+opt out always there; and the bug tickets changed so the data can be aggregated over time, to make this the best
+feeling sim there is. Then, once the prompt was written: "lets go sonnet, build this, if no sliders are touched the
+existing flight feel is maintained".
+
+### What it is now
+
+- **A mode, off by default** (`feelTuning`). Off, or on with every slider at 100, the quad is the one that shipped. This
+  is checked on the real page, not argued: `window.__air().calls` is the number of times the shell has invoked
+  `sim_set_air` or `sim_set_motor_kv`, and it is 0 on a default page and 0 with the mode on and nothing moved, in the
+  air as well as on the ground, with the module still holding air 1.0. The apply block compares the SCALE it wants with
+  the one it holds and calls the module only when they differ, so stock never reaches the exports; the record key gains
+  `.a85` or `.k110` only off 1.0, so every key that exists stays where it is.
+- **Air grip**, 50 to 150, step 5, left Carries and right Grips. It is the existing `sim_set_air` (the scale on the body
+  drag, the rotor H force and the ducted descent brake), exposed as a slider for the first time since the first air
+  slider came out on 2026-09-18. Measured off the module by `scripts/tune-measure.js` (`npm run feel:measure`), hands off
+  carry in angle mode from 20 m/s (12 on the whoop) to half of it, sticks centred at hover throttle, at the machine the
+  shell flies:
+
+  | | 50 | 100 | 150 |
+  |---|---|---|---|
+  | five inch carry | 54.8 m | 26.9 m | 18.0 m |
+  | five inch flat out | 221 km/h | 152 | 113 |
+  | whoop carry | 18.8 m | 9.4 m | 6.4 m |
+  | whoop flat out | 115 km/h | 81 | 61 |
+
+  Hover does not move at all (0.350 five inch, 0.502 whoop). The two ends are twice as far and two thirds as far, which
+  is a corner's difference, not the "hardly discernable" one the first air slider was reported as: that was asked
+  vertically, and the vertical axis is gravity's.
+- **Motor power**, 80 to 120: the shell side is built and tested, and the module side is NOT. There is no
+  `sim_set_motor_kv` in dist/sim.wasm, so on this build the Motor power row and slider are not drawn and the copy never
+  names it (`ui.setTuneCaps`, feature detected). The change to the module is put to the owner below and waits for the
+  answer.
+- **Where they are.** On the flight screen as a group under the Weight slider in the same block (`.osd-tune`, new class
+  names only, because `.osd-air*` is the contract across the deploy cache seam), on the ground only, faded in the air by
+  the Weight slider's own rule; as rows in the Quad room and, while the mode is on, in the pause menu; the switch is in
+  the Quad room and as a door on the flight feel form. A once-ever card explains the group on a screen at least 561 px
+  tall. Reset to stock appears only off stock. Moving a slider mid lap voids the lap ("Feel changed, Lap voided"), as
+  Weight does. A first visit to the other aircraft puts both sliders back to stock.
+- **The question.** A flight flown on the mode with any of the three sliders off 100 for at least 30 s of sim airtime
+  (the combination flown longest, if it changed) asks "Did that feel better than stock?" a beat after Results or the
+  title arrives: Better than stock, Same or worse, Not now, Stop asking. Better opens the form (verdict, the five feel
+  words, a few words, a name, Send or Don't send). Same or worse asks once more whether to send that result too, and
+  Close sends nothing. Nothing is sent unless Send is pressed. It is asked once per combination per session, never over
+  another dialog, and not at all to a pilot on a radio (the pad can only go Back, so Results has a Share this tune row,
+  which also serves a touch pilot who said Not now, and is the way back after Stop asking).
+- **The tickets.** Kind `tune`, a typed `tune` object, and on EVERY ticket now a top level `airframe` and
+  `sim: {wasm, deploy}` (the first 16 hex characters of the SHA-256 of the dist/sim.wasm the page loaded, and the deploy
+  stamp), so tickets can be grouped by aircraft and by physics over time. The contract is the board's README, under
+  "Tune tickets"; the board's own validator accepts what the page sends (checked below, with the board's code and not a
+  copy of it).
+- **The board half** is its own commit in the other repository (4c1ce87 on the same branch name, base 4b4c614): the
+  `tune` kind, three new columns on `bugs`, a typed `feel_tunes` table written in the same transaction as its ticket,
+  `GET /api/feel/summary` behind the inbox's own check (an admin or `BUGS_TOKEN`, never public) and a Tunes panel in the
+  inbox. It has to be live before this ships: a simulator that sends a `tune` to a board that does not know the kind is
+  told so in a sentence and nothing is lost, but there is nothing to read the data with.
+
+### Decisions made without asking, and what to change if they are wrong
+
+- A lap flown off stock stays off the public board, as does a freestyle run with a trick landed off stock. The board has
+  nowhere to say which aircraft it was, and a record on a different quad is the thing the board exists to prevent. The
+  record key carries the suffix, so personal bests stay apart locally. `Race.boardRow` leaves such laps out and the
+  results screen says why. If the owner wants tuned laps on the board, that is a board column first.
+- The mode's switch is not a pause menu row: an always on row there broke `lint:shell`'s 1280x720 fold ("paused: the
+  list hangs 47 px under the command bar, was 0 px"). The sliders appear in the pause menu only while the mode is on.
+- The card is not raised below 561 px of height, not remembered as seen there, and the Quad room, the pause menu and the
+  flight feel form are where a phone pilot meets the mode.
+- 30 s of airtime is the line for asking. It is `TUNE_MIN_AIR_MS` in `src/share/tune.js`.
+- Same or worse can also be sent (a tune that did not help marks where not to go), where the ask was only the pilots who
+  did better. It is a second confirmation away from a ticket and sends nothing on Close.
+- A pilot on a radio or a gamepad is not asked on their own, which is not what the plan said to the owner ("they can
+  answer with a radio or gamepad"). A dialog here can be answered by a pad only with Back, and the existing Flight feel
+  form is already "never on its own for a radio or a gamepad" for the same reason, so this follows it: Results carries a
+  Share this tune row for them, reached with a mouse or keyboard, and the row is the way back after Stop asking.
+- The board's helper settled eight small ambiguities in the contract I wrote, and recorded each in the board's README
+  and commit. The three that matter here: a tune with no weight is refused (the stock weight reader would have taken an
+  absent weight as 100); a tune with no `sim` is refused (any other kind folds a bad one to empty); a version with an
+  empty wasm fingerprint is a group of its own and cannot be asked for by name.
+
+### Checks run in this turn
+
+Simulator, on this tree (last source edit 12:44Z, last script edit 12:47Z, every run below after both):
+
+- `npm run tune:selftest`: 59 of 59 checks clean, among them the board's own validator loaded from the sibling checkout at its commit 4c1ce87.
+- `node scripts/tune-check.js`, the real page: 80 passed, 0 failed on the third run (what the first two caught is under
+  "What went wrong"). It covers a default page (stock, `calls` 0, the group not drawn), the mode on and untouched at
+  1600x900, 1280x720 and 960x540 (stock, `calls` 0, the group inside the screen and adding no overlap the Weight slider
+  did not already have), a phone at 844x390 and held upright, a tuned page (the module holds 0.85, one call, the key,
+  Reset to stock), a real 30 s flight to the question and through the form to a ticket that the board's own validator
+  accepts, the old board 400 sentence, Not now, Stop asking and a 12 s flight that is not asked.
+- `npm run check:longflight` all pass. `npm run lint:boot` 9 of 9. `npm run lint:frame` 34 passed, 0 failed.
+  `npm run check:fresh` 18 passed, 0 failed. `npm run lint:preload` up to date (boot 134 modules, 259 served).
+- `npm run lint:nouns` PASS. `npm run lint:board` PASS, with the board's checkout beside this one under the name the
+  check looks for (a symlink to `webfpvsimulator-leaderboard`; without it the check says SKIP).
+- `npm run lint:input`: all 246 passed, 317 s. `npm run lint:responsive`: PASS, freestyle 333 frames, worst gap 381 ms, none over 500 ms. `npm run lint:scale`: PASS.
+- `npm run lint:fc`, `lint:presets`, `lint:catalog`: 4 of 4 presets clean, the catalog agrees with valueTable and bf_settings.c, 33 of 33 traces clean.
+- `npm run lint:shell` FAILS, 7 problems: overflow on Pilot, Rates, PIDs, FC and Tricks, a 2 px hang on Paused at
+  1280x720 and 125 px on Stick help at 844x390. The same seven fail, with the same numbers, on an unmodified da4e4b7
+  (`git archive` of it, run in this container), because the container's font metrics are not the ones the baseline was
+  recorded with. The only differences from that run are the ones this change makes on purpose: the Quad room has one
+  more stop (11, was 10) and there is one more named row (319, was 318). No threshold was touched.
+- Not run: `npm run verify`. Nothing here reaches physics, the plant, the module ABI or the build:
+  `git diff --stat vendor/betaflight` is empty and dist/sim.wasm is unchanged. No adversarial or multi agent review.
+
+Board, on its commit 4c1ce87:
+
+- `npm test`: all passed, 1059 pass, 0 FAIL, 2 skip (the admin password, and the Postgres half).
+- `BOARD_SELFTEST_DATABASE_URL=... npm test` against a scratch Postgres 16 made for the run and removed after it: all
+  passed, 1085 pass, 0 FAIL, 1 skip (the admin password), no schema left behind.
+- `npm run lint:licence` (30 files carry the notice) and `npm run lint:nouns` PASS.
+- Run by the helper and not repeated by me: four mutation checks (each restored byte for byte), the real server on a
+  scratch Postgres (an old build files two tickets, the new one migrates in place and reads them back identical, seven
+  tunes in, the summary equal to `percentile_cont` in psql), and the inbox page in headless Chromium at six widths.
+
+### What went wrong
+
+- An always on pause row broke the fold at 1280x720 (above); the row came out.
+- `.osd-air-row { display: flex }` beat the `hidden` attribute on a tune row, so a slider the module cannot answer would
+  have been drawn anyway; each row and its caption now sit in a `.osd-tune-item` with its own `[hidden]` rule.
+- `clampAirGrip(null)` returned the floor, 50, because `Number(null)` is 0: a corrupt stored blob would have put a pilot
+  on a quad that carries twice as far. null, the empty string and booleans are now stock.
+- The first real page run showed the tuning card hung over the launch banner and the clock on an 844x390 screen (card
+  y 97 to 280, banner 20 to 120), which is the one thing a pilot on the start block needs to read. The card is now not
+  raised on a screen under 561 px tall (`tuneCardRoom`).
+- The first overlap assertions in `scripts/tune-check.js` failed on 480x300 and 390x844 desktop windows. Not the
+  feature's: main's Weight block alone already sits on the pack bar there (measured on a `git archive` of da4e4b7). The
+  check now judges what the group ADDS to the Weight slider's own overlaps.
+- The check's "module not touched in the air" assertion read a cumulative count that already held the ground sliders'
+  calls; it compares against the count taken before the flight.
+- Two real page runs in a row then failed one assertion: the question's text was expected to name "Motor power 100%", and
+  this build, which has no such export, correctly does not. The expectation now comes from `ui.tuneCaps`, the same
+  source the copy uses. The code was right and the assertion was wrong; the third run is the 80 of 80 above.
+- The tuning switch's note first said switching the mode "puts the quad back on the start line", which is false; it now
+  says a lap is voided only when the change alters the quad being flown.
+- A duplicate `const t` in `scripts/tune-selftest.js` was a SyntaxError that stopped the file; renamed.
+- `lint:board` skipped itself at first because it looks for `../WebFPVSimulator-LeaderBoard` and the checkout here is
+  `webfpvsimulator-leaderboard`. It was run through a symlink once the board half was committed.
+- `lint:shell` fails 7 ways on unmodified main in this container, as above. Not this change's, not touched.
+- The board's remote printed "This repository moved" (now `WebFPVSimulator-LeaderBoard.git`) on the helper's push. The
+  push went through; the old address still resolves.
+
+### Owed
+
+- **Motor power, in the module, needs the owner's word.** What changes: one more mode export beside `sim_set_air`,
+  `sim_set_motor_kv` with a getter `sim_motor_kv`, refused outside 0.8 to 1.2, which models a rewound motor (the back
+  EMF constant divided by the scale and the winding resistance by its square, at the six places `plant_step` uses them),
+  survives a reset the way SIM_AIR and SIM_GRAVITY do, and is never called at 1.0. The ABI version stays 1 and nothing
+  existing changes meaning. Why: it is the second slider the owner asked for, and the one that moves thrust, top speed
+  and how hard the quad snaps to a stick, which no other slider here does. What it could break: the plant's golden
+  trace if 1.0 were not a bit exact no op (it is compared on the scale and never called, and check:plant has to show the
+  golden unchanged); the wasm fingerprint every tune ticket is grouped by changes with the module, which is the intent
+  and means the first tunes on this build are a group of their own; hover throttle moves with kv, so the keyboard's
+  hover spring needs a kv axis (`syncKeyHover` is already called from the apply block) and the flight check's hover
+  tables want one; and the module's exports and the build both change, so it goes through the whole suite. The coverage
+  rule comes first: check:plant, check:takeoff, check:crash and check:wall were green on unmodified main in this
+  container before any of this started and have to be green again before the module is touched, then
+  `npm run verify` after, and `node scripts/tune-measure.js --sweep=kv` to say what the slider does. Put to the owner
+  as a decision card in the flight feel thread at 11:58Z on 2026-10-08, options Add it (recommended) and Skip Motor
+  power. No answer when this entry was written, so nothing in the module was touched. If the answer is no, this ships
+  as Air grip only and the Motor power rows stay out of sight, which is how it is built.
+- Nobody has flown it. Air grip is measured off the module, driven on the real page headless and checked as a ticket,
+  and never flown by a person. The band, 50 to 150, is the measurement's first guess at where the ends feel too much.
+  A slider moved in the middle of a lap voiding the lap is Weight's own rule copied, and no check exercises it.
+- No frame time on real hardware. The group costs a few comparisons a frame in the apply block and DOM work only when a
+  slider moves or a dialog opens, and `lint:frame` passes; none of that is a weak laptop.
+- The board half has to be merged and live first. The inbox panel was looked at only in headless Chromium.
