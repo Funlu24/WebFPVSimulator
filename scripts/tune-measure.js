@@ -12,9 +12,10 @@
  *                 Reports "not in this build" on a module without it.
  *
  * Every row is a fresh module at the machine the shell flies, which is the
- * airframe's own gravity base (configs/airframes.js) and the verification
- * fixture's tune, so a row at 100 is the stock quad and every other row is
- * the stock quad with one number moved.
+ * airframe's own gravity base (configs/airframes.js) on the five inch plant
+ * (both airframes carry simId 0) and the verification fixture's tune, so a
+ * row at 100 is the stock quad and every other row is the stock quad with
+ * one number moved.
  *
  * WHAT IS MEASURED, and why these.
  *
@@ -22,12 +23,12 @@
  *             rate. Air grip must not move it (the air only slows the craft
  *             down), Motor power does.
  *   coast     the hands off carry, in ANGLE mode so the craft levels itself:
- *             accelerate to 20 m/s (12 on the whoop, which tops out lower at
- *             the heavy end of the band), centre the sticks at hover
- *             throttle, and time and measure the run down to half that
- *             speed. This is what "momentum" means to a pilot, and what Air
- *             grip is for. The level out is part of it: the craft is tilted
- *             forward when the sticks come back.
+ *             accelerate to 20 m/s, centre the sticks at hover throttle, and
+ *             time and measure the run down to half that speed. This is what
+ *             "momentum" means to a pilot, and what Air grip is for. The
+ *             level out is part of it: the craft is tilted forward when the
+ *             sticks come back. A row that cannot reach 20 m/s says so and
+ *             coasts from where it got.
  *   flat out  the fastest level speed in angle mode with altitude held.
  *   punch     from a hover, full throttle for a second: the speed climbed to
  *             and the height gained. This is what Motor power is for.
@@ -62,8 +63,6 @@ const args = process.argv.slice(2);
 const flag = (name, fallback) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const AIRFRAME = flag('airframe', '5inch');
 const SWEEP = flag('sweep', 'air');
-const WHOOP = AIRFRAME === 'whoop65';
-const SIM_AIRFRAME_WHOOP65 = 1;
 const ST = { T: 0, X: 1, Y: 2, Z: 3, VX: 4, VY: 5, VZ: 6 };
 
 if (!['air', 'kv'].includes(SWEEP)) {
@@ -71,21 +70,34 @@ if (!['air', 'kv'].includes(SWEEP)) {
 }
 
 /* The speed the coast starts from: one every row can reach, so the rows
- * compare. The whoop's flat out at the heavy end of Air grip is 17 m/s. */
-const COAST_FROM = WHOOP ? 12 : 20;
+ * compare. A row that cannot reach it says so and coasts from where it got. */
+const COAST_FROM = 20;
 
 const af = airframeById(AIRFRAME);
 const GRAVITY = af.gravityBase;
 const wasm = await readFile(join(root, 'dist/sim.wasm'));
-const config = await readFile(
-  join(root, WHOOP ? 'configs/whoop-champion.diff' : 'tests/fixtures/config-baseline.diff'),
-  'utf8',
-);
+/*
+ * THE PLANT THE SHELL FLIES, which for the whoop is the five inch's: both
+ * airframe entries carry simId 0, so the whoop is the five inch plant at its
+ * own gravity base. This script used to select the module's own whoop plant
+ * (airframe 1) with the maker's whoop tune for --airframe=whoop65, which the
+ * shell does not fly, and every whoop figure it printed was a different
+ * machine's. PROGRESS.md 2026-10-08 has the correction.
+ *
+ * THE TUNE is the verification fixture's, as the hover tables in
+ * configs/rates.js are read, so that a row compares with another row and
+ * with those tables. It is shorter than the shell's own default
+ * (configs/betaflight-default.diff). Flown on that one instead, on
+ * 2026-10-08, hover, flat out and the punch came out the same to the digit
+ * and the hands off carry 1 to 3 percent shorter (Air grip 50, 100 and 150:
+ * 54.2, 26.3 and 17.4 m against 54.8, 26.9 and 18.0).
+ */
+const config = await readFile(join(root, 'tests/fixtures/config-baseline.diff'), 'utf8');
 
 /* A fresh module at the machine the shell flies, with one slider moved. */
 async function fresh(air = 1, kv = 1) {
   const sim = await loadSim(wasm);
-  if (WHOOP && sim.e.sim_set_airframe(SIM_AIRFRAME_WHOOP65) !== SIM_OK) {
+  if (sim.e.sim_set_airframe(af.simId) !== SIM_OK) {
     throw new Error('sim_set_airframe refused');
   }
   if (sim.e.sim_set_gravity(GRAVITY) !== SIM_OK) {
@@ -106,7 +118,7 @@ async function fresh(air = 1, kv = 1) {
     throw new Error('sim_init failed');
   }
   sim.reset();
-  sim.setCellVoltage(WHOOP ? 4.2 : 4.2);
+  sim.setCellVoltage(4.2);
   return sim;
 }
 
@@ -170,7 +182,7 @@ async function flyLevel(air, kv, hover) {
   if (sim.e.sim_set_angle_mode(1) !== SIM_OK) {
     throw new Error('sim_set_angle_mode refused');
   }
-  const target = WHOOP ? 3 : 6;
+  const target = 6;
   const hold = altitudeHold(hover, target);
   /* Up and steady first. */
   run(sim, 3500, (i, st) => ({ throttle: i < 700 ? Math.min(1, hover + 0.25) : hold(st) }));

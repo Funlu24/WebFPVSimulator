@@ -141,6 +141,7 @@ import {
   buildTunePayload,
   clampAirGrip,
   clampMotorKv,
+  effectiveTune,
   inputKindFromSource,
   tuneAskReason,
   tuneCardText,
@@ -6898,9 +6899,15 @@ export class Ui {
        * arrived with a rates line that says nothing about the throttle
        * unless a cap is already on, so the one setting that answers the
        * complaint was the one thing the report could not carry. Its hover
-       * is at the weight and pack below, so the three agree.
+       * is at the weight, pack and Motor power below, so they agree.
        */
-      throttle: throttleSummary(s.rates || {}, s.airframe, clampWeight(s.weight, s.airframe), s.packVoltage),
+      throttle: throttleSummary(
+        s.rates || {},
+        s.airframe,
+        clampWeight(s.weight, s.airframe),
+        s.packVoltage,
+        this.tuneCaps.kv ? effectiveTune(s).motorKv : MOTOR_KV_STOCK,
+      ),
       /*
        * THE SLIDER'S POSITION, and it belongs in the report for the same
        * reason the throttle curve does: this is the one field that tells the

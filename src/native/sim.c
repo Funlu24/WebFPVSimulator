@@ -1356,6 +1356,23 @@ SIM_EXPORT int sim_set_gravity(double scale) {
 
 SIM_EXPORT double sim_gravity(void) { return SIM_GRAVITY; }
 
+/* Motor power scale, see sim_internal.h. A mode, same rule as the air scale. */
+double SIM_MOTOR_KV = 1.0;
+
+SIM_EXPORT int sim_set_motor_kv(double scale) {
+  /*
+   * Refused rather than clamped, same argument as sim_set_air. 0.8 to 1.2 is
+   * what the shell offers and the only range that was measured.
+   */
+  if (!(scale >= 0.8) || !(scale <= 1.2)) {
+    return SIM_ERR_BAD_ARG;
+  }
+  SIM_MOTOR_KV = scale;
+  return SIM_OK;
+}
+
+SIM_EXPORT double sim_motor_kv(void) { return SIM_MOTOR_KV; }
+
 /*
  * The airframe. A MODE, not dynamic state, in exactly the sense
  * sim_set_flight_style above is one: it survives sim_reset and sim_init, the

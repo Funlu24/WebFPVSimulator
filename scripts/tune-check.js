@@ -11,7 +11,7 @@
  * shell, on the field, in headless Chromium, and asks the page and the
  * module rather than the source.
  *
- * Four pages, because the situations must not share a profile:
+ * Five pages, because the situations must not share a profile:
  *
  *   STOCK       default settings. The module must never be called, the
  *               record key must carry no suffix, the group must not be
@@ -29,6 +29,14 @@
  *               block is tightest: the group fits between the plates and
  *               puts nothing new under itself, the card stays down, and
  *               upright the whole block is put away as it always was.
+ *   MOTOR POWER the mode on, Motor power 110. The module says 1.1 and Air
+ *               grip never reached it, the key names it, the keyboard's
+ *               spring moved with it (hover sits lower on the stick), a
+ *               slider moved on the ground arrives and Reset goes home, and
+ *               a tune sent from it carries both numbers and is accepted by
+ *               the board's own validator. The page the numbers come from.
+ *               Whether that spring number holds altitude is not asked here:
+ *               scripts/motor-kv-check.js flies it against the module.
  *
  * Overlap is judged against the Weight slider alone, never against nothing:
  * a 390 px wide desktop window already has the Weight block on the pack bar
@@ -70,6 +78,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openPage } from '../tests/lib/page.js';
 import { SETTINGS_KEY, seatAirframe } from '../src/ui/ui.js';
 import { airframeById } from '../configs/airframes.js';
+import { hoverStickPercent } from '../configs/rates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHOTS = process.env.TUNE_SHOTS_DIR || join(tmpdir(), 'webfpv-tune-shots');
@@ -674,12 +683,129 @@ async function tunedPage(inspect) {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* 4. Motor power, now that the module has the export                  */
+/* ------------------------------------------------------------------ */
+
+/* A slider moved on the ground by its label, the way the pointer moves it. */
+const moveSlider = (label, value) => `
+  const item = [...document.querySelectorAll('.osd-tune-item')]
+    .find((n) => n.querySelector('.osd-air-cap').textContent.startsWith(${JSON.stringify(label)}));
+  const r = item.querySelector('.osd-air-range');
+  r.value = ${JSON.stringify(String(value))};
+  r.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)));
+  return 1;`;
+
+/* What the page's keyboard spring and the table it reads say, side by side. */
+const SPRING = `
+  const s = window.__ui.settings;
+  return { cap: s.rates.throttleCap, af: s.airframe, w: s.weight, v: s.packVoltage, at: window.__input.kbHover };`;
+
+async function motorPage(inspect) {
+  note('MOTOR POWER: the mode on, Motor power 110');
+  const { page, ev, shot } = await openFlight({ patch: { feelTuning: true, motorKv: 110 } });
+  try {
+    const caps = await ev('return window.__ui.tuneCaps');
+    check(caps.kv === true && caps.air === true, 'this build has both exports, so both rows are drawn', JSON.stringify(caps));
+    const a = await ev(AIR);
+    check(a.motorKv === 110 && a.kvScale === 1.1 && a.moduleKv === 1.1, 'the page holds Motor power 110 as a scale of 1.1 and the module says it has 1.1',
+      JSON.stringify({ motorKv: a.motorKv, kvScale: a.kvScale, moduleKv: a.moduleKv }));
+    check(a.calls === 1 && a.airScale === 1 && a.moduleAir === 1, 'with exactly one call, for the one slider that moved, and Air grip never reached the module',
+      JSON.stringify({ calls: a.calls, airScale: a.airScale, moduleAir: a.moduleAir }));
+    check(/\.k110$/.test(a.key) && !/\.a\d+/.test(a.key) && a.tuned === true, 'the record key names it and the race knows laps are off the public board', a.key.slice(-12));
+    const g = await ev(GROUP);
+    check(g.drawn && g.caps.includes('Motor power 110%') && g.caps.includes('Air grip 100%'), 'both rows are drawn, Motor power at 110% and Air grip at 100%', g.caps.join(' | '));
+    check(g.resetUp, 'Reset to stock is offered', String(g.resetUp));
+    await shot('landed-motor-power');
+
+    /* The keyboard's throttle springs to hover, and hover moved. */
+    const sp = await ev(SPRING);
+    const want = hoverStickPercent(sp.cap, sp.af, sp.w, sp.v, 110) / 100;
+    const stock = hoverStickPercent(sp.cap, sp.af, sp.w, sp.v, 100) / 100;
+    check(Math.abs(sp.at - want) < 1e-12 && sp.at < stock, 'the keyboard spring rests at the hover for Motor power 110, lower on the stick than stock',
+      `${sp.at.toFixed(4)} against ${stock.toFixed(4)} stock`);
+
+    /* A slider moved on the ground arrives, and the spring follows it. */
+    await ev(moveSlider('Motor power', 90));
+    const b = await ev(AIR);
+    check(b.motorKv === 90 && b.kvScale === 0.9 && b.moduleKv === 0.9 && b.calls === 2, 'Motor power moved to 90 reaches the module as 0.9, one more call',
+      JSON.stringify({ kvScale: b.kvScale, moduleKv: b.moduleKv, calls: b.calls }));
+    check(/\.k90$/.test(b.key), 'and the key follows', b.key.slice(-12));
+    const sp90 = await ev(SPRING);
+    check(Math.abs(sp90.at - hoverStickPercent(sp90.cap, sp90.af, sp90.w, sp90.v, 90) / 100) < 1e-12 && sp90.at > stock,
+      'the spring moved with it: hover sits higher on the stick at 90 than at stock', `${sp90.at.toFixed(4)}`);
+    await ev(moveSlider('Air grip', 120));
+    const c = await ev(AIR);
+    check(c.moduleAir === 1.2 && c.moduleKv === 0.9 && /\.a120\.k90$/.test(c.key), 'both sliders at once reach the module and the key names both',
+      JSON.stringify({ moduleAir: c.moduleAir, moduleKv: c.moduleKv, key: c.key.slice(-12) }));
+    await ev(clickText('Reset to stock', 'document.querySelector(".osd-tune")'));
+    await sleep(300);
+    const d = await ev(AIR);
+    check(d.moduleKv === 1 && d.moduleAir === 1 && !/\.[ak]\d+$/.test(d.key) && d.tuned === false, 'Reset to stock sends both back to 1.0 and the key and the race are stock again',
+      JSON.stringify({ moduleKv: d.moduleKv, moduleAir: d.moduleAir, key: d.key.slice(-12) }));
+    const sp100 = await ev(SPRING);
+    check(Math.abs(sp100.at - stock) < 1e-12, 'and the keyboard spring is back at the stock hover, to the last bit', `${sp100.at}`);
+    await ev(moveSlider('Motor power', 110));
+    const e = await ev(AIR);
+    check(e.moduleKv === 1.1, 'back to 110 for the flight', String(e.moduleKv));
+    const callsBefore = e.calls;
+
+    /* Aloft: the module is not touched again, and the question names Motor power. */
+    const up = await ev(hold('t > 3', 60));
+    check(!up.faulted && up.maxAbove > 1, 'took off with Motor power 110', `${up.maxAbove.toFixed(1)} m up`);
+    const f = await ev(AIR);
+    check(f.calls === callsBefore && f.moduleKv === 1.1, 'and the module was not touched again in the air', JSON.stringify({ calls: f.calls, before: callsBefore, moduleKv: f.moduleKv }));
+
+    /* An injected flight stands in for the thirty seconds; tunedPage flies the real one. */
+    await ev(`const ui = window.__ui;
+      ui.show('title');
+      ui.setTuneProbe(() => ({ key: '5inch:100:100:110', airframe: '5inch', weight: 100, airGrip: 100, motorKv: 110, gravityScale: 1.62, airtimeS: 41 }));
+      ui.maybeAskTune(ui.takeTuneFlight());
+      return 1;`);
+    const dlg = await dialogUp(ev, 9000);
+    check(dlg.up && dlg.text.includes('Weight 100%, Air grip 100%, Motor power 110%.'), 'the question names Motor power with the other two', dlg.text.slice(0, 160));
+    await sleep(400);
+    await ev(clickText('Better than stock'));
+    await sleep(500);
+    await ev(`
+      const d = window.__ui.nameDialog;
+      const pick = (t) => [...d.querySelectorAll('.feel-chip')].find((c) => c.textContent === t).click();
+      pick('Much better'); pick('Twitchy');
+      d.querySelector('textarea').value = 'More punch out of corners.';
+      d.querySelector('input[type=text]').value = 'Checker';
+      return 1;`);
+    await ev(clickText('Send'));
+    for (let i = 0; i < 20 && (await ev('return window.__posted.length')) < 1; i += 1) {
+      await sleep(150);
+    }
+    const posted = await ev('return window.__posted');
+    const body = posted[posted.length - 1];
+    check(posted.length === 1 && body && body.kind === 'tune', 'Send posts one ticket of kind tune', `${posted.length} posts`);
+    if (body) {
+      check(body.tune.motorKv === 110 && body.tune.kvScale === 1.1 && body.tune.airGrip === 100 && body.tune.airScale === 1,
+        'carrying Motor power 110 and its scale of 1.1, and Air grip untouched', JSON.stringify({ k: body.tune.motorKv, ks: body.tune.kvScale, g: body.tune.airGrip }));
+      check(/Motor power 110%/.test(body.what) && /motor 110/.test(body.title), 'and the words and the title say so', body.title);
+      if (inspect) {
+        const got = inspect(body);
+        check(!got.error && got.tune && got.tune.motorKv === 110, 'the board\'s own validator takes it and keeps Motor power 110', got.error || 'accepted');
+      }
+    }
+    const late = await ev('return window.__frameFault ? window.__frameFault.message : null');
+    const uncaught = page.errors.filter((x) => x.startsWith('uncaught:'));
+    check(late === null && uncaught.length === 0, 'no frame faulted and nothing threw', [late, ...uncaught.slice(0, 2)].filter(Boolean).join(' | '));
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   const inspect = await boardValidator();
   try {
     await stockPage();
     await untouchedPage();
     await phonePage();
+    await motorPage(inspect);
     await tunedPage(inspect);
   } catch (e) {
     fails += 1;

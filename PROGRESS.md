@@ -69067,6 +69067,8 @@ append conflict at the end of this file and nothing else in these files.
 
 ## 2026-10-08 | tuning, board | Flight feel tuning: Air grip, the end of flight question and tune tickets (branch claude/project-thread-yofdnj, draft PRs here and in the board's repository)
 
+*Corrected by the entry at the end of this file, 2026-10-08 | tuning, physics: the whoop figures in the Air grip table below were measured on a plant the shell never flies, Motor power is now in the physics module with the owner's yes of 13:08Z, and `npm run verify` has been run.*
+
 The owner, 11:44Z and 11:51Z in the flight feel thread: two more on screen sliders, "air grippyness, carry or momentum"
 and "motor power /kv", shown on the ground like the Weight slider; at the end of a flight the pilot is asked whether
 they got a better flight feel than stock and, if so, whether they can submit their tune with comments, with a no or an
@@ -69235,3 +69237,223 @@ Board, on its commit 4c1ce87:
 - No frame time on real hardware. The group costs a few comparisons a frame in the apply block and DOM work only when a
   slider moves or a dialog opens, and `lint:frame` passes; none of that is a weak laptop.
 - The board half has to be merged and live first. The inbox panel was looked at only in headless Chromium.
+
+## 2026-10-08 | tuning, physics | Motor power in the physics module: sim_set_motor_kv, on the same draft PR (branch claude/project-thread-yofdnj)
+
+### The owner's word
+
+The entry above left Motor power in the module owed to the owner, because it changes the module's exports and the build. The
+decision card went up in the flight feel thread at 11:58Z on 2026-10-08, "Add a Motor power setting to the physics module?",
+with Add it (recommended) and Skip Motor power. At 13:08Z the owner tapped Add it.
+
+What that covers: `sim_set_motor_kv` and `sim_motor_kv` in dist/sim.wasm, 80 to 120 percent, on the draft pull request and
+nowhere else, with stock flight bit identical at 100. What it does not cover: anything reaching main (the board's pull
+request #12 first, then the simulator's #49, each on the owner's word), and the rewrite of `tests/goldens/plant.json`
+described below, whose own note asks for the owner's approval. That rewrite is flagged as his call. If he would rather the
+golden were not touched, the hash line and the six new scenarios come out and nothing else changes; `npm run check:motorkv`
+would still pin the direction of the knob, though not its bits.
+
+### What changed
+
+- **The module.** At the top of `plant_step` (`src/native/plant.c`) the back EMF constant becomes `ke / s` and the winding
+  resistance `r_motor / (s * s)`, and every place `plant_step` read `ke` and `r_motor` reads those (the bus voltage solve,
+  the motor current, the torque on the rotor and the reaction on the frame). `src/native/sim.c` holds the scale
+  (`SIM_MOTOR_KV`, 1.0), `sim_set_motor_kv` (refuses anything outside 0.8 to 1.2, NaN and infinity included, with
+  `SIM_ERR_BAD_ARG`, and leaves the value it held) and `sim_motor_kv`. It is a mode like the air and gravity scales: it
+  survives `sim_reset` and `sim_init`, and the shell owns asserting it. The model, what follows from it and what it leaves
+  alone are written out at `SIM_MOTOR_KV` in `sim_internal.h` and `sim_abi.h`. The ABI version stays 1 (two additive entry
+  points, nothing existing moved). `bf_glue.c`'s raw readbacks of the table's `r_motor` and `ke` are deliberately unscaled:
+  they report the table.
+- **The build.** dist/sim.wasm is rebuilt, 141813 to 141948 bytes, SHA-256 0a1f60b4...9ffa to 9d6544ee...4576. Rebuilding
+  the unmodified sources first reproduced the old bytes exactly, so the build is reproducible and the difference is the
+  change. The first 16 hex characters of the new hash, 9d6544ee6cd982ef, are the fingerprint every tune ticket carries, so
+  the tunes sent from this build are a group of their own on the board, which is what that field is for.
+  `git diff --stat vendor/betaflight` is empty after the build.
+- **The keyboard's hover spring has a Motor power axis.** Hover sits lower on the stick as the scale rises, so a spring to
+  the stock number would drop or climb the quad every time a key came up (bug-3a7be142 again). `configs/rates.js` gains
+  two measured edge tables per aircraft, at 80 and at 120, read with `node scripts/flightcheck.js --kv=...` at each of the
+  nine weight and charge pairs and nine caps, and `hoverStickPercent` takes the scale and interpolates in 1 / kV, because
+  hover is a duty and duty goes as 1 / kV. At 100 it returns the stock table entry untouched, so the keyboard's stock
+  spring is exactly what it was. `syncKeyHover` passes the scale; the feel report's throttle line passes it too.
+- **The Motor power rows now draw**, because the module has the export (feature detected, as before). A module without it,
+  such as a cached older one, still hides the rows and never has the export called.
+- **Scripts.** `scripts/motor-kv-check.js` (`npm run check:motorkv`, new): the surface, the identity of the setter's own
+  history, the direction of the knob, the motor's time constant, and the spring. `scripts/plant-golden.js` flies six
+  Motor power scenarios. `scripts/flightcheck.js` takes `--kv=`. `scripts/tune-check.js` has a Motor power page.
+  `scripts/input-selftest.js` has four Motor power hover cases. `scripts/tune-measure.js` is corrected (below).
+
+### What the knob is, and what it claims
+
+The same motor wound hotter or milder on the same pack. Turns go as 1 / s for a kV scale of s and resistance as turns
+squared, so the back EMF constant is divided by s and the winding resistance by s squared. That is one fact, not two free
+knobs. It follows, and none of it is tuned, that the no load speed and the stall torque go up by s and the stall current by
+s squared, while the motor's own time constant (J R / ke squared) stays where it was. Hover wants the same rotor speed and
+torque, so hover duty goes as 1 / s: lower on the stick above 1. Full throttle turns the rotor faster, which is more
+thrust, more current and more sag. It does not touch mass, inertia, the prop, the pack, the air or any Betaflight setting.
+One simplification: `r_motor` is the airframe's lumped figure for motor, ESC and leads, so scaling all of it overstates a
+real rewind's stall current a little (the ESC and the leads would not change).
+
+### What it does, measured off the module
+
+`node scripts/tune-measure.js --sweep=kv`, a fresh module per row, at the gravity the shell flies, on the verification
+fixture's tune. Five inch, gravity 1.62:
+
+| Motor power | 80 | 100 | 120 |
+|---|---|---|---|
+| hover, percent of stick | 43.8 | 35.0 | 29.1 |
+| punch from a hover, speed reached | 20.3 m/s | 26.7 | 31.7 |
+| punch from a hover, height gained | 12.7 m | 17.4 | 21.4 |
+| flat out, angle mode | 143 km/h | 152 | 159 |
+| hands off carry, 20 to 10 m/s | 26.6 m | 26.9 | 27.1 |
+
+The whoop as the shell flies it (the five inch plant at gravity 2.025): hover 50.0, 39.9 and 33.2 percent; punch speed
+18.7, 25.3 and 30.5 m/s; punch height 11.6, 16.4 and 20.5 m; flat out 152, 163 and 170 km/h; carry 24.7, 24.7 and 24.9 m.
+So the knob moves power and leaves carry alone, which is the job Air grip does and the reason there are two sliders.
+On the shell's own default tune (`configs/betaflight-default.diff`) hover, flat out and the punch come out the same to the
+digit and carry 1 to 3 percent shorter.
+
+On the four motor bench in `check:motorkv`, full duty for three seconds: rotor speed 22193, 26077 and 28602 rpm at 80, 100
+and 120 (less than the scale itself, because the prop takes some of it back, so static thrust, which goes about as the
+square, is roughly 28 percent less at 80 and 20 percent more at 120), pack current 79, 130 and 201 A, pack voltage 24.0,
+23.2 and 22.2 V. The motor's 63 percent rise, check 8's procedure at each scale, is 27, 26, 26, 26 and 25 ms at 80, 90,
+100, 110 and 120.
+
+### Coverage first, as the owner required on 2026-09-24
+
+Before any native file was touched, on the unmodified module (wasm 0a1f60b4...), 13:10 to 13:15Z: `check:plant` all
+passed, `check:takeoff` all pass, `check:crash` 0 guards failed, `check:wall` 78 passed, 0 failed (targets, not counted:
+1 met, 3 not met), and `npm run verify` 18 of 18, 127 s. Then the module changed.
+
+### Stock is bit identical, measured and not argued
+
+- `tests/goldens/plant.json`: regenerating it on the new module reproduces the 23 scenarios that existed, byte for byte.
+  Each entry is a hash of the whole state block at every 1 ms step, plus windows and samples, so one bit anywhere in any
+  of 23 flights would have shown.
+- `npm run verify` after the change, 14:14Z: 18 of 18, and every row's measured value and threshold is identical to the
+  baseline's, including check 2 and 3's replay hash, 4cadc5ef7d6e in Node and in headless Chromium, and check 4's single
+  hash across four frame rates. Check 1 rebuilt the module from the sources and got the same bytes, and the vendor diff
+  is empty. The determinism checks are not blind to this knob: `check:motorkv` flies the same 6000 step script with the
+  export never called, called with 1.0, and sent to 1.2 and back, gets one hash three times (55cfcfc45493), and at 1.05
+  gets a different one (3a8994ab03cc).
+- `node scripts/flightcheck.js --gravity=1.62`, the stock cap table, reads 35.0, 38.3, 42.5, 44.9, 47.8, 51.1, 54.9, 64.9
+  and 79.8, the nine figures in `HOVER_5IN_AT_BASE`.
+- **Off stock, Node and the browser agree too.** The same 6000 step stick script, hashed over the whole state block at
+  every step, in Node and in headless Chromium 141: identical at the export never called, 1.0, 0.8, 0.85 at the shell's
+  weight, 1.05, 1.2, 1.2 on a sagging 3.5 V pack, and 1.1 on the module's own whoop plant. 8 cases, 7 distinct hashes (never
+  called and 1.0 are the one), 0 differ between the hosts. This is a one off script and is not kept; verify's check 3 does
+  the stock replay only.
+- **Cost.** One physics step with Betaflight in Node on this machine: 1.74 us before and 1.77 us after (medians of 16
+  interleaved runs of 10000 steps, ratio 1.019). Not a weak laptop, and the step is 0.2 percent of its millisecond here.
+
+### New coverage for the knob itself
+
+- **Plant golden: six scenarios added** (29 now), the new module hash recorded: free air at 1.2 and at 0.8, free air on a
+  sagging pack at 1.2, a grass takeoff, hover and landing at 1.1 and at 0.85 at the weight the shell flies, and the
+  module's own whoop at 1.2. Each has an `exercises` guard. `npm run check:plant:selftest` (3 mutations) still turns
+  exactly the scenarios it should red.
+- **`npm run check:motorkv`**, all passed, 2 s: the nine slider stops are taken exactly; everything outside 0.8 to 1.2
+  and every non number is refused and leaves the value; init, reset and an airframe swap leave it alone; hover times scale
+  is within 0.4 percent of stock at every stop (the law is 1 / scale, held to two percent); full throttle rotor speed,
+  current and punch height rise at every step and the pack sags further; the motor's rise time is within one millisecond
+  of stock at every stop; and the spring: the keyboard's hover number holds altitude to 0.07 m a second at worst across
+  36 settings (nine Motor power stops at four caps, weights and charges).
+- `npm run input:selftest` 384 passed (four new). `npm run tune:selftest` 59 of 59. `node scripts/tune-check.js`, the real
+  page, 102 passed, 0 failed, among them a Motor power page (the rows draw, the module holds the scale, the key gains
+  `.k110`, a ticket's title and body carry it and the board's own validator takes it) and the 30 s real flight.
+
+### Checks run in this turn
+
+All on this tree, one browser check at a time, after the last edit to any file the check reads (13:37Z). A comment in
+`scripts/tune-measure.js` changed after the measurements and no code did.
+
+- `npm run verify`: 18 of 18, 161 s, rows identical to the baseline's (above).
+- `check:plant` all passed (29 scenarios), `check:plant:selftest` all passed, `check:motorkv` all passed.
+- `check:takeoff` all pass, run twice (52 s each); `check:crash` 0 guards failed (106 s); `check:wall` 78 passed, 0 failed,
+  targets 1 met and 3 not met, as before the change; `check:longflight` all pass; `lint:boot` 9 of 9; `lint:frame` 34
+  passed, 0 failed; `check:fresh` 18 passed, 0 failed; `lint:preload` up to date (boot 134 modules, 259 served).
+  `check:takeoff` flies the real page at real frame pacing, so its timings move from run to run: the whoop's first ramp
+  reached 1 m at 3.538 s on the unmodified module and at 3.542 and 3.556 s on the new one in two runs, the punch at 0.648
+  against 0.637 and 0.667 s. Every verdict is the same.
+- `lint:presets` 4 of 4 clean, `lint:catalog` ok, `lint:fc` 33 of 33, `lint:nouns` PASS, `lint:board` PASS (through the
+  sibling name symlink).
+- `lint:shell` FAILS, 7 problems: overflow on Pilot, Rates, PIDs, FC and Tricks, a 2 px hang on Paused at 1280x720 and
+  125 px on Stick help at 844x390. The same seven with the same numbers fail on an unmodified da4e4b7 in this container
+  (font metrics) and failed at c028efc. Its output is the same as at c028efc line for line. No threshold was touched.
+- `lint:input`: 245 passed, 1 FAILED, 305 s. The one failure is in the builder's chooser, "a key pressed at the question
+  does nothing behind it": the 3D view was already on when it was read. It is not this change. That section run alone
+  fails the same assertion with the same state on an unmodified da4e4b7 in 6 of 6 runs, on c028efc in 6 of 6 and on this
+  tree in 7 of 9, and it passed in the full run at c028efc, so it is an intermittent race in this container. The
+  builder's key handler does return while the chooser is up (`bindKeys` in `src/trackbuilder/app.js`), so the V key did not
+  put the view into 3D; something else did, which a late finishing 3D load would. Not touched: neither the check nor its
+  bands were edited, and it is the owner's to look at.
+- Not run: `lint:responsive` and `lint:scale`, which run with the tuning mode off and so cannot see the Motor power rows
+  (the page flow that does, `tune-check.js`, measured the group at 1600x900, 1280x720, 960x540 and 844x390); the
+  screenshots (`node scripts/shots.js`); no adversarial or multi agent review.
+
+### Corrections to the entry above
+
+- **The whoop figures in the Air grip table were measured on a plant the shell never flies, and are wrong.** The entry
+  says whoop carry 18.8, 9.4 and 6.4 m, flat out 115, 81 and 61 km/h, hover 0.502. `scripts/tune-measure.js` flew the
+  module's own whoop plant (airframe 1) on the whoop champion tune. Both airframe entries in `configs/airframes.js`
+  carry `simId: 0`, so the shell flies the five inch plant at gravity 2.025 as the whoop, and `configs/rates.js` says so
+  at the hover tables. Measured as the shell flies it: carry 50.3, 24.7 and 16.6 m at Air grip 50, 100 and 150; flat out
+  234, 163 and 124 km/h; hover 0.399 (which agrees with the 39.9 in the whoop hover table). The five inch figures were
+  right and are unchanged. `tune-measure.js` is fixed and its comments say why. The pull request text never quoted the
+  whoop figures.
+- The entry above says Motor power's physics export was not in this pull request, that nothing reached physics, the plant,
+  the module ABI or the build, and that `npm run verify` was not run. All three are now otherwise, as this entry says.
+  Its Owed item for the owner's word is closed by the 13:08Z answer.
+
+### Decisions made without asking
+
+- Outside 0.8 to 1.2 is refused, not clamped, as `sim_set_air` does. The shell clamps first, so this is only for a caller
+  that is not the shell.
+- `r_motor` is scaled whole (see Owed). The alternative, leaving a share for the ESC and leads, would be a number
+  nobody has measured.
+- The hover spring reads two edge tables and interpolates, rather than nine tables for the nine stops. The cost of that
+  is the third Owed item.
+- Six golden scenarios, not more: both ends, a sagging pack, the grass at two settings and the module's own whoop.
+
+### What went wrong
+
+- The whoop was measured on the wrong plant (above). I found it by reading `configs/airframes.js` and the notes at the
+  hover tables before the figures went anywhere else, and the near miss was about to read the whoop's hover edge tables
+  with `--airframe=whoop65`, which is a plant the shell does not select. The tables are read with `--gravity` and no
+  `--airframe`. A second slip in the same place: the comment I wrote in `tune-measure.js` said the whoop flies the five
+  inch's default tune, but the script loads the verification fixture, which is shorter than
+  `configs/betaflight-default.diff`. The comment now says which, and the difference was measured (above).
+- A comment in `sim.c` said a fifth either way is as far as the tune was checked to hold. Nothing had checked that, so it
+  came out before the build.
+- A golden scenario meant to fly the whoop weight on Motor power 0.8 was hollow: it fell and never climbed (peak height
+  0.25 m), so it would have pinned nothing. It was replaced by a plain free air run at 0.8 and a grass takeoff at 0.85
+  at the weight the shell flies, and the golden was regenerated from the saved original.
+- The check's header first claimed full speed ratios of 1.14 and 0.84, from a one motor bench. The four motor bench the
+  check really flies reads 1.097 and 0.851. The header and the bands were corrected to the measurement before the final
+  run. They are claims about the physics, and the 1.05 to 1.20 and 0.80 to 0.92 bands leave room either side.
+- The Motor power page of `tune-check.js` first asserted the ticket title contains "Motor power 110". The real format is
+  "Tune: much better, 5 inch, grip 100, motor 110, weight 100", so the assertion became `/motor 110/` before the run. A
+  tautological assertion drafted in `input-selftest.js` was replaced by a composed hover check before it ran.
+- `lint:input` failed once on the builder chooser, and I did not at first know whether it was mine. Running the section
+  alone against the unmodified trees settled it (above) before I wrote that it was not.
+- The 1 / kV interpolation of the hover tables is not exact where a table entry is clipped at full stick: see Owed.
+
+### Owed
+
+- **Nobody has flown it.** The harness is green and the feel is awaiting the pilot. The band, 80 to 120, is a first guess
+  at where the ends stop being fun: the bench draws 201 A at 120 against 130 stock, which is a strong motor and a real
+  amount of sag. Whether 120 is too much, or 80 too little to notice, is for the pilot to say.
+- **The keyboard's hover spring is least accurate where the stick is nearly out.** Interpolating in 1 / kV against
+  `flightcheck` at 85, 90, 110 and 115 over all 18 aircraft, weight and charge columns at nine caps (648 values): where hover
+  is below 80 percent of the stick (543 of them) the mean error is 0.04 of a point and the worst 0.15. Between 80 and 90
+  percent it is 0.9 worst, and past 90 it is 1 to 6 points under the true figure, which is a cap of 40 or 50 on a low
+  kV, a tired pack or a heavy quad with next to no travel left above hover. The quad flown at the spring number drifts
+  0.07 m a second at worst in the 36 settings `check:motorkv` flies, none of them in that corner.
+- **`r_motor` is lumped** (motor, ESC and leads), so the stall current at 120 is a little overstated against a real rewind.
+- **The fingerprint changes with the module**, so the board will hold the tunes sent from this build as their own group,
+  and tunes before and after cannot be compared on the board without the group by version that PR #12 provides.
+- **`tests/goldens/plant.json` was rewritten**: the hash line and six added scenarios, the 23 older entries unchanged. Its
+  note asks for the owner's approval of a rewrite. It is on this draft pull request for him to accept or to say no.
+- **`lint:input` has one intermittently failing builder check** that is not this change (above). It will keep the suite
+  red on this container until someone looks at the race.
+- No frame time on real hardware. The step cost above is Node on this machine, not a weak laptop.
+- No adversarial or multi agent review was run. Nothing is merged and neither pull request is out of draft.

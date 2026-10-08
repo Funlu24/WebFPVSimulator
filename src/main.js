@@ -5284,10 +5284,13 @@ export async function boot({ loading, bootStart, mapId }) {
    * shipped hover, and the quad fell whenever W came up. Called from
    * applySettings, which every settings write reaches, the weight slider in
    * flight included, and from the run start, where the pack is latched.
+   * Motor power moves hover as well, by about 1 / kV, so the spring reads the
+   * percent the module is actually flying (runMotorKv, 100 until the tuning
+   * mode has moved it).
    */
   function syncKeyHover() {
     input.setKeyHover(hoverStickPercent(
-      normaliseRates(ui.settings.rates).throttleCap, runAirframe, runWeight, runVoltage,
+      normaliseRates(ui.settings.rates).throttleCap, runAirframe, runWeight, runVoltage, runMotorKv,
     ) / 100);
   }
 
