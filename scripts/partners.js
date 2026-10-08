@@ -518,6 +518,7 @@ const made = [
   { kind: 'svg', rel: 'mantisfpv/mono.svg', body: mantisMono(readFileSync(at('mantisfpv/colour.svg'), 'utf8')) },
   { kind: 'png', rel: 'wcmrc/mono.png', img: creamPng(readPng(readFileSync(at('wcmrc/colour.png')), 'wcmrc/colour.png')) },
   { kind: 'png', rel: 'mattsflooring/mono.png', img: creamPng(readPng(readFileSync(at('mattsflooring/colour.png')), 'mattsflooring/colour.png')) },
+  { kind: 'png', rel: 'yourfpv/mono.png', img: creamPng(readPng(readFileSync(at('yourfpv/colour.png')), 'yourfpv/colour.png')) },
   { kind: 'png', rel: 'quadconfig/mono.png', img: quadconfigMono(readPng(readFileSync(at('quadconfig/colour.png')), 'quadconfig/colour.png')) },
   {
     kind: 'svg',

@@ -165,9 +165,12 @@ export const PARTNERS = Object.freeze([
 
 /*
  * Maps-only partners: shown on freestyle maps (painted walls and find-the-logo
- * stamps) but NOT on the front page, leaderboard or partners page. These
- * partners are listed separately so the other repositories' vendored roster.js
- * consumers (which copy PARTNERS byte for byte) need no changes.
+ * stamps) but NOT on the front page, leaderboard or partners page. These are
+ * NOT counted as partners in PARTNERS.length or partner roles. They are
+ * listed separately so the other repositories' vendored roster.js consumers
+ * (which copy PARTNERS byte for byte) need no changes. The landing page can
+ * choose to display them separately from PARTNERS (e.g., as "Supporters" or
+ * "Sponsors").
  */
 export const MAP_ONLY_PARTNERS = Object.freeze([
   partner({
@@ -179,6 +182,17 @@ export const MAP_ONLY_PARTNERS = Object.freeze([
       { kind: 'site', label: "Visit Matt's Flooring", href: 'https://www.mattsflooring.com.au/' },
     ],
     logo: { colour: 'mattsflooring/colour.png', mono: 'mattsflooring/mono.png', aspect: 499 / 111 },
+    mark: { field: '#f3ead4' },
+  }),
+  partner({
+    slug: 'yourfpv',
+    name: 'YourFPV',
+    short: 'YourFPV',
+    about: 'Sheffield, UK based FPV shop. Curated FPV drone parts and accessories shipped from their UK warehouse.',
+    links: [
+      { kind: 'site', label: 'Visit YourFPV', href: 'https://www.yourfpv.co.uk/' },
+    ],
+    logo: { colour: 'yourfpv/colour.png', mono: 'yourfpv/mono.png', aspect: 869 / 570 },
     mark: { field: '#f3ead4' },
   }),
 ]);
