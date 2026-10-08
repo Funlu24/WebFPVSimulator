@@ -299,9 +299,13 @@ function cityAttractPath(world) {
  * so this stops at the last value a pilot can use rather than at the last one
  * the ledger likes.
  *
- * The far plane stays long. It costs nothing, it is depth precision rather
- * than draw calls, and the sky dome and the hills behind the town live out
- * there.
+ * The far plane stays long, because the sky dome, the comic cumulus, the
+ * hills and the inked rooftops past the fog, which are the skyline from a
+ * roof, all live out there. It is not free. It is not draw calls, but from
+ * the air most of the frame is town past the fog: the frame cost pass of
+ * 2026-10-08 measured a far plane at the fog 2.4 to 2.8 times faster there
+ * in SwiftShader, and no faster at street level, and it took the whole sky
+ * and the skyline with it.
  *
  * High's live numbers (fog 22 to 65, cull 70, foliage keep 0.65, shadow
  * half 22) live in src/render/quality.js so Medium and Low can scale them

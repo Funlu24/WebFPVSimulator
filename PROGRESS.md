@@ -69329,3 +69329,48 @@ append conflict at the end of this file and nothing else in these files.
 - What went wrong: pictures from an earlier try at 1C were already in `after/item1c/` and how they were made was not
   written down anywhere, so they were moved to `after/item1c/earlier/` and the pairs were shot again from a patch that
   is kept.
+
+### Item 6: not done; the far plane at the fog takes the sky and the skyline, and the dome reorder buys nothing measurable
+
+- Step one as the prompt has it, the camera's far plane a little past the fog on Medium and Low, is not the same
+  picture, and it is not close. Measured in one town page with the clock frozen, base and variant alternated, from a
+  worktree with a scratch hook (`window.__cam`) that is not on the branch (`item6.mjs`, `after/item6/`). The town has
+  three things past its fog, and the far plane takes all of them: the sky dome (500 m, following the camera), the comic
+  sky's cumulus and the hills (fog off, 220 to 380 m out), so the sky goes to the flat clear colour; and the town past
+  the fog, which is not invisible, because it is drawn in the fog colour with its lines on (the ink fades from 40 to
+  98 m and the fog is full at 53 m on Medium), so from a roof the inked rooftops past the fog are the skyline, and they
+  go too. 34 percent of the pixels of the spawn street view change, the whole sky of the view from a roof, and from
+  60 m up the whole frame, because everything below is past the fog and its lines are the picture
+  (`after/item6/medium-fixed/sbs/`). On Low, where the town is drawn without lines, the street keeps its look and the
+  sky alone goes, a fifth of the street view (21 percent of its pixels, `after/item6/low/sbs/`).
+- What it would buy, SwiftShader ratio, per drawn frame, from a run with the machine to itself: at the spawn street
+  2066 and 2294 ms with the far plane at 900, 2250 and 2282 ms at 58, no change; 60 m up looking down the town, 1746
+  and 2063 ms against 737 and 728 ms, 2.4 to 2.8 times faster. Draw calls 456 to 423 at the street and 358 to 254 from
+  the air; triangles 1.33 M to 1.29 M and 1.15 M to 1.12 M, because the merges are town wide and the frustum keeps
+  them, so what goes is fragments, and only from the air.
+- Step two, merging per tile, is the lever ROUND 32 measured and put back (`MERGE_CELL` in `src/maps/city/index.js`:
+  60 m cells cost 435 draw calls for 357,000 triangles at its worst viewpoint, with draw calls the binding budget).
+  Not done. The far plane result does not change that arithmetic: triangles were never what it saved.
+- Tried as a same picture substitute and not kept: the sky dome drawn after the town instead of first. buildSky puts
+  it at render order -10, so all of a 500 m sphere is shaded every frame and then painted over. At 0.5 the depth test
+  would throw the hidden part away. Moving the dome alone lost the clouds: an inventory of every opaque draw that
+  writes no depth found two, the cumulus at -9 and the shadow proxies, and the dome painted over the cumulus. With the
+  cumulus moved after it as well, the four views were identical to the base, zero pixels, on Medium. It still is not
+  kept, for two reasons. It buys nothing SwiftShader can show: street 4981 and 4032 ms against 4512 and 4964, air
+  3650 and 3543 against 2883 and 3675, in a run that shared the machine with another page, so the noise is a fifth
+  either way; the dome is a cheap gradient, and one screen of it is of the order of 0.1 to 0.2 ms on an integrated
+  GPU at 1080p by fill rate arithmetic, an estimate. And it is not the same picture everywhere: the cumulus writes no
+  depth, so today the hills (-8) and the town (0) paint over it wherever they stand, even behind it, and drawn after
+  them it would paint over hills and fogged rooftops farther away than it is. The four views missed that because the
+  cumulus stands above the hills in all of them. Keeping it exact needs the cumulus to write a depth just inside the
+  dome, or a stencil, which is more shader than the saving.
+- The comment beside CAMERA_FAR said the long far plane costs nothing. That is right at street level and wrong from
+  the air, so it now says what was measured and why the far plane stays anyway: the sky and the skyline live out
+  there. That comment is the whole commit.
+- Not in the prompt and not done, written down for the next pass: a fragment past fogFar is exactly the fog colour
+  (three's linear fog is a smoothstep that reaches 1 at fogFar, and a mix at 1 returns the fog colour), so the town's
+  materials could return the fog colour there without lighting or comic work, and the picture would not change.
+  From the air that is most of the frame. It needs a check that the ink pass reads nothing those materials write but
+  depth, and pictures.
+- What went wrong: the Low run stopped at the container's thirty minute limit for a background job after its street
+  views. It was not run again, because the far plane's answer was already plain and the dome reorder is not kept.
