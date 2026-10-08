@@ -67284,3 +67284,65 @@ way round is a computer.
 Mat, 2026-10-06 14:43 UTC, in the thread, after being offered none, cheap, shots, verify or fly it: "push to main". It covers
 this change only (the raw axis and button readout in the stick report). Fetched main first: origin/main is an ancestor of
 this branch, so a fast forward.
+
+## 2026-10-08 | partners | YourFPV added as UK retail partner
+
+Mat explicitly asked for this PR. YourFPV (https://www.yourfpv.co.uk/, a UK FPV parts shop in Sheffield; contact Gaf /
+Ghafoor Hussain) is a 6 month paid partnership (October 2026 to April 2027). They are a FULL partner, not map-only like
+Matt's Flooring (PR #22 / MAP_ONLY_PARTNERS) and not a patron sign.
+
+### Deal terms
+
+1. Their logo is randomly placed in every freestyle map, with an in-game find-it achievement/callout along the lines of
+   "You found YourFPV, the UK FPV shop".
+2. They appear wherever partners are listed, with a clickable link to https://www.yourfpv.co.uk/ (they specifically asked
+   for a clickable link on webfpv.org).
+
+### The exclusivity question
+
+Mantis FPV (Sydney, AU) is already the "Official retail partner". Rather than creating a second Official retail partner,
+which would break the exclusivity that roster.js describes, YourFPV gets a new role: `uk_retail` with the title "UK retail
+partner". This makes the regional distinction clear: Mantis FPV is the global official partner, YourFPV is regional UK.
+
+### What changed
+
+- `src/partners/roster.js`: added `uk_retail: 'UK retail partner'` to ROLE_TITLES; added YourFPV to PARTNERS after Mantis
+  FPV with slug `yourfpv`, role `uk_retail`, about text sourced from their own site (Sheffield, UK based; ships from UK
+  warehouse; curated FPV parts), link to https://www.yourfpv.co.uk/, logo files at `yourfpv/colour.png` and
+  `yourfpv/mono.png`, aspect 869/570, mark field #f3ead4 (cream, for the dark navy and sky blue logo). Updated the WHO
+  comment from "Three businesses" to "Four partners", updated list order comment from "training, retail, club" to
+  "training, retail, UK retail, club".
+- `assets/partners/yourfpv/colour.png`: the logo as supplied (869x570 PNG with transparency, trimmed from the original
+  1024x1024 PNG with flat grey background).
+- `scripts/partners.js`: added `yourfpv/mono.png` to the `made` array, generated using `creamPng` (every pixel cream, alpha
+  kept).
+- `NOTICE`: updated partners section from "Three partners" to "Four partners", added YourFPV to the list with provenance
+  (logo as supplied, 869 by 570 PNG with transparency; mono made by scripts/partners.js).
+
+### Logo provenance
+
+Logo supplied by YourFPV. The original was 1024x1024 RGB PNG with flat #F2F2F2 background. A helper cutout was made (869x570
+RGBA, transparency) which became colour.png. The mark is dark navy and sky blue, needs a light/cream field behind it
+in-world.
+
+### What was run
+
+- `npm run gen:partners`: generated `assets/partners/yourfpv/mono.png`. All checks pass: 88 passed, 0 failed.
+- `npm run lint:partners`: all checks pass: 88 passed, 0 failed. Verified the logo aspect ratio matches (1.525), mono.png
+  is cream wherever not clear, slug is valid board source, role has a title, no en/em dashes, link is https.
+
+### Other repositories
+
+Not changed in this PR: the webfpv.org landing page (github.com/Mathew-Harvey/landingpage-WebFPVSimulator-) and the Board
+partners page (github.com/Mathew-Harvey/WebFPVSimulator-LeaderBoard, webfpv.org/board/partners). Both keep a vendored copy
+of roster.js (src/sim/partners/roster.js and public/sim/partners/roster.js respectively) and copy logos via
+scripts/vendor.js. The landing page's vendor.js hard-codes an ASSETS list per partner file. They will pick up the new
+partner when their vendor scripts are next run, but will need their own PRs to pull the updated roster and regenerate
+assets.
+
+### To review
+
+PR opened as READY (not draft) per Mat's instructions. Tagged @claude to review: role/exclusivity choice (uk_retail for UK
+retail partner, avoiding a second Official retail partner), find-it callout text (still to be implemented in map painting
+code), logo on a light field (mark.field #f3ead4 cream), link with utm tagging (handled by partnerHref in roster.js), lints
+passing (88/88).

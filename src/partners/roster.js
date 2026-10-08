@@ -1,12 +1,15 @@
 /*
  * roster.js: the partners, and the one list all three repositories read.
  *
- * WHO. Three businesses and a club back WebFPV, each exclusive in its kind:
- * Global Drone Solutions as the official training partner, Mantis FPV as the
- * official retail partner, and the West Coast Multirotor Club as the official
- * club partner. The owner named them on 2026-09-27 and approved the plan that
- * puts them on the front door, on Tracks and Times, on a partners page with a
- * dashboard for each of them, and painted into every freestyle map.
+ * WHO. Four partners back WebFPV: Global Drone Solutions as the official
+ * training partner, Mantis FPV as the official retail partner (Australia),
+ * YourFPV as the UK retail partner, and the West Coast Multirotor Club as the
+ * official club partner. The first three were named by the owner on 2026-09-27
+ * and approved for the plan that puts them on the front door, on Tracks and
+ * Times, on a partners page with a dashboard for each of them, and painted
+ * into every freestyle map. YourFPV is a 6 month paid partnership (October
+ * 2026 to April 2027) added on 2026-10-08, with the same presence plus an
+ * in-game find-it achievement.
  *
  * WHY ONE LIST, AND WHY HERE. The front door draws their marks, the board
  * prints their cards and counts what they are owed, and the simulator paints
@@ -84,11 +87,12 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* The three kinds, and how each is said. "Official" because each partner is
- * the only one of its kind, which is what the owner agreed with them. */
+/* The four kinds, and how each is said. "Official" for the first three because
+ * each is the only one globally. "UK retail partner" is regional. */
 export const ROLE_TITLES = Object.freeze({
   training: 'Official training partner',
   retail: 'Official retail partner',
+  uk_retail: 'UK retail partner',
   club: 'Official club partner',
 });
 
@@ -107,7 +111,7 @@ const partner = (p) => Object.freeze({
 });
 
 /*
- * The list, in the order every surface shows it: training, retail, club.
+ * The list, in the order every surface shows it: training, retail, UK retail, club.
  *
  * GDS's files are a WebFPV redraw of their public logo, not a file GDS
  * supplied, and each file's <title> says so. They stand until GDS approves
@@ -139,6 +143,18 @@ export const PARTNERS = Object.freeze([
       { kind: 'site', label: 'Visit Mantis FPV', href: 'https://www.mantisfpv.com.au/' },
     ],
     logo: { colour: 'mantisfpv/colour.svg', mono: 'mantisfpv/mono.svg', aspect: 1868.79 / 329.61 },
+    mark: { field: '#f3ead4' },
+  }),
+  partner({
+    slug: 'yourfpv',
+    name: 'YourFPV',
+    short: 'YourFPV',
+    role: 'uk_retail',
+    about: 'Sheffield, UK based FPV shop. Curated FPV drone parts and accessories shipped from their UK warehouse.',
+    links: [
+      { kind: 'site', label: 'Visit YourFPV', href: 'https://www.yourfpv.co.uk/' },
+    ],
+    logo: { colour: 'yourfpv/colour.png', mono: 'yourfpv/mono.png', aspect: 869 / 570 },
     mark: { field: '#f3ead4' },
   }),
   partner({
