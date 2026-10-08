@@ -502,13 +502,35 @@ export function buildComposer(renderer, scene, camera, quality) {
     outline = new ShaderPass(OutlineShader);
     outline.uniforms.tGeo.value = normalTarget.texture;
     outline.uniforms.uResolution.value.set(w, h);
+    /*
+     * THE WHOOP ROOM KEEPS THE INK IT HAD BEFORE THE COMIC LAYER: slate, at
+     * 0.85, one texel, and no outer line. Its course is a frame of tubes a
+     * few pixels across, and the crease term reads a tube's own curve as a
+     * fold, so it inks most of every tube, on main as well. In slate at
+     * 0.85 a grey tube still read as grey and the red pole as red; in the
+     * comic layer's near black at full strength the tubes went black and
+     * the red pole lost the colour that tells a pilot what it is (found by
+     * the regression sweep after graphics pass 25). The reach alone was
+     * tried first and did not do it, because the crease fires at one texel
+     * too. Giving the room the comic ink needs a crease term that tells a
+     * curve from a fold, which would change every world's line and is left
+     * for a pass of its own.
+     */
+    const room = Boolean(scene.userData.indoor);
+    if (room) {
+      outline.uniforms.uLineColor.value.set(0x1a2230);
+      outline.uniforms.uStrength.value = 0.85;
+      outline.uniforms.uInkWidth.value = 1;
+    }
     /* Occlusion and the outer line on High only: the preset was set by
      * buildFieldScene before this runs. Defines, so Medium compiles none of
      * either. Not on WebGL 1, where dFdx needs an extension this pass does
      * not ask for: see comicGL2. */
     if (comicAoOn() && comicGL2(renderer)) {
       outline.material.defines.COMIC_AO = 1;
-      outline.material.defines.COMIC_SIL = 1;
+      if (!room) {
+        outline.material.defines.COMIC_SIL = 1;
+      }
       outline.material.needsUpdate = true;
     }
     composer.addPass(outline);

@@ -68677,3 +68677,58 @@ append conflict at the end of this file and nothing else in these files.
 - Checks: `node --check` on both scripts; every capture that was kept logged 0 console errors and 0 harness faults;
   each regenerated picture read by eye against the one it replaces. Not run for this pass on its own:
   `npm run verify`, which the sweep below runs.
+
+### The sweep after pass 25, 2026-10-07 to 08: regressions and cost, against main
+
+- The owner, at 22:53Z: after the last round and the assessment, "undertake a regression bug and performance sweep,
+  ensure you haven't broken anything". Everything below is this branch against main at dc3141a, which is still the
+  merge base, checked out in a second worktree and run one at a time on the same container. Pictures:
+  `/mnt/project-files/graphics-pass/sweep/`.
+- Found and fixed: Low paid for the comic layer it does not draw. `src/render/comic.js` compiled its chunk into every
+  toon program on every preset and set its knobs to zero on Low, and the field's sky dome carried the streak cloud
+  behind a uniform branch. Headless Chromium renders in software, which is also what a machine with no usable GPU
+  gets and why it boots on Low, and there the whoop room on Low drew a frame in 231 to 246 ms where main drew it in
+  112 to 117, with the same draw calls, triangles and programs. The field on Low was 73 to 121 percent slower than
+  main, the town 70 to 72, the yard 54 to 117. Now
+  Low compiles none of it: the hook adds nothing and the program cache key says so (`chunkOn`, `comicChunkOn`), the
+  town's and the yard's ink skip the canopy codes no material writes there, and the field's dome compiles the streak
+  cloud in only on Medium and High (`COMIC_CIRRUS`). A preset change builds the world again, so the world's materials
+  follow it; the craft outlives the world, so `evictSessionRoots` in `src/render/shell.js` now marks every session
+  root's materials to compile again in the next world. Checked with the program keys exposed for one run (an
+  experiment, reverted): booted on Low, no program carries the chunk; switched to High in the session, every one of
+  the scene's toon materials and the craft's 14 do; back to Low, the scene's are Low's again and so are the craft's,
+  but for three that had not been drawn since, which take it at their next draw.
+- Found and fixed: the whoop room's course inked solid. Its tubes are a few pixels across, and the outline's crease
+  term reads a tube's own curve as a fold, so it inks most of every tube, on main too. In main's slate at 0.85 a grey
+  tube still read as grey and the red pole as red; in the comic layer's near black at full strength they went black,
+  on High and on Medium, the red pole lost the colour that tells a pilot what it is, and the floor's amber line went
+  with them. The room now keeps main's ink, slate at 0.85 and one texel, and no outer line (`buildComposer` in
+  `src/render/post.js`, told by `scene.userData.indoor`, which `buildFieldScene` sets); its occlusion on High stays.
+  The first fix tried was the pen's reach alone, one texel indoors, and it changed nothing visible, because the
+  crease fires at one texel too; switching the ink off showed the tubes pale grey and the pole red underneath, which
+  is what found the cause. A crease term that tells a curve from a fold would let the room have the comic ink, and is
+  left for a pass of its own because it changes every world's line. The whoop gate card (`assets/gate/whoop.jpg`),
+  kept as shipped in pass 25 for this, is regenerated with the fix.
+- Checks, 38 of the repository's own on the branch head: 34 pass. The four that fail fail on main too, with the same
+  output: `lint:shell` (the same seven overflow and fold problems, line for line), `lint:input` (1 of 246, the builder
+  chooser's V key test, the same JSON), `lint:devices` (three problems; main had the same three and a fourth, a drawer
+  on the tablet portrait room), and `lint:catalog`, which needs `vendor/betaflight`, absent from this container.
+  The final verify and the re-runs of the cheap checks on the tree with these fixes follow in the next commit.
+- WebGL 1 (getContext refusing `webgl2`, as a browser without it): the field and the room on the title, the town and
+  the yard in flight, at Medium and High. Every world drew, no shader error, no page error, the only console error the
+  refused board ping.
+- Cost: every world on every preset timed again with the fixes, main and branch alternating, one at a time. The room
+  is done: on Low it draws in 108 to 110 ms where main drew in 110 to 115 in the same run, so Low is main again. The
+  rest of the table follows in the next commit.
+- The builder's 3D preview of the golden yard: 167,201 triangles where main draws 122,825, 36 percent more, of which
+  45,990 are the canopy clumps. It has no preset to switch them on, so every machine draws them; whether it should is
+  the owner's call, and it is still open.
+- Found, not fixed: `tests/lib/page.js` makes a browser profile in `/tmp` for every page it opens and never deletes
+  it, up to 92 MB each. This container had 897 of them, 27 GB, when its disk allowance ran out in the middle of the
+  timing runs: the yard on High failed with `ERR_INSUFFICIENT_RESOURCES` on main and drew nothing on the branch, and
+  the next runs hung. On main as here, and outside this branch's subject, so it is written down rather than fixed; the
+  sweep deleted them after every run.
+- What went wrong: the first fix for the room (the reach alone) did nothing; the first timing pass ran out of disk
+  and its last runs failed, and its numbers before that were what showed Low's cost; a wait that killed its own shell
+  with a pattern that matched its own command line, again.
+- Not run yet: the final verify, which follows.

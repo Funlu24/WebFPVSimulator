@@ -29,13 +29,16 @@
  * own hooks differ would hand each other a linked program: the bug
  * celmat.js's long comment on customProgramCacheKey describes. The wrapped
  * key is the caller's own key, or the caller's hook's source where it set
- * no key, with a constant suffix. The chunk itself never varies, every
- * knob is a uniform, so one suffix is the whole truth about it.
+ * no key, with a suffix. The chunk itself never varies, every knob is a
+ * uniform, and it is either compiled in or, on Low, not (chunkOn below), so
+ * two suffixes are the whole truth about it.
  *
  * SHARED UNIFORMS. Each material's hook assigns the same uniform OBJECTS
  * from COMIC below, so one write here reaches every compiled toon program
  * at once, and the preset's level (setComicQuality) takes effect on the
- * next frame without a recompile.
+ * next frame without a recompile. Between Low and the others it takes a
+ * recompile, because Low compiles none of it, and a preset change builds
+ * the world again anyway.
  *
  * THE STROKES are world space, so they stay on the surface as the camera
  * moves rather than swimming across it, and they are kept a constant width
@@ -168,8 +171,27 @@ const LEVELS = {
   high: { hatch: 1, grit: 1, brush: 1, detail: 1 },
 };
 
+/*
+ * WHETHER THE CHUNK IS COMPILED IN AT ALL. Low draws none of it, and until
+ * the sweep after graphics pass 25 it was compiled into every toon program
+ * there anyway, with its knobs at zero, so the machines that boot on Low (a
+ * phone, a laptop with no usable GPU) paid for strokes nobody drew. Measured
+ * in headless Chromium, whose renderer is software, the whoop room on Low
+ * drew a frame in about 250 ms where main draws it in 110, with the same
+ * draw calls and triangles, and in 110 with the chunk left out. So on Low
+ * the hook adds nothing and the program is main's, and the program cache
+ * key below says which of the two a material has. A material that outlives
+ * a world (the craft) is compiled again in the next one: see
+ * evictSessionRoots in src/render/shell.js.
+ */
+let chunkOn = true;
+export function comicChunkOn() {
+  return chunkOn;
+}
+
 export function setComicQuality(q, { groundAuto = false, edges = false, grime = false } = {}) {
   const id = q && q.id ? q.id : 'high';
+  chunkOn = id !== 'low';
   /* Every map sets these when it builds, so leaving the town clears them. */
   COMIC.groundAuto.value = groundAuto ? 1 : 0;
   COMIC.edge.value = edges && id !== 'low' ? 1 : 0;
@@ -1083,7 +1105,7 @@ if (!P[INSTALLED]) {
         if (user) {
           user.call(self, shader, renderer);
         }
-        if (comicGL2(renderer)) {
+        if (chunkOn && comicGL2(renderer)) {
           inject(shader, self);
         }
       };
@@ -1113,8 +1135,12 @@ if (!P[INSTALLED]) {
         } else if (self._comicUserHook) {
           k = self._comicUserHook.toString();
         }
-        /* A baked canopy's material compiles its own program (see
+        /* Off on Low (chunkOn above), where the program is the caller's
+         * alone. A baked canopy's material compiles its own program (see
          * FRAG_TAIL's note on pass 23), so its key says so. */
+        if (!chunkOn) {
+          return `${k}|comic0`;
+        }
         return k + KEY + (self.userData.comicBlobBaked ? '|baked' : '');
       };
       key.comicUserKey = this._comicUserKey || null;
@@ -1146,7 +1172,9 @@ export function comicPipeline(pipeline, { blobs = false } = {}) {
   pipeline.inkWeight = INK_WEIGHT;
   pipeline.comicAo = gl2 && comicAoOn() && addPipelineAo(pipeline);
   pipeline.comicSil = gl2 && comicAoOn() && addPipelineSil(pipeline);
-  pipeline.comicBlobs = gl2 && blobs && addPipelineBlobs(pipeline);
+  /* Not on Low, where the chunk that writes the codes is not compiled in
+   * (chunkOn), so the ink would fetch them for nothing. */
+  pipeline.comicBlobs = gl2 && blobs && chunkOn && addPipelineBlobs(pipeline);
   pipeline.comicEdges = gl2 && comicEdgesOn() && addPipelineEdges(pipeline);
   const ink = pipeline.ink && pipeline.ink.mat && pipeline.ink.mat.uniforms;
   if (ink) {

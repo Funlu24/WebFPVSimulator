@@ -369,6 +369,15 @@ export function buildShell(canvas, opts) {
    * without a parent, but the count returned would be a lie.
    *
    * Returns how many were detached. Nothing reads it today.
+   *
+   * Every root's materials are also marked to compile again at their first
+   * draw in the next world, which may be built at another preset, and a
+   * preset can change a toon program and not only its uniforms: the comic
+   * layer is compiled out on Low (comicChunkOn in src/render/comic.js), so
+   * without this a craft first drawn on Low would fly the rest of the
+   * session on High without it, and one first drawn on High would carry it
+   * on Low. three keeps one program per key, so a material whose program
+   * does not change is handed the one it had.
    */
   function evictSessionRoots(scene) {
     if (!scene) {
@@ -379,6 +388,7 @@ export function buildShell(canvas, opts) {
       if (!root) {
         continue;
       }
+      recompileTree(root);
       let p = root.parent;
       while (p && p !== scene) {
         p = p.parent;
@@ -446,6 +456,19 @@ export function buildShell(canvas, opts) {
   }
 
   return api;
+}
+
+/* Mark every material under root to compile again at its next draw: see
+ * evictSessionRoots. */
+function recompileTree(root) {
+  root.traverse((o) => {
+    const m = o.material;
+    for (const one of Array.isArray(m) ? m : [m]) {
+      if (one && one.isMaterial) {
+        one.needsUpdate = true;
+      }
+    }
+  });
 }
 
 /*

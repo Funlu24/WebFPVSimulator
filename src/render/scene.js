@@ -4806,19 +4806,25 @@ function attractOrbit(course, gates, tops, heightFn) {
 
 function skyDome(q = null) {
   const geo = new THREE.SphereGeometry(1500, 40, 24);
+  /* The streak cloud on Medium and High, compiled in rather than switched
+   * by a uniform: Low's dome is main's program. It was a uniform branch
+   * until the sweep after graphics pass 25, which found a software renderer
+   * paying for code behind a branch it never took (src/render/comic.js,
+   * chunkOn), and a preset change builds the dome again anyway. */
+  const cirrus = !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
+    defines: cirrus ? { COMIC_CIRRUS: 1 } : {},
     /* The streak cloud's fwidth. WebGL 2 has derivatives built in and three
      * ignores this there; on WebGL 1, which three falls back to and main
      * draws on, it is what lets the dome compile at all. */
-    extensions: { derivatives: true },
+    extensions: { derivatives: cirrus },
     uniforms: {
       uHigh: { value: new THREE.Color(SKY_HIGH) },
       uHorizon: { value: new THREE.Color(HORIZON) },
       uSun: { value: SUN_DIR.clone() },
-      uCirrus: { value: q && q.id === 'low' ? 0 : 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -4829,18 +4835,19 @@ function skyDome(q = null) {
     `,
     fragmentShader: /* glsl */ `
       ${SKY_GLSL}
+      #ifdef COMIC_CIRRUS
       ${CIRRUS_GLSL}
+      #endif
       varying vec3 vDir;
       uniform vec3 uHigh;
       uniform vec3 uHorizon;
       uniform vec3 uSun;
-      uniform float uCirrus;
       void main() {
         vec3 col = celSkyColor(vDir, uSun, uHorizon, uHigh);
-        if (uCirrus > 0.0) {
-          col = celSkyCirrus(col, normalize(vDir), uSun,
-            vec3(0.93, 0.94, 0.97), vec3(1.0, 0.95, 0.86), 0.30);
-        }
+        #ifdef COMIC_CIRRUS
+        col = celSkyCirrus(col, normalize(vDir), uSun,
+          vec3(0.93, 0.94, 0.97), vec3(1.0, 0.95, 0.86), 0.30);
+        #endif
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -5098,6 +5105,9 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * it is doing the job the sky dome does outdoors.
    */
   scene.background = new THREE.Color(indoor ? ROOM.air : HORIZON);
+  /* The ink reads this: a room's course is a frame of tubes a few pixels
+   * across (buildComposer in src/render/post.js). */
+  scene.userData.indoor = indoor;
   /*
    * IN THE ROOM'S OWN METRES, WHICH ARE MICRO_SCALE TIMES RACEGOW'S. The
    * room is built through that factor so a five inch has space to fly, and

@@ -50,9 +50,9 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
  *
  * The two tints and the strength are arguments (pass 20), so the town and
  * each of the yard's times can paint it in their own colours; the field
- * passes the numbers it always had. Off on Low, where a dome either never
- * calls it (the field's uCirrus, a uniform branch, so its dome keeps one
- * program) or never has it (comicSky below).
+ * passes the numbers it always had. Off on Low, where no dome has it: the
+ * field's compiles it in only on Medium and High (COMIC_CIRRUS in
+ * src/render/scene.js), and comicSky below adds it only there.
  */
 export const CIRRUS_GLSL = /* glsl */ `
   float skyHash(vec2 p) {
