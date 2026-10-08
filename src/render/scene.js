@@ -155,8 +155,15 @@ function makeBaker() {
         b = { material: o.material, hull: o.material.userData.hullColor != null, geos: [] };
         buckets.set(key, b);
       }
-      /* Non-indexed so polyhedra and cylinders merge into one buffer. */
-      const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      /* Indexed members stay indexed. This used to explode every one of them
+       * with toNonIndexed(), so that polyhedra (which three builds without an
+       * index) could share a bucket with cylinders (which it builds with
+       * one), and that tripled the vertex count of everything round: the
+       * canopies are welded into smooth blobs on purpose, in tree(), and
+       * were then pulled apart again here. A merge has to be all indexed or
+       * all not, so flush() gives the odd non-indexed member a plain 0..n
+       * index, and only in a bucket that holds indexed ones. */
+      const geo = o.geometry.clone();
       geo.applyMatrix4(o.matrixWorld);
       b.geos.push(geo);
     });
@@ -164,6 +171,18 @@ function makeBaker() {
   function flush(scene, layer) {
     const meshes = [];
     for (const b of buckets.values()) {
+      if (b.geos.some((g) => g.index)) {
+        for (const g of b.geos) {
+          if (!g.index) {
+            const n = g.attributes.position.count;
+            const seq = new (n > 65535 ? Uint32Array : Uint16Array)(n);
+            for (let i = 0; i < n; i += 1) {
+              seq[i] = i;
+            }
+            g.setIndex(new THREE.BufferAttribute(seq, 1));
+          }
+        }
+      }
       const mesh = new THREE.Mesh(mergeGeometries(b.geos, false), b.material);
       if (!b.hull) {
         mesh.castShadow = true;
@@ -4959,7 +4978,12 @@ function clouds(rng, count = 26, size = 1) {
     nrm.needsUpdate = true;
   };
   const puff = (cluster, r, x, y, z, sy) => {
-    const geo = new THREE.IcosahedronGeometry(r, 1);
+    /* Welded before the cut, as tree() welds its canopy. three hands back a
+     * detail 1 icosahedron with every triangle's corners its own, 240
+     * vertices for 80 faces, and these are the biggest non-indexed meshes in
+     * the frame: the cut moves vertices, so a shared corner has to be one
+     * vertex before it moves and not three that happen to move together. */
+    const geo = mergeVertices(new THREE.IcosahedronGeometry(r, 1));
     cut(geo, y, sy);
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);

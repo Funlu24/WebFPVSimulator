@@ -69064,3 +69064,48 @@ append conflict at the end of this file and nothing else in these files.
 - Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
+
+## 2026-10-08 | perf | The frame cost pass, from the performance hunt (branch claude/project-thread-0g4yz8)
+
+- Source: the hunt in `/mnt/project-files/perf-hunt/findings.md`, measured on main at da4e4b7. This entry keeps its item
+  numbers. The owner's standing priority from 2026-10-08 is low end performance, and at 13:07Z in the performance hunt
+  thread he said "lets go sonnet, read the prompot and the findings. md and implment". One commit per item, so any one
+  can be reverted alone. Render and load only unless an item says otherwise.
+- What a number here is. This container has no GPU and its Chromium runs on SwiftShader, where the GPU is the CPU, so
+  a time from it is a ratio of arithmetic and not a laptop's frame. Every figure below is a count, a size or a
+  SwiftShader ratio, and says which. A frame on real hardware is not measured; Settings, Input to screen on the owner's
+  laptop is the check this container cannot make.
+- How a picture was held. `shoot.mjs` (in `/mnt/project-files/perf-hunt/measurements/`) parks the camera on eleven
+  views per world with the menu hidden and the clock frozen at one instant, once on a git worktree of the base commit
+  and once on the branch, and `imgdiff.py` counts the pixels that differ. Two runs of the base differ from each other by
+  13 pixels in the field, in two boxes of three pixels at the horizon (a tuft of distant grass, at most 21 of 255), so
+  that is the noise floor of the harness and not a finding.
+
+### Item 2: the baked scenery keeps its index, and the cloud puffs are welded
+
+- `makeBaker` in `src/render/scene.js` exploded every indexed member with `toNonIndexed()` so that polyhedra and
+  cylinders could share a bucket. But `tree()` welds its canopy into smooth blobs on purpose, so the explode pulled
+  apart what the builder had put together: three vertices a triangle where the blob has about one. Members now keep
+  their index, and `flush()` gives the odd non-indexed member a plain 0..n index only in a bucket that also holds
+  indexed ones, because a merge has to be all indexed or all not. The cloud puffs are detail 1 icosahedra that three
+  hands back non-indexed, 240 vertices for 80 faces, and the biggest non-indexed meshes left, so `clouds()` welds each
+  with `mergeVertices` before the base cut moves vertices.
+- Measured, field on Medium, from the scene graph: vertices submitted 1,018,663 to 379,878, of which the shadow
+  casters' 532,868 to 187,919; triangles unchanged at 436,751. Attributes 33.3 MB to 12.9 MB and index 0.8 MB to 3.2 MB.
+  The inked hull mesh went from 297,576 vertices to 82,247, and the four canopy merges from 106,560, 89,280, 87,600 and
+  72,480 to 25,308, 21,204, 20,805 and 17,214. A vertex bound pass has about a third of its vertex work and a fill bound
+  one the same as before.
+- Pictures: eleven views of the field on Medium, 15 pixels differ from main, in the same two boxes of three pixels that
+  differ between two runs of main itself.
+- SwiftShader time per drawn frame, field on Medium at 1280x720, 12 drawn frames in each of three windows, base and
+  branch interleaved twice: medians 805 and 849 ms on main, 728 and 726 ms on the branch, about 12 percent less. A
+  ratio, not milliseconds on a laptop.
+- Boot: `mergeVertices` self time 410 to 433 ms (the welded clouds), `convertBufferAttribute` 72 ms to nothing. The
+  boot as a whole read 13.6 s and 12.0 s, but the shader compile inside it moved by a second on its own, so the claim
+  is only that it is no slower.
+- Checks: `lint:quality` (71 of 71), `check:room` (71), `check:props`. Nothing here reaches physics, the plant, the
+  module ABI or the build, so `npm run verify` was not run.
+- What went wrong: the first pictures were all of the title menu, because `#ui` sits over the canvas, so every view
+  showed the same four cards and the only difference was their thumbnails (11.6 percent of each image). The harness
+  now hides it. And the first count of the saving read "two thirds" from the hunt's estimate and the real figure is
+  63 percent of vertices and 65 percent of the shadow pass's, so the estimate held.
