@@ -46,7 +46,7 @@ import {
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
 import { setComicQuality } from './comic.js';
-import { CIRRUS_GLSL } from './comicsky.js';
+import { CIRRUS_GLSL, cirrusUniforms } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
 /* The obstacle dimensions come from the track module, which holds MultiGP's
@@ -4825,6 +4825,7 @@ function skyDome(q = null) {
       uHigh: { value: new THREE.Color(SKY_HIGH) },
       uHorizon: { value: new THREE.Color(HORIZON) },
       uSun: { value: SUN_DIR.clone() },
+      ...(cirrus ? cirrusUniforms() : {}),
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;

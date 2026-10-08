@@ -68785,3 +68785,161 @@ append conflict at the end of this file and nothing else in these files.
   fail on main too and the catalog lint are layout, input and the vendored sources, which the fixes do not touch;
   the rest passed there, and the longest of them, `check:builder`, is a page that never loads the comic layer (nothing
   `src/trackbuilder/start.js` imports reaches `src/render/comic.js`), so the fixes cannot reach it.
+
+### The low end pass, 2026-10-08: Medium and High cheaper, the picture unchanged
+
+- The owner, at 06:01Z, after the sweep's cost table: "So it will run slower at medium and high settings ?", answered
+  yes, and at 06:02Z: "Yes optimise , low end computer performance is important". Medium is what an integrated laptop
+  boots on (`bootGuessGraphics` in `src/render/quality.js`), so it was the target, with High kept in step, and the
+  rule was to move nothing a pilot could see. Render only: no physics, plant, module ABI, build, file format or
+  setting change, and no threshold touched. Builds named below: main is dc3141a, still the merge base; before is
+  this branch at a53fb24; after is this pass without the grime switch, which came last; final is this commit.
+- Where the time went. The town on Medium in headless Chromium, the comic chunk cut down one part at a time, each
+  timed once (park view and overview, ms a frame): the whole chunk 2357 and 1835; the chunk compiled out 965 and 793;
+  `comicShade` returning at once 988 and 770; without the grit 2208 and 1610, the hatching 2581 and 1595, the detail
+  map 1977 and 1322, the edge light 2144 and 1695. So the vertex half, the varyings and the tail cost nothing that
+  shows, `comicShade` is all of it, and no one part of it is: taking any one out moved the frame by less than two runs
+  of one build differ (without the hatching it came out slower than with it). The run was stopped after the town
+  because it could not tell the parts apart. What every part shares is value noise, four hashes a call: twice for the
+  grit on every pixel, twice for the field's patches, twice for the yard's stains, twice for the pen in shade.
+- What changed:
+  - `src/render/lattice.js`, new: the noise's grid as a 256 square texture whose texels each hold their cell's four
+    corners, so a call is one nearest fetch and the shader blends the corners itself with the smoothstep it always
+    used (a filtered fetch would have blended them in the sampler, eight bit weights on most GPUs). Two of them. One
+    holds the comic layer's own hash and one the field's cloud shadow hash (`celHash`), each worked in single
+    precision as a GPU works it at every cell from -128 to 127, so within 127 cells of the origin the noise is what
+    the hash drew, to the byte: both hashes run on the GPU here (SwiftShader) against the JavaScript, all 65,536 cells
+    equal, where the same hashes in double precision differed at more than half. Past that the lattice repeats, every
+    256 cells: the same kind of noise, drawn another way, from 55 m out for the finest octave the comic layer uses
+    (2.3 cells a metre) and 67 m for the 1.9 a metre ones. Read by `comicNoise` and `comicNoiseD` in
+    `src/render/comic.js` (texelFetch, WebGL 2 as the chunk is), by the sky's streak cloud (`CIRRUS_GLSL` in
+    `src/render/comicsky.js`, on the field's dome and the town's and the yard's) and by main's cloud shadow
+    (`src/render/celmat.js`), both texture2D because they draw on WebGL 1 too. Each is built by the first material
+    that wants it, so Low builds neither. A world's teardown frees the textures in its sky domes' uniforms
+    (`disposeSceneGraph`), the lattice among them, and three uploads it again, 256 KB, at the next world's first
+    draw; `lint:memory` passes. `src/fresh.js` lists the new module (`npm run gen:preload`).
+  - The brush marks (High), the grime (a built map) and its cracks (a built map on High) are compiled in only where
+    they draw (`chunkVariant`, whose defines and key suffix come from one call), where every Medium program carried
+    all three behind uniform branches. A GPU skips such code but keeps the registers for it, which is what an
+    integrated GPU is short of, and the cracks are the most arithmetic in the shader. Every map sets its grime
+    (`setComicQuality`) as it builds, before anything draws, and a preset change builds the world again, so a map's
+    programs are all one variant, and the craft, which outlives a world, compiles again in each (`evictSessionRoots`).
+    The sweep's one timing of the grime block compiled in and out (the room on Medium, which never draws it: mean 432
+    ms in, 368 out, inside the spread) is what this does on every map that does not draw it.
+  - The crossing hatch set is drawn only where its weight is above zero. On the dark side of the toon ramp, a third
+    lit, it was drawn and multiplied by nothing. Same pixels.
+- Found on the way and fixed, from the sweep: a material compiled on High, then on Low, then on High again drew with
+  Low's uniform list. three keeps the uniforms a material had at its last compile and goes back to a program it holds
+  for a key without compiling (`getProgram`), so after the Low compile the comic uniforms were missing, three never
+  uploaded them for that material, and it drew with whatever another material last gave the shared program: on a
+  craft material that shares a program with ground, the ground's mark, and the ground's stone texture on its upper
+  faces. Read from three's code and shown by the probe below, not seen in the game. Reached by changing the preset in
+  Settings and back, because the craft outlives a world. A probe page (two toon materials taken High, Low, High,
+  Medium, High) found the uniforms missing from every compile after the Low one on the branch before this; now the
+  hook binds them on every compile (`bindUniforms`), and the same probe finds them in all five, with one program for
+  each variant (`|comic0`, `|comic1`, `|comic1|brush`, `|comic1|brush|cracks`) and no GL error.
+- Pictures, before against after, each world from the same fixed views as the sweep's, compared pixel by pixel. On
+  Medium the room is within 7 levels of 255 everywhere, the field within 9 but for its flag, which moves, the town
+  differs only where the petals and the traffic move and the yard only where the traffic does. On High the field is
+  within 8 but for the flag, and the yard differs where the traffic moves and in crack pixels more than 67 m from the
+  origin, the same cracks wandering another way, as above. WebGL 1 (getContext refusing `webgl2`): the field and the
+  yard on Medium draw, with no shader or page error. The grime switch came after those pictures, changes no pixel by
+  construction (where it compiles the block out, the block's own uniform branch skipped every pixel), and was
+  photographed on its own, after against final: the yard's three views on Medium and on High and the town's two on
+  Medium differ only where the traffic and the petals move, and the yard's tree views not at all. Its programs, read
+  back from the real flow (below), are as meant: the field and the town carry no grime, the yard on Medium the grime
+  alone, the yard on High the grime, the cracks and the brush marks, the field on High the brush marks alone. Pairs:
+  `/mnt/project-files/graphics-pass/lowend/`.
+- Cost in software: headless Chromium as in the sweep, each world in flight, ten drawn frames on each fixed view,
+  main, before and after one at a time in alternating order, two runs each on Medium and one on High, ms a frame. The
+  grime switch is not in it.
+
+  | World | Preset | View | main | before | after | after over before |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Field | Medium | gate | 443 | 688 | 593 | 0.86 |
+  | Field | Medium | over | 363 | 763 | 687 | 0.90 |
+  | Room | Medium | card | 307 | 652 | 515 | 0.79 |
+  | Room | Medium | corner | 346 | 623 | 559 | 0.90 |
+  | Town | Medium | park | 885 | 2462 | 2173 | 0.88 |
+  | Town | Medium | over | 783 | 1858 | 1377 | 0.74 |
+  | Yard | Medium | low | 503 | 1220 | 1099 | 0.90 |
+  | Yard | Medium | top | 597 | 1372 | 1095 | 0.80 |
+  | Yard | Medium | trees | 541 | 850 | 888 | 1.04 |
+  | Field | High | gate | 468 | 767 | 888 | 1.16 |
+  | Field | High | over | 560 | 978 | 1007 | 1.03 |
+  | Room | High | card | 443 | 970 | 767 | 0.79 |
+  | Room | High | corner | 400 | 730 | 760 | 1.04 |
+  | Town | High | park | 1268 | 3973 | 2802 | 0.71 |
+  | Town | High | over | 1043 | 2324 | 1868 | 0.80 |
+  | Yard | High | low | 783 | 2148 | 1855 | 0.86 |
+  | Yard | High | top | 972 | 1930 | 1954 | 1.01 |
+  | Yard | High | trees | 802 | 1563 | 1375 | 0.88 |
+
+  On Medium eight of the nine views are 10 to 26 percent faster than before and the yard's tree view 4 percent slower,
+  inside the spread: two runs of one build differ here by up to a quarter (the yard's top view after, 973 and 1217).
+  Medium was 1.55 to 2.78 times main's frame in this renderer and is 1.34 to 2.46. On High, one run each, five views
+  are 12 to 29 percent faster, three within 4 percent either way, and the field's gate view 16 percent slower.
+- Why software understates it, from a microbenchmark in the same browser (a full screen quad, 262,144 pixels, ten
+  draws and a finish, median of five, run twice): SwiftShader keeps about a tenth of the cost of code behind a uniform
+  branch it does not take; it pays the same as or up to 17 percent more for a lattice noise than for the four hash
+  noise it replaces, where a GPU's texture unit works beside the arithmetic; and one anisotropic fetch of a
+  mipmapped texture, which the detail map is, costs it as much as twelve to fifteen noises. So software is the worst
+  case for this pass: there the lattice is at best even and a switch saves only the tenth an untaken branch still
+  costs. Which parts made the gain there was not taken apart. The machines that render in software boot on Low,
+  where none of this is compiled.
+- What an integrated GPU's compiler makes of it. No GPU here, so each build's fragment shaders were captured from the
+  real flow (each world in flight, every source three handed WebGL) and compiled for an AMD Renoir, the Vega graphics
+  of a Ryzen laptop, by Mesa's RADV on its null device (`RADV_FORCE_FAMILY=renoir`), through glslang to SPIR-V, with
+  the compiler's own statistics read back (`VK_KHR_pipeline_executable_properties`). Medians over each world's toon
+  programs: instructions, registers a pixel (VGPRs), and waves, the groups of pixels a SIMD keeps in flight to hide a
+  fetch, which the registers decide (256 over them, ten at most) and which is what an integrated GPU runs short of.
+
+  | World | Preset | main | before | after | final |
+  | --- | --- | --- | --- | --- | --- |
+  | Field | Medium | 376, 24, 10 | 2438, 84, 3 | 1223, 48, 5 | 1092, 48, 5 |
+  | Town | Medium | 148, 24, 10 | 2234, 64, 4 | 1079, 48, 5 | 950, 48, 5 |
+  | Yard | Medium | 149, 24, 10 | 2245, 64, 4 | 1092, 48, 5 | 1089, 48, 5 |
+  | Field | High | 376, 24, 10 | 2438, 84, 3 | 1346, 48, 5 | 1215, 48, 5 |
+  | Yard | High | 149, 24, 10 | 2245, 64, 4 | 1836, 64, 4 | 1836, 64, 4 |
+
+  The counts are static, every branch counted, so they are a program's size and not one pixel's work; ACO's own
+  estimate of a wave's cycles fell with them, from 3944 to 2259 on the field on Medium and from 3472 to 1931 in the
+  town. Medium is now under half the program it was and keeps five waves where it kept three or four. It is still
+  three to seven times main's: lower, not gone. The yard on High keeps its 64 registers (84 for its largest program,
+  three waves) because the cracks are compiled in there, and they are where to look next on High.
+- Where the rest is, the same compiler on the field's largest program on Medium (after), each part taken out in turn,
+  instructions and cycles a wave of its 1259 and 2640: the hatching 375 and 611, of which the crossing set is 114 and
+  131; the grit and the field's patches 200 and 290; the grime 130 and 242, now compiled out off a built map; the
+  field's cloud shadow, which is main's, 128 and 220; the foliage 88 and 170; the detail map 74 and 117; the edge
+  light 17 and 52. The whole of `comicShade` is 918 and 1622, and without it the program holds 28 registers and keeps
+  nine waves. Every part left is one a pilot sees.
+- Checks on the final tree: `lint:quality` (71 of 71), `lint:preload`, `lint:boot` (9 of 9), `lint:frame` (34),
+  `check:fresh` (18), `lint:memory` (every world lazy and freed), `check:world`, `check:room` (71), `check:craft` (20
+  of 20), `check:props`, `check:orbit` (17) and `check:longflight`, all pass; the same twelve passed on the tree
+  before the grime switch. `npm run verify` was not run: nothing here reaches physics, the plant, the module ABI or
+  the build. The rest of the 38 were not run again; the four of them that fail on main fail on layout, input and the
+  vendored sources, which this does not touch.
+- What went wrong:
+  - The first lattice was a fresh random draw, the same character of noise, and the field's gate view lost most of
+    its streak cloud: the streaks' cover is a coarse noise with only a few cells in view, so it is those few values.
+    That is why the lattice holds the hash's own values.
+  - Then the cloud shadow read the comic hash's lattice, and the field's overview went darker. Its coarsest octave is
+    312 m a cell, so its cover over the field is a handful of values: on the comic hash's it covered 61 percent of
+    1.2 km square around the origin over its first ten minutes, against 32 on its own. Hence the second lattice.
+  - The cut down timing could not separate the parts (above) and was stopped after one world. It cost about fifteen
+    minutes and said only that the cost was the shading function as a whole.
+  - The lattice turned out no cheaper than the hashes in software, found by the microbenchmark after the timing had
+    been run; it is why the field on High, which gains least from the rest, came out no faster there. The compiler
+    numbers are the case for it, and they are a laptop GPU's compiler, not a laptop.
+  - Running Chromium itself on RADV's null device failed twice: RADV does not know the family as `gfx90c` (it is
+    `renoir`), and with that fixed ANGLE's Vulkan backend would not start. The shaders were captured in the harness's
+    own browser instead and compiled by a small Vulkan program.
+  - One capture of the final field on Medium took 9 of its 44 programs, because a fixed four second wait ran out
+    under the load of four browsers at once. The capture now waits until the count stops growing, and every capture
+    above holds as many toon programs as the same world on every other build of this branch (main has one fewer in
+    the town and the yard).
+  - A cleanup of the harness's browser profiles ran while the picture job had a browser open; that run finished
+    anyway, and the rest ran one at a time.
+- Not measured: a frame on real hardware, still the check this container cannot make. The levers left all change
+  the picture and are the owner's to pick: the detail map's anisotropy from 8 to 4 on Medium, hatching only near the
+  eye, fewer grit octaves, and the cracks on High.

@@ -9,8 +9,9 @@
  * painted texture rather than a flat fill. This file adds both to the
  * lighting of MeshToonMaterial itself, so the race field (celmat.js), the
  * town and a built map (the vendored toon.js) all get the same hand with
- * one edit and no new pass and no new target. Its one texture, the
- * ground's detail map, came with pass 12 and is generated in code.
+ * one edit and no new pass and no new target. Its two textures, the
+ * ground's detail map (pass 12) and the noise lattice (the low end pass,
+ * src/render/lattice.js), are generated in code.
  *
  * WHY THE PROTOTYPE AND NOT EACH CALL SITE. The field builds its toon
  * materials through celMaterial and the freestyle maps through the
@@ -29,16 +30,18 @@
  * own hooks differ would hand each other a linked program: the bug
  * celmat.js's long comment on customProgramCacheKey describes. The wrapped
  * key is the caller's own key, or the caller's hook's source where it set
- * no key, with a suffix. The chunk itself never varies, every knob is a
- * uniform, and it is either compiled in or, on Low, not (chunkOn below), so
- * two suffixes are the whole truth about it.
+ * no key, with a suffix. The chunk is either compiled in or, on Low, not
+ * (chunkOn below), and where it is, the brush marks, the grime and its
+ * cracks are compiled in only where they draw (chunkVariant); every other
+ * knob is a uniform. The suffix says all of that, so it is the whole truth
+ * about the chunk a program carries.
  *
  * SHARED UNIFORMS. Each material's hook assigns the same uniform OBJECTS
  * from COMIC below, so one write here reaches every compiled toon program
  * at once, and the preset's level (setComicQuality) takes effect on the
- * next frame without a recompile. Between Low and the others it takes a
- * recompile, because Low compiles none of it, and a preset change builds
- * the world again anyway.
+ * next frame without a recompile. Between presets it takes a recompile,
+ * because Low compiles none of it and only High the brush marks, and a
+ * preset change builds the world again anyway.
  *
  * THE STROKES are world space, so they stay on the surface as the camera
  * moves rather than swimming across it, and they are kept a constant width
@@ -82,6 +85,7 @@
  */
 
 import * as THREE from 'three';
+import { latticeMap, LATTICE_N } from './lattice.js';
 
 /*
  * The knobs, as shared uniform objects. hatch and grit are 0 to 1 and are
@@ -110,6 +114,9 @@ export const COMIC = {
    * built the texture, so a page that never sets a preset samples nothing. */
   detail: { value: 0 },
   detailMap: { value: null },
+  /* The noise lattice (src/render/lattice.js), set when the first program
+   * that reads it is compiled, so Low never builds it. */
+  noise: { value: null },
   /* 1 where a map's ground cannot be marked material by material, and its
    * up facing surfaces are told apart by colour instead. See GROUND. */
   groundAuto: { value: 0 },
@@ -155,12 +162,14 @@ export function markGround(root) {
   });
 }
 
-/* Per preset. Low is the integrated laptop and the phone that has already
- * given up shadows and ink for fill rate; it keeps none of this, and the
- * guard in the shader is a uniform branch, so a zero skips the arithmetic
- * without a second program. The occlusion, the outer line and the ground's
- * cracks are High's alone, and the edge highlights and the ground's stains
- * Medium's and High's (setComicQuality). */
+/* Per preset. Low is the phone and the machine with no usable GPU, which
+ * have already given up shadows and ink for fill rate; it keeps none of
+ * this, and compiles none of it (chunkOn, below). The occlusion, the outer
+ * line, the brush marks and the ground's cracks are High's alone, and the
+ * edge highlights and the ground's stains Medium's and High's
+ * (setComicQuality). The brush marks, the grime and its cracks are
+ * compiled in only where they draw (chunkVariant); the rest are guarded in
+ * the shader by a uniform branch, which a GPU skips. */
 const LEVELS = {
   low: { hatch: 0, grit: 0, brush: 0, detail: 0 },
   /* Medium is the integrated laptop: strokes and grit, not the brush
@@ -583,6 +592,7 @@ uniform float uComicFadeNear;
 uniform float uComicFadeFar;
 uniform float uComicDetail;
 uniform sampler2D uComicDetailMap;
+uniform sampler2D uComicNoise;
 uniform float uComicGround;
 uniform float uComicGroundAuto;
 uniform float uComicFoliage;
@@ -592,21 +602,26 @@ uniform float uComicGrime;
  * by comicShade, read by FRAG_TAIL. */
 float comicLit = 0.0;
 
-/* No sine in either: a sine's precision is the driver's, and a stroke
- * should land in the same place on every GPU. */
+/* No sine: a sine's precision is the driver's, and a stroke should land in
+ * the same place on every GPU. */
 float comicHash( vec2 p ) {
   vec3 p3 = fract( vec3( p.xyx ) * 0.1031 );
   p3 += dot( p3, p3.yzx + 33.33 );
   return fract( ( p3.x + p3.y ) * p3.z );
 }
+/* Value noise, its four corners in one fetch of the lattice
+ * (src/render/lattice.js), where it was four hashes until the low end pass.
+ * A texelFetch takes no derivative, so it is safe in the per pixel branches
+ * below. */
 float comicNoise( vec2 p ) {
   vec2 i = floor( p );
   vec2 f = fract( p );
   f = f * f * ( 3.0 - 2.0 * f );
-  return mix( mix( comicHash( i ), comicHash( i + vec2( 1.0, 0.0 ) ), f.x ),
-              mix( comicHash( i + vec2( 0.0, 1.0 ) ), comicHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
+  vec4 c = texelFetch( uComicNoise, ivec2( mod( i, ${LATTICE_N.toFixed(1)} ) ), 0 );
+  return mix( mix( c.x, c.y, f.x ), mix( c.z, c.w, f.x ), f.y );
 }
 
+#ifdef COMIC_CRACKS
 /* comicNoise with its slope: the value (x) and its gradient (yz), so the
  * grime can carry a pixel's footprint through a wander it computes only
  * where a crack can be (GRIME, in comicShade). */
@@ -614,13 +629,10 @@ vec3 comicNoiseD( vec2 p ) {
   vec2 i = floor( p );
   vec2 f = fract( p );
   vec2 u = f * f * ( 3.0 - 2.0 * f );
-  float a = comicHash( i );
-  float b = comicHash( i + vec2( 1.0, 0.0 ) );
-  float c = comicHash( i + vec2( 0.0, 1.0 ) );
-  float d = comicHash( i + vec2( 1.0, 1.0 ) );
-  float k = a - b - c + d;
-  return vec3( a + ( b - a ) * u.x + ( c - a ) * u.y + k * u.x * u.y,
-               6.0 * f * ( 1.0 - f ) * vec2( b - a + k * u.y, c - a + k * u.x ) );
+  vec4 c = texelFetch( uComicNoise, ivec2( mod( i, ${LATTICE_N.toFixed(1)} ) ), 0 );
+  float k = c.x - c.y - c.z + c.w;
+  return vec3( c.x + ( c.y - c.x ) * u.x + ( c.z - c.x ) * u.y + k * u.x * u.y,
+               6.0 * f * ( 1.0 - f ) * vec2( c.y - c.x + k * u.y, c.z - c.x + k * u.x ) );
 }
 
 /* Two hashes from one, for the grime's cells (GRIME, in comicShade). */
@@ -669,6 +681,7 @@ vec4 comicCrack( vec2 x ) {
   vec2 e = normalize( r2 - r1 );
   return vec4( dot( ( r1 + r2 ) * 0.5, e ), step( comicHash( c1 + c2 + 0.37 ), 0.3 ), e );
 }
+#endif
 
 /* Coverage of one set of parallel strokes at one octave: x is the stroke
  * coordinate (one stroke per unit), fw its screen derivative, w the pen in
@@ -817,8 +830,11 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
    * shader (setComicQuality's grime: 1 stains, 2 both). The derivatives are
    * taken in branches on uniforms alone, and the rest of a crack, its
    * wander, cells and width, only on a pixel that could draw one: most of
-   * the ground is outside a patch.
+   * the ground is outside a patch. All of it is compiled in only on a map
+   * that draws it (chunkVariant): on the field and in the town it was a
+   * tenth of the toon program for nothing.
    */
+  #ifdef COMIC_GRIME
   if ( uComicGrime * uComicGround > 0.0 ) {
     vec2 gp = p.xz;
     float upG = smoothstep( 0.05, 0.25, wn.y - max( wn.x, wn.z ) );
@@ -829,6 +845,8 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     float stain = smoothstep( 0.71 - sfw, 0.71 + sfw, sn );
     float tide = stain * ( 1.0 - smoothstep( 0.71 + sfw, 0.71 + 3.0 * sfw + 0.01, sn ) );
     col *= 1.0 - ( stain * 0.08 + tide * 0.12 ) * gm * ( 1.0 - smoothstep( 60.0, 140.0, dist ) );
+    /* Compiled in only where it draws (chunkVariant). */
+    #ifdef COMIC_CRACKS
     if ( uComicGrime > 1.5 ) {
       /* How far the ground moves across a pixel, taken here, where every
        * pixel of the draw takes it: the rest branches pixel by pixel. */
@@ -862,7 +880,9 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
         col = mix( col, col * 0.22 + uComicInk * 0.4, crack * 0.85 );
       }
     }
+    #endif
   }
+  #endif
 
   /*
    * FOLIAGE (pass 13): the detail map's leaf clumps on a material marked
@@ -916,8 +936,16 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
       /* First set at 45 degrees, from the first hint of shade. */
       float h1 = comicSet( xa, xb, fwa, wob, wt, uComicPeriod ) * smoothstep( 0.0, 0.35, shade );
       /* The crossing set only in deep shadow: a cast shadow, not the dark
-       * side of the ramp, or every shaded face reads as a net. */
-      float h2 = comicSet( xb, xa, fwb, -wob, wt, uComicPeriod ) * ( 1.0 - smoothstep( 0.12, 0.24, lit ) );
+       * side of the ramp, or every shaded face reads as a net. Drawn only
+       * where it shows. Until the low end pass it was drawn on every shaded
+       * pixel and multiplied by nothing on the dark side of the ramp, which
+       * is a third lit, so most shaded faces paid for a set they never
+       * showed. comicSet takes no derivative, so the branch is safe. */
+      float h2w = 1.0 - smoothstep( 0.12, 0.24, lit );
+      float h2 = 0.0;
+      if ( h2w > 0.0 ) {
+        h2 = comicSet( xb, xa, fwb, -wob, wt, uComicPeriod ) * h2w;
+      }
       float cov = max( h1, h2 ) * fade * square * uComicHatch;
       col = mix( col, col * 0.18 + uComicInk * 0.5, cov * uComicDepth );
     }
@@ -931,13 +959,16 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * parallel world strokes as lines running to the vanishing point, and
      * a field of them read as a ruled floor or a ploughed one, not as
      * paint (pass 9). The ground keeps its hatching in shadow and its
-     * grit and patches in the light.
+     * grit and patches in the light. Compiled in only on High
+     * (chunkVariant).
      */
+    #ifdef COMIC_BRUSH
     float wall = 1.0 - step( max( wn.x, wn.z ), wn.y );
     if ( uComicBrush > 0.0 && fade * wall > 0.0 ) {
       float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
       col *= 1.0 - bm * 0.11 * fade * square * uComicBrush * ( 1.0 - shade );
     }
+    #endif
   }
   return col;
 }
@@ -1013,18 +1044,41 @@ const FRAG_TAIL = /* glsl */ `
 	#endif
 `;
 
-function inject(shader, material) {
-  if (shader.fragmentShader.includes(MARK)) {
-    return;
-  }
-  const vs = shader.vertexShader;
-  const fs = shader.fragmentShader;
-  if (!vs.includes('#include <project_vertex>') || !vs.includes('#include <common>')
-      || !fs.includes('#include <opaque_fragment>') || !fs.includes('#include <common>')
-      || !fs.includes('vec3 outgoingLight')) {
-    /* Not the toon shader this was written against. Draw it as it was. */
-    return;
-  }
+/*
+ * What the chunk compiles in beyond its core, from the knobs as they stand:
+ * the brush marks on High, the grime where a built map asks for it, and its
+ * cracks where a built map on High does. Until the low end pass all three
+ * were in every program and skipped by a uniform branch where they did not
+ * draw. A GPU skips the arithmetic, but not the registers it reserves for
+ * code it might take, which is what an integrated GPU runs out of first,
+ * and the cracks are the most arithmetic in the shader. The source and the
+ * program cache key are both made from this, in the same call (three's
+ * getProgram reads the key and then, on a miss, calls the hook), so
+ * materials that share a key share a source. Each map sets its grime before
+ * it draws, so a map's programs are all one variant.
+ */
+function chunkVariant() {
+  const brush = COMIC.brush.value > 0;
+  const grime = COMIC.grime.value > 0;
+  const cracks = COMIC.grime.value > 1.5;
+  return {
+    defines: (brush ? '#define COMIC_BRUSH\n' : '') + (grime ? '#define COMIC_GRIME\n' : '')
+      + (cracks ? '#define COMIC_CRACKS\n' : ''),
+    key: (brush ? '|brush' : '') + (grime ? '|grime' : '') + (cracks ? '|cracks' : ''),
+  };
+}
+
+/*
+ * The layer's uniforms go on every program the hook builds, the chunk's or
+ * not. three keeps the uniforms a material had when it last COMPILED, and
+ * goes back to a program it already holds for a key without compiling
+ * (getProgram in three's WebGLRenderer). So a craft compiled on High, then
+ * on Low, then on High again would draw High's program with Low's uniforms,
+ * and if Low's had none of these, its strokes and its ground mark would
+ * read whatever another material last gave the shared program. A uniform
+ * the program does not use is never uploaded, so on Low they cost nothing.
+ */
+function bindUniforms(shader, material) {
   shader.uniforms.uComicHatch = COMIC.hatch;
   shader.uniforms.uComicGrit = COMIC.grit;
   shader.uniforms.uComicBrush = COMIC.brush;
@@ -1038,6 +1092,7 @@ function inject(shader, material) {
   shader.uniforms.uComicFadeFar = COMIC.fadeFar;
   shader.uniforms.uComicDetail = COMIC.detail;
   shader.uniforms.uComicDetailMap = COMIC.detailMap;
+  shader.uniforms.uComicNoise = COMIC.noise;
   /* The material's own, and the only one here that is not shared: three
    * keeps a material's uniforms per material while the program is shared,
    * so every material reads its own mark through one program. */
@@ -1059,12 +1114,30 @@ function inject(shader, material) {
       return material.userData.comicBlob ? 1 : 0;
     },
   };
+}
+
+function inject(shader, material) {
+  if (shader.fragmentShader.includes(MARK)) {
+    return;
+  }
+  const vs = shader.vertexShader;
+  const fs = shader.fragmentShader;
+  if (!vs.includes('#include <project_vertex>') || !vs.includes('#include <common>')
+      || !fs.includes('#include <opaque_fragment>') || !fs.includes('#include <common>')
+      || !fs.includes('vec3 outgoingLight')) {
+    /* Not the toon shader this was written against. Draw it as it was. */
+    return;
+  }
+  /* Built by the first program that reads it, here rather than in
+   * setComicQuality, for a page that compiles the chunk without ever
+   * setting a preset. */
+  COMIC.noise.value = latticeMap();
   const baked = material.userData.comicBlobBaked ? '#define COMIC_BLOB_BAKED\n' : '';
   shader.vertexShader = vs
     .replace('#include <common>', `#include <common>\n${baked}${VERT_HEAD}`)
     .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_BODY}`);
   shader.fragmentShader = fs
-    .replace('#include <common>', `#include <common>\n${FRAG_HEAD}`)
+    .replace('#include <common>', `#include <common>\n${chunkVariant().defines}${FRAG_HEAD}`)
     .replace('#include <opaque_fragment>', `${FRAG_BODY}\n\t#include <opaque_fragment>`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>\n${FRAG_TAIL}`);
 }
@@ -1106,6 +1179,7 @@ if (!P[INSTALLED]) {
         if (user) {
           user.call(self, shader, renderer);
         }
+        bindUniforms(shader, self);
         if (chunkOn && comicGL2(renderer)) {
           inject(shader, self);
         }
@@ -1137,12 +1211,13 @@ if (!P[INSTALLED]) {
           k = self._comicUserHook.toString();
         }
         /* Off on Low (chunkOn above), where the program is the caller's
-         * alone. A baked canopy's material compiles its own program (see
+         * alone. What the chunk compiles in (chunkVariant) is in its key,
+         * and a baked canopy's material compiles its own program (see
          * FRAG_TAIL's note on pass 23), so its key says so. */
         if (!chunkOn) {
           return `${k}|comic0`;
         }
-        return k + KEY + (self.userData.comicBlobBaked ? '|baked' : '');
+        return k + KEY + chunkVariant().key + (self.userData.comicBlobBaked ? '|baked' : '');
       };
       key.comicUserKey = this._comicUserKey || null;
       return key;

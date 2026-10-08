@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { latticeMap, latticeNoiseGlsl } from './lattice.js';
 
 /*
  * HIGH STREAK CLOUD, painted across the upper sky (graphics pass 18).
@@ -46,27 +47,23 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
  * above the horizon, where it would be too fine to draw anyway, and thins
  * again overhead, where the nearest part of it would draw its wisps
  * largest, so the zenith keeps its deepest blue. No sine anywhere, for the
- * same reason comic.js gives: a hash lands on the same pixel on every GPU.
+ * same reason comic.js gives: the noise lands on the same pixel on every
+ * GPU.
  *
  * The two tints and the strength are arguments (pass 20), so the town and
  * each of the yard's times can paint it in their own colours; the field
  * passes the numbers it always had. Off on Low, where no dome has it: the
  * field's compiles it in only on Medium and High (COMIC_CIRRUS in
  * src/render/scene.js), and comicSky below adds it only there.
+ *
+ * Its noise is the comic hash's lattice (src/render/lattice.js; skyHash
+ * was the same hash), four corners a fetch, where it was four hashes a call
+ * and four calls a pixel of sky until the low end pass after the sweep, and
+ * every streak is where it was. A dome that includes this gives it the
+ * lattice as uSkyNoise (cirrusUniforms).
  */
 export const CIRRUS_GLSL = /* glsl */ `
-  float skyHash(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-  }
-  float skyNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(skyHash(i), skyHash(i + vec2(1.0, 0.0)), f.x),
-               mix(skyHash(i + vec2(0.0, 1.0)), skyHash(i + vec2(1.0, 1.0)), f.x), f.y);
-  }
+  ${latticeNoiseGlsl('skyNoise', 'uSkyNoise')}
   vec3 celSkyCirrus(vec3 col, vec3 vd, vec3 sunDir, vec3 cool, vec3 warm, float strength) {
     /* The layer's plane, softened at the horizon so it never runs off to
      * infinity, and turned to the wind. No early out below the horizon:
@@ -87,6 +84,11 @@ export const CIRRUS_GLSL = /* glsl */ `
     return mix(col, tint, wisp * mask * strength);
   }
 `;
+
+/* What a dome that includes CIRRUS_GLSL adds to its uniforms. */
+export function cirrusUniforms() {
+  return { uSkyNoise: { value: latticeMap() } };
+}
 
 /* How strongly a dome paints it, unless a look says otherwise, and how
  * much cooler than the look's cloud it is away from the sun. */
@@ -116,7 +118,7 @@ function domeStreaks(dome) {
     uStreakCool: { value: new THREE.Color() },
     uStreakWarm: { value: new THREE.Color() },
   };
-  Object.assign(m.uniforms, u);
+  Object.assign(m.uniforms, u, cirrusUniforms());
   /* fwidth on WebGL 1, as the field's dome. */
   m.extensions.derivatives = true;
   m.onBeforeCompile = (shader) => {

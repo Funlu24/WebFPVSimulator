@@ -37,6 +37,7 @@
 import * as THREE from 'three';
 /* Installs the comic layer on every toon material before any is built. */
 import './comic.js';
+import { latticeMap, latticeNoiseGlsl } from './lattice.js';
 
 /*
  * Three.js samples the toon gradient map as
@@ -150,22 +151,14 @@ const RIM_CHUNK = /* glsl */ `
  * single strongest signal that a stylised world is alive rather than a
  * diorama: they break up large flat areas, they give the terrain a sense
  * of scale, and they make the light feel like it comes from a sky rather
- * than from a lamp. Sampled from procedural noise at world position, so
- * there is no texture to load and it costs a handful of instructions.
+ * than from a lamp. Sampled from value noise at world position, three
+ * octaves of a lattice that holds this shader's own hash (src/render/
+ * lattice.js), a fetch each, where they were four hashes each until the
+ * low end pass after the graphics sweep: a terrain pixel's cloud shadow was
+ * about two hundred operations, on most of every frame's lower half.
  */
 export const CLOUD_SHADOW_GLSL = /* glsl */ `
-  float celHash(vec2 p) {
-    p = fract(p * vec2(233.34, 851.73));
-    p += dot(p, p + 23.45);
-    return fract(p.x * p.y);
-  }
-  float celNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(celHash(i), celHash(i + vec2(1.0, 0.0)), f.x),
-               mix(celHash(i + vec2(0.0, 1.0)), celHash(i + vec2(1.0, 1.0)), f.x), f.y);
-  }
+  ${latticeNoiseGlsl('celNoise', 'uCelNoise')}
   float celCloudShadow(vec2 world, float t) {
     vec2 p = world * 0.0032 + vec2(t * 0.010, t * 0.006);
     float n = celNoise(p) * 0.6 + celNoise(p * 2.3) * 0.3 + celNoise(p * 4.7) * 0.1;
@@ -307,6 +300,10 @@ export function celMaterial(opts = {}) {
     shader.uniforms.uSpecWidth = { value: opts.specWidth ?? 0.01 };
     shader.uniforms.uSpecDir = { value: new THREE.Vector3(0.45, 0.8, 0.4) };
     shader.uniforms.uCloudShadow = { value: cloud };
+    /* The lattice that holds this shader's own hash (lattice.js), built
+     * only by a material that draws a cloud shadow; the rest bind three's
+     * empty texture, which they never read. */
+    shader.uniforms.uCelNoise = { value: cloud > 0 ? latticeMap('cel') : null };
     shader.uniforms.uCelTime = { value: 0 };
     shader.uniforms.uCloudTint = { value: new THREE.Color(0x8397be) };
     if (!registered.has(mat)) {
