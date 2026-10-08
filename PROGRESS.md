@@ -69122,3 +69122,29 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
   room pixel diffs were against the menu overlay and said nothing until the overlay was hidden; a 15 minute timeout
   killed `check:builder` once.
 - Not run: `npm run verify`, `lint:shell`, `lint:responsive`, a flight on real hardware.
+
+## 2026-10-08 (later): item 4, the town height grid, and a warning item 3 had introduced
+
+- Approval: the owner tapped "Yes, do it" on the decision card "Index the town's height query with a cell grid?" at
+  15:01:14Z on 2026-10-08. The card was posted in the earlier analysis thread (draft PR 51, since closed as a duplicate
+  of this one) and its answer was passed to this thread by the coordinator; the tap is a `decide` event in that thread,
+  option 0, by the owner's account. It covered this change only: the plant reads this height, and it promised an own
+  commit, the three golden checks and one `npm run verify`.
+- Item 4. `world.heightAt` in `src/maps/city/vendored/world/index.js` now tests only the platforms whose box reaches
+  the query's 4 m cell, plus a short list of platforms wider than 24 cells (one in the town), instead of all 801. The
+  index is topped up from the append only `platforms` array on each call, because builders and `places` push to it
+  up to the end. Max is order independent, so answers are unchanged. Proof: 290,175 queries (150,000 random points
+  over the town's box and margin, and every platform's edges, centre and 1e-9 inside the edges, at seven `fromY`
+  values including none) hash to the same two values on main and on this branch (FNV over the float bits). Cost of a
+  call, 20,000 calls, headless: 20.45 to 0.205 microseconds. `check:world-golden` all passed, `check:world-town`
+  the fixture is the town, `check:world-engines` equal to the bit. `PATCH-world-index.diff` regenerated against
+  upstream, round trip checked with `patch` and `cmp`. The physics model, the module ABI and the build did not change.
+- What went wrong: the first `npm run verify` on this branch failed checks 15 and 16 (world-scale, map-isolation) with
+  "KHR_parallel_shader_compile extension not supported" as a console warning. That was item 3's `compileAsync`, not
+  item 4: three logs the warning whenever `compileAsync` runs on a context without the extension (SwiftShader here, and
+  any driver or browser that lacks it). Item 3's checks had not run verify, so it was not seen. Fix, own commit: both
+  callers use `compileAsync` only when `renderer.extensions.has('KHR_parallel_shader_compile')`, and otherwise take
+  main's synchronous `compile` (the town and yard warm up skips, as on main). Second `npm run verify`: 17 of 17
+  checks passing, check 1 (build-clean) skipped because there is no emcc in this container. That run is on the head
+  with both commits, so it covers item 3 as well as item 4.
+- Not run: `lint:shell`, `lint:responsive`, a flight on real hardware.
