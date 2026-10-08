@@ -69109,3 +69109,21 @@ append conflict at the end of this file and nothing else in these files.
   showed the same four cards and the only difference was their thumbnails (11.6 percent of each image). The harness
   now hides it. And the first count of the saving read "two thirds" from the hunt's estimate and the real figure is
   63 percent of vertices and 65 percent of the shadow pass's, so the estimate held.
+
+### Item 9: a room does not build the outdoor ground grid
+
+- The whoop room built the field's 1700 m ground, 230 by 230 segments, 105,800 triangles, and then laid its boards over
+  it out past the walls, so the grid was never seen (the room block says so in its own comment) and was nine tenths of
+  the room's triangles, drawn in three passes on Medium and High. The height field is already flat indoors, and it is
+  what the plant reads, so it is untouched. `terrain()` now takes its size and segment count, and a room asks for a
+  two by two grid the size of its boards. It is still built, not left out, because the ground tint loop and the comic
+  ground pass want a mesh to work on.
+- Measured, room on Medium: scene triangles 117,358 to 11,566, vertices 75,470 to 21,710, attributes 3.0 MB to 0.6 MB,
+  draws unchanged at 209, programs unchanged at 17. The page's heap after boot 58.5 MB to about 52 MB, and the first
+  frame at boot 6.9 s to 6.2 and 6.4 s on two runs here (the 53,000 vertex tint loop no longer has a grid to walk).
+- Pictures: eight views from the middle of the room, none of them differ by a single pixel from main.
+- SwiftShader time per drawn frame, room on Medium at 1280x720, base and branch interleaved twice: medians 492 and
+  489 ms on main, 445 and 418 ms on the branch, about 12 percent less. The room is fill bound here, four point lights
+  through every toon fragment, so this is the vertex share only. A ratio, not milliseconds on a laptop.
+- Checks: `check:room` (71 passed, which flies the room's solids in the plant, not the drawn ground), `check:props`.
+  No physics, plant, ABI or build change, so `npm run verify` was not run.

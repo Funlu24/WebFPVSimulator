@@ -1368,9 +1368,7 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   return c;
 }
 
-function terrain(height, samples, pitch) {
-  const size = 1700;
-  const seg = 230;
+function terrain(height, samples, pitch, size = 1700, seg = 230) {
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -5289,7 +5287,15 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const clubPad = clubhousePad(clubSite);
   const height = makeHeightField(samples, pitch, clubPad, indoor);
 
-  const ground = terrain(height, samples, pitch);
+  /* A room's floor is the boards laid out past its walls (see the room
+   * block), so the ground under them is never seen and a coarse grid does
+   * as well as a fine one. It is still built, because the ground tint below
+   * and the comic ground pass want a mesh to work on. The full grid was
+   * 105,800 triangles, nine tenths of the room's frame, drawn three times a
+   * frame on Medium and High, and a 53,000 vertex tint loop at boot. */
+  const ground = indoor
+    ? terrain(height, samples, pitch, ROOM.width + 24 * MICRO_SCALE, 2)
+    : terrain(height, samples, pitch);
   scene.add(ground);
 
   /*
