@@ -50,8 +50,13 @@ import {
 } from './path.js';
 import { collectWarnings, freestyleReport, labeller, FREESTYLE_SOLIDS_MAX } from './warnings.js';
 import { History } from './history.js';
+import { presetById } from './presets.js';
 import { docFromQuery, docFromHash, decodeTrack, encodeTrack, trackLink, canCompress } from './sharelink.js';
 import { buildSheet, sheetHtml, sheetSvg, membersOf, mergeMembers, nodesOf, fittingKind, CORNERS, SECTION, FITTING_ALLOWANCE, compass } from './buildsheet.js';
+import {
+  BUNDLE_FORMAT, BUNDLE_VERSION, bundleData, bundleEntries, evenRoute, mapSvg, trackSlug, dataText,
+} from './bundle.js';
+import { crc32, zipStore } from './zip.js';
 import { importFpvEvents, looksLikeFpvEvents, reportLines } from './importfpv.js';
 import {
   passList, tagsOf, reuseOf, lanesOf, focusFor, aroundPass, stretchOf, flyAgain, apertureAt,
@@ -8345,6 +8350,63 @@ async function suiteShareLink() {
  * small cases are counted from how a gate is built out of pipe: four pipes and four
  * elbows, a shared bar and two tees, a leg and a foot.
  */
+function suiteBundle() {
+  console.log('\nthe whoop builder: the export bundle');
+  const doc = presetById('racegow5-track1');
+  const now = '2026-10-08T14:00:00Z';
+  const path = buildPath(doc, { closeLoop: true });
+  const data = bundleData(doc, { now, path });
+  check('the format and version are named', data.format === BUNDLE_FORMAT && data.formatVersion === BUNDLE_VERSION);
+  check('the lap is the builder\'s own closed line', data.lap.closed && Math.abs(data.lap.lengthM - path.length) < 1e-3, String(data.lap.lengthM));
+  check('one gate row per numbered pass, in order, waypoints left out', data.gates.map((g) => g.number).join() === '1,2,3,4,5,6' && data.lap.gateCount === 6, data.gates.map((g) => g.number).join());
+  check('the passes agree with the build sheet\'s numbers', buildSheet(doc).pieces.flatMap((p) => p.numbers).sort((a, b) => a - b).join() === '1,2,3,4,5,6');
+  const pts = data.route.points;
+  check('the route is evenly spaced and closes on its start', pts.length > 50
+    && Math.hypot(...pts[0].map((v, i) => v - pts[pts.length - 1][i])) < 0.05
+    && Math.abs(Math.hypot(...pts[1].map((v, i) => v - pts[0][i])) - data.route.spacingM) < 0.02);
+  check('evenRoute of nothing is nothing', evenRoute({ samples: [], length: 0 }).length === 0);
+  check('the data survives JSON and the pretty text parses back to the same', JSON.stringify(JSON.parse(dataText(data))) === JSON.stringify(data));
+  check('the slug matches the builder\'s file rule', trackSlug({ name: 'My Track! 2' }) === 'my-track-2' && trackSlug({}) === 'track');
+
+  const svg = mapSvg(doc, { path, data });
+  check('the map is an SVG with a start, a north arrow and every pass number', svg.startsWith('<svg') && svg.includes('START') && svg.includes('>N<') && [...svg.matchAll(/>([0-9][0-9, +]*)<\/text>/g)].map((m) => m[1]).join(',').split(/[, +]+/).filter(Boolean).sort().join() === '1,2,3,4,5,6');
+  const hostile = deepClone(doc);
+  hostile.name = '<img src=x onerror=alert(1)>';
+  const hs = mapSvg(hostile);
+  check('a hostile track name is escaped in the map', !hs.includes('<img') && hs.includes('&lt;img'));
+
+  const images = { 'views/southwest-route.png': new Uint8Array([137, 80, 78, 71]) };
+  const made = bundleEntries(doc, { images, lap: new Uint8Array([71, 73, 70]), now });
+  const names = made.entries.map((e) => e.name);
+  check('bundle.json goes first and the files are the ones asked for', names[0] === 'bundle.json'
+    && ['track.json', 'map.svg', 'instructions.html', 'lap.gif', 'views/southwest-route.png'].every((n) => names.includes(n)), names.join());
+  check('only the views that exist are named', made.data.views.length === 1 && made.data.views[0].obstacles === null);
+  check('every file is listed with its size and CRC', made.data.files.length === names.length - 1
+    && made.data.files.every((f) => {
+      const e = made.entries.find((x) => x.name === f.path);
+      const bytes = typeof e.data === 'string' ? new TextEncoder().encode(e.data) : e.data;
+      return f.bytes === bytes.length && f.crc32 === crc32(bytes).toString(16).padStart(8, '0');
+    }));
+  const html = made.entries.find((e) => e.name === 'instructions.html').data;
+  const page = new TextDecoder().decode(html);
+  check('the page points only at files that are in the bundle', [...page.matchAll(/src="([^"]+)"/g)].every((m) => names.includes(m[1])));
+  check('track.json reads back as the same document', serialize(deserialize(new TextDecoder().decode(made.entries.find((e) => e.name === 'track.json').data)).doc) === serialize(doc));
+  const again = bundleEntries(doc, { images, lap: new Uint8Array([71, 73, 70]), now });
+  const zipA = zipStore(made.entries, { date: new Date(now) });
+  const zipB = zipStore(again.entries, { date: new Date(now) });
+  check('the same track makes the same bytes', zipA.length === zipB.length && zipA.every((b, i) => b === zipB[i]));
+  check('and it is a zip: local header first, end record last, one entry per file', zipA[0] === 0x50 && zipA[1] === 0x4b && new DataView(zipA.buffer).getUint16(zipA.length - 12, true) === names.length);
+  check('crc32 of "123456789" is the standard check value', crc32(new TextEncoder().encode('123456789')) === 0xcbf43926);
+  let refused = '';
+  try { zipStore([{ name: '../x', data: 'a' }]); } catch (e) { refused = e.message; }
+  check('a path that climbs out of the zip is refused', /safe/.test(refused), refused);
+  const lone = createTrack('lone', 'micro');
+  placeOnTrack(lone, 'gate', { x: 5, y: 6 });
+  let none = '';
+  try { bundleEntries(lone, { now }); } catch (e) { none = e.message; }
+  check('a track with no lap is refused with a sentence', /no lap/.test(none), none);
+}
+
 function suiteBuildSheet() {
   console.log('\nthe whoop builder: the build sheet');
   const IN = 0.0254;
@@ -14110,6 +14172,7 @@ async function main() {
   await suiteCube();
   await suiteShareLink();
   suiteBuildSheet();
+  suiteBundle();
   suiteImportFpv();
   suiteFiveInchParts();
   suiteManoeuvres();

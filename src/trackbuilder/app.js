@@ -78,6 +78,7 @@ import { vehicleStart } from '../maps/built/traffic.js';
 import { History } from './history.js';
 import { docFromQuery, trackLink } from './sharelink.js';
 import { buildSheet, sheetHtml, CORNERS } from './buildsheet.js';
+import { bundleFilename } from './bundle.js';
 import { importFpvEvents, looksLikeFpvEvents, reportLines } from './importfpv.js';
 /* The road tool: every rule about nodes and where a car goes is in here,
  * pure, and this file only applies them as edits. */
@@ -4327,6 +4328,115 @@ export class App {
   }
 
   /*
+   * THE BUNDLE: a track as one zip, for somebody else's program and somebody
+   * else's living room. bundle.json for a machine, instructions.html for a
+   * person, track.json for the builder and the simulator, a map, six views of
+   * the room (each with the line and without it) and a lap animation. The
+   * format is in BUNDLE-FORMAT.md.
+   *
+   * Everything but the pictures needs no graphics card and is instant, so the
+   * dialog lets the pictures be switched off, and the animation is offered at
+   * the small size by default. Closing the box stops the work at the next
+   * picture, like the animation's own.
+   */
+  async exportBundle() {
+    if (!this.isWhoopRace()) {
+      return;
+    }
+    if (this.nameInput && this.nameInput.value) {
+      this.doc.name = this.nameInput.value.trim() || 'Untitled track';
+    }
+    if (this.doc.sequence.length < 2) {
+      this.toast('A bundle needs a lap: put at least two elements in the flying order.');
+      return;
+    }
+    const body = document.createElement('div');
+    const help = document.createElement('p');
+    help.className = 'tb-help';
+    help.textContent = 'One zip holding this track as a file a program can read, a page to build it from, '
+      + 'a map, views of the room with the racing line and without it, and one lap as an animation. '
+      + 'This tab has to stay open while it is made, and closing this box stops it.';
+    body.append(help);
+
+    const field = (label, id, options, note) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'tb-field';
+      const l = document.createElement('label');
+      l.className = 'tb-field-label';
+      l.textContent = label;
+      const pick = document.createElement('select');
+      pick.id = id;
+      l.htmlFor = id;
+      for (const [value, text] of options) {
+        const o = document.createElement('option');
+        o.value = value;
+        o.textContent = text;
+        pick.append(o);
+      }
+      const n = document.createElement('p');
+      n.className = 'tb-help';
+      n.id = `${id}-note`;
+      n.textContent = note;
+      pick.setAttribute('aria-describedby', n.id);
+      wrap.append(l, pick);
+      body.append(wrap, n);
+      return pick;
+    };
+    const gifPick = field('Lap animation', 'tb-bundle-gif', [
+      ['card', 'Small, 384 by 240'],
+      ['large', 'Larger, 640 by 400'],
+      ['none', 'None'],
+    ], 'Small is a few seconds and a file of a few hundred kilobytes. None is the quickest and is the one to pick on a slow computer: everything else is made at once.');
+    const stillPick = field('Views of the room', 'tb-bundle-stills', [
+      ['yes', 'Six pictures'],
+      ['no', 'None'],
+    ], 'Three corners of the room, each with the racing line and without it. A fraction of a second.');
+
+    const status = document.createElement('p');
+    status.className = 'tb-help';
+    body.append(status);
+    const stop = new AbortController();
+
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'tb-btn tb-primary';
+    go.textContent = 'Make the bundle';
+    go.addEventListener('click', async () => {
+      go.disabled = true;
+      gifPick.disabled = true;
+      stillPick.disabled = true;
+      status.textContent = 'Starting.';
+      try {
+        const { makeBundle } = await import('./bundlemaker.js');
+        const made = await makeBundle(this.doc, {
+          gif: gifPick.value,
+          stills: stillPick.value === 'yes',
+          signal: stop.signal,
+          onStatus: (t) => { status.textContent = t; },
+        });
+        const file = bundleFilename(this.doc);
+        downloadBlob(made.bytes, file, 'application/zip');
+        const kb = Math.round(made.bytes.length / 1024);
+        const left = made.skipped.length ? ` Left out, because this computer could not draw it: ${made.skipped.join(', ')}.` : '';
+        status.textContent = `Done. ${made.files} files, ${kb} KB, saved as ${file}.${left}`;
+        go.textContent = 'Make it again';
+      } catch (e) {
+        if (e && e.name === 'AbortError') {
+          return;
+        }
+        status.textContent = e && e.message ? e.message : String(e);
+      } finally {
+        go.disabled = false;
+        gifPick.disabled = false;
+        stillPick.disabled = false;
+      }
+    });
+    body.append(go);
+    this.modal('Export bundle', body);
+    this.afterModal = () => stop.abort();
+  }
+
+  /*
    * The card animation, rendered and sent after a room is published. The
    * rendering and the sending are in src/share/cardgif.js, because the
    * simulator's own Publish does the same thing and the two must not
@@ -5944,6 +6054,7 @@ export class App {
       ['sheet', 'Build sheet', () => this.openSheet(), 'A page to print: where every piece stands, measured from a corner, and what pipe and fittings to buy', ''],
       ['picture', 'Picture', () => this.savePicture(), 'Save a picture of the room as it is on the screen, numbers and all', ''],
       ['animation', 'Export animation', () => this.exportAnimation(), 'Write a looping .gif of one lap', ''],
+      ['bundle', 'Export bundle', () => this.exportBundle(), 'A zip for another program and for building from: the track as data, a page of instructions, a map, views of the room and a lap animation', ''],
       ['admin', 'Admin', () => this.openAdmin(), 'Sign in as a board admin, to mark tracks official and to edit the ones that are', ''],
       ['delete', 'Delete', () => this.confirmRemove(), 'Remove this track from this browser', 'tb-danger'],
     ]) {
@@ -6311,7 +6422,7 @@ export class App {
       /* The share link is a race track's, on either canvas (MENUS-PLAN.md
        * 4.2b); the build sheet and the picture are the room's. */
       this.moreItems.get('link').style.display = map ? 'none' : '';
-      for (const id of ['sheet', 'picture']) {
+      for (const id of ['sheet', 'picture', 'bundle']) {
         this.moreItems.get(id).style.display = whoop ? '' : 'none';
       }
     }

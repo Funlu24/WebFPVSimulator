@@ -69064,3 +69064,27 @@ append conflict at the end of this file and nothing else in these files.
 - Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
+
+### The whoop export bundle, 2026-10-08 (draft)
+
+- Asked by the owner (14:08Z in the export thread): each track exportable as files with instructions, the pieces
+  needed and GIFs of the circuit, for a friends' app where a group races a new track each week at its own pace.
+  Built on a draft branch, not pushed to main. Nothing here touches physics, the plant, the module ABI or the build,
+  and the stage change is additive: a lap animation of racegow5-track1 is byte identical before and after (sha256
+  d8c6e4ec, 256 px, 12 frames).
+- What it is: More, Export bundle (whoop only) writes one stored zip made in the browser: `bundle.json` (versioned
+  machine file), `track.json` (the builder's document), `map.svg`, six stills (three corners, with the line and
+  without), `lap.gif`, `instructions.html`. Format in `BUNDLE-FORMAT.md`. Reused: `buildPath(doc, { closeLoop: true })`
+  for the line, `buildSheet` for pieces and parts, `exportTrackGif` for the animation. `buildSheet` gained `origin`.
+  `stage.js` gained `setRoute` (whole lap as one even ribbon, or none) and `look` (camera from a compass bearing).
+  `scripts/trackbundle.js` makes one headless.
+- Weak machines: the pictures are optional in the dialog; the stills are one renderer and six draws; the animation
+  defaults to 384 by 240 and is the existing yielding, abortable exporter; the zip is stored, so packing is a CRC.
+  Not measured on a real weak laptop. In this container (software GL): Track 1 with everything 5.7 s, Track 8
+  (211 frames) 13.5 s, 1.9 MB; without pictures about 1 s.
+- Checks run: `node src/trackbuilder/selftest.js` (2579 passed, 20 new), `lint:nouns`, `lint:preload`, `lint:boot`,
+  `lint:memory`, the dialog driven in headless Chromium (Done, 10 files). Not run: `npm run verify`, `shots.js`.
+- What went wrong: the first map drew a gate as a spike, because the build sheet's footprint polygon is for the
+  sheet; the map now draws the pipe members. Passes on one spot overprinted each other (RaceGOW Track 8 flies a gate
+  five times), so labels group and cap at three numbers.
+- Left for the owner: the friend's app is not touched. CommunityGow hosting is a separate piece, see the thread.
