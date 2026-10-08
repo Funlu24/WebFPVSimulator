@@ -69127,3 +69127,26 @@ append conflict at the end of this file and nothing else in these files.
   through every toon fragment, so this is the vertex share only. A ratio, not milliseconds on a laptop.
 - Checks: `check:room` (71 passed, which flies the room's solids in the plant, not the drawn ground), `check:props`.
   No physics, plant, ABI or build change, so `npm run verify` was not run.
+
+### Item 12: the state reads keep their views, and the gamepad poll is left alone
+
+- `Sim.readState()` (`tests/lib/simmod.js`, which the shell flies on) made a view over the module's state block and
+  then a copy of it on every call, and `readWorldReport()` in `src/main.js` made a view on every call. Both run once a
+  step, a thousand times a second in flight. The views are kept now and rebuilt only when `memory.buffer` is a new
+  object, which is what a memory growth hands out. The copy `readState` returns stays a copy made with `slice()`,
+  because the step loop keeps the previous state while it reads the next.
+- Measured in Node on the plant alone, step plus `readState` as the flight loop does it, interleaved twice with main:
+  5.59 and 5.78 us a step to 4.25 and 3.91, and `readState` by itself 1.89 and 1.71 us to 1.73 and 1.26. That is about
+  1.5 us a step, 0.15 percent of a core: free, and small. The bytes are the same: `check:plant` and
+  `check:world-golden` and both selftests pass.
+- Not done: the gamepad poll. `poll()` asks `navigator.getGamepads()` on every 2 ms tick, 76 ms of a 10 s town flight
+  here, 0.76 percent of a core with no pad attached, and the hunt suggested skipping it until a `gamepadconnected`
+  event. Left alone on purpose. The call is the pad's only freshness signal (the Gamepad object's own timestamp is how
+  `padHz` is measured). The code says in its own comment that the roster is polled rather than trusted to the event,
+  because Chrome hides a pad until it moves and Windows reorders them on a replug. And `scripts/input-selftest.js`
+  plugs a pad in by replacing `navigator.getGamepads`, with no event at all, so a back off keyed on time or on the
+  event changes what that selftest means. The saving is a fraction of a percent of a core and input latency is what
+  this simulator is for. If the owner wants it, the safe form is a back off while no pad has ever been listed, with
+  the selftest and `lint:input` changed in the same commit, and that is his call.
+- Checks: `check:plant`, `check:plant:selftest`, `check:world-golden`, `check:world-golden:selftest`. The change is
+  read only of the module and moves no byte of the trace; `npm run verify` was not run.

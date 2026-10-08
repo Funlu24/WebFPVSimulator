@@ -1965,7 +1965,15 @@ export async function boot({ loading, bootStart, mapId }) {
       worldReportPtr = sim.e.malloc(11 * 8);
     }
     sim.e.sim_world_report(worldReportPtr);
-    worldReport.set(new Float64Array(sim.e.memory.buffer, worldReportPtr, 11));
+    /* The view over the module's heap is kept until the memory grows and
+     * hands out a new buffer: this runs once a step, and making the view
+     * afresh each time was a thousand allocations a second in flight. */
+    const buf = sim.e.memory.buffer;
+    if (worldReportBuf !== buf) {
+      worldReportBuf = buf;
+      worldReportView = new Float64Array(buf, worldReportPtr, 11);
+    }
+    worldReport.set(worldReportView);
     return worldReport;
   }
 
@@ -2996,6 +3004,8 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   const worldReport = new Float64Array(11);
   let worldReportPtr = 0;
+  let worldReportBuf = null;
+  let worldReportView = null;
   const frameReport = emptyWorldReport(new Float64Array(11));
   const passStats = {
     steps: 0,

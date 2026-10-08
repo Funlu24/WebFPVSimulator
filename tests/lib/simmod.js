@@ -109,6 +109,8 @@ export class Sim {
     this.e = exports;
     this.statePtr = 0;
     this.stateDoubles = 0;
+    this.stateView = null;
+    this.stateViewBuf = null;
   }
 
   abiVersion() {
@@ -196,8 +198,16 @@ export class Sim {
     if (code !== SIM_OK) {
       return { code, state: null };
     }
-    const view = new Float64Array(this.e.memory.buffer, this.statePtr, n);
-    return { code, state: new Float64Array(view) };
+    /* One view over the module's state block, kept until the memory grows
+     * and hands out a new buffer. Making it afresh on every call was an
+     * allocation a step, a thousand a second in flight. The copy stays,
+     * because callers hold the previous state while they read the next. */
+    const buf = this.e.memory.buffer;
+    if (this.stateViewBuf !== buf) {
+      this.stateViewBuf = buf;
+      this.stateView = new Float64Array(buf, this.statePtr, n);
+    }
+    return { code, state: this.stateView.slice() };
   }
 
   // Returns { code, bytes } with the raw little-endian state block bytes,
