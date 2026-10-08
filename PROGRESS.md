@@ -67370,3 +67370,24 @@ PR opened as READY (not draft) per Mat's instructions. Tagged @claude to review:
 PARTNERS), Mantis FPV exclusivity preserved (no second retail partner implied), find-it callout works via existing
 mechanism, logo on cream field (#f3ead4), link with utm tagging (handled by partnerHref in roster.js), lints passing
 (90/90).
+
+## 2026-10-08 | review | YourFPV supporter PR (#46) reviewed and merged
+
+Mat, 2026-10-08 08:58 UTC, in the thread: "Can you review the pr grok put up and push to main if bug free". It covers this
+pull request only (the Cursor agent's #46, YourFPV as a maps-only supporter), and sits under his standing word of
+2026-10-06 to merge clean ones. Fetched main first: the PR's merge base was main's tip, so no conflict.
+
+What was read: the roster, scripts/partners.js and NOTICE diffs. YourFPV is in MAP_ONLY_PARTNERS only, PARTNERS and
+ROLE_TITLES are untouched, and Mantis FPV's entry is not in the diff. Placement needs no new code: src/maps/built/index.js
+already spreads PARTNERS and MAP_ONLY_PARTNERS into choosePartnerSpots and paintPartnerMarks, and the mark is findable.
+The logo is a clean 869 by 570 RGBA cutout, mono.png matches its size.
+
+What was run on the PR head: `npm run lint:partners` 88 passed, 0 failed; `npm run check:props` all passed; no dashes in the
+changed prose. `npm run lint:shell` fails on layout overflow (pids, fc, tricks, two fold cases) and prints the same lines
+on main, so it is not this change's. Not run: `npm run verify`, `node scripts/shots.js`, and a flown map, because nothing
+here touches physics, the plant, the ABI or the build, and the paint path is the one Matt's Flooring already uses.
+
+Findings: the PR's own PROGRESS entry says 90 checks passed, the run says 88 (the PR body says 88). Left as written upstream
+and corrected here. Still open and outside this repository: the landing page has to import MAP_ONLY_PARTNERS and copy the
+logo for the clickable link Mat asked for, and the board needs `node scripts/vendor.js` to pick up roster.js (it will not
+show YourFPV, which is intended). Review comments: none declined.
