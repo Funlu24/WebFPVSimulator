@@ -2420,6 +2420,22 @@ export async function buildMap(shell, onProgress, options) {
         m.userData.noChunk = true;
         m.userData.noMerge = true;
       }
+      /* The field moves all 980 matrices on every frame whether or not
+       * anything can see them. The cull grid switches the meshes off past the
+       * cull radius, and a mesh that is off draws nothing and shows no
+       * motion, so while none of the three is on the step is not run. The
+       * field is where it stopped when the pilot comes back, which is a field
+       * of petals in the air either way. */
+      const stepPetals = world.petals.update;
+      const petalMeshes = world.petals.meshes;
+      world.petals.update = (dt, gust, gustDir) => {
+        for (let i = 0; i < petalMeshes.length; i += 1) {
+          if (petalMeshes[i].visible) {
+            stepPetals(dt, gust, gustDir);
+            return;
+          }
+        }
+      };
     } else {
       for (const m of world.petals.meshes) {
         m.removeFromParent();

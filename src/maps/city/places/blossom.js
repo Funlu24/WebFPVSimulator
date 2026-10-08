@@ -171,9 +171,6 @@ export function buildBlossom(ctx, wells = []) {
     return GROUND;
   };
 
-  const dummy = new THREE.Object3D();
-  const q = new THREE.Quaternion();
-  const scaleV = new THREE.Vector3();
   let t = 0;
 
   function respawn(p) {
@@ -184,6 +181,13 @@ export function buildBlossom(ctx, wells = []) {
   }
 
   function update(dt) {
+    /* Nothing is drawn while the cull grid has the field switched off (it is
+     * one group so that it makes one decision), and nothing is seen to move,
+     * so nothing is moved: the loop below is the field's whole cost. It picks
+     * up where it stopped when the pilot comes back. */
+    if (!group.visible) {
+      return;
+    }
     t += dt;
     for (let i = 0; i < P.length; i += 1) {
       const p = P[i];
@@ -210,13 +214,40 @@ export function buildBlossom(ctx, wells = []) {
         respawn(p);
       }
 
-      q.setFromAxisAngle(p.spin, p.angle);
-      dummy.position.set(p.x, p.y, p.z);
-      dummy.quaternion.copy(q);
-      scaleV.setScalar(p.scale);
-      dummy.scale.copy(scaleV);
-      dummy.updateMatrix();
-      p.mesh.setMatrixAt(p.idx, dummy.matrix);
+      /* The instance matrix straight from the axis, the angle and the scale:
+       * the matrix compose() makes from setFromAxisAngle's quaternion, without
+       * the Object3D that re-derives Euler angles (asin and atan2) for every
+       * card on every frame. The town's own field does the same, in the same
+       * words: see ../vendored/world/petals.js. */
+      const sp = p.spin;
+      const c = Math.cos(p.angle);
+      const sn = Math.sin(p.angle);
+      const k = 1 - c;
+      const k01 = k * sp.x * sp.y;
+      const k02 = k * sp.x * sp.z;
+      const k12 = k * sp.y * sp.z;
+      const sx = sn * sp.x;
+      const sy = sn * sp.y;
+      const sz = sn * sp.z;
+      const sc = p.scale;
+      const e = p.mesh.instanceMatrix.array;
+      const o = p.idx * 16;
+      e[o] = (k * sp.x * sp.x + c) * sc;
+      e[o + 1] = (k01 + sz) * sc;
+      e[o + 2] = (k02 - sy) * sc;
+      e[o + 3] = 0;
+      e[o + 4] = (k01 - sz) * sc;
+      e[o + 5] = (k * sp.y * sp.y + c) * sc;
+      e[o + 6] = (k12 + sx) * sc;
+      e[o + 7] = 0;
+      e[o + 8] = (k02 + sy) * sc;
+      e[o + 9] = (k12 - sx) * sc;
+      e[o + 10] = (k * sp.z * sp.z + c) * sc;
+      e[o + 11] = 0;
+      e[o + 12] = p.x;
+      e[o + 13] = p.y;
+      e[o + 14] = p.z;
+      e[o + 15] = 1;
     }
     for (const m of meshes) {
       m.instanceMatrix.needsUpdate = true;

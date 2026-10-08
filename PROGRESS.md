@@ -69239,3 +69239,46 @@ append conflict at the end of this file and nothing else in these files.
   (`fitRing` in `view3d.js`) and the assertion reads them straight after Escape, so under SwiftShader's slow frames it
   reads before that frame. The check is left as it is; the one line wait is a change to a check and the owner's call.
   `npm run verify` was not run: nothing here touches physics, the plant, the module ABI or the build.
+
+### Item 7: the blossom fields write their matrices directly, and rest while the cull grid has them off
+
+- The town has two blossom fields, the street's 980 petals (`vendored/world/petals.js`) and the works road's 980
+  (`places/blossom.js`), and both moved every card on every frame through an `Object3D`: `setFromAxisAngle` into a
+  quaternion, the quaternion copied into the object (which re-derives its Euler angles, `asin` and `atan2` included),
+  `compose`, `setMatrixAt`. The hunt's flight profile charged the three.js calls under the two updates about as much
+  as the updates themselves. Both now write the matrix the same card would have had straight into
+  `instanceMatrix.array` (Rodrigues from the axis and the angle, then the scale and the position). Nothing about the
+  motion changed, and no new randomness was added.
+- Neither field is stepped while the cull grid has it switched off. `buildCullGrid` writes `visible` on a cell's items
+  past the cull radius, so a mesh that is off draws nothing and shows nothing moving. The blossom is one group and
+  checks `group.visible` itself; the street's three meshes are not wrapped in a group, so `city/index.js` wraps the
+  field's `update` and runs it while any of the three is on. A field that was off picks up where it stopped when the
+  pilot comes back, which is a field of petals in the air either way. The shove the train gives the street's field
+  is missed if the train passes while the field is off, and is not missed by anyone who can see it.
+- `PATCH-world-petals.diff` now records both changes to the vendored file against the upstream blob (4d9a1b4 to
+  be29bee, the old `inst.name` lines kept). The upstream blob was rebuilt by reverse applying the old record to main's
+  file and its hash checked before the new record was made.
+- Measured in the town's own page (`petalbench.mjs` in the measurements folder: a stub context, 1200 fixed steps, then
+  the median of 7 timed runs of 1500 updates), main against the branch, interleaved twice. Median microseconds per
+  update: street petals 288 and 263 to 122 and 121, works road blossom 154 and 153 to 68 and 71. With the field
+  switched off, which is what the cull grid does past the radius, the blossom goes from 145 and 153 to 0.
+- The matrices are the same. After the 1200 steps all 15,680 street entries and all 10,240 works road entries are
+  equal to the bit between main and the branch, and a second run of main equals the first, so the sequence is
+  deterministic and the test could have seen a difference.
+- Seen in the running town (`petalcheck.mjs`, main and branch, parked views): on the street the three street meshes
+  fell by a median of 0.22 m over six frames on both builds, and the works road's three fell the same when the camera
+  was there. On the branch a field that was culled did not move at all, on main every culled field moved by the same
+  0.22 m. Two stills of the street a second apart, petals in different places each time, are in
+  `after/item7/branch-street-t0.png` and `branch-street-t1.png`.
+- The flight profile (town, Medium, 10 s, draw off, interleaved twice) agrees with the direction and is noisier,
+  because it samples a real flight and frame counts differ from 282 to 395: the update's own time and the three.js
+  quaternion and matrix calls under it come to about 0.45 and 0.36 ms a frame on main and 0.23 and 0.23 on the
+  branch, and the works road blossom (0.10 and 0.09 ms a frame on main, culled from the street) to nothing. Container
+  core, so a weak laptop is two to three times that.
+- Not done. The vertex shader option from the hunt: the street's petals respawn when they reach the ground height
+  under them and take the train's gust, which a shader loop cannot reproduce, so it would change what they do and
+  not only what they cost. Half the cards a frame: it halves the rate of the motion, a visible change, and the
+  owner's to ask for. What is left is the arithmetic of the motion, four trigonometric calls a card, about 120
+  microseconds for 980.
+- Checks: `check:world-town` (the fixture is the town, 29.5 s), `check:town-patrons` (24 passed), `lint:quality` (71 of
+  71), `lint:preload`. The petals are decoration and the plant does not read them; `npm run verify` was not run.
