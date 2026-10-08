@@ -69064,3 +69064,30 @@ append conflict at the end of this file and nothing else in these files.
 - Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
+
+### Breadcrumb trail on the RaceGOW rooms: an investigation and a prototype, 2026-10-08
+
+The owner asked whether a trail showing beginners a good line can be built, starting with the RaceGOW tracks. This turn
+changed no sim code: `scripts/breadcrumb-proto.js` is new and reads the plant, the race and the builder's line without
+changing any of them. It is a prototype and an experiment, not a feature, and nothing in the shell loads it.
+
+- What it does: takes the line `courseFromDocument` already derives for a RaceGOW room, resamples it at 5 cm, gives it
+  a speed from a point mass limit (thrust vector at most sqrt(1 + lat_g^2) g, forward and backward passes), then flies
+  that timed path through `dist/sim.wasm` with Betaflight's loop, in Node, using the rig in `scripts/lib/flightrig.js`.
+  It scores the flight with the real `Race`. Four laps; tracking error read on laps 2 to 4 because lap 1 starts from rest.
+- Finding 1, the builder's line is a line through the openings and not a racing line. Three point radius over 0.15 m:
+  tightest 0.09 to 0.45 m on the eight rooms, 25 to 29 percent of each line tighter than 1 m, 68 to 80 percent tighter
+  than 3 m, on a craft 0.35 m across. At 2 g of lateral load a 1 m radius is 4.4 m/s, so the speed profile is held to a
+  mean of 3 to 5 m/s by the line's shape and not by the plant.
+- Finding 2, the plant is not the limit. With a stiff tracker (kp 14, kd 7.5, ka 20; hover throttle 0.28 at 4.0 V) the
+  line at 1 g and 2 g is flown with mean error 0.3 to 0.6 m and all four laps scored on Tracks 1, 2, 3, 5 (2 g: 3 of 4),
+  8; 3 g and above start to lose laps and tracking, with the worst error at the tightest kinks.
+- What went wrong: the rig's default tracker (kp 3.5, kd 4.5, ka 7) lost the path at 1 g with 2 m of mean error, and
+  its default hover throttle (0.345) sat 0.33 m high at a hover. The first sweep read as "the line is unflyable at any
+  speed" and was the tracker. Raising the gains and bisecting the hover throttle fixed it; the 0.15 g trace showed 0.1 to
+  0.4 m of error, which is how the tracker was ruled in and the line ruled out. Tracks 4, 6 and 7 still lose laps at 2 g.
+- Not measured: collisions (the plant world is empty sky), a human's reaction lag, wrong-way and stray crossings of
+  other openings (my crossing test used a guessed plane normal and was thrown away), the drag the plant's quadratic
+  model puts on a long fast run.
+- Verification: `node scripts/breadcrumb-proto.js "Track 1" 1 2 3 4 6` and the other tracks, run this turn. Not run:
+  `npm run verify`, because nothing in the physics, plant, ABI or build changed.
