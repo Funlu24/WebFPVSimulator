@@ -69050,3 +69050,17 @@ append conflict at the end of this file and nothing else in these files.
 - Not measured: a frame on real hardware, still the check this container cannot make. The levers left all change
   the picture and are the owner's to pick: the detail map's anisotropy from 8 to 4 on Medium, hatching only near the
   eye, fewer grit octaves, and the cracks on High.
+
+### The graphics branch to main, 2026-10-08
+
+- The owner, at 11:06Z in the graphics thread, answering whether to fly it, take more pictures or leave the branch a
+  draft: "push to main i'll test in prod ... like  man". That covers the whole of `claude/project-thread-edah8s`
+  (draft PR #45): the 25 graphics passes, the sweep after them and the low end pass, all render only, with no physics,
+  plant, module ABI, build, file format or setting change. The owner tests it live.
+- Main had moved on to 4e0ab62 (the YourFPV supporter, #46). Merged into the branch as 49ba9dc; PROGRESS.md met the
+  append conflict at its end and holds main's entries before this branch's, so main's copy only grows, and nothing
+  else overlapped. On the merged tree `lint:quality`, `lint:preload`, `lint:boot`, `lint:frame`, `check:fresh`,
+  `check:world`, `check:room`, `check:orbit` and `lint:partners` pass. Main then fast forwards to the branch.
+- Not run on the merged tree: `npm run verify` (render only; it passed 17 of 17 at 81000c5) and the rest of the
+  targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
+- If it is wrong live, the way back is a revert on main, never a reset.
