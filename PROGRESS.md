@@ -69079,13 +69079,14 @@ changing any of them. It is a prototype and an experiment, not a feature, and no
   tightest 0.09 to 0.45 m on the eight rooms, 25 to 29 percent of each line tighter than 1 m, 68 to 80 percent tighter
   than 3 m, on a craft 0.35 m across. At 2 g of lateral load a 1 m radius is 4.4 m/s, so the speed profile is held to a
   mean of 3 to 5 m/s by the line's shape and not by the plant.
-- Finding 2, the plant is not the limit. With a stiff tracker (kp 14, kd 7.5, ka 20; hover throttle 0.28 at 4.0 V) the
-  line at 1 g and 2 g is flown with mean error 0.3 to 0.6 m and all four laps scored on Tracks 1, 2, 3, 5 (2 g: 3 of 4),
-  8; 3 g and above start to lose laps and tracking, with the worst error at the tightest kinks.
+- Finding 2, the plant is not the limit. With a stiff tracker (kp 14, kd 7.5, ka 20; hover throttle 0.28 at 4.0 V) at
+  1 g of lateral load seven of the eight rooms score all four laps (Track 6 scores three) with mean error 0.3 to 0.4 m.
+  At 2 g Tracks 1, 2, 3 and 8 score all four, Tracks 4, 5 and 7 two or three, Track 6 none. At 3 g and above laps are
+  lost on most rooms. The worst error sits at the tightest kinks of the line.
 - What went wrong: the rig's default tracker (kp 3.5, kd 4.5, ka 7) lost the path at 1 g with 2 m of mean error, and
   its default hover throttle (0.345) sat 0.33 m high at a hover. The first sweep read as "the line is unflyable at any
   speed" and was the tracker. Raising the gains and bisecting the hover throttle fixed it; the 0.15 g trace showed 0.1 to
-  0.4 m of error, which is how the tracker was ruled in and the line ruled out. Tracks 4, 6 and 7 still lose laps at 2 g.
+  0.4 m of error, which is how the tracker was ruled in and the line ruled out.
 - Not measured: collisions (the plant world is empty sky), a human's reaction lag, wrong-way and stray crossings of
   other openings (my crossing test used a guessed plane normal and was thrown away), the drag the plant's quadratic
   model puts on a long fast run.
