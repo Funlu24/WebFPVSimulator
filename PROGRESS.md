@@ -69282,3 +69282,50 @@ append conflict at the end of this file and nothing else in these files.
   microseconds for 980.
 - Checks: `check:world-town` (the fixture is the town, 29.5 s), `check:town-patrons` (24 passed), `lint:quality` (71 of
   71), `lint:preload`. The petals are decoration and the plant does not read them; `npm run verify` was not run.
+
+### Item 1A: one scene pass in the field and the room, not done; 1C shot and held for the owner
+
+- What 1A was: the colour pass writes a second attachment carrying the packed normal and depth the prepass writes today,
+  so the two prepasses go and the outline reads what it reads now. Reading the prepass against the colour pass found
+  that the geometry buffer is not a picture of the colour pass's geometry, and three things in it cannot come out of
+  the colour pass's own draws.
+  1. The inverted hulls. `scene.overrideMaterial` replaces the whole material, its `side` included, so the prepass
+     draws the field's 25 hull meshes (102,352 triangles, back side MeshBasic in the colour pass, 1.055 to 1.1 times
+     the size of what they outline) FRONT side: the geometry buffer holds every hulled tree and gate as its inflated
+     shell. The colour pass draws the back faces of the same meshes and cannot write the front faces' depth and
+     normal, so a pixel identical single pass still needs a draw of every hull into the geometry buffer, about a
+     quarter of the first prepass's 426,536 triangles. Leaving them out, as an experiment in a scratch checkout, moved
+     the lines on 1.2 to 3.1 percent of the pixels of eleven field views (`after/item1a/`).
+  2. Blending. WebGL 2 has one blend state per draw for every attachment; per attachment blending is the
+     `OES_draw_buffers_indexed` extension and cannot be counted on. The gate halo (`haloMat` in `scene.js`, MeshBasic,
+     transparent at 0.5, depth writing, normally blended) is one of the occluders the prepass stamps with the no ink
+     sentinel, so its second output would be blended with what is under it. The packing uses all four channels (rg the
+     normal, ba the 16 bit depth), so alpha cannot be forced to one to make the blend a replacement without losing the
+     low byte of the depth. It needs a draw of its own as well.
+  3. Every program the colour pass runs has to write the second output, or that attachment is undefined wherever it
+     draws: the toon materials through the hook in `comic.js`, the MeshBasic materials (the hulls, 183 small meshes,
+     the rings), and six ShaderMaterial families (gate glow, gate cue, marker glow, the sky dome, the cloud puffs, the
+     comic sky's clouds), each writing the value that is a no op for its own blend mode where it must not write.
+     WebGL 1 keeps the three pass path beside it.
+- Taken together, a pixel identical 1A is the colour pass with a second output in every family above, then a small
+  pass over the hulls and the promoted layer written through draw buffer state three does not expose, with the three
+  pass path kept for WebGL 1. That is more than the two days the prompt allows, and the saving is less than the hunt's
+  two passes in three, because the hulls' draw stays. So it stopped here, as the prompt says, and 1C was made instead.
+- 1C, the half resolution prepass: `normalTarget` at half width and height, and the outline's four taps at least one
+  geometry texel apart, because at half size a one pixel reach lands in the same texel and finds no edge. It is a
+  patch outside the branch, `after/item1c/half-res-prepass.patch`, with the pictures beside it. Measured on Medium,
+  branch tip against the patch: render targets 54.5 MB to 45.8 MB at 1600x900 (the geometry target 11.5 to 2.9 MB);
+  P3 and P4 do not move, because they count fullscreen quads; SwiftShader time per drawn frame 754 and 738 ms to 756
+  and 684 ms on the field and 420 and 429 ms to 386 and 463 ms in the room, inside the 12 percent two runs of one build
+  differ by here, so no time saving can be claimed from this container. The prepass's fragment work is a normalize
+  and a pack, so what an integrated GPU would save is bandwidth: estimated at well under a millisecond, not measured.
+- What it costs the picture: 3 to 6 percent of the pixels of the field views change on Medium and 6 to 11 percent on
+  High (the outer line and the occlusion read the same buffer), all along the lines. Lines on distant things are
+  twice as wide, since one geometry texel is two pixels; steps along a line are two pixels long; and the room's
+  skirting board is inked as a row of dots where it is a line today (`after/item1c/sbs/`, the crops at three times).
+- 1B, normals from depth as the town does it, was not made. It changes how every crease inside a silhouette inks,
+  which is a look, and whether it is worth a pass of pictures is the owner's call.
+- Nothing of 1A or 1C is on the branch. The question is in the thread.
+- What went wrong: pictures from an earlier try at 1C were already in `after/item1c/` and how they were made was not
+  written down anywhere, so they were moved to `after/item1c/earlier/` and the pairs were shot again from a patch that
+  is kept.
