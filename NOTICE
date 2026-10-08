@@ -100,14 +100,13 @@ governs the font software, not images made with it.
     Licence     NOT GPLv3. Each mark is its owner's trade mark, used with
                 their permission to show them as a WebFPV partner.
 
-Four partners back WebFPV: Global Drone Solutions, Mantis FPV, YourFPV, and
-the West Coast Multirotor Club. The first three were agreed with the owner in
-September 2026; YourFPV is a 6 month paid partnership (October 2026 to April
-2027) added in October 2026. Their marks are in the repository so that the
-simulator can paint them into its maps and the front door and the board can
-show them, and for nothing else. The project's GPLv3 grant does not extend to
-them: nobody may take a partner's mark from here and use it as their own, and
-a fork that is not WebFPV has no partnership to show.
+Three partners back WebFPV, agreed with the owner in September 2026: Global
+Drone Solutions, Mantis FPV and the West Coast Multirotor Club. Their marks
+are in the repository so that the simulator can paint them into its maps and
+the front door and the board can show them, and for nothing else. The
+project's GPLv3 grant does not extend to them: nobody may take a partner's
+mark from here and use it as their own, and a fork that is not WebFPV has no
+partnership to show.
 
   * `gds/colour.svg` and `gds/mono.svg` are WebFPV's redraw of the public
     Global Drone Solutions logo, not files GDS supplied, and each one's
@@ -115,14 +114,16 @@ a fork that is not WebFPV has no partnership to show.
   * `mantisfpv/colour.svg` is the official Mantis FPV 2022 logo as they
     supplied it. `mantisfpv/mono.svg` is made from it by
     scripts/partners.js: the same letters in one colour.
-  * `yourfpv/colour.png` is the YourFPV logo as supplied, a 869 by 570 PNG
-    with transparency. `yourfpv/mono.png` is made from it by
-    scripts/partners.js, every pixel cream and its transparency kept.
   * `wcmrc/colour.png` is the club's logo as supplied, a 708 by 252 PNG.
     `wcmrc/mono.png` is made from it by scripts/partners.js, every pixel
     cream and its transparency kept.
   * `mattsflooring/colour.png` is the Matt's Flooring logo as supplied, a
     499 by 111 PNG. `mattsflooring/mono.png` is made from it by
+    scripts/partners.js, every pixel cream and its transparency kept.
+  * `yourfpv/colour.png` is the YourFPV logo as supplied, a 869 by 570 PNG
+    with transparency. YourFPV is a 6 month paid supporter (October 2026 to
+    April 2027) shown on freestyle maps and the landing page, but not
+    counted in the partners list. `yourfpv/mono.png` is made from it by
     scripts/partners.js, every pixel cream and its transparency kept.
   * `quadconfig/colour.png` is the Quad Configurator logo as supplied by
     patron Magnus Arge, a 1882 by 400 PNG. `quadconfig/mono.png` is made

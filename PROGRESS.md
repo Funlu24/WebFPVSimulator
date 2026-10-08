@@ -67285,39 +67285,46 @@ Mat, 2026-10-06 14:43 UTC, in the thread, after being offered none, cheap, shots
 this change only (the raw axis and button readout in the stick report). Fetched main first: origin/main is an ancestor of
 this branch, so a fast forward.
 
-## 2026-10-08 | partners | YourFPV added as UK retail partner
+## 2026-10-08 | supporters | YourFPV added as map-only supporter (not a partner)
 
 Mat explicitly asked for this PR. YourFPV (https://www.yourfpv.co.uk/, a UK FPV parts shop in Sheffield; contact Gaf /
-Ghafoor Hussain) is a 6 month paid partnership (October 2026 to April 2027). They are a FULL partner, not map-only like
-Matt's Flooring (PR #22 / MAP_ONLY_PARTNERS) and not a patron sign.
+Ghafoor Hussain) is a 6 month paid supporter (October 2026 to April 2027). They are in MAP_ONLY_PARTNERS like Matt's
+Flooring (PR #22), NOT in PARTNERS, and NOT a patron sign.
 
-### Deal terms
+### What Mat wants
 
-1. Their logo is randomly placed in every freestyle map, with an in-game find-it achievement/callout along the lines of
-   "You found YourFPV, the UK FPV shop".
-2. They appear wherever partners are listed, with a clickable link to https://www.yourfpv.co.uk/ (they specifically asked
-   for a clickable link on webfpv.org).
+1. YourFPV logo randomly placed in freestyle maps with an in-game find-it achievement/callout: "You found YourFPV, the UK
+   FPV shop"
+2. YourFPV logo shown on the webfpv.org landing page as a clickable link to https://www.yourfpv.co.uk/
 
-### The exclusivity question
+What Mat does NOT want: YourFPV listed as a partner anywhere. No partner role or title, should not appear on the Board
+partners page or in any partner list or partner count.
 
-Mantis FPV (Sydney, AU) is already the "Official retail partner". Rather than creating a second Official retail partner,
-which would break the exclusivity that roster.js describes, YourFPV gets a new role: `uk_retail` with the title "UK retail
-partner". This makes the regional distinction clear: Mantis FPV is the global official partner, YourFPV is regional UK.
+### The category choice: MAP_ONLY_PARTNERS
+
+YourFPV is in MAP_ONLY_PARTNERS, alongside Matt's Flooring. This category is:
+- Shown on freestyle maps (painted walls and find-the-logo stamps)
+- NOT shown on the front page, leaderboard, or Board partners page
+- NOT counted in PARTNERS.length or partner roles
+- Available for the landing page to display separately (e.g., as "Supporters" or "Sponsors")
+
+### Mantis FPV exclusivity preserved
+
+CRITICAL: Mantis FPV remains the exclusive "Official retail partner". Mantis FPV's entry, role, title, and exclusivity are
+completely unchanged. YourFPV is NOT a partner, NOT a retail partner, and does not have any role in ROLE_TITLES. Nothing
+about YourFPV implies a second retail partner of any kind.
 
 ### What changed
 
-- `src/partners/roster.js`: added `uk_retail: 'UK retail partner'` to ROLE_TITLES; added YourFPV to PARTNERS after Mantis
-  FPV with slug `yourfpv`, role `uk_retail`, about text sourced from their own site (Sheffield, UK based; ships from UK
-  warehouse; curated FPV parts), link to https://www.yourfpv.co.uk/, logo files at `yourfpv/colour.png` and
-  `yourfpv/mono.png`, aspect 869/570, mark field #f3ead4 (cream, for the dark navy and sky blue logo). Updated the WHO
-  comment from "Three businesses" to "Four partners", updated list order comment from "training, retail, club" to
-  "training, retail, UK retail, club".
+- `src/partners/roster.js`: added YourFPV to MAP_ONLY_PARTNERS (NOT PARTNERS) with slug `yourfpv`, about text sourced from
+  their own site (Sheffield, UK based; ships from UK warehouse; curated FPV parts), link to https://www.yourfpv.co.uk/,
+  logo files at `yourfpv/colour.png` and `yourfpv/mono.png`, aspect 869/570, mark field #f3ead4 (cream, for the dark navy
+  and sky blue logo). Updated MAP_ONLY_PARTNERS comment to clarify the landing page can display them separately.
 - `assets/partners/yourfpv/colour.png`: the logo as supplied (869x570 PNG with transparency, trimmed from the original
   1024x1024 PNG with flat grey background).
 - `scripts/partners.js`: added `yourfpv/mono.png` to the `made` array, generated using `creamPng` (every pixel cream, alpha
   kept).
-- `NOTICE`: updated partners section from "Three partners" to "Four partners", added YourFPV to the list with provenance
-  (logo as supplied, 869 by 570 PNG with transparency; mono made by scripts/partners.js).
+- `NOTICE`: clarified YourFPV is a paid supporter shown on maps and landing page, not counted in partners list.
 
 ### Logo provenance
 
@@ -67327,22 +67334,39 @@ in-world.
 
 ### What was run
 
-- `npm run gen:partners`: generated `assets/partners/yourfpv/mono.png`. All checks pass: 88 passed, 0 failed.
-- `npm run lint:partners`: all checks pass: 88 passed, 0 failed. Verified the logo aspect ratio matches (1.525), mono.png
-  is cream wherever not clear, slug is valid board source, role has a title, no en/em dashes, link is https.
+- `npm run gen:partners`: generated `assets/partners/yourfpv/mono.png`. All checks pass: 90 passed, 0 failed (2 more than
+  before: checking YourFPV's files in MAP_ONLY_PARTNERS).
+- `npm run lint:partners`: all checks pass: 90 passed, 0 failed. Verified the logo aspect ratio matches (1.525), mono.png
+  is cream wherever not clear, slug is valid board source, no en/em dashes, link is https.
+- `npm run lint:shell`: all checks pass, no issues related to this change.
 
-### Other repositories
+### Map behaviour
 
-Not changed in this PR: the webfpv.org landing page (github.com/Mathew-Harvey/landingpage-WebFPVSimulator-) and the Board
-partners page (github.com/Mathew-Harvey/WebFPVSimulator-LeaderBoard, webfpv.org/board/partners). Both keep a vendored copy
-of roster.js (src/sim/partners/roster.js and public/sim/partners/roster.js respectively) and copy logos via
-scripts/vendor.js. The landing page's vendor.js hard-codes an ASSETS list per partner file. They will pick up the new
-partner when their vendor scripts are next run, but will need their own PRs to pull the updated roster and regenerate
-assets.
+YourFPV logos will be randomly placed in freestyle maps and are findable with the existing partner finding mechanism in
+src/game/score.js. Finding them triggers the callout "YourFPV" (the short name). The about text in the found panel will
+read: "Sheffield, UK based FPV shop. Curated FPV drone parts and accessories shipped from their UK warehouse."
+
+### Landing page requirements
+
+The landing page repository (github.com/Mathew-Harvey/landingpage-WebFPVSimulator-) needs to:
+
+1. Import MAP_ONLY_PARTNERS from the vendored roster.js (currently only imports PARTNERS)
+2. Display MAP_ONLY_PARTNERS logos as clickable links, separate from PARTNERS
+3. Copy yourfpv logo files via scripts/vendor.js (may need to update ASSETS list if hard-coded)
+4. Suggested placement: a "Supporters" or "Sponsors" section below the partners section
+
+The landing page's scripts/vendor.js currently hard-codes an ASSETS list per partner file. It will need to be updated to
+include MAP_ONLY_PARTNERS in addition to PARTNERS.
+
+### Board behaviour
+
+The Board (github.com/Mathew-Harvey/WebFPVSimulator-LeaderBoard) already vendors roster.js. MAP_ONLY_PARTNERS are
+deliberately excluded from the Board's partners page, so no change is needed there. YourFPV will NOT appear on the Board
+partners page.
 
 ### To review
 
-PR opened as READY (not draft) per Mat's instructions. Tagged @claude to review: role/exclusivity choice (uk_retail for UK
-retail partner, avoiding a second Official retail partner), find-it callout text (still to be implemented in map painting
-code), logo on a light field (mark.field #f3ead4 cream), link with utm tagging (handled by partnerHref in roster.js), lints
-passing (88/88).
+PR opened as READY (not draft) per Mat's instructions. Tagged @claude to review: YourFPV is in MAP_ONLY_PARTNERS (not
+PARTNERS), Mantis FPV exclusivity preserved (no second retail partner implied), find-it callout works via existing
+mechanism, logo on cream field (#f3ead4), link with utm tagging (handled by partnerHref in roster.js), lints passing
+(90/90).
