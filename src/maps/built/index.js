@@ -107,6 +107,7 @@ import { trafficOf, uploadTraffic, roadKeepOut } from './traffic.js';
 import { buildRoadMesh, roadCover } from './roadmesh.js';
 import { buildCars } from './cars.js';
 import { buildGround } from './ground.js';
+import { warmPrograms } from '../../render/warm.js';
 
 /* The town's far plane, for the town's reason: the sky dome and the ridge
  * lines live out past the fog. See CAMERA_FAR in src/maps/city/index.js.
@@ -1273,6 +1274,10 @@ export async function buildMap(shell, onProgress, options) {
   pipeline.setSize(dims.w, dims.h);
 
   scene.add(shell.quad);
+  /* Every program the yard draws, linked now and against the pipeline's
+   * scene target instead of one at a time as the pilot first sees each: see
+   * render/warm.js. */
+  await warmPrograms(renderer, scene, camera, pipeline.rtScene);
   progress(1);
 
   const shadowTarget = new THREE.Vector3();

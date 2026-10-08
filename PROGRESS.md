@@ -69069,8 +69069,8 @@ append conflict at the end of this file and nothing else in these files.
 
 - Source: the hunt in `/mnt/project-files/perf-hunt/findings.md`, measured on main at da4e4b7. This entry keeps its item
   numbers. The owner's standing priority from 2026-10-08 is low end performance, and at 13:07Z in the performance hunt
-  thread he said "lets go sonnet, read the prompot and the findings. md and implment". One commit per item, so any one
-  can be reverted alone. Render and load only unless an item says otherwise.
+  thread the owner said "lets go sonnet, read the prompot and the findings. md and implment". One commit per item, so
+  any one can be reverted alone. Render and load only unless an item says otherwise.
 - What a number here is. This container has no GPU and its Chromium runs on SwiftShader, where the GPU is the CPU, so
   a time from it is a ratio of arithmetic and not a laptop's frame. Every figure below is a count, a size or a
   SwiftShader ratio, and says which. A frame on real hardware is not measured; Settings, Input to screen on the owner's
@@ -69147,6 +69147,95 @@ append conflict at the end of this file and nothing else in these files.
   plugs a pad in by replacing `navigator.getGamepads`, with no event at all, so a back off keyed on time or on the
   event changes what that selftest means. The saving is a fraction of a percent of a core and input latency is what
   this simulator is for. If the owner wants it, the safe form is a back off while no pad has ever been listed, with
-  the selftest and `lint:input` changed in the same commit, and that is his call.
+  the selftest and `lint:input` changed in the same commit, and that is the owner's call.
 - Checks: `check:plant`, `check:plant:selftest`, `check:world-golden`, `check:world-golden:selftest`. The change is
   read only of the module and moves no byte of the trace; `npm run verify` was not run.
+
+### Item 3: programs linked ahead against the right target, and one program for every shadow tint
+
+- What the hunt saw: a first frame that spends most of its boot inside shader compiles, and programs that keep turning
+  up in flight (the town 124 at the title to 142 after ten seconds of flying, the yard 61 to 92). Counting every
+  program the page linked and hashing the GLSL of each (`compile-trace.mjs` and `progdiff.mjs` in the measurements
+  folder) found three causes, and not the one the hunt named:
+  1. The compile at the end of `buildFieldScene` ran with no render target bound. With none bound three builds the
+     programs that write to the canvas and convert to sRGB. Every map here draws into a target and converts on a pass
+     of its own, so the programs the frames use are the linear ones. Of the field's 46 programs on Medium, 21 were sRGB
+     variants compiled for nothing and never drawn, and the 25 that were drawn compiled one at a time in the first
+     frame.
+  2. The town and the yard compiled nothing ahead at all, so a prop's program was built the first time a frame drew that
+     prop, which is a stall the pilot earns by turning their head.
+  3. The town's cel factory (`maps/city/vendored/core/toon.js`) keys its program on the shadow tint's hex, although the
+     tint reaches the shader as a uniform and the GLSL is the same text for every tint. Each tint a roof or a prop wore
+     compiled and linked the same program again: 102 programs for 27 distinct shader sources in the yard, 128 for about
+     44 in the town.
+- What changed:
+  - New `src/render/warm.js`: `warmPrograms(renderer, scene, camera, target)` runs `renderer.compileAsync` with the
+    target the frames draw into bound (the composer's in the field and the room, the pipeline's scene target in the
+    town and the yard), and is awaited before the world reports ready. Where the browser has
+    `KHR_parallel_shader_compile` the links run side by side on the GPU process's own threads while the loading screen
+    keeps painting; where it has not three waits one timer tick and the first frame pays as it always did. A failure
+    here costs the first frame its compile and never the map. `attachComposer` in `src/maps/field.js` calls it, so the
+    custom map has it too, and the town's and the yard's `buildMap` call it after the pipeline is built.
+  - The compile at the end of `buildFieldScene` (`src/render/scene.js`) is gone: it cannot name the target, because the
+    composer is built from the scene after it.
+  - `src/render/comic.js` `programKey` folds `celTint_xxxxxx` into one program key. Every material keeps its own tint in
+    its own uniform object and three uploads a material's uniforms whenever the material changes, so a shared program
+    draws each tint exactly as its own did. The vendored `toon.js` is untouched.
+  - `src/maps/city/bake.js` `lookKey`: the town's bake tells two materials apart by a look that included the program
+    key. With the fold, two materials that differ only in tint would have merged and one would have been painted with
+    the other's shadow side, so the look reads the caller's own key, which still names the tint, beside the program key.
+- Measured, Medium, a git worktree of main against the branch, two rounds interleaved (`boot-round.sh`, results in
+  `after/item3/boot/`). Program counts are exact (`createProgram` calls). Times are SwiftShader, where the GPU is the
+  CPU, so they are ratios and not a laptop, and "blocked" is main thread time inside the link status and log queries.
+
+  | World | Programs, main to branch | Boot to first frame, main to branch | Blocked on links before ready | Programs made after ready |
+  | --- | --- | --- | --- | --- |
+  | Field | 46 to 27 | 9.5 and 10.3 s to 9.8 and 9.8 s | 0.9 and 1.2 s to 1.0 and 1.1 s | 0 to 0 |
+  | Room | 20 to 15 at the title | 4.8 and 5.3 s to 5.2 and 5.3 s | 0.4 and 0.5 s to 0.6 and 0.6 s | not recorded |
+  | Yard | 101 to 29 | 14.8 and 14.4 s to 10.6 and 11.3 s | 8.7 and 9.9 s to 3.8 and 3.5 s | 25 and 22 to 0 |
+  | Town | 136 and 131 to 45 and 45 | 40.9 and 42.6 s to 26.0 and 27.1 s | 7.9 and 8.5 s to 1.4 s (and one late program, below) | 8 and 8 to 1 and 0 |
+
+  The field and the room boot no faster and no slower, within the 12 percent two runs of one build differ by here: the
+  21 programs the field no longer builds were cheap ones, and the saving there is programs not held, not seconds. The
+  yard boots in three quarters of the time and the town in under two thirds, and neither compiles anything of its own
+  after it reports ready except the one program below.
+- Pictures: one page with the clock frozen, drawing the same eleven views with the fold on and then off (a temporary
+  switch, every material marked `needsUpdate`), so nothing but the fold differs. Yard, 29 programs against 109: 19
+  pixels differ in two boxes of a few pixels (the same two boxes differ by 20 pixels between two identical passes).
+  Town, 45 against 151: 38 pixels differ in one box around the craft (identical passes differ by 53 there). The craft's
+  pixels are not deterministic at a frozen clock, so that is the harness's floor and not a finding. Pictures and diffs
+  are in `after/item3/`.
+- The one program left late, in the town: the shadow depth variant for a textured caster drawn back side, which three
+  makes on the first shadow render that sees such a caster, and which `renderer.compile` does not reach (it walks the
+  scene's own materials, not the depth variants, the prepass overrides or the fullscreen passes). Those link under the
+  loading screen on the first frame. Its 1.9 s and 5.3 s of blocked main thread on main and on the branch is the wait
+  for the GPU process to drain the frames queued before it, so it is not a cost of the program.
+- Not done. Keeping programs across a world swap: `swapMap` frees the old world first on purpose, to give its memory back
+  before the next is built, and a held program is a held GL object; the numbers above are the first load, which is the
+  one a pilot waits for. Parallel compile is implemented and cannot be measured here, because SwiftShader has no
+  `KHR_parallel_shader_compile` (three waits one timer tick), so the claim for a laptop is that the links are issued
+  together and polled, not that they got quicker. The `over25` count the hunt named does not read under SwiftShader,
+  where every town frame is over 25 ms, so programs made after ready stands in for it.
+- What went wrong. The first experiment compiled earlier hoping to cut the blocking and did not: under SwiftShader the
+  compile work is serial and its total does not depend on when it is asked for, which is what sent the count to
+  duplicates and wasted variants. The first `compileAsync` trial edited `buildMap` in `field.js`, but `?map=custom` goes
+  through `custom.js`, so the trial read as doing nothing until it moved into the shared `attachComposer`. The first
+  town pixel diff showed up to 7 percent of pixels differing and looked like a regression: it was animation, because the
+  crossing boom and the petals run on the physics step clock and that clock's phase differs when the boot takes a
+  different time. The in-page A/B above is what replaced it. Two temporary hooks used for the measurement (the renderer
+  on `window`, the fold switch) were taken out before the commit; `hooks.sh` in the measurements folder puts them back.
+- The room has boot and title numbers only. Its flight entry times out in the harness waiting for the launch screen,
+  because the pass seeds the empty micro course, which is what the hunt recorded for the room too. Its blocked time
+  at the title is 0.4 and 0.5 s on main and 0.6 and 0.6 s on the branch with fewer programs and a first frame within
+  the noise, so it is not a saving and not a clear cost, and it was not chased.
+- Checks, all run on the final tree: `lint:preload` (up to date, `src/render/warm.js` in), `lint:boot` (9 of 9),
+  `lint:quality` (71 of 71, no ceiling touched), `check:room` (71 passed), `check:props`, `check:orbit` (17 passed),
+  `check:fresh` (18 passed), `check:town-patrons` (24 passed). WebGL 1 (`getContext` refusing `webgl2`) boots and
+  flies the field, the yard and the town with zero shader errors, and boots the room with zero. `check:builder` ran 811
+  passes and one failure, "and the ring is at its foot" in "map: build by pointer". That failure is not this change's.
+  The same case alone, run three times on a worktree of main at da4e4b7 and three times on the branch, interleaved,
+  failed all six times on that assertion and nothing else, and passed on both with an 800 ms wait put in front of the
+  assertion in a copy of the script kept outside the repository. The ring's parts are made on the frame that draws it
+  (`fitRing` in `view3d.js`) and the assertion reads them straight after Escape, so under SwiftShader's slow frames it
+  reads before that frame. The check is left as it is; the one line wait is a change to a check and the owner's call.
+  `npm run verify` was not run: nothing here touches physics, the plant, the module ABI or the build.

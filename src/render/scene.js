@@ -6936,9 +6936,14 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    */
   /* Everything is in the graph. What is left is the shader compile, which is
    * the most expensive single thing in this function on a cold cache and has
-   * no inside to report from. */
+   * no inside to report from. It is not made here any more: the argument
+   * above stands, but a compile has to run against the target the frames are
+   * drawn into, and that is the composer's, which is built from this scene
+   * after it. Made here with nothing bound it linked the sRGB programs,
+   * which nothing draws, and left the ones that are drawn to the first
+   * frame. attachComposer (maps/field.js) makes it, through render/warm.js,
+   * before buildMap returns, so the world is still compiled when it loads. */
   await report(0.86);
-  renderer.compile(scene, camera);
   progress(1);
 
   /*
