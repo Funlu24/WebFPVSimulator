@@ -1353,9 +1353,12 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   return c;
 }
 
-function terrain(height, samples, pitch) {
+function terrain(height, samples, pitch, indoor = false) {
   const size = 1700;
-  const seg = 230;
+  /* Indoors the height field is dead level and the room's boards lie over the terrain to well past its walls, so
+   * nothing of it is ever seen: two cells a side hold the plane, instead of 105,800 triangles drawn in two of the
+   * room's three passes. The mesh stays because the ambient occlusion pass below reads its vertices. */
+  const seg = indoor ? 2 : 230;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -5269,7 +5272,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const clubPad = clubhousePad(clubSite);
   const height = makeHeightField(samples, pitch, clubPad, indoor);
 
-  const ground = terrain(height, samples, pitch);
+  const ground = terrain(height, samples, pitch, indoor);
   scene.add(ground);
 
   /*
