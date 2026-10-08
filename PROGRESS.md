@@ -69092,3 +69092,118 @@ changing any of them. It is a prototype and an experiment, not a feature, and no
   model puts on a long fast run.
 - Verification: `node scripts/breadcrumb-proto.js "Track 1" 1 2 3 4 6` and the other tracks, run this turn. Not run:
   `npm run verify`, because nothing in the physics, plant, ABI or build changed.
+
+## 2026-10-08 | racing | Race line: a toggleable trail of dots on the whoop rooms (draft PR #48)
+
+The owner's ask, 2026-10-08 12:26Z, in the breadcrumb thread: "lets do it, add a toggleablee feature in whoop tracks for
+race line". That is approval to build the feature on the draft PR and not to push it to main, so none of this is on
+main. No physics, plant, module ABI or build change: the line is arithmetic over the course and the room's solids and
+it feeds nothing back into the flight, so `npm run verify` was not run (see the end).
+
+### What shipped
+
+- `src/game/raceline.js` (new, 1660 lines) is the solver and `src/render/raceline.js` (new, 441 lines) draws the dots.
+  `src/game/trackdoc.js` hands a whoop course its builder knots and the station each one made (a micro course only; any
+  other course is the object it was). `src/render/scene.js`, `src/main.js` and `src/ui/ui.js` wire it, `src/fresh.js`
+  is regenerated for the two modules, `scripts/raceline-check.js` is the check and `package.json` has `check:raceline`.
+- A "Race line" toggle on the Pilot settings screen, beside Stick overlay, off by default. On, in a whoop room, a trail
+  of dots runs from the gate just flown to the one after the next, so the trail is about two gates long and not a whole
+  lap of dots. The dots are dropped at equal intervals of lap time, so close together means slow down. Cream is fast and amber is slow,
+  set over that lap's own 10th to 90th percentile of speed, because a fixed scale put every dot at amber (the laps run
+  at 1 to 3 m/s).
+- Off costs nothing. The solver is a dynamic import and only the small render module is in the preload list, so with
+  the setting off nothing is requested, solved or drawn (Chromium, Track 1: `phase` idle, and the resource list holds
+  the render module and not the solver).
+- On, the solve is sliced at 5 ms a frame and kept for the last four tracks. The line is solved, then flown through the
+  real `Race` for three laps, and only shown when all three are credited and no built opening is crossed out of turn
+  or backward. A track that cannot be given one says so in words: "No race line for this track yet: a clean way
+  through the whole lap was not found."
+
+### How the line is found
+
+The long form is in the header of `src/game/raceline.js`. The builder's knots are the skeleton. Each knot slides
+inside its hole, less the craft's sweep (0.1735 m) and a 0.25 m margin, its heading may lean off the gate's normal and
+its tangent length is free, with cubic Hermite legs between. The cost is lap time from a point mass speed profile under
+a thrust ball (0.35 g sideways, 6 m/s cap) plus walls: 60 s for crossing a built opening out of turn or backward and a
+steep ramp for touching a pipe or a frame. Coordinate descent, then a detour knot round a hard stray, then a second
+strategy if the first is not clean. It is deterministic.
+
+The pace is an effective figure and not a measurement. It was set against the board's best on the five tracks with 18
+or more times posted (2026-10-08): RaceGOW5 Track 1 0.93, RaceGOW5 Track 2 1.06, RaceGOW6 Track 1 1.44, Whoop Triple
+Stack 0.72, Master before buying Mobula8 0.91, a geometric mean of 0.99. The spread is the model's: a point mass has no
+inertia in its attitude, so loop heavy tracks come out slow and tracks of short straights fast.
+
+### Run, in the same turn
+
+- `node scripts/raceline-check.js` (5 s): all eight RaceGOW5 presets pass. A line is found and clean, the real Race
+  credits three laps of it, the built gates are passed in order and no others (found again by the check's own plane
+  test, so a mistake in the solver's crossing count cannot also be the check's), the gaps in the lattice are passed in
+  order, the craft keeps its clearance from every solid (the check's own distance functions), the line beats the
+  builder's through the same openings, the ratio to the board is 0.99 on the two that are presets, no two crumbs are
+  more than 1 m apart, the gate table on the crumbs is in order and a second solve is identical to the last bit.
+- `node scripts/raceline-check.js --fly` (16 s): the line flown through `dist/sim.wasm` with Betaflight's loop, in empty
+  sky, on a follower of the check's own. All eight rooms credit four laps of four, in 1.05 to 1.17 times the line's
+  time (Track 1 1.08, 2 1.13, 3 1.11, 4 1.17, 5 1.09, 6 1.08, 7 1.05, 8 1.10), with a mean error of 0.18 to 0.30 m and a
+  worst of 1.0 to 2.1 m at the sharpest corners. The time allowed, 1.5 times the line's, was fixed before the last run.
+  As a negative control (a scratch copy, not committed) the same rooms asked for 4 g of sideways load make it fail:
+  Tracks 3 and 7 credit two laps of four and Track 1 three, and at 2 g the replay slows to 1.34 to 1.40 times, so the
+  check moves with what the line asks of the craft but is not fine enough to see a small overreach.
+- The 17 tracks on the board, in Node: 14 are clean. Powerloop 1 (4 built openings crossed out of turn) and 3 cubes
+  (13) refuse. Garagetrack, twice, and Whoop Tech Flow report a piece Node does not model (a barrier, a flag), because
+  Node's solids come from the course and the browser's from the real colliders.
+- Chromium through `node scripts/shots.js` at low graphics and 1280x720, in the real shell, with the setting on: Track 1
+  solves in 147 ms of CPU, Whoop Tech Flow 341, RaceGOW6 Track 1 531, Garagetrack 849, Track 8 1003, Whoop Triple Stack
+  104 and Mobula8 130. 3 cubes and Powerloop 1 refuse with the sentence above. The only console error is the board
+  fetch being refused here. At 60 Hz a 5 ms slice a frame makes the wall time about 3.3 times the CPU time (computed
+  from those figures, not measured at 60 Hz): about half a second for Track 1, three and a half for Track 8 and four
+  and a half for 3 cubes, which is the slowest refusal. Headless frames take 120 ms here, so the wall times the harness
+  printed are not those.
+- `lint:preload`, `lint:quality` (71 of 71), `lint:boot`, `lint:nouns`, `lint:frame` (34 of 34), `lint:memory`,
+  `check:fresh`, `micro:check`, `check:room` (71 of 71), `lint:presets` and `lint:partners` pass.
+- `lint:shell` FAILS, and fails on main. On da4e4b7, in a scratch worktree, it reports the same seven findings as here
+  except one number: the Pilot screen is 747 px past its recorded 678 there and 792 px with the toggle row, so the row
+  is 45 px. The other six (rates, pids, fc, tricks, the paused fold and the stickhelp fold) are identical on main and
+  not from this change. I did not re-record the baseline, because that would also bury those six. That is the
+  owner's call.
+
+### What went wrong, and the one judgement call
+
+- The first version refused RaceGOW6 Track 1 in the browser ("the line did not score a lap"). The verify flew a lead in
+  and three rounds, and when the timing gate's crossing fell on the wrap segment the last lap's closing crossing was
+  one point past the end, so two laps of three were credited. It now flies until three are credited, for at most five
+  rounds.
+- The independent check, once written, found two to five crossings of unbuilt openings on Tracks 5 to 8 that the
+  solver's own count could not see, because an unbuilt gap in the lattice had no window in it. The solver has them now.
+  A route that crossed none was contrived on Track 7 (two hard strays were left), so a stray through an unbuilt gap is a
+  price (3 s) and not a wall. THIS IS MY CALL AND NOT THE OWNER'S, and it has not been put to them: Track 7's line
+  crosses two gaps out of turn, which a pilot cannot see because a gap has no pipe. A built opening is still a wall.
+- The plant replay misled me for a while. With the rig's own tracker (the one the prototype of this morning used and
+  I trusted) Tracks 3 and 7 credited two laps of four, which read as a line the plant could not follow. It was the
+  tracker. Its throttle trim integrates climb rate, so a trim wound by one moment stayed wound and held the craft
+  0.8 m under the line for a minute, with the proportional term and the trim cancelling to the digit (Track 7). And it
+  rolls the craft over for half a metre of height error with a metre a second of climb behind it (Track 3, the end of
+  the first lap). A sweep of 27 gain sets on those two tracks gave 0 to 4 laps with no trend, which is how it was ruled
+  out. The follower in the check chases a point that waits when the craft falls behind it (the first version chased a
+  stopwatch), caps the line's own feed forward at 5 m/s^2 (a kink 7 cm across in Track 7's line asked for 14 m/s^2 for
+  a tenth of a second), and never asks for thrust under 15 percent of a hover or more than 80 degrees off the
+  vertical. Each came from a cause read in a trace and not from the lap count, and with all three it credits all
+  eight. So the prototype entry above, "seven of the eight at 1 g", was partly luck of that tracker. Its finding that
+  the builder's line is not a racing line stands, because that was geometry. `scripts/lib/flightrig.js` is unchanged:
+  a tilt limit added to it made the replay worse and was reverted.
+- The lines have corners. Every preset has a place where the model slows to 0.2 to 0.35 m/s, and on Tracks 1 and 3 they
+  are turns of 80 to 140 degrees within a metre, near knots, with a few curls a few centimetres across (Track 7 has one).
+  The model makes these cheap, the dots bunch there, which reads as "slow right down", and the plant follows them. By
+  the model's own numbers under 1 percent of any lap (0.0 to 0.7) has the thrust pointing down. Whether a person finds
+  such a corner natural is what this thread cannot measure, and it is the thing to look at when flying it.
+
+### Not measured, not run
+
+- No frame cost on a real GPU or a low end laptop, only the container's rasteriser. The setting is off by default and
+  the draw is one call on the window of the lap's crumbs (about 400 for the whole of the longest lap, Track 8), but that is a
+  reading and not a measurement. While solving, the 5 ms slice is about a third of a 60 Hz frame for the seconds the
+  solve takes, once per track, so on a machine already at its budget it is a stutter for those seconds. The slice is
+  the dial if it shows.
+- A human following the trail. A collision in the plant replay (empty sky). Touch devices.
+- `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`.
+- `scripts/breadcrumb-proto.js`, the prototype in the entry above, is removed. What it did lives on in the check's
+  `--fly`, and the file is in 53aa025.

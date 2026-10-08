@@ -1207,6 +1207,15 @@ const DEFAULTS = {
    * loop already holds. A boolean so the typeof gate accepts it.
    */
   stickOverlay: true,
+  /*
+   * RACE LINE: in a whoop room, a trail of cream dots through the next gates
+   * showing a good line a pilot can fly, the owner's ask of 2026-10-08 on
+   * behalf of beginners. Off by default: a trail nobody asked for is a trail
+   * in the way, and while it is off nothing is built, loaded or solved. Only
+   * the picture: it reads the course and the room, never the flight. A
+   * boolean so the typeof gate accepts it.
+   */
+  raceLine: false,
   packVoltage: 4.2,
   /*
    * How heavy the quad is, as a percentage of the weight the airframe is
@@ -8353,6 +8362,14 @@ export class Ui {
             : 'Off: no stick boxes on the flight picture. Turn it on to see what your sticks are telling the quad.',
           s.stickOverlay,
           (v) => { s.stickOverlay = v; },
+        ),
+        toggle(
+          'Race line',
+          s.raceLine
+            ? 'On: in a whoop room, a trail of dots through the next gates shows a good line to fly, from the gate you have just flown to the one after the next. Dots close together mean slow down, amber ones mean slowest. Rooms only, and a few tracks have no line yet.'
+            : 'Off: no trail. Turn it on in a whoop room to see a good line through the next gates, drawn as dots.',
+          s.raceLine,
+          (v) => { s.raceLine = v; },
         ),
         { label: 'Sound', section: true },
         toggle('Sound', 'All sound: motors, wind, music, cues and every lap time called out loud.', s.sound, (v) => { s.sound = v; }),
