@@ -69253,6 +69253,8 @@ described below, whose own note asks for the owner's approval. That rewrite is f
 golden were not touched, the hash line and the six new scenarios come out and nothing else changes; `npm run check:motorkv`
 would still pin the direction of the knob, though not its bits.
 
+The golden rewrite was approved afterwards, by the owner at 23:21Z on 2026-10-08: see the last entry in this file.
+
 ### What changed
 
 - **The module.** At the top of `plant_step` (`src/native/plant.c`) the back EMF constant becomes `ke / s` and the winding
@@ -69457,3 +69459,20 @@ All on this tree, one browser check at a time, after the last edit to any file t
   red on this container until someone looks at the race.
 - No frame time on real hardware. The step cost above is Node on this machine, not a weak laptop.
 - No adversarial or multi agent review was run. Nothing is merged and neither pull request is out of draft.
+
+## 2026-10-08 | tuning, physics | The owner approved the plant golden rewrite for Motor power
+
+At 23:21Z on 2026-10-08 the owner tapped Approve on the decision card "Approve the rewritten plant golden for Motor
+power?" in the flight feel thread. The card was posted at 16:00Z with Approve recommended, beside a second card on how to
+check Motor power.
+
+What it covers: `tests/goldens/plant.json` as pushed on the draft pull request at b194605, which is the new module hash
+(9d6544ee...4576) and the six Motor power scenarios, with the 23 older entries byte for byte unchanged. The golden's own
+note asks for the owner's approval of a rewrite, and this is it. The file stays as pushed. What it does not cover:
+anything reaching main, and the check scale. The second card, "How should Motor power be checked before it merges?", has
+not been answered, so how the build is to be checked is still open (`npm run verify` has run, 18 of 18, and nobody has
+flown it), and each merge, the board's #12 first and then the simulator's #49, stays on his word. This closes the golden
+item under Owed in the entry above.
+
+Nothing but this record and the pull request text changed in this turn: no code, no check and no threshold. Nothing went
+wrong in it.
