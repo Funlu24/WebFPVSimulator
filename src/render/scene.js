@@ -155,8 +155,12 @@ function makeBaker() {
         b = { material: o.material, hull: o.material.userData.hullColor != null, geos: [] };
         buckets.set(key, b);
       }
-      /* Non-indexed so polyhedra and cylinders merge into one buffer. */
-      const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      /* Every member is indexed, so polyhedra and cylinders merge into one indexed buffer and a shared vertex is
+       * shaded once, not once per triangle corner. A member that arrives without an index is welded first, with a
+       * tolerance far under the smallest prop (the whoop room is built at MICRO_SCALE, and the default 1e-4 could
+       * weld neighbouring vertices of a small one). mergeVertices joins vertices equal in EVERY attribute, so a
+       * flat face keeps its own corners, its normal differs, and the picture is the one the exploded buffer drew. */
+      const geo = o.geometry.index ? o.geometry.clone() : mergeVertices(o.geometry, 1e-6);
       geo.applyMatrix4(o.matrixWorld);
       b.geos.push(geo);
     });
