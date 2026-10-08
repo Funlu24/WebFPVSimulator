@@ -6915,7 +6915,12 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * the most expensive single thing in this function on a cold cache and has
    * no inside to report from. */
   await report(0.86);
-  renderer.compile(scene, camera);
+  /* compileAsync, not compile: compile only queues the links, and the first frame then blocks on every one of them
+   * (three checks the link status on first use). compileAsync polls the driver's parallel compile
+   * (KHR_parallel_shader_compile) between timer ticks, so the loading bar keeps moving, the links finish on the
+   * driver's threads, and the first frame finds programs that are ready. Without the extension it falls back to
+   * waiting a beat and then polling, which costs nothing the synchronous path did not. */
+  await renderer.compileAsync(scene, camera);
   progress(1);
 
   /*

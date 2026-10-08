@@ -503,6 +503,47 @@ function preloadMapModules(id) {
   }
 }
 
+/*
+ * Every program the world will use, linked on the driver's own threads while the loading bar is still up.
+ *
+ * Three compiles a material the first time something draws it, and the first frame then blocks on every link.
+ * The town's first frame was 33 s of 54 s of exactly that under a software rasteriser, and a driver is quicker but
+ * has the same shape, and the programs that only appear in flight (a car, a pass card) paid for themselves as a
+ * hitch the first time they came into view. compile() walks the whole graph, visible or not, so the hidden and
+ * the far cells are in it, and compileAsync waits on the parallel compile extension in timer ticks instead of
+ * blocking. The field and the room do this at the end of their own build and find every program held, so this is
+ * for the maps that build their own pipeline and left it to the first frame. A failure here is only a missed warm
+ * up: the first frame compiles what is missing, as it always did.
+ */
+async function precompileWorld(shell, map, loading) {
+  const r = shell.renderer;
+  if (!map.scene || !r || typeof r.compileAsync !== 'function' || map.id === 'field' || map.id === 'custom') {
+    return;
+  }
+  try {
+    loading.detail = 'compiling shaders';
+    /* The pipelines draw into a render target, and three keys a program on the target it is compiled for (the
+     * output colour space and the tone mapping both follow it), so a compile against the canvas links programs the
+     * frame never uses and the frame links its own again: 282 programs in the town instead of 131. Any target will
+     * do, since only its being a target counts. */
+    const probe = new THREE.WebGLRenderTarget(1, 1);
+    const held = r.getRenderTarget();
+    r.setRenderTarget(probe);
+    let ready;
+    try {
+      ready = r.compileAsync(map.scene, shell.camera);
+    } finally {
+      r.setRenderTarget(held);
+    }
+    await ready;
+    probe.dispose();
+  } catch (e) {
+    /* Nothing to undo. */
+  } finally {
+    loading.detail = '';
+  }
+}
+
 async function loadMap(shell, id, loading, options) {
   const entry = mapById(id);
   loading.start('module');
@@ -524,6 +565,7 @@ async function loadMap(shell, id, loading, options) {
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
+  await precompileWorld(shell, map, loading);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a
    * document, and the shell has to tell two of them apart: see
