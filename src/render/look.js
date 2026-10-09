@@ -109,8 +109,19 @@ function toneGeometry(geo) {
   col.needsUpdate = true;
 }
 
-/* Apply the look to a built world's scene, once. A scene already done is left alone. */
-export function applyLook(scene) {
+/*
+ * Apply the look to a built world's scene, once. A scene already done is left alone.
+ *
+ * `keep` is a session lived root inside the scene, the craft, which is left
+ * exactly as it was. The craft outlives every world (src/render/shell.js) and
+ * every map adds it to its scene, so it was toned again by every world built
+ * after it: measured, the craft's vertex colours fell by about a tenth with
+ * each world, to 58 percent of the first world's after five more, and its tone
+ * came from cells and a wall's foot that a five inch quad does not have. A
+ * geometry is also toned at most once, so nothing else that outlives its world
+ * can drift.
+ */
+export function applyLook(scene, keep = null) {
   if (!scene || scene.userData.gemLook) {
     return;
   }
@@ -118,7 +129,14 @@ export function applyLook(scene) {
   const key = new THREE.Color(...GEM.keyLight);
   const skies = [];
   const done = new Set();
+  const kept = new Set();
+  if (keep) {
+    keep.traverse((o) => kept.add(o));
+  }
   scene.traverse((o) => {
+    if (kept.has(o)) {
+      return;
+    }
     if (o.isDirectionalLight && o.intensity > 1.5) {
       o.color.multiply(key);
     }
@@ -130,12 +148,13 @@ export function applyLook(scene) {
       skies.push(m.uniforms);
     }
     const g = o.geometry;
-    if (!m || !m.vertexColors || !g || done.has(g) || o.isInstancedMesh) {
+    if (!m || !m.vertexColors || !g || done.has(g) || g.userData.gemToned || o.isInstancedMesh) {
       return;
     }
     const c = g.attributes.color;
     if (c && c.itemSize === 3 && g.attributes.normal && g.attributes.position) {
       done.add(g);
+      g.userData.gemToned = true;
       toneGeometry(g);
     }
   });

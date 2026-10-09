@@ -526,7 +526,7 @@ async function loadMap(shell, id, loading, options) {
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
   /* The Gem look, once a world is built: colours and vertex tones only, nothing per frame (look.js). */
-  applyLook(map.scene);
+  applyLook(map.scene, shell.quad);
   map.shadowsOff = Boolean(options && options.quality && options.quality.shadowsOff);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a
