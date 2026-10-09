@@ -70023,3 +70023,37 @@ Not on main. No physics, plant, module ABI or build change here, so `npm run ver
   trail waits for a pause if the pilot flies before it is solved (Track 6 is about 1.75 s of CPU).
 - What went wrong: nothing in the code. The harness refused one `rm` in a shell line whose path used an unset-able
   variable; the line did not need it, because the directory was new, and was rerun without it.
+
+## 2026-10-09 | racing | Race line goes to main on the owner's word (PR #48)
+
+- Approval: the owner wrote "push to main branch" in the thread at 08:20:32Z on 2026-10-09, after the race line had been
+  on `test` since about 05:50Z. It covers PR #48 as it stood on `test`, plus the merge of current main that a fast forward
+  needs. It does not cover anything else on `test`. No flight report had arrived when it was given: the word is the
+  approval, not a flight. The PR was a draft; after this push its commits are on main, so GitHub should show it merged.
+- Latency, under the project rule of 2026-10-09, unchanged from the entries above. With Race line off, the default,
+  nothing is imported, solved or drawn. On, one extra draw call a frame, and no solve slice in a flying frame. That draw
+  is the one rise; the reply of 00:43Z on 2026-10-09 and the PR body both named it as needing the owner's word, and
+  "push to main branch" is taken as that word. Its cost on a real GPU or a low end laptop was never measured and still
+  is not.
+- What was pushed: main (afda081) merged into this branch as 962311b, then main fast forwarded to the head of this
+  branch. No force. Main had moved 8 commits since the `test` push: the flight feel tuning (PR 49, Motor power in the
+  physics module) went to main at about 08:10Z on the owner's word in its own thread. Only the tail of PROGRESS.md
+  conflicted (both sides kept, main's first); `src/ui/ui.js`, `src/main.js`, `src/fresh.js` and `package.json` merged
+  without conflict. The merged tree differs from `test` (ca2f52e, the flight feel thread's integration of the same two
+  branches) in one file, `src/trackbuilder/selftest.js`, which main changed after that merge. So what goes to main is
+  what the owner could fly on `test`, plus that file.
+- Run on the merged tree, this turn, all passing: `node scripts/raceline-check.js` (91) and with `--fly` (99, four laps
+  of four in all eight rooms, through main's new module), `check:plant` (all passed), `lint:preload` (up to date, 138
+  boot modules), `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71), `lint:frame` (34),
+  `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4), `lint:partners` (88) and `lint:fc` (33 of 33).
+- Not run: `npm run verify` (this branch changes no physics, plant, module ABI or build; PR 49's own physics change is
+  already on main under its own entry), `lint:input`, `lint:shell` (fails on main, baseline not re-recorded),
+  `lint:catalog` (cannot start in this container, `vendor/betaflight` is not checked out), `node scripts/shots.js`, and
+  a browser run of the merged tree with the setting on.
+- If the live build is wrong: the setting is off by default, so a pilot only meets it by turning Race line on, and the
+  first step is to leave it off. To take it out, revert the race line code commits (7ccbe63, 2ff7188 and fbb1600; the
+  others are PROGRESS entries and merges). The shared files they touch are `src/main.js`, `src/ui/ui.js`,
+  `src/render/scene.js`, `src/fresh.js` and `package.json`.
+- Still open with the owner, not decided by this push: whether the trail should be only as strict as RaceGOW's Rule 7
+  (never backward), and not also refuse an opening out of turn. The check card of 2026-10-08 never got an answer.
+- What went wrong: nothing new.
