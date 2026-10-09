@@ -120,6 +120,11 @@ partnership to show.
   * `mattsflooring/colour.png` is the Matt's Flooring logo as supplied, a
     499 by 111 PNG. `mattsflooring/mono.png` is made from it by
     scripts/partners.js, every pixel cream and its transparency kept.
+  * `yourfpv/colour.png` is the YourFPV logo as supplied, a 869 by 570 PNG
+    with transparency. YourFPV is a 6 month paid supporter (October 2026 to
+    April 2027) shown on freestyle maps and the landing page, but not
+    counted in the partners list. `yourfpv/mono.png` is made from it by
+    scripts/partners.js, every pixel cream and its transparency kept.
   * `quadconfig/colour.png` is the Quad Configurator logo as supplied by
     patron Magnus Arge, a 1882 by 400 PNG. `quadconfig/mono.png` is made
     from it by scripts/partners.js.

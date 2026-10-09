@@ -47,6 +47,9 @@ import * as THREE from 'three';
 import { PAL } from './vendored/core/palette.js';
 import { Pipeline } from './vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
+import { comicPipeline, setComicQuality } from '../../render/comic.js';
+import { comicSky } from '../../render/comicsky.js';
+import { clumpBlob } from '../../render/clump.js';
 import { buildSky } from './vendored/core/sky.js';
 import { setOutlineResolution } from './vendored/core/outline.js';
 import { buildWorld } from './vendored/world/index.js';
@@ -74,6 +77,8 @@ import { buildPlaces } from './places/index.js';
 import { drawnBoxes } from './drawn.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { makeShadowRate } from '../../render/shadowrate.js';
+import { warmPrograms } from '../../render/warm.js';
 
 /*
  * Where a run starts. On the road south of the level crossing, facing north
@@ -475,6 +480,9 @@ class CityPipeline extends Pipeline {
     /* Stage F's manga layer, folded into the grade and the fxaa pass on
      * this pipeline's own materials: see src/render/manga.js. */
     this.manga = mangaPipeline(this);
+    /* The comic layer's pen and grade: see src/render/comic.js. The
+     * blobs option is the ink half of markCanopies' comicBlob. */
+    comicPipeline(this, { blobs: true });
   }
 
   setSize(w, h) {
@@ -523,7 +531,8 @@ class CityPipeline extends Pipeline {
     this.fxaa.mat.uniforms.uTexel.value.copy(texel);
     this.ink.mat.uniforms.uNear.value = this.camera.near;
     this.ink.mat.uniforms.uFar.value = this.camera.far;
-    this.ink.mat.uniforms.uThickness.value = 1.05 + 0.55 * scale;
+    /* Times the comic layer's heavier pen (src/render/comic.js). */
+    this.ink.mat.uniforms.uThickness.value = (1.05 + 0.55 * scale) * (this.inkWeight || 1);
 
     this.renderer.setPixelRatio(shellPr);
     this.renderer.setSize(w, h, false);
@@ -1748,6 +1757,209 @@ function dropCarFit(carFit) {
   carFit.length = 0;
 }
 
+/*
+ * THE CANOPIES TAKE THE COMIC PASS'S LEAF CLUMPS (render/comic.js, FOLIAGE).
+ *
+ * By name: the five canopy sets trees.js builds, for the town and for the
+ * two places, which use the same builders. On a COPY of the material, one
+ * per material however many sets share it. cel() hands the same material to
+ * anything built with the same arguments, and bakeColourToVertices gives
+ * the merged material it makes the userData of the first material it folds
+ * in, the object itself and not a copy, so a mark on a shared material
+ * could put leaves on a wall. The copy keeps the hook and the program key,
+ * which Material.copy does not carry, exactly as the bake's own copies do.
+ * Each set is its own draw already, so this adds a handful of materials and
+ * no draw call. Before the bake and the chunking, so every chunk of a set
+ * carries the copy.
+ *
+ * The cherry and grove sets, the round blobs, are also marked comicBlob
+ * (graphics pass 19): each blob writes a code the ink reads, so the creases
+ * between its own faces are not inked and it outlines as one round shape
+ * (render/comic.js, A CANOPY BLOB'S CODE). The cedars, the bamboo and the
+ * shrubs are faceted on purpose and keep their creases, so a material is
+ * copied once per kind as well as once per original: a shrub that happens
+ * to share a grove's paint gets a copy without the mark.
+ */
+const CANOPY = /^(sakura|grove|cedar|bamboo|shrub)Canopy\d+$/;
+
+function markCanopies(root) {
+  const made = new Map();
+  root.traverse((o) => {
+    if (!o.isInstancedMesh || !CANOPY.test(o.name) || Array.isArray(o.material)) {
+      return;
+    }
+    const m = o.material;
+    const blob = ROUND_CANOPY.test(o.name);
+    let kinds = made.get(m);
+    if (!kinds) {
+      kinds = new Map();
+      made.set(m, kinds);
+    }
+    let c = kinds.get(blob);
+    if (!c) {
+      c = m.clone();
+      c.onBeforeCompile = m.onBeforeCompile;
+      if (typeof m.customProgramCacheKey === 'function') {
+        c.customProgramCacheKey = m.customProgramCacheKey;
+      }
+      c.userData = { ...m.userData, comicFoliage: true, comicBlob: blob };
+      kinds.set(blob, c);
+    }
+    o.material = c;
+  });
+  let size = 0;
+  made.forEach((kinds) => {
+    size += kinds.size;
+  });
+  return size;
+}
+
+/*
+ * ROUND CANOPIES NEAR THE EYE (graphics pass 15).
+ *
+ * The cherry and grove canopies are twenty faced blobs, shaded round since
+ * PATCH-world-trees.diff, but the outline still found their facets: the ink
+ * pass reads creases from depth, and a 42 degree turn at every edge is a
+ * crease, so a tree beside the quad was a bunch of inked gems. An eighty
+ * faced blob turns about 20 degrees at an edge and outlines as a near
+ * circle. It is drawn at 0.92 of the sphere, which matches the twenty
+ * faced blob's average silhouette (0.906 by projected area, 0.938 by mean
+ * width), so a canopy does not swell as the eye nears it.
+ *
+ * Near cells only, because the town's triangles are its trees: the eighty
+ * faced blob is four times the twenty, and the town carries 6,798 cherry
+ * and grove blobs after thinning on High. A cell takes the round blob while
+ * its nearest point is within `q.city.leafRound` metres of the eye; past
+ * that the fog has started and a facet is a few pixels. The swap is the
+ * mesh's geometry pointer, written only when a cell crosses the line, so it
+ * costs no draw call, no program and no buffer beyond one eighty faced
+ * blob per set, and it changes nothing a collider or the bake reads: it is
+ * done on the chunks after both. Low keeps the twenty faced blob.
+ *
+ * Sets are found by name and checked by shape, an icosahedron at detail 0
+ * whose normals are radial, which is the blob buildSakura and buildGrove
+ * draw; the shrubs and the bamboo are faceted on purpose and are left
+ * alone, as is anything not in a cell (a set too wide for one is drawn
+ * from every distance and keeps its blob).
+ *
+ * CLUMPS NEAR THE EYE (graphics pass 24). With its facets gone the near
+ * blob was a smooth balloon, and a cherry beside the quad was a bunch of
+ * them, pale and round, which is what the yard's trees were until pass 23.
+ * So on Medium and High (the quality table's leafClumps) the near blob is
+ * one of the yard's clumps of lumps (src/render/clump.js), a different one
+ * for each tone of each kind, under every blob's own spin and squash. It
+ * is drawn at 0.92, the round blob's scale, which gives it the twenty faced
+ * blob's mean silhouette: as the radius of a circle of the same area,
+ * averaged over 300 directions, 0.877 against 0.874 (the round blob 0.887),
+ * so a tree still does not swell as the eye nears it. The one shape of the
+ * eight that is leaner than the rest (0.857 at full size) is left out. 180
+ * faces on 92 vertices where the round blob is 80 on 240, and still no draw
+ * call or program, and no buffer beyond one clump per shape, made with the
+ * town and freed with it.
+ *
+ * Nothing a collider reads changes, as before. A town blob's solid is the
+ * box round its unturned ellipsoid (collideLeaves in the vendored trees.js),
+ * and every blob is drawn turned inside it. A clump at 0.92 reaches at most
+ * 0.975 of the radius at the top of a lump, so across the blob it stays
+ * inside the box as the round blob did; above and below it a turned blob
+ * already reached past the box, and a clump reaches at most 0.055 of the
+ * radius further than the round blob there. Its valleys lie at about 0.69
+ * of the radius, where the far blob's faces lie at 0.79 and the round
+ * blob's at 0.86, so between two lumps the box stands up to a tenth of the
+ * radius further out from the leaves than it does on Low.
+ */
+const ROUND_CANOPY = /^(sakura|grove)Canopy\d+$/;
+/* The clump shapes the town draws: all but the lean one. */
+const TOWN_CLUMPS = [0, 1, 2, 3, 4, 6, 7];
+
+/* The clump for a set, by its kind and its tone: the cherries' three tones
+ * take the first three shapes and the groves' four (the fourth is the
+ * willows' pale green) the other four. `made` holds this town's, one a
+ * shape. */
+function nearClump(name, made) {
+  const tone = Number(name.slice(name.lastIndexOf('Canopy') + 6)) || 0;
+  const k = TOWN_CLUMPS[((name.startsWith('grove') ? 3 : 0) + tone) % TOWN_CLUMPS.length];
+  let g = made[k];
+  if (!g) {
+    g = clumpBlob(k).clone();
+    g.scale(0.92, 0.92, 0.92);
+    made[k] = g;
+  }
+  return g;
+}
+
+function isRoundBlob(geo) {
+  if (geo.type !== 'IcosahedronGeometry' || !geo.parameters || geo.parameters.detail !== 0) {
+    return false;
+  }
+  const p = geo.attributes.position;
+  const n = geo.attributes.normal;
+  if (!p || !n) {
+    return false;
+  }
+  for (let i = 0; i < p.count; i += 1) {
+    const l = Math.hypot(p.getX(i), p.getY(i), p.getZ(i));
+    if (Math.abs(n.getX(i) * l - p.getX(i)) > 1e-4 || Math.abs(n.getY(i) * l - p.getY(i)) > 1e-4
+      || Math.abs(n.getZ(i) * l - p.getZ(i)) > 1e-4) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function roundCanopiesNear(cells, clumps, swapped) {
+  const twins = new Map();
+  const shapes = [];
+  let meshes = 0;
+  for (const c of cells) {
+    for (const item of c.items) {
+      item.traverse((o) => {
+        if (!o.isInstancedMesh || !ROUND_CANOPY.test(o.name)) {
+          return;
+        }
+        const lo = o.geometry;
+        const key = clumps ? `${lo.uuid}:${o.name}` : lo.uuid;
+        let hi = twins.get(key);
+        if (hi === undefined) {
+          hi = null;
+          if (isRoundBlob(lo)) {
+            /* A clump only stands in for the unit blob both builders draw,
+             * and only if it carries every attribute the set's program
+             * reads, which after the bake's trimAttributes is position and
+             * normal. Otherwise the round blob, as before pass 24. */
+            const clump = clumps && lo.parameters.radius === 1 ? nearClump(o.name, shapes) : null;
+            if (clump && Object.keys(lo.attributes).every((name) => clump.attributes[name])) {
+              hi = clump;
+            } else {
+              hi = new THREE.IcosahedronGeometry(lo.parameters.radius * 0.92, 1);
+              /* The same attributes as the blob it stands in for, so the
+               * program three.js built for the set binds it unchanged: the
+               * bake's trimAttributes has taken uv off the canopy. */
+              for (const name of Object.keys(hi.attributes)) {
+                if (!lo.attributes[name]) {
+                  hi.deleteAttribute(name);
+                }
+              }
+            }
+          }
+          twins.set(key, hi);
+        }
+        if (!hi) {
+          return;
+        }
+        o.userData.leafLo = lo;
+        o.userData.leafHi = hi;
+        swapped.add(lo);
+        swapped.add(hi);
+        (c.leaves || (c.leaves = [])).push(o);
+        c.leafNear = false;
+        meshes += 1;
+      });
+    }
+  }
+  return { meshes, sets: new Set([...twins.values()].filter(Boolean)).size, clumps: clumps === true };
+}
+
 function buildColliders(world) {
   const colliders = new Colliders();
   let noTop = 0;
@@ -2152,6 +2364,10 @@ export async function buildMap(shell, onProgress, options) {
 
   progress(0.04);
   const sky = buildSky(scene, 500);
+  /* Heaped cumulus in place of the vendored cards, and the streak cloud on
+   * Medium and High: src/render/comicsky.js. */
+  comicSky(sky, { cloud: PAL.cloud, shade: PAL.cloudShade, ink: PAL.ink, sun: SUN_OFFSET.toArray() },
+    { streaks: q.id !== 'low' });
   progress(0.08);
 
   /*
@@ -2269,6 +2485,7 @@ export async function buildMap(shell, onProgress, options) {
    * two places get their own field, over their own ground, for the reason in
    * ./places/blossom.js. */
   const places = buildPlaces(world, { petals: q.city.petals });
+  markCanopies(world.root);
   progress(0.87);
   await yieldToPaint();
 
@@ -2389,6 +2606,13 @@ export async function buildMap(shell, onProgress, options) {
   const chunked = chunkInstanced(world.root, { cell: CULL_CELL });
   progress(0.92);
   const cull = buildCullGrid(world.root, { cell: CULL_CELL });
+  const leafRound = q.city.leafRound ?? 0;
+  /* Every blob and twin the near canopies swap between, for dispose(). */
+  const leafSwapped = new Set();
+  const roundLeaves = leafRound > 0
+    ? roundCanopiesNear(cull.cells, q.city.leafClumps === true, leafSwapped)
+    : { meshes: 0, sets: 0, clumps: false };
+  const leafR2 = leafRound * leafRound;
   const anim = cityAnimation(world, colliders, boomIndices, trainCars);
   let placeStep = 0;
   /* Measured AFTER cityAnimation has seated the booms at step zero, so it is
@@ -2400,6 +2624,10 @@ export async function buildMap(shell, onProgress, options) {
   };
   progress(0.94);
 
+  /* groundAuto: the bake has folded colour into vertices and merged the
+   * town's roads, walls and cars into shared materials, so its ground
+   * cannot be marked material by material (render/comic.js, GROUND). */
+  setComicQuality(q, { groundAuto: true, edges: true });
   const pipeline = new CityPipeline(renderer, scene, camera, {
     /*
      * 2.6e6 on High, not the town's own 4.6e6.
@@ -2430,9 +2658,15 @@ export async function buildMap(shell, onProgress, options) {
   pipeline.setSize(d.w, d.h);
 
   scene.add(shell.quad);
+  /* Every program the street draws, linked now and against the pipeline's
+   * scene target instead of one at a time as the pilot first sees each: see
+   * render/warm.js. */
+  await warmPrograms(renderer, scene, camera, pipeline.rtScene);
   progress(1);
 
   const shadowTarget = new THREE.Vector3();
+  /* How often the map is redrawn: see render/shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, q.shadows ? (q.city.shadowEvery || 1) : 1, half);
   function seat(light, offset, origin) {
     light.target.position.copy(origin);
     light.position.copy(origin).add(offset);
@@ -2469,6 +2703,15 @@ export async function buildMap(shell, onProgress, options) {
     if (!proxyMeshes.length) {
       return;
     }
+    /* A proxy paints nothing, but the colour pass draws it all the same, so
+     * on a frame that does not redraw the shadow map (shadowrate.js) it is a
+     * draw and its triangles for nothing: every proxy is hidden then. */
+    if (!renderer.shadowMap.autoUpdate && !renderer.shadowMap.needsUpdate) {
+      for (let i = 0; i < proxyMeshes.length; i += 1) {
+        proxyMeshes[i].visible = false;
+      }
+      return;
+    }
     proxyEye.copy(target).add(SUN_OFFSET);
     proxyView.lookAt(proxyEye, target, proxyUp);
     proxyView.setPosition(proxyEye);
@@ -2499,6 +2742,7 @@ export async function buildMap(shell, onProgress, options) {
     seat(sun, SUN_OFFSET, shadowTarget);
     seat(fill, FILL_OFFSET, shadowTarget);
     seat(bounce, BOUNCE_OFFSET, shadowTarget);
+    shadowRate.step(shadowTarget);
     /* The dome is centred on the flat origin, so it has to trail the camera
      * or a quad flying 200 m out flies out of its own sky. */
     sky.dome.position.copy(camera.position);
@@ -2544,6 +2788,16 @@ export async function buildMap(shell, onProgress, options) {
       const dx = Math.max(0, Math.abs(eye.x - c.x) - cullHalf);
       const dz = Math.max(0, Math.abs(eye.z - c.z) - cullHalf);
       const d2 = dx * dx + dz * dz;
+      if (c.leaves) {
+        const near = d2 <= leafR2;
+        if (c.leafNear !== near) {
+          c.leafNear = near;
+          for (let j = 0; j < c.leaves.length; j += 1) {
+            const o = c.leaves[j];
+            o.geometry = near ? o.userData.leafHi : o.userData.leafLo;
+          }
+        }
+      }
       const on = d2 <= cullR2;
       if (c.on === on) {
         continue;
@@ -2667,6 +2921,7 @@ export async function buildMap(shell, onProgress, options) {
       cullAlways: cull.always.length,
       cullRadius,
       foliageKeep,
+      roundLeaves: { ...roundLeaves, radius: leafRound },
       planting: world.planting ?? null,
       places: {
         ...places.stats,
@@ -2699,6 +2954,13 @@ export async function buildMap(shell, onProgress, options) {
       shell.evictSessionRoots(scene);
       pipeline.dispose();
       disposeSceneGraph(scene, SESSION_TEXTURES);
+      /* A near canopy set shows its blob or its twin (passes 15 and 24),
+       * and the walk above freed only the one each set showed last, so a
+       * twin drawn once and then left behind stayed on the GPU. Freeing a
+       * geometry twice is a no-op. */
+      for (const g of leafSwapped) {
+        g.dispose();
+      }
     },
   };
 }

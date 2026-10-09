@@ -196,8 +196,12 @@ const BUILDER = {
   orbit: { x: 80, y: 82, radius: 104, theta: 2.2, phi: 0.5 },
 };
 
-/* The builder's chrome, which is the whole page except the drawing. */
-const BUILDER_HIDE = ['#tb-topbar', '#tb-keep', '#tb-palette', '#tb-side', '#tb-status', '#tb-toast', '#tb-modal'];
+/* The builder's chrome, which is the whole page except the drawing. The
+ * map's bar (`#tb-lapbar`, 2026-10-01) and the preview's Play box
+ * (`.tb-play`, 2026-09-26) arrived after this list was written, and the
+ * regeneration of 2026-10-07 photographed both over the drawing. */
+const BUILDER_HIDE = ['#tb-topbar', '#tb-keep', '#tb-palette', '#tb-side', '#tb-status', '#tb-toast', '#tb-modal',
+  '#tb-lapbar', '.tb-play'];
 
 async function captureBuilder(outDir) {
   const page = await openPage({ root, width: W, height: H, url: BUILDER.url });
@@ -229,6 +233,11 @@ async function captureBuilder(outDir) {
     })()`, 90000);
     const o = BUILDER.orbit;
     await page.evaluate(`(() => {
+      /* Again, for the Play box, which the preview makes only once its kit
+       * has arrived. */
+      ${JSON.stringify(BUILDER_HIDE)}.forEach((s) => {
+        document.querySelectorAll(s).forEach((n) => { n.style.display = 'none'; });
+      });
       const v = window.trackBuilder.view3d;
       v.orbit.target = { x: ${o.x}, y: 0, z: ${-o.y} };
       v.orbit.radius = ${o.radius};

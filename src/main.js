@@ -46,7 +46,8 @@
 
 import * as THREE from 'three';
 import { buildShell } from './render/shell.js';
-import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, setInkLines } from './render/quality.js';
+import { applyLook } from './render/look.js';
+import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, qualityOf, setInkLines } from './render/quality.js';
 import { readGpuInfo } from './render/gpuinfo.js';
 import { makeAttractCamera } from './render/attract.js';
 import { MangaLayer } from './render/manga.js';
@@ -64,6 +65,7 @@ import { InputManager, NAV_DEFLECT } from './input/input.js';
 import { PAD_CALM } from './input/padgate.js';
 import { mountTouchSticks, touchWanted } from './input/touchsticks.js';
 import { RcLink, LINK_DEFAULT, LINK_PRESETS } from './input/link.js';
+import { setTicketMeta, wasmFingerprint } from './share/bugs.js';
 import { FlightRecorder, downloadText, flightLogName } from './share/flightlog.js';
 import { PRACTICE_LAPS, Race, runComplete } from './game/race.js';
 import { TrickDetector } from './game/trickdetect.js';
@@ -84,6 +86,16 @@ import { Chase, CHASE_EVERY, pays } from './game/chase.js';
 import { sincos } from './props/trig.js';
 import { setCraftAirframe, CRAFT_R, CRAFT_WORLD_R, CRAFT_V_UP, CRAFT_V_DOWN, craftVerticalHalf, craftVerticalOffset, canPerch, shouldScorePass, shouldEnterTurtle, uprightPlantQuat, turtleFlipEase, turtleFlipLift, turtleSlerpQuat, TURTLE_STICK_MIN, TURTLE_SPEED, TURTLE_RATE, TURTLE_FLIP_MS, TURTLE_INVERT_UPZ, TURTLE_EXIT_UPZ, turtleClearance, findRestSpot, PROP_PLANE_MAX_UP_DOT, GRAZE_SPEED_MAX, BOUNCE_SPEED_MAX, BOUNCE_COOLDOWN_MS, LAND_DESCENT_MAX, LAND_HORIZONTAL_MAX, LAND_TILT_MAX_DEG, LAND_TILT_HARD_DEG, LAND_TIP_SPEED_MAX, GROUND_MU, GROUND_E, CLIP_SPAWN_GRACE_MS, CrashJudge, emptyWorldReport, foldWorldReport } from './game/collide.js';
 import { Ui, formatTime, WEIGHT_STOCK, clampWeight, gravityScaleFor, loadSettings, pacingTimerOn } from './ui/ui.js';
+import {
+  AIR_GRIP_STOCK,
+  MOTOR_KV_STOCK,
+  TuneLog,
+  airScaleFor,
+  effectiveTune,
+  kvScaleFor,
+  offBoardTune,
+  tuneKey,
+} from './share/tune.js';
 import { lostStickNotice, noRadioNotice } from './ui/stickhelp.js';
 import {
   adoptMapFromLocation, adoptMostFlownTrack, adoptShareFromLocation, boardPageUrl, fetchGhost,
@@ -170,14 +182,14 @@ const WASM_URL = new URL('../dist/sim.wasm', import.meta.url).href;
  * the collision dimensions and the drawn model: these two are a FRAME, and
  * moving one mid lap would move the floor under a craft that is flying.
  */
-let SPAWN_ALT = 0.045;
+let SPAWN_ALT = 0.033;
 /* The craft rests with its underside on the ground, not its centre.
  * Identical to SPAWN_ALT so the parked pose, the spawn state and a landing
  * all agree about where the ground holds the craft. */
-let REST_HEIGHT = 0.045;
+let REST_HEIGHT = 0.033;
 /* One seat for both, so they cannot drift apart. */
 function seatRestHeight(dims) {
-  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.045;
+  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.033;
   SPAWN_ALT = h;
   REST_HEIGHT = h;
 }
@@ -524,6 +536,9 @@ async function loadMap(shell, id, loading, options) {
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
+  /* The Gem look, once a world is built: colours and vertex tones only, nothing per frame (look.js). */
+  applyLook(map.scene, shell.quad);
+  map.shadowsOff = Boolean(options && options.quality && options.quality.shadowsOff);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a
    * document, and the shell has to tell two of them apart: see
@@ -1114,6 +1129,16 @@ export async function boot({ loading, bootStart, mapId }) {
     loading.progress('sim', simProgress[0], simProgress[1]);
   }
   const sim = await loadSim(await simBytes);
+  /*
+   * THE PHYSICS VERSION, NAMED ON EVERY TICKET. The hash of the bytes this
+   * page just instantiated, taken off the frame loop (the module is already
+   * in hand, and nothing waits on it), plus the aircraft in the hangar. A
+   * flight feel tune is only worth reading beside the physics it was flown
+   * on, and the deploy stamp alone cannot say: it moves on every deploy,
+   * physics or not. See setTicketMeta in src/share/bugs.js.
+   */
+  setTicketMeta({ airframeOf: () => ui.settings.airframe });
+  simBytes.then((bytes) => wasmFingerprint(bytes)).then((hash) => setTicketMeta({ wasm: hash }));
   if (typeof sim.e.sim_deflect !== 'function') {
     throw new Error('sim.wasm does not export sim_deflect');
   }
@@ -1291,7 +1316,7 @@ export async function boot({ loading, bootStart, mapId }) {
     : {});
   try {
     view = await loadMap(shell, ui.settings.map, loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
       ...worldDocument(ui.settings.map),
@@ -1311,7 +1336,7 @@ export async function boot({ loading, bootStart, mapId }) {
     ui.settings.map = 'custom';
     ui.renderMenu();
     view = await loadMap(shell, 'custom', loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
     });
@@ -1965,7 +1990,13 @@ export async function boot({ loading, bootStart, mapId }) {
       worldReportPtr = sim.e.malloc(11 * 8);
     }
     sim.e.sim_world_report(worldReportPtr);
-    worldReport.set(new Float64Array(sim.e.memory.buffer, worldReportPtr, 11));
+    /* One view, rebuilt only when the module's memory grows and the buffer changes identity: this runs every step. */
+    const buf = sim.e.memory.buffer;
+    if (worldReportView === null || worldReportViewBuf !== buf) {
+      worldReportView = new Float64Array(buf, worldReportPtr, 11);
+      worldReportViewBuf = buf;
+    }
+    worldReport.set(worldReportView);
     return worldReport;
   }
 
@@ -2068,6 +2099,12 @@ export async function boot({ loading, bootStart, mapId }) {
       trickWeight = runWeight;
     } else if (trickWeight !== runWeight) {
       trickWeightMixed = true;
+    }
+    /* One trick landed on a quad that grips the air or pulls differently and
+     * the run is not the machine the board compares, whatever the rest of it
+     * was flown on. */
+    if (offBoardTune(runAirGrip, runMotorKv)) {
+      trickTuned = true;
     }
   }
   /*
@@ -2653,7 +2690,18 @@ export async function boot({ loading, bootStart, mapId }) {
      * a slider with a different meaning and are orphaned the same way.
      */
     const gravPart = runGravityScale === 1 ? '' : `.g${Math.round(runGravityScale * 100)}`;
-    return `webfpv.best.${h.toString(16)}.${runVoltage.toFixed(2)}${style}${craft}${gravPart}`;
+    /*
+     * AND THE TWO FLIGHT FEEL SCALES, on the same rule and for the same
+     * reason: a lap on a quad that grips the air or pulls differently is a
+     * lap on another machine, and a personal best filed beside the stock
+     * one would mean nothing. Only when off 1.0, so every key that was ever
+     * written stays exactly where it is: `.a85` is Air grip 85, `.k110` is
+     * Motor power 110. Keyed on the multiple the module holds, like the
+     * weight, so the key names the machine and not the menu.
+     */
+    const airPart = runAirScale === 1 ? '' : `.a${Math.round(runAirScale * 100)}`;
+    const kvPart = runKvScale === 1 ? '' : `.k${Math.round(runKvScale * 100)}`;
+    return `webfpv.best.${h.toString(16)}.${runVoltage.toFixed(2)}${style}${craft}${gravPart}${airPart}${kvPart}`;
   }
 
   let mode = 'title'; /* title, flight, paused, results */
@@ -2996,6 +3044,8 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   const worldReport = new Float64Array(11);
   let worldReportPtr = 0;
+  let worldReportView = null;
+  let worldReportViewBuf = null;
   const frameReport = emptyWorldReport(new Float64Array(11));
   const passStats = {
     steps: 0,
@@ -3080,6 +3130,44 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   let runWeight = WEIGHT_STOCK;
   let runGravityScale = 1;
+  /*
+   * FLIGHT FEEL TUNING'S TWO SCALES, held on the Weight's rule and for its
+   * reason: the sliders are on the flight screen so a pilot can feel them
+   * arrive, so they apply at once (see the block after the Weight in
+   * applySettings) and the cost is paid on the lap. Each is the slider value
+   * the module is flying and the multiple it was handed, and both start at
+   * the module's own defaults, 100 and 1.0, which is what a pilot who never
+   * turns the mode on flies forever. Nothing is ever pushed to the module
+   * while they equal what is wanted, so a stock flight makes no call at all.
+   */
+  let runAirGrip = AIR_GRIP_STOCK;
+  let runAirScale = 1;
+  let runMotorKv = MOTOR_KV_STOCK;
+  let runKvScale = 1;
+  /* How many times either export has been called, for the harness: a stock
+   * flight must make none (window.__air). */
+  let tuneCalls = 0;
+  function pushTune(name, scale) {
+    if (typeof sim.e[name] !== 'function') {
+      return false;
+    }
+    tuneCalls += 1;
+    return sim.e[name](scale) === SIM_OK;
+  }
+  /*
+   * AND WHAT THE QUESTION AT THE END OF A FLIGHT IS ABOUT: the sim time spent
+   * in the air on each combination of the three sliders that was off stock,
+   * this flight (src/share/tune.js). Fed once a frame from the physics
+   * branch, read by the Ui when a flight ends, cleared when a new one starts.
+   * Stock airtime is never logged, so a pilot who is not tuning pays for one
+   * comparison a frame.
+   */
+  const tuneLog = new TuneLog();
+  let tuneLogKey = '';
+  let tuneLogMeta = null;
+  /* Whether a trick of the freestyle run was landed off the stock air or
+   * motors, which keeps the run off the public board. See noteTrickWeight. */
+  let trickTuned = false;
   /*
    * The weight the scored freestyle run's tricks were landed at: null
    * before the first, and `trickWeightMixed` once one lands at another.
@@ -4480,6 +4568,10 @@ export async function boot({ loading, bootStart, mapId }) {
     score.reset();
     trickWeight = null;
     trickWeightMixed = false;
+    trickTuned = false;
+    /* A new flight is a new question: what was flown last time is not what
+     * the end of this one is asked about. */
+    tuneLog.clear();
     trickDetector.restart();
     ui.resetScore();
     /* The counter's gaps and close calls from nothing. */
@@ -4524,9 +4616,46 @@ export async function boot({ loading, bootStart, mapId }) {
   let swapInFlight = false;
   let finishLoadingOnFrame = true;
 
+  /*
+   * THE RACE LINE: a whoop room's trail of crumbs through the next gates
+   * (src/render/raceline.js). The Race line setting, off by default; only a
+   * room has one, so on every other world this does nothing. Nothing is
+   * built or solved while it is off. The notice says what the trail is doing,
+   * so a pilot who turns it on and sees nothing yet knows why: it is being
+   * worked out, or this track has no line.
+   */
+  let raceLineSaid = '';
+  function raceLineNotice(st) {
+    const said = st.wanted ? st.phase : '';
+    if (said === raceLineSaid) {
+      return;
+    }
+    raceLineSaid = said;
+    if (said === 'solving') {
+      notice = { text: 'Working out the race line.', untilMs: performance.now() + 2800 };
+    } else if (said === 'refused') {
+      notice = { text: st.reason, untilMs: performance.now() + 4800 };
+    }
+  }
+  function applyRaceLine(s) {
+    const trail = view && view.raceLine;
+    if (!trail) {
+      return;
+    }
+    if (!trail.heard) {
+      trail.heard = true;
+      /* Never solve inside a flying frame: see step in render/raceline.js. */
+      trail.canSolve = () => !(mode === 'flight' && ui.screen === 'flight');
+      raceLineSaid = '';
+      trail.listen(raceLineNotice);
+    }
+    view.setRaceLine(Boolean(s.raceLine));
+  }
+
   function adoptLoadedView(keepPlace, stayMode, stayScreen) {
     /* A new view is a new set of solids, whether or not the place is kept. */
     uploadPlantWorld();
+    applyRaceLine(ui.settings);
     /* And a new GPU cost: the old world's average says nothing about this
      * one's. See reset in gpugate.js. */
     gpuGate.reset(true);
@@ -4541,6 +4670,7 @@ export async function boot({ loading, bootStart, mapId }) {
     if (!keepPlace) {
       race = new Race(view.gates, view.trackClass ?? 'full');
       race.setWeight(runWeight);
+      race.setTuned(offBoardTune(runAirGrip, runMotorKv));
       race.setRecordKey(recordKey());
       ui.setBest(race.bestMs, view.mode);
       adoptSpawn();
@@ -4604,6 +4734,7 @@ export async function boot({ loading, bootStart, mapId }) {
     return view
       && wantId === view.id
       && wantQ === view.graphics
+      && Boolean(ui.settings.shadowsOff) === Boolean(view.shadowsOff)
       && wantedCourseKey(wantId) === loadedCourseKey(view);
   }
 
@@ -4655,6 +4786,7 @@ export async function boot({ loading, bootStart, mapId }) {
     await yieldToPaint();
     const previous = view.id;
     const previousGraphics = view.graphics;
+    const previousShadowsOff = Boolean(view.shadowsOff);
     /*
      * The published map each side of the swap flies, when it is the built
      * world. The failure below names the one that would not build by its
@@ -4673,7 +4805,7 @@ export async function boot({ loading, bootStart, mapId }) {
     applyPixelRatio(shell, wantQ, renderScaleOf(ui.settings));
     try {
       view = await loadMap(shell, wantId, loading, {
-        quality: wantQ,
+        quality: qualityOf(ui.settings),
         renderScale: renderScaleOf(ui.settings),
         hideSponsors: replayClean,
         ...worldDocument(wantId),
@@ -4697,12 +4829,13 @@ export async function boot({ loading, bootStart, mapId }) {
       };
       ui.settings.map = previous;
       ui.settings.graphics = previousGraphics;
+      ui.settings.shadowsOff = previousShadowsOff;
       sharedMap = previousShared;
       ui.setSharedMap(sharedMap);
       try {
         applyPixelRatio(shell, previousGraphics, renderScaleOf(ui.settings));
         view = await loadMap(shell, previous, loading, {
-          quality: previousGraphics,
+          quality: qualityOf(ui.settings),
           renderScale: renderScaleOf(ui.settings),
           hideSponsors: replayClean,
           ...worldDocument(previous),
@@ -5203,10 +5336,13 @@ export async function boot({ loading, bootStart, mapId }) {
    * shipped hover, and the quad fell whenever W came up. Called from
    * applySettings, which every settings write reaches, the weight slider in
    * flight included, and from the run start, where the pack is latched.
+   * Motor power moves hover as well, by about 1 / kV, so the spring reads the
+   * percent the module is actually flying (runMotorKv, 100 until the tuning
+   * mode has moved it).
    */
   function syncKeyHover() {
     input.setKeyHover(hoverStickPercent(
-      normaliseRates(ui.settings.rates).throttleCap, runAirframe, runWeight, runVoltage,
+      normaliseRates(ui.settings.rates).throttleCap, runAirframe, runWeight, runVoltage, runMotorKv,
     ) / 100);
   }
 
@@ -5439,6 +5575,81 @@ export async function boot({ loading, bootStart, mapId }) {
        * time the race hears it, before anything can be flown. */
       race.setWeight(runWeight);
     }
+    /*
+     * FLIGHT FEEL TUNING: AIR GRIP AND MOTOR POWER, on the Weight's rule and
+     * straight after it, for the same reason (read the note at runWeight).
+     * They apply at once, and a lap the change lands inside is voided,
+     * because a lap flown on two different quads is not a lap flown on
+     * either. Between laps, on the start line, or in freestyle, nothing is
+     * interrupted.
+     *
+     * THE STOCK RULE, which is the whole safety of the feature: what is wanted
+     * is effectiveTune(s), and with the mode off that is 100 and 100 whatever
+     * is stored, so a pilot who never turns it on, or turns it on and touches
+     * nothing, asks for exactly the 1.0 and 1.0 the module already holds. The
+     * test is on the SCALE, so equal means no call at all: stock flight does
+     * not so much as invoke the exports.
+     *
+     * Guarded because an older dist/sim.wasm predates the export. On such a
+     * build the slider moves and the plant does not, so the guard also puts
+     * the stored value back to what the module is flying: a record must not
+     * be filed under an air or a motor the module never flew.
+     */
+    {
+      const want = effectiveTune(s);
+      const wantAir = airScaleFor(want.airGrip);
+      const wantKv = kvScaleFor(want.motorKv);
+      let moved = false;
+      if (wantAir !== runAirScale) {
+        if (pushTune('sim_set_air', wantAir)) {
+          runAirGrip = want.airGrip;
+          runAirScale = wantAir;
+          moved = true;
+        } else {
+          s.airGrip = runAirGrip;
+        }
+      }
+      if (wantKv !== runKvScale) {
+        if (pushTune('sim_set_motor_kv', wantKv)) {
+          runMotorKv = want.motorKv;
+          runKvScale = wantKv;
+          moved = true;
+        } else {
+          s.motorKv = runMotorKv;
+        }
+      }
+      if (moved) {
+        if (race.currentLapMs(simTimeMs) != null) {
+          race.voidLap('Feel changed\nLap voided', performance.now());
+        }
+        /* Motor power moves where hover sits on the stick, and the keyboard's
+         * throttle springs back to it: see syncKeyHover. */
+        syncKeyHover();
+      }
+      /* Stamped on every lap counted from here on, after the void above, so
+       * the lap the change landed in is thrown away and the next is counted
+       * under the new machine. */
+      race.setTuned(offBoardTune(runAirGrip, runMotorKv));
+      /* What the airtime is filed under from here on: the combination the
+       * module is flying, and only while the mode is on and something is off
+       * stock. Weight counts, because it is one of the three the question is
+       * about, but only inside the mode: a pilot who never turned tuning on
+       * is never asked. */
+      if (s.feelTuning && !(runWeight === WEIGHT_STOCK && runAirGrip === AIR_GRIP_STOCK && runMotorKv === MOTOR_KV_STOCK)) {
+        tuneLogKey = tuneKey(runAirframe, runWeight, runAirGrip, runMotorKv);
+        tuneLogMeta = {
+          airframe: runAirframe,
+          weight: runWeight,
+          airGrip: runAirGrip,
+          motorKv: runMotorKv,
+          gravityScale: runGravityScale,
+        };
+      } else {
+        tuneLogKey = '';
+        tuneLogMeta = null;
+      }
+      ui.paintAir();
+    }
     race.setRecordKey(recordKey());
     ui.setBest(race.bestMs, view.mode);
     if (!worldMatchesSettings()) {
@@ -5557,6 +5768,7 @@ export async function boot({ loading, bootStart, mapId }) {
     audio.setLevel(s.volume / 10);
     audio.setEnabled(s.sound);
     applyMix(s);
+    applyRaceLine(s);
     /* Last, after the weight, the aircraft, the pack and the rates above
      * have all settled on what the run is flying. */
     syncKeyHover();
@@ -5723,7 +5935,14 @@ export async function boot({ loading, bootStart, mapId }) {
           text: 'Practice laps stay off the public board.\nSet Laps to 1, 3 or 5 and fly it again.',
           untilMs: performance.now() + 3600,
         }
-        : { text: 'No clean lap to post.', untilMs: performance.now() + 2800 };
+        : (race.hasTunedLaps()
+          /* The laps are there and were left out on purpose: say so rather
+           * than telling a pilot who flew them that there is no clean lap. */
+          ? {
+            text: 'Laps flown on Air grip or Motor power off 100 stay off the public board.\nSet both back to 100 and fly it again.',
+            untilMs: performance.now() + 3800,
+          }
+          : { text: 'No clean lap to post.', untilMs: performance.now() + 2800 });
       return;
     }
     let name = readPilotName();
@@ -5914,6 +6133,9 @@ export async function boot({ loading, bootStart, mapId }) {
      * board labels a run with it, and a run landed at two has none. */
     summary.weight = clampWeight(trickWeight ?? runWeight, null);
     summary.weightMixed = trickWeightMixed;
+    /* A trick landed off the stock air or motors keeps the whole run off the
+     * public board, and the results row says so. See noteTrickWeight. */
+    summary.tuned = trickTuned;
     ui.showFreestyleResults(summary);
   }
 
@@ -5981,6 +6203,21 @@ export async function boot({ loading, bootStart, mapId }) {
     if (trickWeightMixed) {
       notice = {
         text: 'The weight changed during this run, so it has no one weight to go on the board with.\nFly it again at one weight.',
+        untilMs: performance.now() + 4200,
+      };
+      return;
+    }
+    /*
+     * AND A RUN FLOWN ON THE TUNED AIR OR MOTORS IS NOT POSTED. Weight is
+     * labelled on the board; Air grip and Motor power are not, so a run
+     * landed on them would sit beside stock runs looking identical. The
+     * results row greys itself for the same reason (summary.tuned,
+     * showFreestyleResults), so this is the backstop for a press that
+     * reaches it some other way.
+     */
+    if (summary.tuned || trickTuned) {
+      notice = {
+        text: 'Tricks landed on Air grip or Motor power off 100 stay off the public board.\nSet both back to 100 and fly it again.',
         untilMs: performance.now() + 4200,
       };
       return;
@@ -8031,6 +8268,13 @@ export async function boot({ loading, bootStart, mapId }) {
         /* Airtime: only steps flown off the stand. See airtimeMs. */
         if (!stood && !replayMode) {
           airtimeMs += flown * MS_PER_STEP;
+          /* And, with flight feel tuning on and a slider off stock, the same
+           * sim time filed under the combination it was flown on: what the
+           * end of the flight is asked about. An empty key is stock, so the
+           * common frame pays for one comparison. */
+          if (tuneLogKey !== '') {
+            tuneLog.add(tuneLogKey, tuneLogMeta, flown * MS_PER_STEP);
+          }
         }
         simStepIdx += flown;
         /* A replay steps nothing, so its frames read the cars as a frame
@@ -8484,6 +8728,9 @@ export async function boot({ loading, bootStart, mapId }) {
              * visit: the lap, the three and the weight they were flown at,
              * all from one weight. See boardRow. */
             board: race.boardRow(),
+            /* Whether a lap of this run was left off it for being flown on
+             * the tuned air or motors, so the Upload row can say why. */
+            offBoard: race.hasTunedLaps(),
           });
         }
       }
@@ -9939,6 +10186,9 @@ export async function boot({ loading, bootStart, mapId }) {
    * `race` at call time; this one captured the object identity at boot, so
    * after a map swap it answered with the previous map's race. */
   window.__race = () => race;
+  /* The whoop room's race line, for the harness: its state, or null on a
+   * world that has none. */
+  window.__raceLine = () => (view && view.raceLine ? view.raceLine : null);
   /* The support prompt's session clock, read and set. A check cannot fly
    * for twenty minutes to reach the line that faulted every frame on
    * 2026-10-05, so scripts/longflight-check.js sets the clock just short of
@@ -10386,6 +10636,20 @@ export async function boot({ loading, bootStart, mapId }) {
     scale: runGravityScale,
     module: typeof sim.e.sim_gravity === 'function' ? sim.e.sim_gravity() : null,
     key: recordKey(),
+    /* Flight feel tuning, the same discipline: what the menu holds, what the
+     * run believes, and what the module says back. `calls` is how many times
+     * either export was invoked, which is zero for any flight that never
+     * left stock. */
+    tuning: Boolean(ui.settings.feelTuning),
+    airGrip: runAirGrip,
+    airScale: runAirScale,
+    moduleAir: typeof sim.e.sim_air === 'function' ? sim.e.sim_air() : null,
+    motorKv: runMotorKv,
+    kvScale: runKvScale,
+    moduleKv: typeof sim.e.sim_motor_kv === 'function' ? sim.e.sim_motor_kv() : null,
+    calls: tuneCalls,
+    tuned: race.tuned === true,
+    flown: tuneLog.dominant(),
   });
   window.__contacts = () => ({
     ...passStats,
@@ -11089,6 +11353,9 @@ export async function boot({ loading, bootStart, mapId }) {
     lowLatency: shell.granted.desynchronized,
     opaque: shell.granted.opaque,
     pixelRatio: Math.round(shell.pixelRatio * 100) / 100,
+    /* The Shadows row, because Medium with it Off is a lighter machine than
+     * the report's graphics field says. */
+    shadowsOff: Boolean(ui.settings.shadowsOff),
     /* Auto graphics: its resolution factor now, and whether it moved the
      * preset this session. Null when the pilot fixed a preset by hand. */
     auto: ui.settings.graphicsAuto
@@ -11154,6 +11421,26 @@ export async function boot({ loading, bootStart, mapId }) {
     gpuMs: gpuGate.state.samples ? gpuGate.state.gpuMs : null,
     lowLatency: shell.granted.desynchronized && ui.settings.lowLatency !== false,
   }));
+  /*
+   * FLIGHT FEEL TUNING'S TWO HANDLES ON THE MODULE, given to the Ui rather
+   * than reached for by it.
+   *
+   * The probe is the flight the question at its end is about: the
+   * combination of Weight, Air grip and Motor power that was flown longest
+   * this flight, with its airtime, or null when nothing was flown off stock
+   * in the mode (src/share/tune.js, TuneLog). The caps are which sliders this
+   * module can honestly move. An older dist/sim.wasm has neither export, and
+   * a slider that moves nothing is a lie, so the Ui draws only the rows the
+   * module can answer.
+   */
+  ui.setTuneProbe(() => {
+    const d = tuneLog.dominant();
+    return d ? { ...d, airtimeS: d.ms / 1000 } : null;
+  });
+  ui.setTuneCaps({
+    air: typeof sim.e.sim_set_air === 'function',
+    kv: typeof sim.e.sim_set_motor_kv === 'function',
+  });
   window.__perfProbe = () => (ui.perfProbe ? ui.perfProbe() : null);
   /* The predicted view on the last frame: whether it moved the camera, how
    * far ahead it looked and how far it turned and moved the view. Harness
@@ -11483,6 +11770,7 @@ export async function boot({ loading, bootStart, mapId }) {
     name: view.name,
     mode: view.mode,
     graphics: view.graphics,
+    shadowsOff: Boolean(view.shadowsOff),
     gates: view.gates.length,
     sponsorsPainted: view.sponsorsPainted ?? 0,
     spawn: { x: startX, y: startY, z: startZ, yaw: startYaw },

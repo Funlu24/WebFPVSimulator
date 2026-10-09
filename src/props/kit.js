@@ -49,6 +49,7 @@ import { styleOf, tiltOf } from './types.js';
 import { tiltMeasure, tiltParts } from './solids.js';
 import { assetOf, partsOf, FAMILY_MATERIALS, FAMILY_PAINTERS } from './catalog.js';
 import * as PT from './textures.js';
+import { clumpBlob, CLUMP_SHAPES, CLUMP_SQUASH } from '../render/clump.js';
 
 /* The town's standard shadow tints. */
 const T = 0x6f6790;
@@ -115,11 +116,11 @@ const SPEC = {
   /* the town's canopy tones: the cherry's blossom on the high key ramp,
    * and two leaf greens for the flower boxes. The street tree and the pine
    * carry their own greens in src/props/street.js. */
-  blossom0: { c: PAL.blossomLight, bands: 'soft', tint: 0xe2c3d2, noReceive: true },
-  blossom1: { c: PAL.blossom, bands: 'soft', tint: 0xd8b2c6, noReceive: true },
-  blossom2: { c: PAL.blossomDeep, bands: 'soft', tint: 0xc99cba, noReceive: true },
-  leaf0: { c: 0x8cb884, tint: 0x5f7390, noReceive: true },
-  leaf1: { c: 0x5f9470, tint: 0x4f6488, noReceive: true },
+  blossom0: { c: PAL.blossomLight, bands: 'soft', tint: 0xe2c3d2, noReceive: true, foliage: true },
+  blossom1: { c: PAL.blossom, bands: 'soft', tint: 0xd8b2c6, noReceive: true, foliage: true },
+  blossom2: { c: PAL.blossomDeep, bands: 'soft', tint: 0xc99cba, noReceive: true, foliage: true },
+  leaf0: { c: 0x8cb884, tint: 0x5f7390, noReceive: true, foliage: true },
+  leaf1: { c: 0x5f9470, tint: 0x4f6488, noReceive: true, foliage: true },
   /* course furniture: the pennant's mast and the printed panels' edge,
    * which K.pennant and K.panel name; the rest is src/props/course.js's */
   flagMast: { c: 0x9aa0a8, tint: TD }, panelEdge: { c: 0x3d4461, tint: 0x3f3a50 },
@@ -304,6 +305,16 @@ export function propMaterial(name, look = null) {
     OWNED.add(m);
   } else if (s.net) {
     m = flat({ color: dim ? dimmed(0xffffff, look.flats) : 0xffffff, map: netTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide, cache: false });
+    OWNED.add(m);
+  } else if (s.foliage) {
+    /*
+     * A canopy tone takes the comic pass's leaf clumps, which is a mark in
+     * its userData (src/render/comic.js, FOLIAGE). So it is the kit's own
+     * material, not the shared cache's: the town's canopies are built from
+     * the same arguments and cel() would hand both the same object.
+     */
+    m = cel({ color: s.c, bands: s.bands ?? 3, tint: s.tint ?? T, cache: false });
+    m.userData.comicFoliage = true;
     OWNED.add(m);
   } else {
     m = cel({ color: s.c, bands: s.bands ?? 3, tint: s.tint ?? T });
@@ -499,20 +510,32 @@ const UNIT = {
 };
 
 /*
- * A canopy blob: the same icosahedron, with its normals taken from the
- * sphere it stands for rather than from its faces. At detail 0 three.js
- * gives every vertex its face's normal, so the cel ramp quantised each of
- * the twenty facets on its own and a tree's canopy was a mosaic of lit and
- * shaded triangles. Every vertex of the unit icosahedron is on the unit
- * sphere, so its normal is its own direction, as the town's planet has it
+ * A canopy blob: an icosahedron with its normals taken from the sphere it
+ * stands for rather than from its faces. At detail 0 three.js gives every
+ * vertex its face's normal, so the cel ramp quantised each of the twenty
+ * facets on its own and a tree's canopy was a mosaic of lit and shaded
+ * triangles. Every vertex is on the sphere, so its normal is its own
+ * direction, as the town's planet has it
  * (src/maps/city/vendored/world/planet.js) and the town's own canopies now
  * do (buildSakura and buildGrove, PATCH-world-trees.diff). The ramp gives
- * each blob two or three clean bands; the outline keeps its facets, and
- * bake() carries the normals through the blob's squash with the inverse
- * transpose. Rubble and a sandbag keep the faceted blob.
+ * each blob two or three clean bands, and bake() carries the normals
+ * through the blob's squash with the inverse transpose. Rubble and a
+ * sandbag keep the faceted blob.
+ *
+ * EIGHTY FACES, NOT TWENTY (graphics pass 15). With round shading the
+ * outline still kept the facets: the ink pass finds creases in depth, and
+ * the twenty faced blob's 42 degree turn at every edge is a crease, so a
+ * cherry close up was a bunch of inked pink gems. Detail 1 turns about 20
+ * degrees at an edge and its silhouette is a near circle. It is drawn at
+ * 0.92 of the sphere, which gives it the twenty faced blob's average
+ * silhouette (0.906 by projected area, 0.938 by mean width), so a tree is
+ * as full as it was. Its inradius is then 0.86, outside the 0.78 the
+ * canopy's solid is cut to in street.js, so the solid stays inside what is
+ * drawn. A tree in the yard is eighteen or so blobs, so this is about a
+ * thousand more triangles a tree: 5,670 to 22,680 in the default yard.
  */
 function roundBlob() {
-  const g = new THREE.IcosahedronGeometry(1, 0);
+  const g = new THREE.IcosahedronGeometry(0.92, 1);
   const p = g.attributes.position;
   const n = g.attributes.normal;
   const v = new THREE.Vector3();
@@ -521,6 +544,82 @@ function roundBlob() {
     n.setXYZ(i, v.x, v.y, v.z);
   }
   return g;
+}
+
+/*
+ * CLUMPS (graphics pass 23): on Medium and High each blob is drawn as a
+ * clump of lumps, clumpBlob in src/render/clump.js, which says why and how
+ * the solid stays inside it. The town draws its near canopies with the
+ * same shapes since pass 24, which is why they live there and not here.
+ */
+
+/*
+ * EACH BLOB ITS OWN CODE (graphics pass 23). The ink pass finds creases in
+ * depth, so an eighty faced blob still inked a line at every turn between
+ * faces and a dot at every vertex, worst toward the rim, and a cherry in
+ * the yard was a bunch of geodesic balloons. The town's canopies stopped
+ * that in pass 19 by writing a code per blob for the ink to read
+ * (src/render/comic.js, A CANOPY BLOB'S CODE), hashed from where each
+ * instance stands. The kit bakes a tone's blobs into one mesh, so here the
+ * code rides in the geometry: one float on every vertex of a blob. A
+ * convex crease inside one blob is then not inked, and its outline and the
+ * line where it meets the next blob are.
+ *
+ * Codes are handed out in the order the blobs are drawn, 53 apart round
+ * 128 values, so any 128 blobs in a row have 128 different codes, a whole
+ * tree's blobs among them, and two touching blobs never read as one. The
+ * order is the build's, so the same map draws the same codes. A copy of
+ * the blob per code, made once: each shares its shape's buffers and adds
+ * one float a vertex.
+ */
+const BLOB_CODES = 128;
+const CODED = { round: [], clump: [] };
+
+function codedLeaf(seq, clumps) {
+  const k = (seq * 53) % BLOB_CODES;
+  const set = clumps ? CODED.clump : CODED.round;
+  let g = set[k];
+  if (!g) {
+    const u = clumps ? clumpBlob(k % CLUMP_SHAPES) : UNIT.leaf;
+    g = new THREE.BufferGeometry();
+    if (u.index) {
+      g.setIndex(u.index);
+    }
+    for (const name of Object.keys(u.attributes)) {
+      g.setAttribute(name, u.attributes[name]);
+    }
+    const code = new Float32Array(u.attributes.position.count).fill((k + 0.5) / BLOB_CODES);
+    g.setAttribute('comicBlob', new THREE.BufferAttribute(code, 1));
+    set[k] = g;
+  }
+  return g;
+}
+
+/*
+ * A canopy tone's twin for the leaf blobs alone, marked to write those
+ * codes. Only leaf() draws with it, so every geometry in its batches has
+ * the attribute: bake() keeps only the attributes every part shares, and a
+ * flower box's ball in the same tone would have dropped it for the batch.
+ * A tone that is not a canopy's is handed back as it is.
+ */
+function leafMaterial(name, look) {
+  const s = SPEC[name];
+  if (!s || !s.foliage) {
+    return propMaterial(name, look);
+  }
+  const key = `${name}:leaf`;
+  let m = MATS.get(key);
+  if (!m) {
+    m = cel({ color: s.c, bands: s.bands ?? 3, tint: s.tint ?? T, cache: false });
+    m.userData.comicFoliage = true;
+    m.userData.comicBlob = true;
+    m.userData.comicBlobBaked = true;
+    m.userData.propCast = !s.noCast;
+    m.userData.propReceive = !s.noReceive;
+    OWNED.add(m);
+    MATS.set(key, m);
+  }
+  return m;
 }
 
 /*
@@ -594,8 +693,10 @@ const FACE_ROT = {
  */
 export class PropKit {
   /* `look` is a time of day's say over the materials, from
-   * src/maps/built/looks.js, or nothing for the town's own golden hour. */
-  constructor(look = null) {
+   * src/maps/built/looks.js, or nothing for the town's own golden hour.
+   * `clumps` false draws a canopy's blobs round rather than lumpy (see
+   * clumpBlob), as a built map does on Low. */
+  constructor(look = null, { clumps = true } = {}) {
     /* Handed to a family's draw() so it can build a geometry the kit has no
      * word for, without importing a renderer into a file Node must load. */
     this.THREE = THREE;
@@ -607,6 +708,9 @@ export class PropKit {
     /* At night, every lamp drawn, in world metres: see add(). */
     this.lamps = [];
     this.lampMat = propMaterial('lampGlow');
+    /* Canopy blobs drawn so far, which hands out their codes: codedLeaf. */
+    this.leaves = 0;
+    this.clumps = clumps !== false;
   }
 
   /* Where the next element goes: world position and heading. */
@@ -762,12 +866,20 @@ export class PropKit {
     this.add(mat, UNIT.blob, new THREE.Matrix4().compose(_v, _q, _s));
   }
 
-  /* A blob of a tree's canopy, shaded round: see roundBlob. */
+  /* A blob of a tree's canopy, shaded round (roundBlob) or drawn as a
+   * clump (clumpBlob), and coded so it inks as one shape (codedLeaf). */
   leaf(mat, c, r, ry, spin) {
     _v.set(c[0], c[1], c[2]);
     _s.set(r, ry, r);
     _q.setFromEuler(new THREE.Euler(spin[0], spin[1], spin[2]));
-    this.add(mat, UNIT.leaf, new THREE.Matrix4().compose(_v, _q, _s));
+    const m = new THREE.Matrix4().compose(_v, _q, _s);
+    if (typeof mat !== 'string') {
+      this.add(mat, UNIT.leaf, m);
+      return;
+    }
+    const clump = this.clumps && ry <= r * CLUMP_SQUASH;
+    this.add(leafMaterial(mat, this.look), codedLeaf(this.leaves, clump), m);
+    this.leaves += 1;
   }
 
   cone(mat, base, r, h, seg = 10) {

@@ -1074,6 +1074,37 @@ section('the keyboard throttle: hover is the measured one');
     [hoverStickPercent(100, 'whoop65', 100, 4.2), hoverStickPercent(100, 'whoop65', 120, 4.2),
       hoverStickPercent(100, 'whoop65', 140, 4.2)].join(' '));
 
+  /*
+   * MOTOR POWER (2026-10-08). A hotter wind turns the same prop on less duty,
+   * so hover sits lower on the stick by about 1 / kV, and the keyboard
+   * springs to it. The stops are flightcheck's own readings (--kv=0.8 and
+   * 1.2), 100 must be the table's figure exactly, and the places between are
+   * what flightcheck read at 90 and 110.
+   */
+  check('Motor power moves hover about 1 / kV: five inch 43.8 at 80 and 29.1 at 120 against 35.0, whoop 50.0 and 33.2 against 39.9',
+    hoverStickPercent(100, '5inch', 100, 4.2, 100) === 35 && hoverStickPercent(100, '5inch', 100, 4.2, 80) === 43.8
+    && hoverStickPercent(100, '5inch', 100, 4.2, 120) === 29.1 && hoverStickPercent(100, 'whoop65', 100, 4.2, 100) === 39.9
+    && hoverStickPercent(100, 'whoop65', 100, 4.2, 80) === 50 && hoverStickPercent(100, 'whoop65', 100, 4.2, 120) === 33.2,
+    [hoverStickPercent(100, '5inch', 100, 4.2, 80), hoverStickPercent(100, '5inch', 100, 4.2, 120),
+      hoverStickPercent(100, 'whoop65', 100, 4.2, 80), hoverStickPercent(100, 'whoop65', 100, 4.2, 120)].join(' '));
+  const kvAgainst = [
+    ['5inch', 100, 4.2, 90, 100, 39.0], ['5inch', 100, 4.2, 110, 100, 31.7],
+    ['5inch', 100, 4.2, 90, 65, 57.1], ['5inch', 100, 4.2, 110, 65, 46.2], ['5inch', 100, 4.2, 110, 40, 71.8],
+    ['whoop65', 100, 4.2, 90, 100, 44.4], ['whoop65', 100, 4.2, 110, 100, 36.3], ['whoop65', 100, 4.2, 110, 65, 53],
+  ].map(([af, w, v, kv, cap, want]) => [af, kv, cap, want, hoverStickPercent(cap, af, w, v, kv)]);
+  check('between the stops it follows 1 / kV, inside a quarter of a point of what flightcheck read at 90 and 110',
+    kvAgainst.every(([, , , want, got]) => Math.abs(got - want) <= 0.25),
+    kvAgainst.map(([af, kv, cap, want, got]) => `${af} kv${kv} cap${cap} ${want}/${got.toFixed(2)}`).join(' '));
+  check('and it composes with weight and pack: the heaviest column on a tired pack is 51.6 at 100, higher at 80 and lower at 120',
+    hoverStickPercent(100, '5inch', 140, 3.5, 100) === 51.6 && hoverStickPercent(100, '5inch', 140, 3.5, 120) < 51.6
+    && hoverStickPercent(100, '5inch', 140, 3.5, 80) > 51.6,
+    [hoverStickPercent(100, '5inch', 140, 3.5, 80), hoverStickPercent(100, '5inch', 140, 3.5, 100),
+      hoverStickPercent(100, '5inch', 140, 3.5, 120)].join(' '));
+  check('outside the slider it reads the stops, and junk or nothing reads the stock figure',
+    hoverStickPercent(100, '5inch', 100, 4.2, 50) === 43.8 && hoverStickPercent(100, '5inch', 100, 4.2, 200) === 29.1
+    && hoverStickPercent(100, '5inch', 100, 4.2, 'x') === 35 && hoverStickPercent(100, '5inch', 100, 4.2, null) === 35
+    && hoverStickPercent(100, '5inch', 100, 4.2, undefined) === 35);
+
   const rig = new Rig(null);
   const im = rig.im;
   const hold = (code, ms) => { im.keys.add(code); rig.run(ms); };

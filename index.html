@@ -1301,6 +1301,49 @@
       }
       .osd-air-hint-btn:focus-visible { outline: 1px solid var(--cream); outline-offset: 2px; }
       /*
+       * FLIGHT FEEL TUNING'S GROUP, under the Weight slider in the same
+       * block, and only while the mode is on (paintAir sets hidden). The two
+       * rows are built from the Weight slider's own classes, so everything
+       * above applies to them without a copy: the fade in the air, the
+       * amber thumb, the slate caption at stock, the dim under the pause.
+       * Only what is new is written here, and only as new classes: the
+       * .osd-air* names are a contract across the deploy cache seam.
+       *
+       * Its card is the Weight card's, hung above the block the same way.
+       * It is never shown at the same time as that one (setAirSlider), so
+       * the two share a place without sharing a pixel.
+       */
+      .osd-tune {
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+      }
+      .osd-tune[hidden] { display: none; }
+      .osd-tune-item {
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+      }
+      .osd-tune-item[hidden] { display: none; }
+      /* Outlined, not filled: the filled amber pill is the card's Got it,
+         and this is a control that stays on the glass for as long as the
+         quad is down. Faded with the rest in the air. */
+      .osd-tune-reset {
+        margin-top: 3px; padding: 3px 10px; font-size: 11px;
+        background: transparent; color: var(--amber);
+        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.42);
+        transition: opacity 0.25s ease, visibility 0s linear 0s;
+      }
+      .osd-air.is-aloft .osd-tune-reset {
+        opacity: 0; visibility: hidden;
+        transition: opacity 0.8s ease 0.6s, visibility 0s linear 1.4s;
+      }
+      /* Two classes, so the short screen rule below (one class, later in the
+         sheet) cannot hang this card under a block that is now taller than
+         the room beneath it. On a screen that short the card is not raised
+         at all: see tuneCardRoom in src/ui/ui.js, which uses the same 560. */
+      .osd-air-hint.osd-tune-hint { top: auto; bottom: calc(100% + 10px); }
+      .osd-air-hint.osd-tune-hint::after {
+        top: auto; bottom: -5px;
+        box-shadow: inset -1px -1px 0 0 rgba(255, 212, 92, 0.42);
+      }
+      /*
        * SHORT SCREEN: THE CARD HANGS BELOW THE SLIDER INSTEAD.
        *
        * Measured on an 844 by 390 landscape phone with the thumb sticks up.
@@ -1529,7 +1572,7 @@
        * key, shown and out of reach. So it is put away there, on every
        * device, and the row is the one control on that screen.
        */
-      .osd.dim .osd-air-row, .osd.dim .osd-air-cap { visibility: hidden; }
+      .osd.dim .osd-air-row, .osd.dim .osd-air-cap, .osd.dim .osd-tune-reset { visibility: hidden; }
       /* Portrait is the hinted-away state, but it still has to be tidy:
          the plates go back to the single size, because two doubled plates
          are wider than the screen. The two lines ride just above the

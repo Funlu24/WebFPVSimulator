@@ -187,7 +187,7 @@ export let CRAFT_WORLD_HULL = simLenToWorld(CRAFT_HULL_R);
  * with the craft and goes to nothing in the vertical at knife edge on its
  * own, which is right, a quad on its side is symmetric about its centre.
  */
-export let CRAFT_V_DOWN = 0.045;
+export let CRAFT_V_DOWN = 0.033;
 export let CRAFT_V_UP = 0.038;
 export let CRAFT_V_HALF = (CRAFT_V_DOWN + CRAFT_V_UP) * 0.5;
 /* Body frame, along the craft's own up axis: where the hull's geometric

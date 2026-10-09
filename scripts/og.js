@@ -63,10 +63,18 @@ const H = 630;
  * Everything in the overlay that is not the wordmark. `.brand-best` is the
  * lap chip, which says "No lap recorded yet" on a fresh browser and would
  * put that sentence on every share of the site.
+ *
+ * And everything the title has grown since this list was written, which is
+ * scripts/gatecards.js's list without `.brand`: the gate's four cards
+ * (2026-09-09), which a regeneration on 2026-10-07 photographed over the
+ * whole field, the Patreon chip beside the beta chip, and the frame bars,
+ * the music dock and the notes under the cards.
  */
 const HIDE = [
   '.menu-stage', '.hint', '.lede', '.title-foot',
   '.bug-chip', '.brand-best', '.keep-note', '.first-note', '.beta-note',
+  '.brand-patreon', '.gate-cards', '.gate-note', '.wiki-teaser', '.craft-showcase',
+  '.frame-top', '.frame-bot', '.music-dock',
 ];
 
 /* Camera, then the point it looks at. Metres, world frame. */

@@ -45,6 +45,8 @@ import {
   celMaterial, outlineHull, updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
+import { setComicQuality, COMIC_SHADING } from './comic.js';
+import { CIRRUS_GLSL, cirrusUniforms } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
 /* The obstacle dimensions come from the track module, which holds MultiGP's
@@ -86,6 +88,7 @@ const ROOM_HEIGHT = ROOM_HEIGHT_TRUE * MICRO_SCALE;
 const RACEGOW_PIPE_OD = RACEGOW_PIPE_OD_TRUE * MICRO_SCALE;
 const RACEGOW_GATE_OPENING_MAX = RACEGOW_GATE_OPENING_MAX_TRUE * MICRO_SCALE;
 import { qualityFor } from './quality.js';
+import { makeShadowRate } from './shadowrate.js';
 /* The shape of the built in circuit, shared with the map screen's thumbnail
  * so the picture of the course and the course cannot drift apart. */
 import { circuitPoint, CIRCUIT_POINTS, CIRCUIT_STATIONS } from '../game/circuit.js';
@@ -93,6 +96,7 @@ import { GUIDE, guideFromPolyline } from '../game/guide.js';
 /* The gate frame belongs to the scorer, so the mesh and the test agree. */
 import { travelAxis } from '../game/race.js';
 import { buildGuideMesh } from './marks.js';
+import { createRaceLine } from './raceline.js';
 /* The printed vinyl a course is dressed in, shared with the track builder's
  * own preview so an author sees the gates they will fly. See src/art/. */
 import {
@@ -153,8 +157,12 @@ function makeBaker() {
         b = { material: o.material, hull: o.material.userData.hullColor != null, geos: [] };
         buckets.set(key, b);
       }
-      /* Non-indexed so polyhedra and cylinders merge into one buffer. */
-      const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      /* Every member is indexed, so polyhedra and cylinders merge into one indexed buffer and a shared vertex is
+       * shaded once, not once per triangle corner. A member that arrives without an index is welded first, with a
+       * tolerance far under the smallest prop (the whoop room is built at MICRO_SCALE, and the default 1e-4 could
+       * weld neighbouring vertices of a small one). mergeVertices joins vertices equal in EVERY attribute, so a
+       * flat face keeps its own corners, its normal differs, and the picture is the one the exploded buffer drew. */
+      const geo = o.geometry.index ? o.geometry.clone() : mergeVertices(o.geometry, 1e-6);
       geo.applyMatrix4(o.matrixWorld);
       b.geos.push(geo);
     });
@@ -314,6 +322,8 @@ const SKY_GLSL = /* glsl */ `
     return col;
   }
 `;
+/* The high streak cloud the dome paints (graphics pass 18) is CIRRUS_GLSL
+ * in ./comicsky.js, which the town's and the yard's domes share. */
 const FOG_NEAR = 130;
 /* 2200, not 780. At 780 every piece of terrain past that distance renders
  * as exactly the horizon colour, 0.781 linear, which leaves no room above
@@ -1003,7 +1013,7 @@ function pitchSurface(pitch, course, sponsorMarks) {
   geo.rotateX(-Math.PI / 2);
   /* Same material family as the terrain, so the pitch takes the same cel
    * ramp and the same cloud shadows and does not read as a decal. */
-  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, transparent: true });
+  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, transparent: true, comic: 'ground' });
   mat.map = tex;
   const mesh = new THREE.Mesh(geo, mat);
   /* Two centimetres up. The ground under the pitch is levelled to exactly
@@ -1346,9 +1356,12 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   return c;
 }
 
-function terrain(height, samples, pitch) {
+function terrain(height, samples, pitch, indoor = false) {
   const size = 1700;
-  const seg = 230;
+  /* Indoors the height field is dead level and the room's boards lie over the terrain to well past its walls, so
+   * nothing of it is ever seen: two cells a side hold the plane, instead of 105,800 triangles drawn in two of the
+   * room's three passes. The mesh stays because the ambient occlusion pass below reads its vertices. */
+  const seg = indoor ? 2 : 230;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -1378,10 +1391,12 @@ function terrain(height, samples, pitch) {
       colors[i * 3 + 1] += (rockCol.g - colors[i * 3 + 1]) * k;
       colors[i * 3 + 2] += (rockCol.b - colors[i * 3 + 2]) * k;
     }
-  };
-  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34 });
+  }
+  geo.attributes.color.needsUpdate = true;
+  /* comic: its vertices paint it grass and rock, and the comic pass gives
+   * each its own texture (comic.js, GROUND). */
+  const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, comic: 'ground' });
   mat.vertexColors = true;
-  /* ekleyeceğiniz kısım: */
   const grassTex = new THREE.TextureLoader().load('assets/ground/grass.jpg');
   grassTex.colorSpace = THREE.SRGBColorSpace;
   grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
@@ -1476,6 +1491,54 @@ function grassField(samples, rng, pitch) {
  * silhouette the post pass already inks from depth. Off for the far scatter
  * and the horizon, which is where most of the trees are.
  */
+/*
+ * Break a canopy blob's sphere into leaf clumps, 2026-10-07: a perfect
+ * icosphere reads as a ball on a stick, and the lumps are what make a
+ * stylised tree read as foliage. Every vertex moves along its own radius by
+ * a smooth function of its direction and the tree's place, so two vertices
+ * at one place (a uv seam) move together and the mesh stays closed.
+ *
+ * The normals stay mostly the sphere's. A 42 vertex blob shaded with its
+ * own lumpy normals breaks into flat facets, each with its own toon band,
+ * which reads as a rock. Painted foliage is shaded as one round mass with a
+ * clumped outline, the old trick of borrowing a sphere's normals for a
+ * bush, so the lumps show in the silhouette and the ink and only a quarter
+ * of their slope reaches the shading.
+ *
+ * It draws nothing from the world's rng (the seed is the tree's place), so
+ * the world, and every collider placed after it, is exactly as it was. The
+ * canopy's collider is still the undeformed radius from the geometry's
+ * parameters, and the lumps are within a fifth of it.
+ */
+function lumpCanopy(geo, r, seed) {
+  const pos = geo.attributes.position;
+  const unit = new Float32Array(pos.count * 3);
+  const v = new THREE.Vector3();
+  for (let k = 0; k < pos.count; k += 1) {
+    v.fromBufferAttribute(pos, k).normalize();
+    v.toArray(unit, k * 3);
+    const n =
+      Math.sin(v.x * 4.2 + seed) * Math.sin(v.y * 3.7 + seed * 1.3) * 0.6 +
+      Math.sin(v.z * 4.9 + seed * 0.7) * Math.cos(v.x * 2.8 - seed) * 0.4;
+    /* Flatter underneath, the way a canopy hangs. */
+    const under = v.y < -0.25 ? 0.85 : 1;
+    v.multiplyScalar(r * (1 + n * 0.19) * under);
+    pos.setXYZ(k, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const nrm = geo.attributes.normal;
+  for (let k = 0; k < nrm.count; k += 1) {
+    v.fromBufferAttribute(nrm, k).multiplyScalar(0.25);
+    v.x += unit[k * 3] * 0.75;
+    v.y += unit[k * 3 + 1] * 0.75;
+    v.z += unit[k * 3 + 2] * 0.75;
+    v.normalize();
+    nrm.setXYZ(k, v.x, v.y, v.z);
+  }
+  nrm.needsUpdate = true;
+}
+
 function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
   const g = new THREE.Group();
   const scale = (0.85 + rng() * 1.5) * bigness;
@@ -1504,10 +1567,10 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
      * edge, which is how this style draws a canopy. */
     let blobGeo = new THREE.IcosahedronGeometry(r, 1);
     blobGeo = mergeVertices(blobGeo);
-    blobGeo.computeVertexNormals();
+    lumpCanopy(blobGeo, r, x * 0.37 + z * 0.61 + i * 1.7);
     const blob = new THREE.Mesh(
       blobGeo,
-      celMaterial({ color: tint, rim: 0.3 }),
+      celMaterial({ color: tint, rim: 0.3, comic: 'foliage' }),
     );
     const a = rng() * Math.PI * 2;
     const spread = i === 0 ? 0 : (0.35 + rng() * 0.55) * scale;
@@ -4759,16 +4822,28 @@ function attractOrbit(course, gates, tops, heightFn) {
   };
 }
 
-function skyDome() {
+function skyDome(q = null) {
   const geo = new THREE.SphereGeometry(1500, 40, 24);
+  /* The streak cloud on Medium and High, compiled in rather than switched
+   * by a uniform: Low's dome is main's program. It was a uniform branch
+   * until the sweep after graphics pass 25, which found Low paying, in a
+   * software renderer, for comic code it never drew (src/render/comic.js,
+   * chunkOn), and a preset change builds the dome again anyway. */
+  const cirrus = COMIC_SHADING && !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
+    defines: cirrus ? { COMIC_CIRRUS: 1 } : {},
+    /* The streak cloud's fwidth. WebGL 2 has derivatives built in and three
+     * ignores this there; on WebGL 1, which three falls back to and main
+     * draws on, it is what lets the dome compile at all. */
+    extensions: { derivatives: cirrus },
     uniforms: {
       uHigh: { value: new THREE.Color(SKY_HIGH) },
       uHorizon: { value: new THREE.Color(HORIZON) },
       uSun: { value: SUN_DIR.clone() },
+      ...(cirrus ? cirrusUniforms() : {}),
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -4779,12 +4854,20 @@ function skyDome() {
     `,
     fragmentShader: /* glsl */ `
       ${SKY_GLSL}
+      #ifdef COMIC_CIRRUS
+      ${CIRRUS_GLSL}
+      #endif
       varying vec3 vDir;
       uniform vec3 uHigh;
       uniform vec3 uHorizon;
       uniform vec3 uSun;
       void main() {
-        gl_FragColor = vec4(celSkyColor(vDir, uSun, uHorizon, uHigh), 1.0);
+        vec3 col = celSkyColor(vDir, uSun, uHorizon, uHigh);
+        #ifdef COMIC_CIRRUS
+        col = celSkyCirrus(col, normalize(vDir), uSun,
+          vec3(0.93, 0.94, 0.97), vec3(1.0, 0.95, 0.86), 0.30);
+        #endif
+        gl_FragColor = vec4(col, 1.0);
       }
     `,
   });
@@ -4793,7 +4876,7 @@ function skyDome() {
 
 /* Chunky stylised clouds: clustered flattened icospheres, unlit, so they
  * stay bright and flat like painted shapes. */
-function clouds(rng) {
+function clouds(rng, count = 26, size = 1) {
   const g = new THREE.Group();
   /* One mesh per puff with a hard painted terminator keyed to world up,
    * plus a warm sun side rim. The previous build overlaid a second,
@@ -4805,17 +4888,40 @@ function clouds(rng) {
     uniforms: { uSun: { value: SUN_DIR.clone() } },
     vertexShader: `
       varying vec3 vN;
+      varying vec3 vNView;
+      varying vec3 vView;
       void main() {
         vN = normalize(mat3(modelMatrix) * normal);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vNView = normalMatrix * normal;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
       }
     `,
     fragmentShader: `
       varying vec3 vN;
+      varying vec3 vNView;
+      varying vec3 vView;
       uniform vec3 uSun;
       void main() {
         vec3 n = normalize(vN);
-        vec3 col = mix(vec3(0.70, 0.77, 0.91), vec3(1.0, 0.98, 0.94), step(0.12, n.y));
+        /* Three painted bands, the way a cumulus is painted: the sunlit
+         * crown, a pale body, and the belly in the blue grey. They are
+         * keyed to an axis leaning from straight up toward the sun, not to
+         * up alone, so the lit side of every puff is the sun's side: a
+         * pilot looking away from the sun sees white heads, and looking
+         * into it sees shaded flanks under a bright lip, which is what
+         * makes a heap of spheres read as a lit volume. Two bands on world
+         * up, which is what this was, gave a pilot looking up at a cloud a
+         * grey pill with a white lip from every side (graphics pass 14).
+         * The belly is a little deeper and bluer than the old body, about
+         * 0.46 linear luminance against the sky's 0.375, so the shadow
+         * reads as a colour and not as a dirty white; the body band is
+         * about 0.59, under the crown's 0.697 and well under the gate
+         * ring's 0.826, so the ladder below holds. */
+        float k = dot(n, normalize(vec3(0.0, 1.0, 0.0) + normalize(uSun) * 0.9));
+        vec3 col = mix(vec3(0.63, 0.68, 0.88), vec3(0.86, 0.87, 0.94), smoothstep(-0.38, -0.32, k));
+        col = mix(col, vec3(1.0, 0.98, 0.94), smoothstep(0.20, 0.26, k));
         /* Sun side warmth, but not enough to clip. Measured, cloud tops
          * reached 255 255 253, luminance 0.999, so a piece of dressing in
          * the corner of the frame was brighter than the gate the pilot is
@@ -4828,20 +4934,79 @@ function clouds(rng) {
          * thing on screen, and a clipped pixel has no hue left either. */
         col *= 0.68;
         col += vec3(1.0, 0.86, 0.60) * pow(max(dot(n, normalize(uSun)), 0.0), 3.0) * 0.08;
+        /* No ink rim: a line round a cloud clashed with the polygon world (bug-09e28ecf). */
         gl_FragColor = vec4(col, 1.0);
       }
     `,
   });
-  for (let i = 0; i < 26; i += 1) {
+  /*
+   * HEAPED HEADS AND A FLAT BASE (graphics pass 14). A cumulus is
+   * cauliflower on top and flat underneath, and a cluster of evenly
+   * flattened spheres was neither: a row of pills, about a third as tall as
+   * it was wide. Each cluster now keeps its flat spread of base puffs and
+   * gets two tiers heaped on them toward its middle, each tier smaller and
+   * rounder than the one under it, and every puff is cut off at a shared
+   * base a little under the cluster's middle, its cut face turned to face
+   * straight down so it takes the belly band.
+   *
+   * The world's rng is drawn exactly as before, the same number of draws in
+   * the same order, because the first bank is drawn on it and one more draw
+   * would move every tree and collider after it. The tiers are drawn from a
+   * stream of their own, seeded by the call, and the base cut moves
+   * vertices only, so it draws on nothing.
+   */
+  const heap = makeRng(0x3c1a7 + count * 131 + Math.round(size * 10));
+  const BASE = -7 * size;
+  const cut = (geo, py, sy) => {
+    const pos = geo.attributes.position;
+    const nrm = geo.attributes.normal;
+    for (let k = 0; k < pos.count; k += 1) {
+      /* In the cluster's frame the vertex is at py + y * sy. */
+      if (py + pos.getY(k) * sy < BASE) {
+        pos.setY(k, (BASE - py) / sy);
+        nrm.setXYZ(k, 0, -1, 0);
+      }
+    }
+    pos.needsUpdate = true;
+    nrm.needsUpdate = true;
+  };
+  const puff = (cluster, r, x, y, z, sy) => {
+    const geo = new THREE.IcosahedronGeometry(r, 1);
+    cut(geo, y, sy);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.scale.y = sy;
+    cluster.add(m);
+    return { x, z, r, top: y + r * sy };
+  };
+  /* A tier: n puffs, each on a puff of the tier below, drawn toward the
+   * cluster's middle so the heap rises there, its centre a little under
+   * its parent's top, so most of its upper half stands clear as a dome. */
+  const tier = (cluster, under, n, lo, span, sy) => {
+    const made = [];
+    for (let c = 0; c < n; c += 1) {
+      const t = under[Math.floor(heap() * under.length)];
+      const r = t.r * (lo + heap() * span);
+      made.push(puff(cluster, r,
+        t.x * 0.6 + (heap() - 0.5) * t.r * 0.6,
+        t.top - r * sy * 0.15,
+        t.z * 0.6 + (heap() - 0.5) * t.r * 0.4, sy));
+    }
+    return made;
+  };
+  for (let i = 0; i < count; i += 1) {
     const cluster = new THREE.Group();
     const puffs = 4 + Math.floor(rng() * 5);
+    const base = [];
     for (let p = 0; p < puffs; p += 1) {
-      const r = 16 + rng() * 26;
-      const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat);
-      puff.position.set((rng() - 0.5) * 70, (rng() - 0.5) * 12, (rng() - 0.5) * 40);
-      puff.scale.y = 0.52;
-      cluster.add(puff);
+      const r = (16 + rng() * 26) * size;
+      const x = (rng() - 0.5) * 70;
+      const y = (rng() - 0.5) * 12;
+      const z = (rng() - 0.5) * 40;
+      base.push(puff(cluster, r, x, y, z, 0.52));
     }
+    const mid = tier(cluster, base, 2 + Math.floor(heap() * 3), 0.6, 0.2, 0.8);
+    tier(cluster, mid, 1 + Math.floor(heap() * 2), 0.55, 0.2, 0.9);
     const a = rng() * Math.PI * 2;
     const rad = 260 + rng() * 780;
     cluster.position.set(Math.cos(a) * rad, 190 + rng() * 190, Math.sin(a) * rad);
@@ -4901,6 +5066,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * build: Low turns the drifting cloud shading off with the shadow maps
    * (quality.js, field.clouds), fill rate back on the machines Low is for. */
   setCelCloudShadows(q.field.clouds !== false);
+  setComicQuality(q);
   const renderer = shell.renderer;
   const camera = shell.camera;
   const progress = onProgress ?? (() => {});
@@ -4952,6 +5118,9 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * it is doing the job the sky dome does outdoors.
    */
   scene.background = new THREE.Color(indoor ? ROOM.air : HORIZON);
+  /* The ink reads this: a room's course is a frame of tubes a few pixels
+   * across (buildComposer in src/render/post.js). */
+  scene.userData.indoor = indoor;
   /*
    * IN THE ROOM'S OWN METRES, WHICH ARE MICRO_SCALE TIMES RACEGOW'S. The
    * room is built through that factor so a five inch has space to fly, and
@@ -4971,7 +5140,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     ? new THREE.Fog(ROOM.air, 5.5 * MICRO_SCALE, 44 * MICRO_SCALE)
     : new THREE.Fog(HORIZON, FOG_NEAR, FOG_FAR);
   if (!indoor) {
-    const sky = skyDome();
+    const sky = skyDome(q);
     sky.layers.set(1);
     scene.add(sky);
   }
@@ -5071,6 +5240,8 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   sun.shadow.camera.right = shadowExtent;
   sun.shadow.camera.top = shadowExtent;
   sun.shadow.camera.bottom = -shadowExtent;
+  /* How often the map is redrawn: see shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, sun.castShadow ? (q.field.shadowEvery || 1) : 1, shadowExtent);
   scene.add(sun);
   scene.add(sun.target);
   /* Sky above, warm grass bounce below: this is what keeps shadowed faces
@@ -5108,7 +5279,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const clubPad = clubhousePad(clubSite);
   const height = makeHeightField(samples, pitch, clubPad, indoor);
 
-  const ground = terrain(height, samples, pitch);
+  const ground = terrain(height, samples, pitch, indoor);
   scene.add(ground);
 
   /*
@@ -5144,6 +5315,12 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   /* Clouds, indoors, would be through the ceiling. */
   if (!indoor) {
     noInkBaker.bake(clouds(rng));
+    /* A second, larger bank from its OWN stream, 2026-10-07, for a sky
+     * that reads as weather rather than as a few stickers. Never from the
+     * world's rng: every draw on it after this point places scenery and
+     * colliders, so one more draw would move the world under every saved
+     * replay. */
+    noInkBaker.bake(clouds(makeRng(0x5c10d5), 16, 1.6));
   }
   /* Layer 0, not the no ink layer. Clouds used to write no depth into the
    * outline prepass, so the ink pass drew mountain silhouettes ACROSS the
@@ -5876,6 +6053,10 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    */
   const FOLLOW_RING = 0.42;
   let nextGateIdx = -1;
+  /* The whoop room's breadcrumb trail, built after the colliders are (see
+   * createRaceLine in raceline.js). Null on every other world, and null until
+   * then, which setNextGate reads. */
+  let raceLine = null;
   /* Where the target is, and which way round the pilot is to it. One
    * object, filled in place, read by the frame loop and by the shell's
    * screen mark, so neither of them allocates per frame. */
@@ -5940,11 +6121,12 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
       dressGate(gt, 'dark');
     }
     nextGateIdx = i;
-    /* follow still arrives from race.js and is deliberately unused: the
-     * owner asked for no markings on anything but the target. The
-     * parameter stays so the callers and the harness readback keep their
-     * shape while the decision is fresh enough to be reversed cheaply. */
-    void follow;
+    /* follow is not drawn on any gate: the owner asked for no markings on
+     * anything but the target. The whoop room's race line, when it is on,
+     * reads it for how far ahead to lay its dots. */
+    if (raceLine) {
+      raceLine.setTarget(i, follow);
+    }
     const target = i >= 0 && i < gates.length ? gates[i] : null;
     if (!target) {
       aim.active = false;
@@ -6745,7 +6927,11 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * the most expensive single thing in this function on a cold cache and has
    * no inside to report from. */
   await report(0.86);
-  renderer.compile(scene, camera);
+  /* Not made here any more: the argument above stands, but a compile has to run against the target the frames are
+   * drawn into, and that is the composer's, which is built from this scene after it. Made here with nothing bound it
+   * linked the sRGB programs, which nothing draws, and left the ones that are drawn to the first frame.
+   * attachComposer (maps/field.js) makes it, through render/warm.js, before buildMap returns, so the world is still
+   * compiled when it loads. */
   progress(1);
 
   /*
@@ -6801,6 +6987,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     sun.position.copy(shadowFocus).addScaledVector(keyDir, 130);
     sun.target.position.copy(shadowFocus);
     sun.target.updateMatrixWorld();
+    shadowRate.step(shadowFocus);
   }
 
   function updateWind(t) {
@@ -6838,6 +7025,14 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   /* Every collider is in by now, so freeze the flat arrays and build the
    * broadphase grid. Nothing may be added after this. */
   colliders.build();
+
+  /* A whoop room can show a trail of crumbs through the next gates. Nothing
+   * is built, loaded or solved until the setting asks for it. */
+  if (course && course.trackClass === 'micro') {
+    raceLine = createRaceLine({
+      scene, course, colliders, gates,
+    });
+  }
 
   progress(1);
 
@@ -6990,6 +7185,16 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     setRacingLine() {},
     hasRacingLine: false,
     updateRacingLine() { return null; },
+    /* The race line: the whoop room's breadcrumb trail, on or off. A no op in
+     * every world that is not a room. */
+    setRaceLine(on) {
+      if (raceLine) {
+        raceLine.setEnabled(on);
+      }
+    },
+    get raceLine() {
+      return raceLine;
+    },
     /*
      * The contact surface. The third argument is the height the query is made
      * FROM, which the city needs so a quad can fly under the overbridge and
@@ -7056,6 +7261,10 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
      * them. Present so the shell has one call shape. */
     updateAnim: () => {},
     dispose() {
+      if (raceLine) {
+        raceLine.dispose();
+        raceLine = null;
+      }
       /* The craft and the ghost rig are the session's, not this world's.
        * The shell keeps that register, so this does not have to name them
        * and cannot fall behind an aircraft swap. */

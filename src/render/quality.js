@@ -142,6 +142,16 @@ const PRESETS = {
       shadowHalf: 22,
       shadowProxyCell: 0,
       foliageKeep: 0.22,
+      /* The town's canopy blobs near the eye drawn at eighty faces, or as
+       * clumps with leafClumps, rather than twenty, within this many metres
+       * of a cell's nearest point; 0 keeps twenty everywhere. See
+       * roundCanopiesNear in src/maps/city/index.js. */
+      leafRound: 0,
+      /* Canopy blobs drawn as clumps of lumps rather than smooth round
+       * blobs, 180 faces a blob where the round one has 80: a built map's,
+       * and the town's within leafRound. See clumpBlob in
+       * src/render/clump.js. */
+      leafClumps: false,
       cullRadius: 50,
       fogNear: 22,
       fogFar: 46,
@@ -170,6 +180,8 @@ const PRESETS = {
       shadowMap: 1024,
       shadowFilter: 'pcfsoft',
       shadowHalf: 72,
+      /* The map is redrawn at most every third frame: see shadowrate.js. */
+      shadowEvery: 3,
       outline: true,
       bloom: false,
       /* 1080p, for the reason under High. Medium has no bloom ladder and a
@@ -180,8 +192,11 @@ const PRESETS = {
     city: {
       shadowMap: 1024,
       shadowHalf: 18,
+      shadowEvery: 3,
       shadowProxyCell: 24,
       foliageKeep: 0.30,
+      leafRound: 25,
+      leafClumps: true,
       cullRadius: 58,
       fogNear: 22,
       fogFar: 53,
@@ -239,6 +254,8 @@ const PRESETS = {
       shadowHalf: 22,
       shadowProxyCell: 24,
       foliageKeep: 0.48,
+      leafRound: 25,
+      leafClumps: true,
       cullRadius: 70,
       fogNear: 22,
       fogFar: 65,
@@ -257,12 +274,48 @@ const PRESETS = {
 };
 
 export function normalizeGraphics(id) {
-  const s = String(id || '').toLowerCase();
+  const s = String(id && typeof id === 'object' ? id.id : id || '').toLowerCase();
   return GRAPHICS_IDS.includes(s) ? s : 'high';
 }
 
+/*
+ * A preset's quality, or the quality it was handed: a world is built from
+ * whatever `options.quality` is, and a preset with its shadows taken away
+ * (withoutShadows) is an object, not an id.
+ */
 export function qualityFor(id) {
+  if (id && typeof id === 'object' && id.field && id.city) {
+    return id;
+  }
   return PRESETS[normalizeGraphics(id)];
+}
+
+/*
+ * The Shadows row's Off: the preset's own numbers with the shadow pass, the
+ * map and the town's proxies taken out. Low is already this, but still comes
+ * back marked `shadowsOff`, because the shell tells a world built with the row
+ * off from one built with it on by that mark and would otherwise rebuild a Low
+ * world for ever. Cached, so the same id is the same object.
+ */
+const NO_SHADOWS = {};
+export function withoutShadows(id) {
+  const key = normalizeGraphics(id);
+  const p = PRESETS[key];
+  if (!NO_SHADOWS[key]) {
+    NO_SHADOWS[key] = Object.freeze({
+      ...p,
+      shadows: false,
+      shadowsOff: true,
+      field: { ...p.field, shadowMap: 0, shadowFilter: 'none' },
+      city: { ...p.city, shadowMap: 0, shadowProxyCell: 0 },
+    });
+  }
+  return NO_SHADOWS[key];
+}
+
+/* What a world is built from, given the pilot's settings. */
+export function qualityOf(settings) {
+  return settings.shadowsOff ? withoutShadows(settings.graphics) : normalizeGraphics(settings.graphics);
 }
 
 export function graphicsLabel(id) {

@@ -88,7 +88,9 @@ function targetBytes(rt, label) {
   return { label, w, h, samples, bytes: colour + depth };
 }
 
-const TAP_CALL = /\btexture(2D|Cube|2DProj|Lod|Grad)?\s*\(/g;
+/* texelFetch too: the town's ink reads a canopy blob's code with it
+ * (src/render/comic.js), and an exact fetch is still a fetch. */
+const TAP_CALL = /\b(?:texture(?:2D|Cube|2DProj|Lod|Grad)?|texelFetch)\s*\(/g;
 
 function strip(source) {
   return String(source || '')
@@ -99,6 +101,58 @@ function strip(source) {
 function countIn(code, re) {
   const m = code.match(re);
   return m ? m.length : 0;
+}
+
+/*
+ * The lines of a shader its own defines compile: #ifdef and #ifndef blocks
+ * kept or dropped by the material's defines and by any #define the source
+ * itself makes on the way, with their #else. Any other #if is kept whole,
+ * both branches, which can only count high. Graphics pass 19: before it,
+ * an #ifdef'd fetch counted whether or not it was compiled, and nothing
+ * here counted the taps a function like macro reaches (below), which is
+ * how the comic layer's occlusion and outer line were invisible on High.
+ */
+function compiled(code, defines) {
+  const known = new Set(Object.keys(defines || {}));
+  const out = [];
+  const stack = [];
+  let live = true;
+  for (const line of code.split('\n')) {
+    const t = line.trim();
+    const cond = /^#\s*(ifdef|ifndef)\s+(\w+)/.exec(t);
+    if (cond) {
+      const want = cond[1] === 'ifdef' ? known.has(cond[2]) : !known.has(cond[2]);
+      stack.push({ parent: live, known: true, taken: want });
+      live = live && want;
+      continue;
+    }
+    if (/^#\s*if\b/.test(t)) {
+      stack.push({ parent: live, known: false, taken: true });
+      continue;
+    }
+    if (/^#\s*(else|elif)\b/.test(t)) {
+      const top = stack[stack.length - 1];
+      if (top && top.known) {
+        live = top.parent && !top.taken;
+        top.taken = true;
+      }
+      continue;
+    }
+    if (/^#\s*endif\b/.test(t)) {
+      const top = stack.pop();
+      live = top ? top.parent : true;
+      continue;
+    }
+    if (!live) {
+      continue;
+    }
+    const def = /^#\s*define\s+(\w+)/.exec(t);
+    if (def) {
+      known.add(def[1]);
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 /*
@@ -113,9 +167,13 @@ function countIn(code, re) {
  * main by substitution. Recursion is impossible in GLSL, so the
  * substitution terminates. Loops are the one thing this cannot see, and a
  * pass containing one is flagged rather than guessed at.
+ *
+ * The source is first cut to what the material compiles (compiled below),
+ * because the field's outline pass carries High's occlusion and outer line
+ * inside #ifdef blocks that Medium leaves undefined.
  */
-function countTaps(source) {
-  const code = strip(source);
+function countTaps(source, defines) {
+  const code = compiled(strip(source), defines);
   const defs = new Map();
   const bodies = [];
   const head = /\b(?:void|float|int|bool|u?vec[234]|mat[234])\s+(\w+)\s*\([^)]*\)\s*\{/g;
@@ -134,6 +192,17 @@ function countTaps(source) {
     const body = code.slice(head.lastIndex, i - 1);
     defs.set(m[1], body);
     bodies.push(body);
+  }
+  /* Function like macros too, as if each were a function whose body is its
+   * replacement. The comic layer's occlusion and outer line reach the depth
+   * through one (COMIC_AO_DEPTH, COMIC_SIL_DEPTH in src/render/comic.js),
+   * and until graphics pass 19 the twelve fetches behind them were counted
+   * as none. */
+  const macro = /^[ \t]*#define[ \t]+(\w+)\([^)]*\)[ \t]+(.+)$/gm;
+  while ((m = macro.exec(code)) !== null) {
+    if (!defs.has(m[1])) {
+      defs.set(m[1], m[2]);
+    }
   }
   const cache = new Map();
   function cost(name, seen) {
@@ -203,7 +272,7 @@ function traceFrame(renderer, renderFrame) {
   };
   renderer.render = (scene, camera) => {
     const quad = scene.isMesh === true;
-    const t = quad ? countTaps(scene.material.fragmentShader) : { taps: 0, loops: 0 };
+    const t = quad ? countTaps(scene.material.fragmentShader, scene.material.defines) : { taps: 0, loops: 0 };
     passes.push({
       w: curW,
       h: curH,

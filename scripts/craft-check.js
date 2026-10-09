@@ -151,10 +151,12 @@ function near(id, got, want, tolMm, unit = 'mm') {
 /*
  * A MISMATCH THAT IS KNOWN, MEASURED AND CANNOT BE FIXED FROM HERE.
  *
- * The five inch's contact hull reaches 45 mm below the CG and the lowest
- * thing the model draws is 30 mm below it, so a parked five inch floats
- * 15 mm: the plant rests the craft on a hull that is deeper than the
- * aircraft on screen. It is plant.c's `hull_hz_down`, which is compiled
+ * The five inch's contact hull reached 45 mm below the CG and the lowest
+ * thing the model draws is 30 mm below it, so a parked five inch floated
+ * 15 mm: the plant rested the craft on a hull that was deeper than the
+ * aircraft on screen. On 2026-10-09 the module was rebuilt with the hull at
+ * 33 mm, on the owner's ask to get closer to the ground, and the gap is the
+ * 3 mm pinned below. What follows is why it was left at 15 until then. It is plant.c's `hull_hz_down`, which is compiled
  * into dist/sim.wasm, and configs/airframes.js snapshots it precisely so
  * that the collider and the plant agree about where the bottom of the quad
  * is. Changing it means changing the C and rebuilding the module, which
@@ -245,20 +247,18 @@ async function main() {
     near(`${af.id}: swept radius vs drawn`, r.craftRadiusTrue * 1000, drawnReach * k, real.tolMm * k);
     near(`${af.id}: hull up vs drawn`, r.craftUpTrue * 1000, drawnUp * k, real.tolMm * k);
     if (af.id === '5inch') {
-      pinned(`${af.id}: hull down vs drawn`, r.craftDownTrue * 1000, drawnDown, 15.0,
-        'the plant parks it 15 mm under the model, see the note above');
+      pinned(`${af.id}: hull down vs drawn`, r.craftDownTrue * 1000, drawnDown, 3.0,
+        'the plant parks it 3 mm under the model, see the note above');
     } else {
       /*
        * The whoop's ducts hang 9.6 mm under a real CG, which through the
-       * room's factor is 32.9 mm, and the five inch plant it now flies parks
-       * it at 45.0. The 12 mm between them is the five inch's own ground
-       * clearance showing through a whoop's body, and it is 3.5 mm once
-       * divided back down to what the picture is of. Pinned rather than
-       * chased, because closing it means either a plant that is not the five
-       * inch's or a model that is not a whoop.
+       * room's factor is 32.9 mm, and the five inch plant it now flies parked
+       * it at 45.0 until 2026-10-09, 12 mm low. The plant's hull is 33 mm now,
+       * so the ducts sit on the floor, and the pin is the tenth of a
+       * millimetre left.
        */
-      pinned(`${af.id}: hull down vs drawn`, r.craftDownTrue * 1000, drawnDown * k, 12.2,
-        'the five inch plant parks a whoop body 12 mm low, 3.5 mm to the eye');
+      pinned(`${af.id}: hull down vs drawn`, r.craftDownTrue * 1000, drawnDown * k, 0.1,
+        'the five inch plant parks a whoop body on its ducts');
     }
 
     /* 3. And the collider against the plant, through the table both read.

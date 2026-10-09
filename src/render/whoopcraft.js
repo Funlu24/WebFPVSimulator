@@ -56,9 +56,9 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { celMaterial, outlineHull } from './celmat.js';
+import { celMaterial } from './celmat.js';
 import { WORLD_SCALE } from './frame.js';
-import { PROP_SPIN } from './herocraft.js';
+import { PROP_SPIN, inkShell } from './herocraft.js';
 import { WHOOP_TRUE_DIMS, MICRO_SCALE } from '../../configs/airframes.js';
 
 /*
@@ -218,9 +218,38 @@ export function buildWhoopCraft(opts = {}) {
    * the one place nobody would catch it.
    */
   group.scale.setScalar(MICRO_SCALE / (opts.worldScale ? WORLD_SCALE : 1));
-  const hull = (mesh, t, c) => {
+  /*
+   * THE INK, and until 7 October 2026 the whoop had none.
+   *
+   * Every call below passed a width in metres, 0.0009 for the tub and so
+   * on, to celmat.js's outlineHull, which takes a SCALE: it draws a copy of
+   * the part scaled about the part's own origin. So each hull was the part
+   * at nine ten thousandths of its size, a speck at its centre, inside it,
+   * and the whoop shipped from its first day with every outline call made
+   * and no outline drawn. What a pilot saw round it was the post pass's
+   * edge line alone, which is the world's pen and not the aircraft's.
+   *
+   * It is herocraft.js's inkShell now, the shell the 5 inch wears: every
+   * face pushed out the same width along its own normal, so a merged tub
+   * whose origin is the CG gets the same line down its far ducts as round
+   * its middle, which no scaled copy could give it. The widths are the
+   * aircraft's own millimetres, like everything else in this file, and the
+   * group's MICRO_SCALE carries them into the world with the rest of it.
+   * They are the 5 inch's pen divided by that factor, give or take, so the
+   * two aircraft are inked with the same weight of line at the same size on
+   * screen; the numbers the calls used to pass, read as widths, would have
+   * drawn three to four times the 5 inch's line.
+   *
+   * The primitives here are indexed and the shell reads three vertices to a
+   * triangle, so each is unindexed for the shell and the copy let go after.
+   */
+  const hull = (mesh, width, c) => {
     if (inkOn) {
-      outlineHull(mesh, t, c);
+      const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+      inkShell(mesh, width, c, fog, src);
+      if (src !== mesh.geometry) {
+        src.dispose();
+      }
     }
     return mesh;
   };
@@ -328,15 +357,30 @@ export function buildWhoopCraft(opts = {}) {
     const webY = DUCT_TOP - 0.0020;
     const webH = 0.0021;
     const span = a * 2;
-    const webGeo = new THREE.BoxGeometry(0.0042, webH, span - 0.0110);
+    /*
+     * EVERY BRACE ENDS IN A DUCT WALL, halfway through its thickness, and not
+     * in the bore.
+     *
+     * They used to run on into the bores, the side webs to 5.5 mm short of a
+     * motor and the diagonals to 7.5 mm short, 11 and 9 mm past the wall, at
+     * the height the props turn at. On the real aircraft the props would cut
+     * them. On screen every duct showed grey planks lying across its disc and
+     * reaching for the hub, through the clear blades, which from above was
+     * the loudest thing on the machine and once the whoop was inked had a
+     * black frame round each plank as well. What holds a motor is the spider
+     * under its disc; the braces only join the ducts to each other and to the
+     * plate, so a brace stops where a duct starts.
+     */
+    const midWall = DUCT_BORE + DUCT_WALL / 2;
+    const webGeo = new THREE.BoxGeometry(0.0042, webH, span - 2 * midWall);
     parts.push(bake(webGeo, a, webY, 0));
     parts.push(bake(webGeo, -a, webY, 0));
     parts.push(bake(webGeo, 0, webY, a, 0, Math.PI / 2, 0));
     parts.push(bake(webGeo, 0, webY, -a, 0, Math.PI / 2, 0));
-    /* The diagonals, corner to corner through the middle. These are what
+    /* The diagonals, from the plate's corners to the ducts. These are what
      * make the four holes read as holes in one part rather than as gaps
      * between four parts. */
-    const diagLen = a * 2 * Math.SQRT2 - 0.0150;
+    const diagLen = (ARM - midWall) * 2;
     const diagGeo = new THREE.BoxGeometry(0.0038, webH, diagLen);
     parts.push(bake(diagGeo, 0, webY, 0, 0, Math.PI / 4, 0));
     parts.push(bake(diagGeo, 0, webY, 0, 0, -Math.PI / 4, 0));
@@ -353,13 +397,18 @@ export function buildWhoopCraft(opts = {}) {
      * what it looked like. What a real whoop has under there is two moulded
      * straps across the belly holding the cell, so that is what is here.
      */
+    /* Turned to run across the aircraft, so the two of them stand apart
+     * ALONG the pack. They were offset across it instead, which laid both
+     * on the same line, overlapping for 9 mm in the middle with an end
+     * standing 6 mm proud of the plate on either side: from above, a pair of
+     * grey tabs sticking out of the aircraft's waist. */
     const strapGeo = new THREE.BoxGeometry(0.0040, 0.0016, 0.0210);
-    for (const sx of [-0.0058, 0.0058]) {
-      parts.push(bake(strapGeo, sx, PACK_TOP + 0.0004, 0.0030, 0, Math.PI / 2, 0));
+    for (const sz of [-0.0058, 0.0058]) {
+      parts.push(bake(strapGeo, 0, PACK_TOP + 0.0004, 0.0030 + sz, 0, Math.PI / 2, 0));
     }
     const tub = new THREE.Mesh(mergeGeometries(parts, false), frame);
     tub.castShadow = shade;
-    group.add(hull(tub, 0.0009, ink));
+    group.add(hull(tub, 0.00025, ink));
   }
 
   /*
@@ -419,7 +468,7 @@ export function buildWhoopCraft(opts = {}) {
     }
     const hoops = new THREE.Mesh(mergeGeometries(parts, false), frame);
     hoops.castShadow = shade;
-    group.add(hull(hoops, 0.0006, ink));
+    group.add(hull(hoops, 0.00018, ink));
   }
 
   /*
@@ -441,7 +490,7 @@ export function buildWhoopCraft(opts = {}) {
     const board = new THREE.Mesh(new THREE.BoxGeometry(0.0182, 0.0014, 0.0182), pcb);
     board.position.set(0, STACK_Y, 0);
     board.castShadow = shade;
-    group.add(hull(board, 0.0006, ink));
+    group.add(hull(board, 0.00018, ink));
 
     /* The four M2 standoffs, and the screw heads on top of them. */
     const postGeo = new THREE.CylinderGeometry(0.00090, 0.00090, 0.0044, lite ? 5 : 8);
@@ -462,7 +511,7 @@ export function buildWhoopCraft(opts = {}) {
     /* The VTX above it, smaller and set back, so the camera has the front. */
     const top = new THREE.Mesh(new THREE.BoxGeometry(0.0150, 0.0012, 0.0122), pcbTop);
     top.position.set(0, STACK_Y + 0.0051, 0.0018);
-    group.add(hull(top, 0.0005, ink));
+    group.add(hull(top, 0.00015, ink));
 
     /*
      * The parts that stand proud on a 1S AIO, roughly where they are: the
@@ -522,12 +571,12 @@ export function buildWhoopCraft(opts = {}) {
       const c = new THREE.Mesh(cheek, camBody);
       c.position.set(sx * 0.0060, 0.0004, 0.0022);
       c.castShadow = shade;
-      cameraMount.add(hull(c, 0.0006, ink));
+      cameraMount.add(hull(c, 0.00015, ink));
     }
     const back = new THREE.Mesh(new THREE.BoxGeometry(0.0136, 0.0116, 0.0018), camBody);
     back.position.set(0, 0.0004, 0.0055);
     back.castShadow = shade;
-    cameraMount.add(hull(back, 0.0006, ink));
+    cameraMount.add(hull(back, 0.00015, ink));
 
     /* The camera itself, sitting in the cage. */
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.0104, 0.0100, 0.0052), camBody);
@@ -566,7 +615,7 @@ export function buildWhoopCraft(opts = {}) {
     const pack = new THREE.Mesh(new THREE.BoxGeometry(0.0158, 0.0060, 0.0330), battery);
     pack.position.set(0, PACK_TOP - 0.0030, 0.0030);
     pack.castShadow = shade;
-    group.add(hull(pack, 0.0008, ink));
+    group.add(hull(pack, 0.00023, ink));
     /* The wrapper's printed band, on the SIDE of the cell rather than across
      * its back: across the back it was a cream slab as wide as the aircraft
      * and it read as a part rather than as a label. */
@@ -657,15 +706,18 @@ export function buildWhoopCraft(opts = {}) {
       );
       group.add(arm);
     }
-    /* The three phase leads, as one bundle, running inboard. */
+    /* The three phase leads, as one bundle, running inboard from the can
+     * to the duct wall, where they turn up it to the board. They stopped
+     * 2.5 mm short of the wall, which nobody saw while a brace lay over
+     * them and everybody would through the clear blades once it did not. */
     const leadDir = Math.atan2(-mz, -mx);
-    const leadGeo = new THREE.BoxGeometry(0.0100, 0.00050, 0.0009);
+    const leadGeo = new THREE.BoxGeometry(DUCT_BORE - 0.0040, 0.00050, 0.0009);
     const lead = new THREE.Mesh(leadGeo, chip);
     lead.rotation.y = -leadDir;
     lead.position.set(
-      mx + Math.cos(leadDir) * 0.0090,
+      mx + Math.cos(leadDir) * (DUCT_BORE + 0.0040) * 0.5,
       ROTOR_Y - 0.0026,
-      mz + Math.sin(leadDir) * 0.0090,
+      mz + Math.sin(leadDir) * (DUCT_BORE + 0.0040) * 0.5,
     );
     group.add(lead);
 
@@ -746,9 +798,16 @@ export function buildWhoopCraft(opts = {}) {
      * were the first thing the eye found. On the real machine they are
      * surface mount parts on the underside of the board that light the
      * moulding from within.
+     *
+     * And under the PLATE's corners, 38 percent of the way to a motor. At
+     * 60 percent they were 3.5 mm inside a bore, hidden from above only by
+     * the brace that ran on across the disc; once the braces stopped at
+     * the wall, each duct had a lit tab floating in it under the prop.
+     * Here the plate covers them from above and they show from below,
+     * beside the pack.
      */
     const led = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0008, 0.0030), ledMat);
-    dummy.position.set(mx * 0.60, DUCT_TOP - 0.0038, mz * 0.60);
+    dummy.position.set(mx * 0.38, DUCT_TOP - 0.0038, mz * 0.38);
     dummy.lookAt(mx, DUCT_TOP - 0.0038, mz);
     dummy.updateMatrix();
     led.position.copy(dummy.position);

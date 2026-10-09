@@ -79,7 +79,7 @@ const wasm = await readFile(join(root, 'dist/sim.wasm'));
 const CONFIG = await readFile(join(root, 'tests/fixtures/config-baseline.diff'), 'utf8');
 
 /* The five inch at rest, and at hover, as scripts/world-check.js has them. */
-const REST = 0.045;
+const REST = 0.033;
 const HOVER = 0.27;
 const WALL = contactMaterial('wall');
 /* The shell's RC grid (src/main.js RC_HZ) and its cap on a frame's dt. */
@@ -183,6 +183,16 @@ function flatBackPilot() {
  * describes, with the verdict it had before, and sat on an edge again. The
  * comments below give the new flights' numbers. The check itself, one
  * verdict at every pacing, passed throughout.
+ *
+ * RE-AIMED AGAIN ON 2026-10-09, with the owner's word, when the five inch's
+ * belly came up from 45 mm to 33 (plant.c hull_hz_down). Two ground
+ * scenarios had left their edge: the stutter one now perched a frame before
+ * its verdict, and the side touches one was no crash at every pacing. Each
+ * was swept on its approach speed only, 7.40 to 7.45 and 6.90 to 7.08, and
+ * keeps the verdict it had: a bump at 2816 ms then a crash at 2998 for the
+ * first, first contact at 6.87 m/s; bumps at 2825 and 3009 ms and no crash
+ * for the second, first contact at 6.42 m/s (7.07 and 7.10 both crash). The
+ * numbers in those two comments are from before this re-aim.
  * ------------------------------------------------------------------ */
 
 const WALL_BOX = [0, -20, -1, 1, 20, 30];
@@ -229,7 +239,7 @@ export const SCENARIOS = [
     name: 'the ground: a touch inside the cooldown, and a stutter',
     edge: true,
     world: [], pose: [-12, 0, 0.2], ms: 9000, after: 700,
-    pilot: () => skimPilot(7.4, 0.2, 80, 220, 70, 0, 0.2),
+    pilot: () => skimPilot(7.45, 0.2, 80, 220, 70, 0, 0.2),
   },
   /* A skim, then side touches through the end of the cooldown as the craft
    * slows through a smack's speed: the last one inside the cooldown, at
@@ -242,7 +252,7 @@ export const SCENARIOS = [
     name: 'the ground: side touches no one step calls a crash',
     edge: true,
     world: [], pose: [-12, 0, 0.2], ms: 9000, after: 700,
-    pilot: () => skimPilot(6.9, 0.2, 80, 190, 70, 0.15, 0.2),
+    pilot: () => skimPilot(7.08, 0.2, 80, 190, 70, 0.15, 0.2),
   },
   {
     name: 'anchor: a steep nose first hit is a crash',

@@ -135,6 +135,11 @@
  * j_rotor is 8.0e-6 against a real 2207 bell plus 5 inch triblade near 9e-6.
  * 9e-6 reads about 29 ms on check 8 against a 30 ms ceiling, which is not
  * margin worth having; 8.0e-6 is inside the real range and leaves some.
+ *
+ * THE TABLE IS THE MOTOR AT SCALE 1.0. sim_set_motor_kv winds the same motor
+ * hotter or milder at run time, dividing ke by the scale and r_motor by its
+ * square at the top of plant_step; nothing in this table moves. See
+ * SIM_MOTOR_KV in sim_internal.h.
  */
 const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
 /* ---------------------------------------------------------------------
@@ -248,8 +253,13 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
    * which is half of the 0.30 that was too hot, with the wider descent
    * window kept. The ladder so far: 0.60, 0.12, 0.30, 0.08, 0.12, 0.15,
    * every rung a pilot's word, which is what a FEEL constant means.
+   *
+   * 0.075 on 2026-10-09, half of 0.15, on the owner's word: "reduce prop
+   * wash by 50% its a bit much". The window it applies in is unchanged, so
+   * this is the same wash at half the strength. The ladder is now 0.60,
+   * 0.12, 0.30, 0.08, 0.12, 0.15, 0.075.
    */
-  .k_propwash = 0.15,
+  .k_propwash = 0.075,
   .prop_r = 0.0635,
   /*
    * 0.55, up from the 0.43842 the block at 3b derives, on 2026-10-04 and
@@ -307,9 +317,33 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
   .pos_z = { 0.020, 0.020, 0.020, 0.020 },
   .cant_radial_deg = { 1.4, 0.85, 1.15, 0.6 },
   .cant_tangent_deg = { -0.9, 1.4, 0.6, -1.2 },
+  /*
+   * THE CONTACT HULL, made smaller on 2026-10-09 on the owner's word: "make
+   * the quad a bit smaller, i should be able to get closer to the ground
+   * before i hit it".
+   *
+   * Down was 0.045 and the lowest thing src/render/herocraft.js draws, the
+   * strap under the pack, is 30 mm under the CG, so a parked five inch
+   * floated 15 mm and a low pass met the grass 15 mm before the drawn quad
+   * did. scripts/craft-check.js pinned that gap and said it waited on a
+   * rebuild of this file. 0.033 leaves 3 mm under the strap, and it is also
+   * where the whoop, which flies this plant, has its drawn ducts: 9.6 mm
+   * under a real whoop's CG through the room's factor is 32.9 mm.
+   *
+   * Across stays 0.094, the motor offset plus an arm pad's radius. 0.085
+   * was tried for the same ask and it is what a wall tap is made of: at
+   * 3 m/s on all four yaws the craft stopped turning back off the face
+   * (npm run check:wall) and a side arrival locked its attitude instead of
+   * rolling (contact:selftest). So the width is the drawn arms and only the
+   * belly moved.
+   *
+   * What it buys, CG height at first touch on flat ground: level, 45 mm to
+   * 33; pitched 40 degrees, 95 mm to 86. Up is unchanged: it is the drawn
+   * stack and an inverted craft rests on it.
+   */
   .hull_hx = 0.094,
   .hull_hy = 0.094,
-  .hull_hz_down = 0.045,
+  .hull_hz_down = 0.033,
   .hull_hz_up = 0.038,
   .contact_patch_r = 0.060,
   .contact_arm_max = 0.20,
@@ -1101,6 +1135,19 @@ static void quat_rotate_inv(const double q[4], const double v[3], double out[3])
 
 void plant_step(SimState *s, const double duty_in[SIM_MOTOR_COUNT]) {
   /*
+   * 0. The motor as the pilot has wound it. SIM_MOTOR_KV scales kV, so the
+   * back EMF constant goes down by that much and the winding resistance by
+   * its square (sim_internal.h has the reasoning). These two are the only
+   * place the scale enters, and every use of ke and r_motor below reads
+   * them. At 1.0, x / 1.0 is x and 1.0 * 1.0 is 1.0 for every finite double,
+   * so the machine that shipped is unmoved bit for bit; the plant golden
+   * measures that.
+   */
+  const double kv = SIM_MOTOR_KV;
+  const double ke_eff = PLANT.ke / kv;
+  const double r_motor_eff = PLANT.r_motor / (kv * kv);
+
+  /*
    * 1. Battery voltage under load, solved implicitly. With a real pack
    * resistance and a real winding resistance the algebraic loop between
    * pack voltage and motor current has a gain above one, so the old one
@@ -1125,11 +1172,11 @@ void plant_step(SimState *s, const double duty_in[SIM_MOTOR_COUNT]) {
     }
     duty[m] = d;
     sumA += d * d;
-    sumB += d * PLANT.ke * s->motor_omega[m];
+    sumB += d * ke_eff * s->motor_omega[m];
   }
   const double v_oc = s->cell_voltage_oc * PLANT.cells;
-  double v_load = (v_oc + (r_pack * sumB) / PLANT.r_motor) /
-                  (1.0 + (r_pack * sumA) / PLANT.r_motor);
+  double v_load = (v_oc + (r_pack * sumB) / r_motor_eff) /
+                  (1.0 + (r_pack * sumA) / r_motor_eff);
   if (v_load < 1.0) {
     v_load = 1.0;
   }
@@ -1546,9 +1593,9 @@ void plant_step(SimState *s, const double duty_in[SIM_MOTOR_COUNT]) {
       }
     }
     const double drag_mag = q_sign * q_mag;
-    const double i = (d * v_load - PLANT.ke * w) / PLANT.r_motor;
+    const double i = (d * v_load - ke_eff * w) / r_motor_eff;
     /* Rotor sees the drag torque resisting its own spin direction. */
-    const double torque = PLANT.ke * i - PLANT_SPIN[m] * drag_mag;
+    const double torque = ke_eff * i - PLANT_SPIN[m] * drag_mag;
     double w_next = w + (torque / PLANT.j_rotor) * SIM_DT;
     if (w_next < 0.0) {
       w_next = 0.0;
@@ -1561,7 +1608,7 @@ void plant_step(SimState *s, const double duty_in[SIM_MOTOR_COUNT]) {
     thrust[m] = t;
     /* Frame feels minus the stator drive torque, about the MOTOR's axis
      * rather than about body z, because the axes are not parallel. */
-    const double st = -PLANT_SPIN[m] * PLANT.ke * i;
+    const double st = -PLANT_SPIN[m] * ke_eff * i;
     stator_torque[0] += st * AXIS[m][0];
     stator_torque[1] += st * AXIS[m][1];
     stator_torque[2] += st * AXIS[m][2];

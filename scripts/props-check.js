@@ -1813,7 +1813,7 @@ function segClearance(a, b, s) {
 /* The five inch's parked height, src/native/plant.c hull_hz_down: where the
  * shell puts the plant's origin over the ground (SPAWN_ALT in src/main.js)
  * and where it raises the ground plane. The same number world-check uses. */
-const REST = 0.045;
+const REST = 0.033;
 /* scripts/world-check.js's hover throttle for the five inch. */
 const HOVER = 0.27;
 /* The thinnest the hull ever is, from the CG: what world-check allows a
@@ -2525,7 +2525,7 @@ async function spawnScenario(world, f, label) {
  * one box of each name must meet its underside in the module.
  */
 const HULLS = [
-  { name: 'five inch', plan: 0.094 * Math.SQRT2, down: 0.045, up: 0.038 },
+  { name: 'five inch', plan: 0.094 * Math.SQRT2, down: 0.033, up: 0.038 },
   { name: 'whoop', plan: 0.041 * Math.SQRT2, down: 0.010, up: 0.018 },
 ];
 const REACH_OVER_CG = PLATFORM_REACH - SURFACE_BIAS;
