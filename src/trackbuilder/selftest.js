@@ -57,6 +57,10 @@ import {
   BUNDLE_FORMAT, BUNDLE_VERSION, bundleData, bundleEntries, evenRoute, mapSvg, trackSlug, dataText,
 } from './bundle.js';
 import { crc32, zipStore } from './zip.js';
+import {
+  COMMUNITY_SESSION_KEY, MAX_PACK_BYTES as COMMUNITY_PACK_MAX, communityPageUrl, fetchCommunity, packBase64, parseOrganiserLink,
+  readCommunityLink, sendRound,
+} from './community.js';
 import { importFpvEvents, looksLikeFpvEvents, reportLines } from './importfpv.js';
 import {
   passList, tagsOf, reuseOf, lanesOf, focusFor, aroundPass, stretchOf, flyAgain, apertureAt,
@@ -8350,6 +8354,83 @@ async function suiteShareLink() {
  * small cases are counted from how a gate is built out of pipe: four pipes and four
  * elbows, a shared bar and two tees, a leg and a foot.
  */
+/*
+ * COMMUNITYGOW, the builder's half: reading the community a link names and
+ * sending a round to the board, with the board played by a fake fetch. The
+ * board's own self test holds its half, the route these requests reach.
+ */
+async function suiteCommunity() {
+  console.log('\nthe whoop builder: sending a round to a CommunityGow community');
+  const key = 'Ab3_dEf-GhIjKlMnOpQr';
+  const fromPortal = readCommunityLink(
+    `?class=micro&mode=race&board=${encodeURIComponent('https://webfpv.org/board')}&community=perth-whoop-club`,
+    `#cgkey=${key}`,
+  );
+  check('the portal\'s link names the community, the board and the key',
+    Boolean(fromPortal) && fromPortal.slug === 'perth-whoop-club' && fromPortal.board === 'https://webfpv.org/board' && fromPortal.key === key);
+  check('a link with no key, a bad address or a board that is not a web address names nothing',
+    readCommunityLink('?community=perth-whoop-club', '', 'https://webfpv.org/board') === null
+      && readCommunityLink('?community=..%2Fapi', `#cgkey=${key}`, 'https://webfpv.org/board') === null
+      && readCommunityLink(`?community=perth-whoop-club&board=${encodeURIComponent('javascript:alert(1)')}`, `#cgkey=${key}`) === null);
+  check('a link with no board uses the board this builder talks to',
+    readCommunityLink('?community=perth-whoop-club', `#track=x&cgkey=${key}`, 'http://127.0.0.1:3100/').board === 'http://127.0.0.1:3100');
+
+  const pasted = parseOrganiserLink(`https://webfpv.org/board/CommunityGow/perth-whoop-club#key=${key}`);
+  check('the organiser link, pasted, is read with the board on its mount',
+    Boolean(pasted) && pasted.board === 'https://webfpv.org/board' && pasted.slug === 'perth-whoop-club' && pasted.key === key);
+  check('so is a round\'s page with the key on it, and a board on a host of its own',
+    parseOrganiserLink(`https://webfpv.org/board/CommunityGow/perth-whoop-club/3#key=${key}`).slug === 'perth-whoop-club'
+      && parseOrganiserLink(`http://127.0.0.1:3100/CommunityGow/perth-whoop-club#key=${key}`).board === 'http://127.0.0.1:3100');
+  check('the community\'s page without the key is not an organiser link, and nor is anything else',
+    parseOrganiserLink('https://webfpv.org/board/CommunityGow/perth-whoop-club') === null
+      && parseOrganiserLink('perth-whoop-club') === null
+      && parseOrganiserLink(`ftp://webfpv.org/CommunityGow/perth-whoop-club#key=${key}`) === null);
+  check('a round\'s address is the board\'s', communityPageUrl(pasted, 4) === 'https://webfpv.org/board/CommunityGow/perth-whoop-club/4');
+
+  const bytes = new Uint8Array(70000).map((_, i) => (i * 7) % 256);
+  check('the pack goes as base64 that reads back to the same bytes', Buffer.from(packBase64(bytes), 'base64').equals(Buffer.from(bytes)));
+
+  const asked = [];
+  const board = (status, body) => async (url, opts = {}) => {
+    asked.push({ url, opts });
+    return { ok: status < 400, status, json: async () => body };
+  };
+  const doc = presetById('racegow5-track1');
+  const made = zipStore(bundleEntries(doc, { now: '2026-10-09T06:00:00Z' }).entries);
+  const sent = await sendRound(pasted, {
+    bytes: made,
+    title: 'Week 1',
+    fetchImpl: board(201, { n: 4, track: { id: 'trk-0a1b2c3d', name: 'RaceGOW5 Track1' }, community: { name: 'Perth Whoop Club' } }),
+  });
+  const posted = JSON.parse(asked[0].opts.body);
+  check('a round is posted to the community\'s rounds with the key in the body, never the address',
+    asked[0].url === 'https://webfpv.org/board/api/communities/perth-whoop-club/rounds' && asked[0].opts.method === 'POST'
+      && posted.organiserKey === key && posted.title === 'Week 1' && !asked[0].url.includes(key));
+  check('the pack sent is the bundle, a zip with the track in it',
+    Buffer.from(posted.pack, 'base64').equals(Buffer.from(made)) && Buffer.from(made).includes(Buffer.from('track.json')));
+  check('and the answer is the round, its board track and its page',
+    sent.n === 4 && sent.track.id === 'trk-0a1b2c3d' && sent.url === 'https://webfpv.org/board/CommunityGow/perth-whoop-club/4' && sent.name === 'Perth Whoop Club');
+  let refused = '';
+  try {
+    await sendRound(pasted, { bytes: made, fetchImpl: board(403, { error: 'Only the organiser can add a round.' }) });
+  } catch (e) {
+    refused = e.message;
+  }
+  check('a key the board will not take is said in the builder\'s words', /organiser link/.test(refused), refused);
+  let big = '';
+  const before = asked.length;
+  try {
+    await sendRound(pasted, { bytes: new Uint8Array(COMMUNITY_PACK_MAX + 1), fetchImpl: board(201, {}) });
+  } catch (e) {
+    big = e.message;
+  }
+  check('a bundle over the board\'s limit is refused before it is sent', /small lap animation/.test(big) && asked.length === before, big);
+  const about = await fetchCommunity(pasted, { fetchImpl: board(200, { name: 'Perth Whoop Club', rounds: [{ n: 1 }, { n: 3 }] }) });
+  check('the community\'s name and its next round come from the board', about.name === 'Perth Whoop Club' && about.next === 4 && about.rounds === 2);
+  check('the boot probe in start.js asks for the key this file keeps',
+    readFileSync(fileURLToPath(new URL('./start.js', import.meta.url)), 'utf8').includes(`'${COMMUNITY_SESSION_KEY}'`));
+}
+
 function suiteBundle() {
   console.log('\nthe whoop builder: the export bundle');
   const doc = presetById('racegow5-track1');
@@ -14173,6 +14254,7 @@ async function main() {
   await suiteShareLink();
   suiteBuildSheet();
   suiteBundle();
+  await suiteCommunity();
   suiteImportFpv();
   suiteFiveInchParts();
   suiteManoeuvres();

@@ -69275,3 +69275,32 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
   sheet; the map now draws the pipe members. Passes on one spot overprinted each other (RaceGOW Track 8 flies a gate
   five times), so labels group and cap at three numbers.
 - Left for the owner: the friend's app is not touched. CommunityGow hosting is a separate piece, see the thread.
+
+### CommunityGow from the builder, and every round flyable, 2026-10-09 (draft)
+
+- Asked by the owner (05:40Z in the export thread): a full design review of CommunityGow against its goal, a
+  group racing a new whoop track a week at home with video evidence, and built tracks in the game as easily as
+  possible. The board half (draft PR 13 on the board) makes every round's track a board track, so a round is
+  flown from its page with one press; this half lets the organiser make and send the round without touching a
+  file. Same draft branch as the export bundle, main merged in first (3335999).
+- What it is: `src/trackbuilder/community.js` reads the community the portal's Make it in the builder link
+  names (`?community=<slug>&board=...#cgkey=<organiser key>`), keeps it in sessionStorage for the tab, takes it
+  out of the address, and sends a round to the board's `/api/communities/:slug/rounds`. `start.js` takes it
+  before anything else reads the address, and loads the module only on such a visit or a reload of one. The
+  builder shows a mint strip under the bar ("Round 2 for Perth Whoop Club", Send, Not now) that follows the
+  track: Send is off until the track is a whoop race track with a lap. Send makes the bundle with the six views
+  and the small animation (inside the board's 4 MB) and posts it; the dialog ends on Open round N and Copy its
+  link. Export bundle also takes a pasted organiser link. `fresh.js` regenerated: it now also lists
+  `bundle.js`, `bundlemaker.js` and `zip.js`, which the bundle commit had left out.
+- Latency: nothing on the flying path changes. The builder fetches one more module only on a community visit.
+- Checks run: `node src/trackbuilder/selftest.js` 2593 passed, 1 failed (15 new, all pass). The one failure is
+  "a whoop rests on the plant's 45 mm", which fails the same way on untouched main 595ed93 (2558 passed, 1
+  failed): main's belly moved to 33 mm and this check still says 45. Not this change, left for the tune thread.
+  `lint:preload` (after `gen:preload`), `lint:boot` 9 of 9, `lint:nouns`. End to end in headless Chromium with
+  the simulator on 8000 and a scratch board on 3150: a community made, the builder opened from its link (strip
+  shown, address cleaned, kept across a reload), RaceGOW5 Track 1 sent in 4.8 s, the board's round carrying a
+  board track, and the round's Fly link landing at the starting blocks ("GATE 1 OF 6"); Track 8 sent from a 390
+  by 844 phone layout. Not run: `npm run verify` (no physics, plant, ABI or build change), `shots.js`.
+- What went wrong: the first strip had no deadline on its read of the community, which `lint:boot`'s rule (every
+  board read has one) would have wanted; it has the board's 8 s now, and a slow board still lets Send work.
+

@@ -55,3 +55,17 @@ second time.
 Times, laps flown, results, rooms, weeks and members: those belong to whatever
 hosts the races. The `track.id` is the document's id and is stable across
 exports of one track; a new week's track is a new document and a new id.
+
+## Who reads it: CommunityGow
+
+The board's CommunityGow portal (`/CommunityGow` on the board) is the first host.
+An organiser either uploads the zip on the community's page or sends it from the
+builder: the page's Make it in the builder opens the whoop builder with
+`?community=<slug>` and the organiser key as `#cgkey=` in the fragment, and the
+strip under the bar sends the bundle as the next round (`src/trackbuilder/community.js`,
+which also reads a pasted organiser link in Export bundle). A bundle sent that way has
+the six views and the small lap animation, which keeps it inside the board's 4 MB.
+
+The board makes the bundle's `track.json` a published track as it takes the round,
+matched by layout so one layout is one track, which is how a round is flyable in the
+simulator from its page. That is why `track.json` is always in the zip.
