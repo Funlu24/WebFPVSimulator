@@ -416,6 +416,35 @@ int sim_set_gravity(double scale);
 double sim_gravity(void);
 
 /*
+ * Motor power: a scale on the motor's kV. 1.0 is the motor the airframe table
+ * describes, the machine every threshold in tests/ and every band in
+ * gates.config.json was measured against, and the path every harness replay
+ * takes. The accepted range is 0.8 to 1.2; outside it returns SIM_ERR_BAD_ARG
+ * rather than being clamped, same argument as sim_set_air.
+ *
+ * It is the pilot's answer to "more power" or "less twitchy": the same motor
+ * wound hotter or milder on the same pack. The back EMF constant goes down by
+ * the scale and the winding resistance by its square, so the no load speed
+ * and the stall torque both go up by the scale, the stall current by its
+ * square, and the motor's own time constant stays where it was. Hover needs
+ * the same rotor speed as before and so sits 1 / scale as deep in the duty
+ * range; full throttle turns the rotor faster. Mass, inertia, the prop, the
+ * pack, the air and every Betaflight setting are untouched. What it does and
+ * does not claim is in src/native/sim_internal.h at SIM_MOTOR_KV.
+ *
+ * A MODE, not state: it survives sim_reset and sim_init exactly as the air
+ * scale, the gravity scale, the flight style and the airframe do. Additive ABI
+ * change, version unchanged: no existing entry point moved or changed meaning,
+ * and a replay that never calls this, or calls it with 1.0, is bit identical
+ * to one from before it existed. MEASURED against the plant golden and the
+ * recorded trace hash, not asserted. See PROGRESS.md.
+ */
+int sim_set_motor_kv(double scale);
+
+/* The motor power scale in force. */
+double sim_motor_kv(void);
+
+/*
  * THE SOLID WORLD, src/native/world.c. Since 2026-09-24 every wall, roof,
  * gate, tree and the train is resolved inside the plant at 1 kHz, by the
  * same step as the ground, instead of by a shell pass that ran after the

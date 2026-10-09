@@ -41,12 +41,84 @@ function trimOrigin(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
+/*
+ * WHAT EVERY TICKET SAYS ABOUT THE BUILD IT CAME FROM, so that tickets can be
+ * grouped over time: the aircraft being flown, and the version of the physics.
+ * They ride beside `context` and never inside it, because the board caps a
+ * context at 32 keys and a feel report already uses about 28.
+ *
+ *   airframe    the id in configs/airframes.js, '5inch' or 'whoop65'.
+ *   sim.wasm    the first 16 hex characters of the SHA-256 of the bytes of
+ *               dist/sim.wasm this page loaded. It names the PHYSICS, which
+ *               the deploy stamp cannot: that moves on every deploy,
+ *               including ones that change no physics.
+ *   sim.deploy  the deploy stamp from src/fresh.js (window.__fresh.stamp), or
+ *               '' on a checkout. It names the SHELL.
+ *
+ * main.js hands the hash over once the module is loaded, off the frame loop.
+ * Before that, or with no crypto.subtle (an insecure origin), it is '' and
+ * the board takes it as unknown. The contract is written out in the board's
+ * README, under Tunes.
+ */
+const ticketMeta = { wasm: '', airframeOf: null };
+
+export function setTicketMeta(next) {
+  if (!next) {
+    return;
+  }
+  if (typeof next.wasm === 'string') {
+    ticketMeta.wasm = /^[0-9a-f]{0,16}$/.test(next.wasm) ? next.wasm : '';
+  }
+  if (typeof next.airframeOf === 'function') {
+    ticketMeta.airframeOf = next.airframeOf;
+  }
+}
+
+/* The first 16 hex characters of the SHA-256 of the module's bytes, or ''. */
+export async function wasmFingerprint(bytes) {
+  try {
+    if (!bytes || typeof crypto === 'undefined' || !crypto.subtle || typeof crypto.subtle.digest !== 'function') {
+      return '';
+    }
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest).subarray(0, 8), (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return '';
+  }
+}
+
+function deployStamp() {
+  try {
+    const stamp = String((window.__fresh && window.__fresh.stamp) || '');
+    return /^[0-9a-z]{0,12}$/.test(stamp) ? stamp : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/* The ticket with the build it came from added, unless the caller already
+ * said (a tune names the aircraft it was flown on, which is not always the
+ * one selected by the time it is sent). */
+function withTicketMeta(payload) {
+  const out = { ...payload };
+  if (out.airframe === undefined && ticketMeta.airframeOf) {
+    const id = String(ticketMeta.airframeOf() || '');
+    if (id) {
+      out.airframe = id;
+    }
+  }
+  if (out.sim === undefined) {
+    out.sim = { wasm: ticketMeta.wasm, deploy: deployStamp() };
+  }
+  return out;
+}
+
 export async function submitBug(payload, origin = boardOrigin()) {
   const board = trimOrigin(origin);
   const res = await fetch(`${board}/api/bugs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(withTicketMeta(payload)),
   });
   const text = await res.text();
   let body = null;

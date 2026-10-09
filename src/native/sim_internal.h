@@ -290,6 +290,45 @@ extern double SIM_AIR;
  */
 extern double SIM_GRAVITY;
 
+/*
+ * MOTOR POWER, set by sim_set_motor_kv: a scale on the motor's kV, the speed
+ * it turns per volt. 1.0 is the motor the airframe table describes and the
+ * machine every band in tests/ and gates.config.json was measured against;
+ * above 1 it is the same motor wound hotter on the same pack, below 1 wound
+ * milder.
+ *
+ * WHAT IT IS. A motor of one size comes in several windings. Fewer, thicker
+ * turns (a higher kV) spin faster per volt and pass more current; more,
+ * thinner turns (a lower kV) the reverse. Turns go as 1 / s for a kV scale of
+ * s and resistance goes as turns squared, so the back EMF constant ke is
+ * divided by s and the winding resistance by s * s. That is all plant_step
+ * does with the scale, and the two are one fact rather than two free knobs.
+ *
+ * WHAT FOLLOWS, none of it tuned: the no load speed is s times, the stall
+ * torque s times and the stall current s squared times what they were, while
+ * the motor's own time constant (J R / ke^2) is unchanged because R and ke^2
+ * move together. Hover wants the same rotor speed and the same torque as
+ * before, so hover duty is 1 / s times what it was and hover sits LOWER on
+ * the stick when s is above 1, which is why configs/rates.js carries a kV
+ * axis for the keyboard's hover. Full throttle turns the rotor faster, which
+ * is more thrust, more current and more sag: that is what the knob is for.
+ *
+ * WHAT IT DOES NOT TOUCH. Mass, inertia, the prop (kt, kq), the pack, the
+ * air and every Betaflight setting. r_motor is the airframe's lumped figure
+ * for motor, ESC and leads, so scaling all of it overstates a real rewind a
+ * little (the ESC and the leads would not change); the difference lives in
+ * the stall current, which is the few milliseconds the note on the missing
+ * winding inductance at PLANT_TABLE already calls unphysical and which the
+ * rotor's own time constant filters before it reaches thrust.
+ *
+ * A MODE, same rule as SIM_AIR and SIM_GRAVITY: it survives sim_reset and
+ * sim_init and the shell owns asserting it. Bit identical at 1.0, because
+ * x / 1.0 is x and 1.0 * 1.0 is 1.0 for every finite double and no
+ * expression in plant_step was reassociated to get it. That is measured
+ * against the plant golden and the recorded trace hash, not assumed.
+ */
+extern double SIM_MOTOR_KV;
+
 /* Motor spin direction, position and cant moved INTO PlantParams when the
  * second airframe landed: they are airframe data and a whoop's are its own.
  * The names below are the shorthand plant.c reads them through. */
