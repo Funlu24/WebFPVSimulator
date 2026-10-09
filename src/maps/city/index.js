@@ -2703,6 +2703,15 @@ export async function buildMap(shell, onProgress, options) {
     if (!proxyMeshes.length) {
       return;
     }
+    /* A proxy paints nothing, but the colour pass draws it all the same, so
+     * on a frame that does not redraw the shadow map (shadowrate.js) it is a
+     * draw and its triangles for nothing: every proxy is hidden then. */
+    if (!renderer.shadowMap.autoUpdate && !renderer.shadowMap.needsUpdate) {
+      for (let i = 0; i < proxyMeshes.length; i += 1) {
+        proxyMeshes[i].visible = false;
+      }
+      return;
+    }
     proxyEye.copy(target).add(SUN_OFFSET);
     proxyView.lookAt(proxyEye, target, proxyUp);
     proxyView.setPosition(proxyEye);
