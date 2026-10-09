@@ -2927,7 +2927,7 @@ function padTroubleItem(info, platform = 'other') {
   }
   if (!info.buttons && !info.hasSelect) {
     return {
-      label: 'Your radio has no buttons this browser can see',
+      label: 'Kumandanızın bu tarayıcının görebildiği düğmesi yok',
       action: 'calibrate',
       rowClass: 'row-warn',
       note: 'Every switch on it is arriving as an axis, so nothing on it can press Enter yet.'
@@ -2989,7 +2989,7 @@ function padTroubleItem(info, platform = 'other') {
   if (!info.calibrated && !info.mapUsable) {
     const phone = platform === 'android' && info.fourAxes;
     return {
-      label: 'This browser is guessing your stick order',
+      label: 'Bu tarayıcı çubuk sıranızı tahmin ediyor',
       action: phone ? 'stickhelp' : 'calibrate',
       rowClass: 'row-warn',
       note: 'The axis it thinks is your throttle is sitting at the middle, and a real'
@@ -3016,7 +3016,7 @@ function padTroubleItem(info, platform = 'other') {
    */
   if (!info.calibrated && info.guessNoYaw) {
     return {
-      label: 'This browser cannot see your yaw stick',
+      label: 'Bu tarayıcı yaw çubuğunuzu göremiyor',
       action: 'calibrate',
       rowClass: 'row-warn',
       note: 'The axis it guessed was yaw has not moved once, while a stick it does not'
@@ -3039,7 +3039,7 @@ function padTroubleItem(info, platform = 'other') {
    */
   if (!info.calibrated && info.guessYawParked) {
     return {
-      label: 'This browser has your throttle as yaw',
+      label: 'Bu tarayıcı gazınızı yaw olarak görüyor',
       action: 'calibrate',
       rowClass: 'row-warn',
       note: 'The axis it guessed was yaw sits off centre and stays there, which a yaw stick'
@@ -3058,7 +3058,7 @@ function padTroubleItem(info, platform = 'other') {
    */
   if (!info.calibrated && info.radioAsGamepad) {
     return {
-      label: 'This browser calls your radio a gamepad',
+      label: 'Bu tarayıcı kumandanızı oyun kolu sanıyor',
       action: 'calibrate',
       rowClass: 'row-warn',
       note: 'One of its stick axes rests off centre and stays there, which a gamepad stick never'
@@ -3380,16 +3380,16 @@ function builderReturnItem(s, sharedMap) {
       return null;
     }
     return {
-      label: 'Back to the builder',
+      label: 'Oluşturucuya dön',
       action: kind === 'owned' ? 'editown' : 'trackbuilder',
       note: `Opens ${listing.name || 'this track'} in the builder. Fly this track in there brings you straight back to the starting blocks.`,
     };
   }
   if (s.map === 'built' && !sharedMap && ownMapId()) {
     return {
-      label: 'Back to the builder',
+      label: 'Oluşturucuya dön',
       action: 'mapbuilder',
-      note: 'Opens your map in the builder. Fly this map in there brings you straight back to it.',
+      note: 'Haritanızı oluşturucuda açar. Orada haritada uçmayı seçerseniz doğrudan buraya döner.',
     };
   }
   return null;
@@ -3430,23 +3430,23 @@ function uploadAction(listing, {
   }
   if (!listing || !shareId) {
     return {
-      label: 'Post a time',
+      label: 'Süre gönder',
       action: 'posttime',
       disabled: true,
-      note: 'Only a track on the board can hold a time. Publish this one first.',
+      note: 'Bir süreyi yalnızca panodaki bir pist tutabilir. Önce bu pisti yayınlayın.',
     };
   }
   if (!listing.canPostTime) {
     return {
-      label: 'Post a time',
+      label: 'Süre gönder',
       action: 'posttime',
       disabled: true,
-      note: 'The layout has changed since it was published. Update the track on the board first.',
+      note: 'Yayınlandığından beri yerleşim değişti. Önce panodaki pisti güncelleyin.',
     };
   }
   if (ms == null) {
     return {
-      label: 'Post a time',
+      label: 'Süre gönder',
       action: 'posttime',
       disabled: true,
       /* A pilot who has just flown twenty clean laps in practice and comes
@@ -3480,16 +3480,16 @@ function uploadAction(listing, {
 function publishAction(listing, published) {
   if (published) {
     return {
-      label: 'Published',
+      label: 'Yayınlandı',
       action: 'seat-board',
-      note: 'This track is on the public board. Opens its page.',
+      note: 'Bu pist herkese açık panoda. Sayfasını açar.',
     };
   }
   if (listing && listing.canPublishNew) {
     const of = listing.sourceName ? ` of ${listing.sourceName}` : '';
     const by = listing.sourceAuthor ? ` by ${listing.sourceAuthor}` : '';
     return {
-      label: 'Publish this track',
+      label: 'Bu pisti yayınla',
       action: 'publishcourse',
       note: listing.remix
         ? `Your copy${of}${by}. Goes on the board under a new name. Then you can post a time.`
@@ -3498,29 +3498,29 @@ function publishAction(listing, published) {
   }
   if (listing && listing.canUpdateListing && listing.layoutDrift) {
     return {
-      label: 'Update this track',
+      label: 'Bu pisti güncelle',
       action: 'publishcourse',
-      note: 'The layout changed. Updating the board will clear posted times, then you can post a time.',
+      note: 'Yerleşim değişti. Panoyu güncellemek gönderilen süreleri siler, sonra süre gönderebilirsiniz.',
     };
   }
   if (listing && listing.kind === 'owned') {
     return {
-      label: 'Publish this track',
+      label: 'Bu pisti yayınla',
       action: 'publishcourse',
       disabled: true,
-      note: 'Already on the board, and nothing has changed since.',
+      note: 'Zaten panoda ve o zamandan beri bir şey değişmedi.',
     };
   }
   if (listing && listing.kind === 'community') {
     return {
-      label: 'Publish this track',
+      label: 'Bu pisti yayınla',
       action: 'publishcourse',
       disabled: true,
-      note: 'Somebody else published this one. Edit a copy to put your own version on the board.',
+      note: 'Bunu başkası yayınladı. Kendi sürümünüzü panoya koymak için kopyasını düzenleyin.',
     };
   }
   return {
-    label: 'Publish this track',
+    label: 'Bu pisti yayınla',
     action: 'publishcourse',
     disabled: true,
     note: listing && listing.kind === 'local'
@@ -3533,13 +3533,13 @@ function remixAction(listing) {
   if (listing && listing.canRemix) {
     const by = byLine(listing) ? ` ${byLine(listing)}` : '';
     return {
-      label: 'Edit a copy',
+      label: 'Kopyasını düzenle',
       action: 'remix',
       note: `Open ${listing.name}${by} in the builder as your own track, under a new name.`,
     };
   }
   return {
-    label: 'Edit a copy',
+    label: 'Kopyasını düzenle',
     action: 'remix',
     disabled: true,
     note: listing && listing.kind === 'owned'
@@ -3551,13 +3551,13 @@ function remixAction(listing) {
 function editOwnAction(listing) {
   if (listing && listing.kind === 'owned') {
     return {
-      label: 'Edit this track',
+      label: 'Bu pisti düzenle',
       action: 'editown',
-      note: 'Open this track in the builder. A rename updates the name on the board. A layout change asks before clearing times.',
+      note: 'Bu pisti oluşturucuda açar. Yeniden adlandırma panodaki adı günceller. Yerleşim değişikliği, süreleri silmeden önce sorar.',
     };
   }
   return {
-    label: 'Edit this track',
+    label: 'Bu pisti düzenle',
     action: 'editown',
     disabled: true,
     note: listing && listing.kind === 'community'
@@ -3674,7 +3674,7 @@ function courseCardRows(subject, seatRows = []) {
      * that the two want joining in words. Not a cursor stop. */
     { label: name, section: true },
     {
-      label: 'Fly it',
+      label: 'Uç',
       action: 'card-fly',
       primary: true,
       note: board
@@ -3686,11 +3686,11 @@ function courseCardRows(subject, seatRows = []) {
    * Post a time, Publish, the right Edit, Standings and its page. */
   if (seatRows.length) {
     rows.push(...seatRows);
-    rows.push({ label: 'Back to the list', action: 'card-back' });
+    rows.push({ label: 'Listeye dön', action: 'card-back' });
     return rows;
   }
   rows.push({
-    label: 'Open in the builder',
+    label: 'Oluşturucuda aç',
     action: 'card-builder',
     note: board
       ? `Open ${name} in the builder without flying it. Somebody else's track opens as a copy under your own name.`
@@ -3698,17 +3698,17 @@ function courseCardRows(subject, seatRows = []) {
   });
   if (board) {
     rows.push({
-      label: 'Standings',
+      label: 'Sıralama',
       action: 'card-standings',
       note: `Every time posted on ${name}, fastest first, and who flew them. Opens here, not on another site.`,
     });
     rows.push({
-      label: 'This track on Tracks and times',
+      label: 'Bu pist, Pistler ve süreler sayfasında',
       action: 'card-board',
       note: `${name} on the public board: every time posted on it, who flew them and their ghosts. A link to send somebody. Opens in a new tab.`,
     });
   }
-  rows.push({ label: 'Back to the list', action: 'card-back' });
+  rows.push({ label: 'Listeye dön', action: 'card-back' });
   return rows;
 }
 
@@ -3728,7 +3728,7 @@ function editAction(listing, seat = null) {
   }
   const name = (seat && seat.name) || (listing && listing.name) || 'this track';
   return {
-    label: 'Open in the builder',
+    label: 'Oluşturucuda aç',
     action: 'trackbuilder',
     note: `Opens the builder on ${name}. New in there starts a blank one. ${KEEP_NOTE}`,
   };
@@ -3911,7 +3911,7 @@ function ratesChanged(s) {
  * so a pilot can see what they are flying without opening it. */
 function ratesItem(s, midRun) {
   return {
-    label: 'Rates',
+    label: 'Oranlar',
     value: ratesShort(s.rates),
     action: 'rates',
     /*
@@ -4031,9 +4031,9 @@ function tuneAskItem(s) {
 
 function feelItem() {
   return {
-    label: 'Flight feel',
+    label: 'Uçuş hissi',
     action: 'feel',
-    note: 'Tell the tune work how the quad flies. One word is enough; your tune, PID adjustment and rates go with it.',
+    note: 'Tune çalışmasına quadın nasıl uçtuğunu söyleyin. Bir kelime yeter; tune, PID ayarınız ve rates birlikte gelir.',
   };
 }
 
@@ -4136,7 +4136,7 @@ function latencyItem(p) {
   const facts = bits.length ? ` Here ${bits.join(', ')}.${sixty}` : '';
   if (!p || !p.supported) {
     return {
-      label: 'Input to screen',
+      label: 'Girişten ekrana',
       value: 'Not measurable here',
       note: `This browser does not report input timing, so the time from a press to the screen cannot be read.${facts}`,
       info: true,
@@ -4144,14 +4144,14 @@ function latencyItem(p) {
   }
   if (!key) {
     return {
-      label: 'Input to screen',
+      label: 'Girişten ekrana',
       value: 'Press a few keys',
       note: `Measured from your own key presses and clicks to the frame that first showed them, so it fills in as you use the menus.${facts}`,
       info: true,
     };
   }
   return {
-    label: 'Input to screen',
+    label: 'Girişten ekrana',
     value: `About ${key.ms} ms`,
     note: `From a key press to the frame that first showed it, the median of your last ${key.n}, as this browser reports it; the display's own delay after that is not included. One frame at 60 Hz is 17 ms.${facts}`,
     info: true,
@@ -4163,7 +4163,7 @@ function gpuItem(info) {
     return {
       label: 'GPU',
       value: 'Detecting',
-      note: 'Read from the WebGL context that is drawing the world.',
+      note: 'Dünyayı çizen WebGL bağlamından okunur.',
       info: true,
     };
   }
@@ -4446,7 +4446,7 @@ const WAYS = [
     id: 'race-5inch',
     airframe: '5inch',
     mode: 'race',
-    label: 'Five inch racing',
+    label: 'Beş inç yarış',
     art: 'assets/gate/race.jpg',
     blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish can go on the public board.',
     facts: ['6S', '220 mm', 'The board'],
@@ -4455,7 +4455,7 @@ const WAYS = [
     id: 'race-whoop65',
     airframe: 'whoop65',
     mode: 'race',
-    label: 'Whoop racing',
+    label: 'Whoop yarışı',
     art: 'assets/gate/whoop.jpg',
     /* Says what configs/airframes.js says, in the same words: the machine
      * flies the five inch's model and the room is built to match, so the
@@ -4502,7 +4502,7 @@ const WAYS = [
  */
 const BUILDER_CARD = {
   id: 'builder',
-  label: 'Builder',
+  label: 'Oluşturucu',
   art: 'assets/gate/builder.jpg',
   blurb: 'Make your own. A race track for the five inch, a room for the whoop, or a freestyle map of bandos, cranes and named gaps, drawn from above and flown from the same page.',
   facts: ['Tracks', 'Rooms', 'Maps'],
@@ -5035,7 +5035,7 @@ export class Ui {
       max: weightMaxFor(this.settings.airframe),
       step: WEIGHT_STEP,
       value: this.settings.weight,
-      label: 'Weight, how heavy the quad feels',
+      label: 'Ağırlık, quadın ne kadar ağır hissettirdiği',
     });
     sticks.append(this.osdStickLeft.box, this.osdAir.box, this.osdStickRight.box);
     this.osdSticks = sticks;
@@ -6169,7 +6169,7 @@ export class Ui {
       return [];
     }
     return [{
-      label: 'Ghost',
+      label: 'Hayalet',
       value: this.ghostRow.value,
       note: this.ghostRow.note,
       adjust: (d) => {
@@ -6209,7 +6209,7 @@ export class Ui {
         label: '',
         value: readPilotName() || '',
         maxLength: 24,
-        placeholder: 'Name',
+        placeholder: 'Ad',
         rules: nameRules(),
         save: writePilotName,
       }];
@@ -6373,7 +6373,7 @@ export class Ui {
   askRatePresetName(suggested = '') {
     const taken = presetNamed(suggested);
     return this.askForm({
-      title: 'Name this preset',
+      title: 'Ön ayara ad ver',
       detail: RATES_STORAGE_WARNING,
       confirmLabel: taken ? 'Replace' : 'Save',
       fields: [{
@@ -6381,7 +6381,7 @@ export class Ui {
         label: '',
         value: suggested,
         maxLength: PRESET_NAME_MAX,
-        placeholder: 'Preset name',
+        placeholder: 'Ön ayar adı',
         empty: 'A preset needs a name.',
       }],
     }).then((values) => (values ? values.name : null));
@@ -6517,7 +6517,7 @@ export class Ui {
     const now = Math.round(yawNow * Math.sin(cameraTiltRad(s.cameraAngle)));
     const then = Math.round(YAW_TIP_RATE * Math.sin(cameraTiltRad(s.cameraAngle)));
     this.askConfirm({
-      title: 'Yaw will roll the horizon',
+      title: 'Yaw ufku yatıracak',
       detail: `At ${s.cameraAngle} degrees of tilt, ${pct} percent of a yaw shows up as roll in the picture: ${now} deg/s of it at your ${yawNow} deg/s yaw rate. That is what a real tilted camera does, and the usual answer is a slower yaw. Dropping the yaw max rate to ${YAW_TIP_RATE} brings it back to ${then} deg/s. You can change it any time on the Rates screen.`,
       yes: `Set yaw to ${YAW_TIP_RATE}`,
       no: `Leave it at ${yawNow}`,
@@ -6551,7 +6551,7 @@ export class Ui {
         label: '',
         value: readPilotName() || '',
         maxLength: 24,
-        placeholder: 'Name',
+        placeholder: 'Ad',
         autocomplete: 'nickname',
         rules: nameRules(),
         save: writePilotName,
@@ -7294,27 +7294,27 @@ export class Ui {
       this.closeNameDialog(null);
     }
     const FEELS = [
-      { id: 'floppy', label: 'Floppy' },
-      { id: 'soft', label: 'Soft' },
-      { id: 'right', label: 'About right' },
-      { id: 'stiff', label: 'Stiff' },
-      { id: 'twitchy', label: 'Twitchy' },
+      { id: 'floppy', label: 'Gevşek' },
+      { id: 'soft', label: 'Yumuşak' },
+      { id: 'right', label: 'Tam kararında' },
+      { id: 'stiff', label: 'Sert' },
+      { id: 'twitchy', label: 'Tepkisel' },
     ];
     const ISSUES = [
-      { id: 'sluggish', label: 'Slow to answer the stick' },
-      { id: 'bounce', label: 'Bounces back after a stop' },
-      { id: 'propwash', label: 'Wobbles in propwash' },
-      { id: 'drift', label: 'Drifts off attitude' },
-      { id: 'yaw', label: 'Yaw is lazy' },
-      { id: 'throttle', label: 'Throttle is touchy' },
+      { id: 'sluggish', label: 'Çubuğa geç cevap veriyor' },
+      { id: 'bounce', label: 'Durunca geri sekiyor' },
+      { id: 'propwash', label: 'Propwash içinde sallanıyor' },
+      { id: 'drift', label: 'Duruşundan kayıyor' },
+      { id: 'yaw', label: 'Yaw tembel' },
+      { id: 'throttle', label: 'Gaz çok hassas' },
       /*
        * FLOATY GETS ITS OWN CHIP, because it kept arriving in the free text
        * box instead. "About right" plus "its much too floaty" typed
        * underneath is a report the chip rows could not carry, and the row
        * below can now answer it on the spot the way the throttle row does.
        */
-      { id: 'floaty', label: 'Floaty, carries too far' },
-      { id: 'locked', label: 'Locked in, no complaints' },
+      { id: 'floaty', label: 'Süzülüyor, fazla uzağa taşıyor' },
+      { id: 'locked', label: 'Oturmuş, şikayet yok' },
     ];
 
     const box = el('div', 'name-dialog-box bug feel');
@@ -8148,7 +8148,7 @@ export class Ui {
       const shared = world && world.id === 'built' ? this.sharedMap : null;
       const modeRow = this.mode === 'freestyle'
         ? {
-          label: 'Map',
+          label: 'Harita',
           value: shared ? shared.name : (world ? world.name : 'Not loaded'),
           action: 'freestyle',
           /*
@@ -8167,7 +8167,7 @@ export class Ui {
               : townNote(s, this.loadFailure)),
         }
         : {
-          label: 'Track',
+          label: 'Pist',
           value: seat ? seat.name : 'Choose one',
           action: 'courses',
           note: seat
@@ -8216,7 +8216,7 @@ export class Ui {
       const guide = this.firstRun && this.mode === 'race' && this.seatMatchesMode();
       const flyRow = guide
         ? {
-          label: 'First flight',
+          label: 'İlk uçuş',
           action: 'firstflight',
           primary: true,
           note: seat && seat.name
@@ -8224,7 +8224,7 @@ export class Ui {
             : 'Levelled off, with the sticks drawn on screen and a prompt at each step.',
         }
         : {
-          label: 'Fly',
+          label: 'Uç',
           action: 'fly',
           primary: true,
           /* Which of the two Fly does, said before it is pressed: see
@@ -8268,7 +8268,7 @@ export class Ui {
           label: 'Quad',
           value: airframeById(s.airframe).name,
           action: 'quad',
-          note: 'The machine. The aircraft, its tune and PIDs, camera angle, field of view, flight mode and the firmware bench, which is every Betaflight key the module compiles.',
+          note: 'Makine. Uçak, tune ve PID ayarları, kamera açısı, görüş alanı, uçuş modu ve derlenen her Betaflight anahtarını içeren firmware tezgahı.',
         },
         {
           /*
@@ -8298,15 +8298,15 @@ export class Ui {
            * (MENUS-PLAN.md 1.2). A set name is already the Pilot chip in the
            * top right; Your name inside still says Not set.
            */
-          label: 'Settings',
+          label: 'Ayarlar',
           action: 'pilot',
-          note: 'You and your radio. Your name, choosing a joystick, Calibrate sticks, rates, graphics and sound.',
+          note: 'Siz ve kumandanız. Adınız, joystick seçimi, çubukların kalibrasyonu, oranlar, grafik ve ses.',
         },
-        { label: 'How to fly', action: 'howto', note: 'The sticks, live, and what the keys do.' },
+        { label: 'Nasıl uçulur', action: 'howto', note: 'Çubuklar canlı ve tuşların ne yaptığı.' },
         {
-          label: 'Tracks and times',
+          label: 'Pistler ve süreler',
           action: 'leaderboard',
-          note: 'Every published track and map, the times flown on them and who flew them. Opens in a new tab.',
+          note: 'Yayınlanmış her pist ve harita, üzerlerinde uçulan süreler ve kimlerin uçtuğu. Yeni sekmede açılır.',
         },
         /*
          * ABOUT, where Credits, Support and the FPV wiki were three rows of
@@ -8316,9 +8316,9 @@ export class Ui {
          * the #credits address and the checks that name it do not move.
          */
         {
-          label: 'About',
+          label: 'Hakkında',
           action: 'credits',
-          note: 'Who made this and whose work it stands on, the partners who back it, Patreon, the FPV wiki, and reporting a bug.',
+          note: 'Bunu kimin yaptığı ve kimlerin çalışmasına dayandığı, destekçiler, FPV wiki ve hata bildirme.',
         },
         /*
          * THE WAY BACK TO THE GATE, AND IT IS A ROW NOW.
@@ -8342,11 +8342,11 @@ export class Ui {
          * game, and a pilot looking for the other mode or the other machine
          * is looking for the screen that offers both.
          */
-        { label: this.gateLabel(), action: 'mode-gate', note: 'The cards: five inch racing, whoop racing, freestyle and the builder. Changing your mind about any of it starts here.' },
+        { label: this.gateLabel(), action: 'mode-gate', note: 'Kartlar: beş inç yarış, whoop yarışı, freestyle ve oluşturucu. Fikrinizi değiştirirseniz buradan başlarsınız.' },
       ];
     }
     if (this.screen === 'howto') {
-      return [{ label: 'Back', action: 'back' }];
+      return [{ label: 'Geri', action: 'back' }];
     }
     /*
      * STICK HELP'S WAYS ON, in the order the screen argues for them. The
@@ -8366,7 +8366,7 @@ export class Ui {
     if (this.screen === 'stickhelp') {
       return [
         {
-          label: 'Calibrate sticks',
+          label: 'Çubukları kalibre et',
           action: 'stickhelp-calibrate',
           primary: true,
           note: 'Centre, full range, then one named move per stick. It maps whatever axis actually'
@@ -8374,18 +8374,18 @@ export class Ui {
             + ' moves for is not: the block above says where that one is lost.',
         },
         {
-          label: 'Check sticks',
+          label: 'Çubukları kontrol et',
           action: 'stickhelp-check',
           note: 'The mapping flying now, live. Reverse a channel that goes the wrong way, or put the'
             + ' sticks on the other hands.',
         },
         {
-          label: 'Choose joystick',
+          label: 'Joystick seç',
           value: (this.padInfo && this.padInfo.using) || 'Keyboard',
           action: 'choosepad',
           note: padChooseNote(this.padInfo, this.radioBlind),
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
     /*
@@ -8398,17 +8398,17 @@ export class Ui {
     if (this.screen === 'credits') {
       return [
         {
-          label: 'Partners',
+          label: 'İş ortakları',
           action: 'partners',
           note: `${PARTNERS.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Opens their page on the board in a new tab.`,
         },
-        { label: 'Support', action: 'support', note: PATREON_NOTE },
+        { label: 'Web sitemiz', action: 'support', note: PATREON_NOTE },
         
         { label: 'Instagram', action: 'instagram', note: INSTAGRAM_NOTE },
         {
           label: 'FPV wiki',
           action: 'wiki',
-          note: 'The closed loop, the plant, and every Betaflight 4.5.1 key. Opens the wiki on webfpv.org.',
+          note: 'Kapalı döngü, plant ve her Betaflight 4.5.1 anahtarı. Wiki webfpv.org adresinde açılır.',
         },
         /*
          * A REPORT FROM THE FRONT DOOR, for the one pilot who had none. The
@@ -8417,11 +8417,11 @@ export class Ui {
          * (MENUS-PLAN.md 1.41). This is that door, one row from the title.
          */
         {
-          label: 'Report a bug',
+          label: 'Hata bildir',
           action: 'reportbug',
-          note: 'Something wrong, or something to say: the form takes a title and a sentence, and sends the map, graphics and browser with it. F8 opens it from anywhere.',
+          note: 'Bir sorun ya da söyleyecek bir şey: form bir başlık ve bir cümle alır, haritayı, grafik ayarlarını ve tarayıcıyı birlikte gönderir. F8 her yerden açar.',
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
     /*
@@ -8517,7 +8517,7 @@ export class Ui {
        * of theirs would appear.
        */
       cards.push({
-        label: 'Build a track',
+        label: 'Pist oluştur',
         note: `Opens the builder on an empty field. Whatever was on its canvas is kept in its Load list. ${KEEP_NOTE}`,
         course: { kind: 'new' },
         action: 'trackbuilder-new',
@@ -8549,9 +8549,9 @@ export class Ui {
         const seatRows = chosen.course.kind === 'current'
           ? [
             {
-              label: 'Before you fly',
+              label: 'Uçmadan önce',
               action: 'card-launch',
-              note: 'Laps, pack charge, flight model, radio link and the ghost: what this run counts as. Opens the launch card, which has its own Fly.',
+              note: 'Tur sayısı, pil şarjı, uçuş modeli, radyo bağlantısı ve hayalet: bu uçuşun neye sayıldığı. Kendi Uç düğmesi olan açılış kartını açar.',
             },
             ...applicableRows([
               uploadAction(listing, {
@@ -8563,21 +8563,21 @@ export class Ui {
             editAction(listing, seat),
             ...(listing && listing.shareId ? [
               {
-                label: 'Standings',
+                label: 'Sıralama',
                 action: 'standings',
                 note: `Every time posted on ${seat ? seat.name : 'this track'}, fastest first. Opens here.`,
               },
               {
-                label: 'This track on Tracks and times',
+                label: 'Bu pist, Pistler ve süreler sayfasında',
                 action: 'seat-board',
-                note: 'Its page on the public board, opened on this track. A link to send somebody. Opens in a new tab.',
+                note: 'Genel panodaki sayfası, bu pistte açılır. Birine gönderebileceğiniz bir bağlantı. Yeni sekmede açılır.',
               },
             ] : []),
           ]
           : [];
         return [...cards, ...courseCardRows(chosen, seatRows)];
       }
-      return [...cards, { label: 'Back', action: 'back' }];
+      return [...cards, { label: 'Geri', action: 'back' }];
     }
     /*
      * FREESTYLE. One town and no ceremony.
@@ -8727,11 +8727,11 @@ export class Ui {
          * touched by it and never flown as a map.
          */
         {
-          label: 'Build a map',
+          label: 'Harita oluştur',
           action: 'mapbuilder',
-          note: 'Opens the builder on the freestyle canvas. Place buildings, a crane, containers, a skate set and named gaps, then fly it here as Your map.',
+          note: 'Oluşturucuyu freestyle tuvalinde açar. Bina, vinç, konteyner, kaykay seti ve adlandırılmış boşluklar yerleştirin, sonra burada Haritanız olarak uçun.',
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
 
@@ -8767,15 +8767,15 @@ export class Ui {
          * 55 px to 135. The row is what the pilot needs; the heading was
          * decoration, and decoration is what gives way.
          */
-        { label: 'The machine', section: true },
+        { label: 'Makine', section: true },
         craftItem(s, midRun),
         tuneItem(s, midRun),
         {
-          label: 'Firmware bench',
+          label: 'Firmware tezgahı',
           action: 'fc',
           note: `Every Betaflight 4.5.1 key the module compiles, tab by tab, in Configurator’s own colours. Opens as a tool, in its own frame. Save becomes Your edits and the Tune row above starts naming it; the picker that puts you back on stock is in ${SCREEN_TITLES.pids}. There is no CLI paste.`,
         },
-        { label: 'Camera', section: true },
+        { label: 'Kamera', section: true },
         this.cameraAngleRow(s),
         choice(
           'Field of view',
@@ -8785,7 +8785,7 @@ export class Ui {
           (n) => `${n} degrees vertical`,
           (n) => { s.cameraFov = n; },
         ),
-        { label: 'Flight', section: true },
+        { label: 'Uçuş', section: true },
         choice(
           'Flight mode',
           'Acro: sticks are rates, hands off holds attitude. Angle: sticks are tilt, hands off levels. A radio, a gamepad, thumb sticks and every freestyle flight fly this one, because Angle holds the craft to about thirty degrees of bank and no trick in the book can be flown in it. M in flight switches whichever one you are flying, and keeps it.',
@@ -8844,12 +8844,12 @@ export class Ui {
          * load bearing navigation as well as a signpost.
          */
         {
-          label: 'Rates',
+          label: 'Oranlar',
           value: ratesShort(s.rates),
           action: 'rates',
           note: `Not the machine's. Rates are yours, so they live under ${SCREEN_TITLES.pilot} and stay put when you switch tunes. Changing the aircraft reseeds them only if you are still on stock rates. This row goes there, and changing them mid run leaves the quad where it is.`,
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
 
@@ -8862,23 +8862,23 @@ export class Ui {
       /* Same contract as Quad above. */
       const midRun = this.returnTo === 'paused';
       return [
-        { label: 'You', section: true },
+        { label: 'Siz', section: true },
         {
-          label: 'Your name',
+          label: 'Adınız',
           value: name || 'Not set',
           action: 'setname',
           note: name
             ? 'Posted times and published tracks carry this name. Changing it updates the board for tracks you published from this browser.'
             : `Needed to publish a track or post a time. ${nameRules()}`,
         },
-        { label: 'Sticks', section: true },
+        { label: 'Çubuklar', section: true },
         {
-          label: 'Choose joystick',
+          label: 'Joystick seç',
           value: (this.padInfo && this.padInfo.using) || 'Keyboard',
           action: 'choosepad',
           note: padChooseNote(this.padInfo, this.radioBlind),
         },
-        { label: 'Calibrate sticks', action: 'calibrate', note: 'Centre, full range, then one named move per stick. Saved after you check it.' },
+        { label: 'Çubukları kalibre et', action: 'calibrate', note: 'Merkez, tam hareket, sonra her çubuk için adı verilmiş bir hareket. Kontrol ettikten sonra kaydedilir.' },
         /*
          * THE WAY BACK TO THE ONLY SCREEN THAT SHOWS A MAPPING.
          *
@@ -8891,7 +8891,7 @@ export class Ui {
          * saved, so a one channel repair costs one row instead of a minute.
          */
         {
-          label: 'Check sticks',
+          label: 'Çubukları kontrol et',
           action: 'calibrate-check',
           note: 'Your saved mapping, live, without calibrating again. Move a stick and watch it:'
             + ' if it goes the wrong way, one key reverses that channel, and if the wrong stick'
@@ -8905,7 +8905,7 @@ export class Ui {
          * in. See STICK HELP in src/input/input.js.
          */
         {
-          label: 'Stick help',
+          label: 'Çubuk yardımı',
           action: 'stickhelp',
           note: 'A stick that does nothing? Move it here and watch every axis your radio sends.'
             + ' That tells the sim, the browser and the radio apart, and says what fixes each.',
@@ -8919,7 +8919,7 @@ export class Ui {
          * noteRestartSwitch in input.js.
          */
         ...(this.padInfo && this.padInfo.count > 0 && this.padInfo.using !== 'Keyboard' ? [{
-          label: 'Restart switch',
+          label: 'Yeniden başlatma anahtarı',
           value: this.padInfo.restartCapturing ? 'Flip it now' : (this.padInfo.restart || 'Not set'),
           action: 'restart-switch',
           note: this.padInfo.restartCapturing
@@ -8929,9 +8929,9 @@ export class Ui {
               : 'A switch or button on your radio that takes you back to the start line in flight, like R on the keyboard. Choose this row, then flip it.'),
         }] : []),
         ...(this.padInfo && this.padInfo.restart && !this.padInfo.restartCapturing ? [{
-          label: 'Forget restart switch',
+          label: 'Yeniden başlatma anahtarını unut',
           action: 'restart-switch-clear',
-          note: 'R on the keyboard still restarts.',
+          note: 'Klavyede R yine yeniden başlatır.',
         }] : []),
         /*
          * WHICH STICK CARRIES WHICH CHANNEL, and it sits here because the
@@ -8989,7 +8989,7 @@ export class Ui {
           (id) => LINK_PRESETS[id].label,
           (id) => { s.link = id; },
         ),
-        { label: 'Screen', section: true },
+        { label: 'Ekran', section: true },
         graphicsItem(s, this.autoScaleNow),
         toggle(
           'Shadows',
@@ -9007,9 +9007,9 @@ export class Ui {
          * flight log, one door down: see the Advanced room's comment.
          */
         {
-          label: 'Advanced',
+          label: 'Gelişmiş',
           action: 'advanced',
-          note: 'Render scale, frame cap, low latency and predicted view, frame pacing, what reaches the screen how fast, and the flight log. For when something is wrong; Auto looks after the picture otherwise.',
+          note: 'Render ölçeği, kare sınırı, düşük gecikme ve tahmin edilen görüntü, kare ritmi, ekrana neyin ne kadar hızlı ulaştığı ve uçuş kaydı. Bir şey ters gittiğinde içindir; Auto aksi halde görüntüyü kendisi halleder.',
         },
         toggle(
           'Fullscreen in flight',
@@ -9110,7 +9110,7 @@ export class Ui {
           s.raceLine,
           (v) => { s.raceLine = v; },
         ),
-        { label: 'Sound', section: true },
+        { label: 'Ses', section: true },
         toggle('Sound', 'All sound: motors, wind, music, cues and every lap time called out loud.', s.sound, (v) => { s.sound = v; }),
         stepper('Volume', 'Overall level, the lap call included. Zero to ten.', `${s.volume}`, (d) => {
           s.volume = Math.max(0, Math.min(10, s.volume + d));
@@ -9143,14 +9143,14 @@ export class Ui {
           s.focusTone,
           (v) => { s.focusTone = v; },
         ),
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
 
     /* ADVANCED: the rows Settings sends here. See the room's comment. */
     if (this.screen === 'advanced') {
       return [
-        { label: 'Picture and latency', section: true },
+        { label: 'Görüntü ve gecikme', section: true },
         gpuItem(this.gpuInfo),
         choice(
           'Render scale',
@@ -9200,7 +9200,7 @@ export class Ui {
         /* What the pieces above add up to on this machine, measured: see
          * src/render/latency.js. Read only, like the GPU row. */
         latencyItem(this.latencyProbe ? this.latencyProbe() : null),
-        { label: 'Diagnostics', section: true },
+        { label: 'Tanılama', section: true },
         toggle(
           'Flight log',
           'Record the run for download as a Betaflight blackbox CSV. Holds the whole flight in memory.',
@@ -9216,11 +9216,11 @@ export class Ui {
           (v) => { s.supportPrompts = v; },
         ),
         {
-          label: 'Download flight log',
+          label: 'Uçuş kaydını indir',
           action: 'downloadflightlog',
-          note: 'Writes what was recorded as blackbox_decode CSV, which scripts/replay-log.js reads.',
+          note: 'Kaydedileni blackbox_decode CSV olarak yazar, scripts/replay-log.js bunu okur.',
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
 
@@ -9237,12 +9237,12 @@ export class Ui {
       if (!t) {
         return [
           {
-            label: 'No track chosen',
+            label: 'Pist seçilmedi',
             info: true,
             disabled: true,
-            note: 'Pick a track in the Race room and open its standings from there.',
+            note: 'Yarış odasında bir pist seçin ve sıralamasını oradan açın.',
           },
-          { label: 'Back', action: 'back' },
+          { label: 'Geri', action: 'back' },
         ];
       }
       const rows = [];
@@ -9251,7 +9251,7 @@ export class Ui {
       const room = t.trackClass === 'micro';
       const bestMs = best ? (room ? best.threeMs : best.lapMs) : null;
       rows.push({
-        label: 'Fly this track',
+        label: 'Bu pistte uç',
         action: 'standings-fly',
         primary: true,
         note: best
@@ -9267,17 +9267,17 @@ export class Ui {
       const ghosts = times.filter((x) => x.hasGhost && x.id);
       if (ghosts.length) {
         rows.push({
-          label: 'Chase the record',
+          label: 'Rekorun peşine düş',
           action: 'standings-ghost',
           note: `${ghosts[0].name || 'An unnamed pilot'}'s ${formatTime(ghosts[0].lapMs)} flown as a ghost beside you, straight from the starting blocks.`,
         });
       }
       rows.push({
-        label: 'This track on Tracks and times',
+        label: 'Bu pist, Pistler ve süreler sayfasında',
         action: 'card-board',
         note: `${t.name} on the public board, opened on its own page. A link to send somebody. Opens in a new tab.`,
       });
-      rows.push({ label: 'Back', action: 'back' });
+      rows.push({ label: 'Geri', action: 'back' });
       return rows;
     }
 
@@ -9295,7 +9295,7 @@ export class Ui {
       const trackName = seat && seat.name ? seat.name : m.name;
       return [
         {
-          label: 'Track',
+          label: 'Pist',
           value: trackName,
           info: true,
           note: seat && seat.gates
@@ -9311,7 +9311,7 @@ export class Ui {
          * else (postTime in src/share/board.js; MENUS-PLAN.md 1.35).
          */
         tuneItem(s, false),
-        { label: 'What this run counts as', section: true },
+        { label: 'Bu uçuşun sayılma koşulları', section: true },
         choice(
           'Laps',
           s.laps === PRACTICE_LAPS
@@ -9355,12 +9355,12 @@ export class Ui {
          * is the one screen with no run in front of it. */
         ...this.ghostItems(),
         {
-          label: 'Fly',
+          label: 'Uç',
           action: 'launch-go',
           primary: true,
           note: recordSentence(s, trackName),
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
 
@@ -9405,12 +9405,12 @@ export class Ui {
       const stickRow = padTroubleItem(this.padInfo, this.stickPlatform);
       const trouble = stickRow ? { ...stickRow, action: 'stickhelp' } : null;
       return [
-        { label: 'Resume', action: 'resume', primary: true },
-        { label: 'Restart run', action: 'restart' },
+        { label: 'Devam et', action: 'resume', primary: true },
+        { label: 'Uçuşu yeniden başlat', action: 'restart' },
         ...(builder ? [builder] : []),
         ...this.ghostItems(),
         ...(trouble ? [trouble] : []),
-        { label: 'Does it feel wrong?', section: true },
+        { label: 'Hissi yanlış mı?', section: true },
         tuneItem(s, true),
         /*
          * RATES, ONE PRESS FROM THE PAUSE MENU, because that is when a pilot
@@ -9428,10 +9428,10 @@ export class Ui {
          * resetting the run.
          */
         {
-          label: 'Rates',
+          label: 'Oranlar',
           value: ratesShort(s.rates),
           action: 'rates',
-          note: 'How far the sticks go, and the throttle limit. Yours, not the tune\'s. Changing them here leaves the quad where it is and the clock running.',
+          note: 'Çubukların ne kadar gittiği ve gaz sınırı. Bunlar sizin, tune ayarının değil. Burada değiştirmek quadı olduğu yerde, saati çalışır halde bırakır.',
         },
         weightItem(s),
         /*
@@ -9459,17 +9459,17 @@ export class Ui {
          * they are one row from the title in About. At 1600x900 the last
          * row, the way out, was cut off by the legend; now it is not.
          */
-        { label: 'Elsewhere', section: true },
+        { label: 'Diğer', section: true },
         {
-          label: 'Settings',
+          label: 'Ayarlar',
           action: 'pilot',
           /* Rates are the first thing in this room and they no longer cost
            * the run, so the blanket warning would be wrong more often than
            * right. The rows that still restart a run carry it themselves. */
-          note: 'Your name, your radio, graphics and sound.',
+          note: 'Adınız, kumandanız, grafik ve ses.',
         },
-        { label: 'How to fly', action: 'howto' },
-        { label: 'Quit to title', action: 'title' },
+        { label: 'Nasıl uçulur', action: 'howto' },
+        { label: 'Ana ekrana çık', action: 'title' },
       ];
     }
     if (this.screen === 'results') {
@@ -9502,7 +9502,7 @@ export class Ui {
          * reason. */
         const built = this.settings.map === 'built';
         return [
-          { label: 'Fly again', action: 'restart', primary: true },
+          { label: 'Tekrar uç', action: 'restart', primary: true },
           this.runPosted
             ? {
               label: this.runPosted.improved === false ? 'Your best still stands' : 'Run posted',
@@ -9513,7 +9513,7 @@ export class Ui {
                 : `The board kept that run.${this.runPosted.rank != null ? ` Rank ${this.runPosted.rank}.` : ''}`,
             }
             : {
-              label: 'Post this run',
+              label: 'Bu uçuşu gönder',
               action: 'postrun',
               /*
                * FREE FLIGHT IS REFUSED HERE, on the row, rather than by a
@@ -9567,21 +9567,21 @@ export class Ui {
             };
           })(),
           {
-            label: 'Tracks and times',
+            label: 'Pistler ve süreler',
             action: 'leaderboard',
-            note: 'Every published track and map, and the times flown on them. Opens in a new tab.',
+            note: 'Yayınlanmış her pist ve harita ve üzerlerinde uçulan süreler. Yeni sekmede açılır.',
           },
           ...this.tuneShareRows(),
           feelItem(),
-          { label: 'Back to title', action: 'title' },
+          { label: 'Ana ekrana dön', action: 'title' },
         ];
       }
       if (!listing) {
         return [
-          { label: 'Fly again', action: 'restart', primary: true },
+          { label: 'Tekrar uç', action: 'restart', primary: true },
           ...this.tuneShareRows(),
           feelItem(),
-          { label: 'Back to title', action: 'title' },
+          { label: 'Ana ekrana dön', action: 'title' },
         ];
       }
       /*
@@ -9594,7 +9594,7 @@ export class Ui {
        */
       const onBoard = Boolean(listing.shareId || listing.published || this.coursePublished);
       return [
-        { label: 'Fly again', action: 'restart', primary: true },
+        { label: 'Tekrar uç', action: 'restart', primary: true },
         ...applicableRows([
           uploadAction(listing, {
             row: this.resultsBoard,
@@ -9605,13 +9605,13 @@ export class Ui {
         ]),
         editAction(listing, activeCourseSummary()),
         ...(onBoard ? [{
-          label: 'This track on Tracks and times',
+          label: 'Bu pist, Pistler ve süreler sayfasında',
           action: 'seat-board',
           note: `${listing.name || 'This track'} on the public board, opened on its own page: every time posted on it and who flew them. Opens in a new tab.`,
         }] : []),
         ...this.tuneShareRows(),
         feelItem(),
-        { label: 'Back to title', action: 'title' },
+        { label: 'Ana ekrana dön', action: 'title' },
       ];
     }
     if (this.screen === 'rates') {
@@ -9686,7 +9686,7 @@ export class Ui {
         : (ratesAreDefault(r) ? 'Stock' : 'Not saved');
       const presetRow = presets.length === 0
         ? {
-          label: 'Preset',
+          label: 'Ön ayar',
           value: 'None saved',
           info: true,
           note: `Save the numbers below under a name and they come back in one press, which is what a second track wants. ${RATES_STORAGE_WARNING}`,
@@ -9739,7 +9739,7 @@ export class Ui {
         { label: 'Yaw', section: true },
         ...axisRows('yaw'),
         this.cameraAngleRow(s),
-        { label: 'Throttle', section: true },
+        { label: 'Gaz', section: true },
         choice(
           'Throttle limit',
           r.throttleCap >= 100
@@ -9769,7 +9769,7 @@ export class Ui {
           r.thrExpo,
           (v) => { r.thrExpo = v; },
         ),
-        { label: 'Presets', section: true },
+        { label: 'Ön ayarlar', section: true },
         /*
          * ONLY HERE WHEN SOMETHING WENT WRONG. A refused write is state the
          * pilot has to know about and cannot see anywhere else, so it wears
@@ -9778,21 +9778,21 @@ export class Ui {
          * successful save says so by changing the Preset row's value.
          */
         ...(this.ratesNotice ? [{
-          label: 'Not saved',
+          label: 'Kaydedilmedi',
           value: '',
           info: true,
           rowClass: 'row-warn',
           note: this.ratesNotice,
         }] : []),
         {
-          label: 'Save as preset',
+          label: 'Ön ayar olarak kaydet',
           action: 'rates-save',
           note: loaded
             ? `Save these numbers again under a name. They already match ${loaded.name}, so saving under that name replaces it and any other name makes a second profile. ${RATES_STORAGE_WARNING}`
             : `Name these numbers and they come back in one press. ${RATES_STORAGE_WARNING}`,
         },
         {
-          label: 'Delete preset',
+          label: 'Ön ayarı sil',
           action: 'rates-delete',
           disabled: !loaded,
           rowClass: loaded ? undefined : 'row-grey',
@@ -9801,14 +9801,14 @@ export class Ui {
             : 'Load a preset first. This deletes the profile the rows below are flying, and they are not flying a saved one.',
         },
         {
-          label: 'Revert to defaults',
+          label: 'Varsayılana dön',
           action: 'rates-default',
           disabled: !ratesChanged(s),
           note: ratesChanged(s)
             ? `Back to what a freshly flashed Betaflight 4.5.1 flies: Actual rates, ${formatRate(rateField('ACTUAL', 'rcRate'), RATE_DEFAULTS.roll.rcRate)} deg/s at centre, ${formatRate(rateField('ACTUAL', 'srate'), RATE_DEFAULTS.roll.srate)} deg/s at the stop on every axis, no expo, no throttle limit.`
             : 'Already on the Betaflight 4.5.1 defaults.',
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       ];
     }
     if (this.screen === 'pids') {
@@ -9912,7 +9912,7 @@ export class Ui {
         rows.push({
           label: `Loading ${tuneName}`,
           info: true,
-          note: 'The tune is being fetched and applied. Its sliders appear the moment the module reads back.',
+          note: 'Tune getiriliyor ve uygulanıyor. Kaydırıcıları, modül geri okuduğu anda görünür.',
         });
       } else {
         rows.push(toggle(
@@ -9926,7 +9926,7 @@ export class Ui {
           },
         ));
         if (!expert) {
-          rows.push({ label: 'Betaflight\'s tuning sliders', section: true });
+          rows.push({ label: 'Betaflight ayar kaydırıcıları', section: true });
           for (const k of SLIDER_KEYS) {
             rows.push(sliderRow(k));
           }
@@ -9942,19 +9942,19 @@ export class Ui {
       }
       rows.push(
         {
-          label: 'Firmware bench',
+          label: 'Firmware tezgahı',
           action: 'fc',
-          note: 'The Firmware bench: filters, features and every firmware key, not just the PIDs. Configurator-shaped. No CLI paste.',
+          note: 'Firmware tezgahı: filtreler, özellikler ve yalnızca PID değil, her firmware anahtarı. Configurator biçiminde. CLI yapıştırma yok.',
         },
         {
-          label: 'Back to the tune\'s own values',
+          label: 'Tune değerlerine geri dön',
           action: 'pids-default',
           disabled: !pidsAdjusted(s.pids, s.tune),
           note: pidsAdjusted(s.pids, s.tune)
             ? `Forgets every slider and hand-set PID for ${tuneName} and flies the tune as it ships. Other tunes' adjustments are kept.`
             : `${tuneName} is already flying its own values.`,
         },
-        { label: 'Back', action: 'back' },
+        { label: 'Geri', action: 'back' },
       );
       return rows;
     }
@@ -16284,7 +16284,7 @@ export class Ui {
     }
     if (String(st.source).includes('touch')) {
       return [{
-        label: 'Stick path',
+        label: 'Çubuk yolu',
         value: 'Thumb sticks',
         info: true,
         note: 'A thumb on glass has about a quarter of a gimbal\'s travel and nothing centring it, so the numbers below are seeded gentler than the radio defaults. Roll, pitch and yaw spring back when you lift off; throttle stays where you left it, the way a radio\'s does.',
@@ -16292,7 +16292,7 @@ export class Ui {
     }
     if (String(st.source).includes('keyboard')) {
       return [{
-        label: 'Stick path',
+        label: 'Çubuk yolu',
         value: 'Keyboard',
         info: true,
         note: 'A key is not a stick. Holding one ramps the stick to 34 percent and stays there until about three quarters of a second, then stretches to full at one and a quarter. So the rates below are the rates a RADIO would fly: a tap reaches roughly a third of them, which is why keyboard flight feels firmer and slower to bite than the numbers say. A gamepad or a radio in USB joystick mode gets the whole curve. And a key race starts in Angle, which ignores this curve: Keyboard races under Quad, or M in flight, makes it Acro.',
@@ -16324,7 +16324,7 @@ export class Ui {
       bits.push(`This radio reports about ${levels} steps across a stick's full travel, which is coarse enough to feel at high rates. A radio with a finer USB report, or lower rates, both soften it.`);
     }
     return [{
-      label: 'Stick path',
+      label: 'Çubuk yolu',
       value: padHz > 0 ? `Radio, ${padHz} Hz` : 'Radio',
       info: true,
       rowClass: tracksFrames ? 'row-warn' : undefined,
@@ -16651,7 +16651,7 @@ export class Ui {
      * choosing a map read "Flying" and the name of a race track there
      * (MENUS-PLAN.md 1.17). */
     if (flying && !(this.screen === 'freestyle' && m.id === 'custom')) {
-      out.push({ label: 'Flying', value: seat && seat.name ? seat.name : (shared || m.name) });
+      out.push({ label: 'Uçan', value: seat && seat.name ? seat.name : (shared || m.name) });
     }
     const name = pilot ? readPilotName() : '';
     if (name) {
@@ -16682,7 +16682,7 @@ export class Ui {
       const out = [];
       out.push({ keys: [], text: this.cardScreen() ? 'Tap a card' : 'Tap a row' });
       if (this.screen !== 'title') {
-        out.push({ keys: [], text: 'Back', action: 'back' });
+        out.push({ keys: [], text: 'Geri', action: 'back' });
       }
       /* The title's own way out is the last row of its menu now, where a
        * thumb can find it without reading the legend. See titleItems. */
@@ -16699,22 +16699,22 @@ export class Ui {
        * treats roll right as choose and roll left as back, which is what the
        * Race room's own hint line has always said; this legend claimed Roll
        * and was simply wrong. */
-      out.push({ keys: pad ? ['Pitch'] : ['\u2190', '\u2192'], text: 'Move' });
+      out.push({ keys: pad ? ['Pitch'] : ['\u2190', '\u2192'], text: 'Hareket' });
     } else {
-      out.push({ keys: pad ? ['Pitch'] : ['\u2191', '\u2193'], text: 'Move' });
+      out.push({ keys: pad ? ['Pitch'] : ['\u2191', '\u2193'], text: 'Hareket' });
       const it = this.items()[this.cursor];
       /* Not on the two screens whose roll poses the quad: see posesQuad. */
       if (this.rowKind(it) === 'value' && !(pad && posesQuad(this))) {
-        out.push({ keys: pad ? ['Roll'] : ['\u2190', '\u2192'], text: 'Adjust' });
+        out.push({ keys: pad ? ['Roll'] : ['\u2190', '\u2192'], text: 'Ayarla' });
       }
     }
-    out.push({ keys: [pad ? 'A' : 'Enter'], text: 'Choose' });
+    out.push({ keys: [pad ? 'A' : 'Enter'], text: 'Seç' });
     /* The Race room's shortcut, and the one entry on this bar a mouse makes
      * rather than a key: a double click on a track flies it (flyCard). Not
      * in the radio's voice, which has no pointer to double click with, nor
      * the phone's, where a double tap is the browser's to interpret. */
     if (this.screen === 'courses' && !pad) {
-      out.push({ keys: ['Double click'], text: 'Fly' });
+      out.push({ keys: ['Çift tık'], text: 'Uç' });
     }
     /*
      * BACK IS A BUTTON ON THE BAR, for every voice (MENUS-PLAN.md 1.12).
@@ -16724,7 +16724,7 @@ export class Ui {
      * keys it names still work as they always did.
      */
     if (this.screen !== 'title') {
-      out.push({ keys: [pad ? 'B' : 'Esc'], text: 'Back', action: 'back' });
+      out.push({ keys: [pad ? 'B' : 'Esc'], text: 'Geri', action: 'back' });
     } else if (!this.onGate()) {
       /* NOT ON THE GATE. The gate is the root and Escape does nothing
        * there, so offering the key is a joke. onGate() is the one
