@@ -176,5 +176,13 @@ export function applyLook(scene, keep = null) {
       const u = skies[0];
       fog.color.lerp((u.uHorizon || u.uHaze).value, GEM.fogToHorizon);
     }
+    /* A sky that paints the fog's own colour under its horizon (a built
+     * map's dome, uFog in src/maps/built/looks.js) takes the new colour as
+     * well, or the fogged ground and the dome below it meet at a seam. */
+    for (const u of skies) {
+      if (u.uFog) {
+        u.uFog.value.copy(fog.color);
+      }
+    }
   }
 }
