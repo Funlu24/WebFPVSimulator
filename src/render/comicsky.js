@@ -392,7 +392,12 @@ function cumulus(group) {
   parts.sort((a, b) => b.d - a.d);
   const geo = mergeGeometries(parts.map((p) => p.geo));
   if (geo) {
-    /* Flat normals, so a heap is cut from facets like everything else (the Gem look). */
+    /* Normals taken again from the merged heap's faces (the Gem look). The
+     * puffs are indexed (mergeVertices, in sphere above), so this averages
+     * the faces round each vertex: a heap stays round, not faceted, and the
+     * cut base's straight down normals are averaged with the sides'. That is
+     * what the pictures the look was picked from showed. Faceted would need
+     * the heap unindexed first, about three times the vertices it draws. */
     geo.computeVertexNormals();
   }
   for (const p of parts) {
