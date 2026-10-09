@@ -77,6 +77,31 @@ function setGravity(sim) {
     throw new Error(`sim_set_gravity returned ${rc}`);
   }
 }
+/*
+ * --kv=SCALE, default 1.0: Motor power, through sim_set_motor_kv. The
+ * keyboard's hover table in configs/rates.js has a kV axis, and its two edge
+ * tables are read with this flag at 0.8 and 1.2, each at the same nine
+ * gravity and charge pairs as the stock one. At 1.0 the export is never
+ * called, so a run without the flag is the module's own default and every
+ * figure below is the one it always printed.
+ */
+const KV = Number(process.argv.slice(2)
+  .find((a) => a.startsWith('--kv='))?.slice('--kv='.length) ?? '1');
+if (!(KV >= 0.8 && KV <= 1.2)) {
+  throw new Error(`--kv=${KV} is outside the module's 0.8 to 1.2`);
+}
+function setKv(sim) {
+  if (KV === 1) {
+    return;
+  }
+  if (typeof sim.e.sim_set_motor_kv !== 'function') {
+    throw new Error('this dist/sim.wasm has no sim_set_motor_kv');
+  }
+  const rc = sim.e.sim_set_motor_kv(KV);
+  if (rc !== SIM_OK) {
+    throw new Error(`sim_set_motor_kv returned ${rc}`);
+  }
+}
 const MASS = WHOOP ? 0.0234 : 0.71;
 
 /* State indices, sim_abi.h. */
@@ -116,6 +141,7 @@ async function fresh(cellV = CELL_V) {
     }
   }
   setGravity(sim);
+  setKv(sim);
   if (sim.init(config) !== SIM_OK) {
     throw new Error('sim_init failed');
   }
@@ -254,7 +280,7 @@ hold(roll, 400, { throttle: 0.35, roll: 1 }, (i, st) => {
 });
 row('peak roll acceleration', `${(peakAccel * 180 / Math.PI).toFixed(0)} deg/s^2`, '', '');
 
-console.log(`\nFLIGHT CHARACTERISTICS, measured off dist/sim.wasm${GRAVITY === 1 ? '' : ` at gravity ${GRAVITY} times 9.80665`}${CELL_V === 4.2 ? '' : ` from ${CELL_V} V per cell`}\n`);
+console.log(`\nFLIGHT CHARACTERISTICS, measured off dist/sim.wasm${GRAVITY === 1 ? '' : ` at gravity ${GRAVITY} times 9.80665`}${CELL_V === 4.2 ? '' : ` from ${CELL_V} V per cell`}${KV === 1 ? '' : ` at motor power ${KV}`}\n`);
 console.log(`${'quantity'.padEnd(30)}${'measured'.padEnd(26)}${'STAGE1.md says'.padEnd(24)}note`);
 for (const r of rows) {
   console.log(`${r.what.padEnd(30)}${String(r.measured).padEnd(26)}${String(r.declared).padEnd(24)}${r.note}`);
@@ -297,6 +323,7 @@ for (const cap of THROTTLE_CAP_CHOICES) {
       }
     }
     setGravity(sim);
+    setKv(sim);
     if (sim.init(config + lines) !== SIM_OK) {
       throw new Error('sim_init failed with the cap lines');
     }

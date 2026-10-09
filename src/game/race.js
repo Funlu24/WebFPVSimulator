@@ -276,6 +276,17 @@ export class Race {
      */
     this.weight = null;
     /*
+     * WHETHER THE LAPS ARE FLOWN OFF THE STOCK AIR OR MOTORS, flight feel
+     * tuning's two sliders (src/share/tune.js), stamped on a lap the same way
+     * and for the same reason as the weight. Unlike the weight it is not
+     * printed on the board: a lap flown on a quad that grips the air or pulls
+     * differently is a lap on another aircraft, and the board has nowhere to
+     * say which, so such a lap is left out of boardRow altogether. The shell
+     * keeps it equal to what the module is flying (setTuned, from
+     * applySettings in main.js, which voids a lap the change lands in).
+     */
+    this.tuned = false;
+    /*
      * THROUGH THE ROOM'S FACTOR, BECAUSE BOTH MICRO FIGURES ARE DERIVED FROM
      * RACEGOW'S REAL PIPE AND THE PIPE IS NOT BUILT AT THAT SIZE.
      *
@@ -422,6 +433,17 @@ export class Race {
   /* The Weight slider the next lap is flown at. See this.weight. */
   setWeight(weight) {
     this.weight = weight;
+  }
+
+  /* Whether the next lap is flown off the stock air or motors. See this.tuned. */
+  setTuned(tuned) {
+    this.tuned = Boolean(tuned);
+  }
+
+  /* Whether any lap this run counted was flown off stock, for the results
+   * row that says why the board was not offered it. */
+  hasTunedLaps() {
+    return this.log.some((e) => e.ms != null && e.tuned === true);
   }
 
   /* Best laps are only comparable on the same config and pack voltage;
@@ -750,7 +772,11 @@ export class Race {
         this.lastSplits = this.splits;
         this.lap += 1;
         this.laps.push(this.lastLapMs);
-        this.log.push({ n: this.lapNumber(), ms: this.lastLapMs, weight: this.weight });
+        /* `tuned` only when it is, so a stock lap's entry is the shape it
+         * always was. */
+        this.log.push(this.tuned
+          ? { n: this.lapNumber(), ms: this.lastLapMs, weight: this.weight, tuned: true }
+          : { n: this.lapNumber(), ms: this.lastLapMs, weight: this.weight });
         let msgText = `Lap ${this.log.length}   ${fmt(this.lastLapMs)}`;
         /* Kept for the shell's spoken call (src/render/voice.js), so the
          * voice reads the flash's decision rather than making its own. */
@@ -869,7 +895,11 @@ export class Race {
    * wrongly.
    */
   boardRow() {
-    const clean = this.log.filter((e) => e.ms != null);
+    /* A lap flown off the stock air or motors is not on the board's menu:
+     * it is left out here, so it can never be picked, never be one of the
+     * three in a row and never be the lap a weight is read off. A run of
+     * nothing but such laps has no row, and the results screen says why. */
+    const clean = this.log.filter((e) => e.ms != null && e.tuned !== true);
     if (!clean.length) {
       return null;
     }
@@ -877,7 +907,7 @@ export class Race {
       let best = null;
       let run = [];
       for (const e of this.log) {
-        if (e.ms == null) {
+        if (e.ms == null || e.tuned === true) {
           run = [];
           continue;
         }
