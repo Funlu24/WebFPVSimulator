@@ -69251,6 +69251,7 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 - Approval: the owner wrote "push to main   i'll test now" in the thread at 05:29:08Z on 2026-10-09, after the reply and card listing the plant and world golden rewrite, the crash-pacing re-aim and the wall band. It covers this change as on draft PR 56 (c9b4ae3) and the golden rewrite. Re-recorded on module cff8160c8791ede4: `tests/goldens/plant.json` (14 of the scenarios moved: free air acro, the knobs and the sagging pack through the wash; every grass, slope, stand, deck, wall and surface scenario through the lower belly) and `tests/goldens/world.json` (34 of 36 runs); both pass and their `exercises` tests still hold. Not done at push time: the crash-pacing re-aim (follows as its own commit) and the wall band, which stays one line red until the owner says otherwise. He chose to fly it live as the check.
 - Crash-pacing re-aimed after the push, under the same word (the card offered it beside the push): two ground scenarios swept on approach speed only, the stutter one 7.40 to 7.45 and the side touches one 6.90 to 7.08, each keeping its verdict from main (crash at 2998 ms after a bump; no crash). `check:crash-pacing` all passed. The wall band (0.194 against 0.20) is still the one red line, left for the owner.
 - Flown: the owner flew the live build carrying this change and wrote "flys good" at 05:40:56Z on 2026-10-09. A pilot's word, not a check. Still open: check:wall's gentle rebound band (0.194 against 0.20) and the iterm_relax_cutoff 8 offer.
+- Missed at push time and fixed after, test only: `npm run check:clip` (src/trackbuilder/selftest.js) asserted the whoop rests on a typed 0.045, so it failed one line on main from 10b8bea. It now reads the five inch table's vHalfDown, which is the plant's hull_hz_down, so it follows the plant. 2559 passed, 0 failed. Reported by the CommunityGow thread; this entry's check list above did not include check:clip.
 
 ### The whoop export bundle, 2026-10-08 (draft)
 
@@ -69295,7 +69296,8 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 - Latency: nothing on the flying path changes. The builder fetches one more module only on a community visit.
 - Checks run: `node src/trackbuilder/selftest.js` 2593 passed, 1 failed (15 new, all pass). The one failure is
   "a whoop rests on the plant's 45 mm", which fails the same way on untouched main 595ed93 (2558 passed, 1
-  failed): main's belly moved to 33 mm and this check still says 45. Not this change, left for the tune thread.
+  failed): main's belly moved to 33 mm and this check still says 45. Not this change, left for the tune thread,
+  which fixed the check on main as 04cc343. With that merged in, 2594 passed, 0 failed.
   `lint:preload` (after `gen:preload`), `lint:boot` 9 of 9, `lint:nouns`. End to end in headless Chromium with
   the simulator on 8000 and a scratch board on 3150: a community made, the builder opened from its link (strip
   shown, address cleaned, kept across a reload), RaceGOW5 Track 1 sent in 4.8 s, the board's round carrying a
