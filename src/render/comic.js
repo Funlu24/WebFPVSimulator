@@ -194,13 +194,24 @@ const LEVELS = {
  * a world (the craft) is compiled again in the next one: see
  * evictSessionRoots in src/render/shell.js.
  */
-let chunkOn = true;
+/*
+ * THE LAYER'S PER PIXEL WORK IS OFF ON EVERY PRESET (owner, 2026-10-09:
+ * latency is the most important thing, and "if it increases latency then we
+ * need to bin it and rethink the art style"). Medium and High took 1.6 to 3.0
+ * times main's frame in the sweep above, and an integrated laptop boots on
+ * Medium. While this is false every preset behaves as Low does: no toon chunk
+ * is compiled, no edge highlight, grime, occlusion or streak cloud, and the
+ * ink is the pass main had. The code stays so the art can be rethought from
+ * it; the geometry (models, clumps) is not behind this flag.
+ */
+export const COMIC_SHADING = false;
+let chunkOn = COMIC_SHADING;
 export function comicChunkOn() {
   return chunkOn;
 }
 
 export function setComicQuality(q, { groundAuto = false, edges = false, grime = false } = {}) {
-  const id = q && q.id ? q.id : 'high';
+  const id = COMIC_SHADING && q && q.id ? q.id : (COMIC_SHADING ? 'high' : 'low');
   chunkOn = id !== 'low';
   /* Every map sets these when it builds, so leaving the town clears them. */
   COMIC.groundAuto.value = groundAuto ? 1 : 0;

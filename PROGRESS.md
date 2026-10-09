@@ -69162,3 +69162,23 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 
 - Approval: the owner wrote "push to main" in the performance thread at 00:18:09Z on 2026-10-09, after the fold landed (dd79427). It covers PR 50 as it stood at dd79427 plus this note, fast forwarded onto main (da4e4b7). He chose to fly it himself afterwards; no verification beyond what the entries above record was run for the push. Nothing about the physics model's shape, the module ABI or the build changed in the PR (item 4 reads the same heights bit for bit, approved by the card at 15:01Z on 2026-10-08).
 - If the live build is wrong: the fold is the last code commit (dd79427) and drops alone; item 4 is d937379 and also drops alone.
+
+## 2026-10-09 | latency | The comic layer's per pixel work is off on every preset
+
+- The owner, 2026-10-09: "latency is felt on all machines, so if it increases latency then we need to bin it and rethink
+  the art style to be polished but not hinder performance". Medium and High took 1.6 to 3.0 times the pre graphics
+  frame in the sweep above, and an integrated laptop boots on Medium.
+- Change: `COMIC_SHADING = false` in `src/render/comic.js`, read by `setComicQuality` and by the field's sky in
+  `scene.js`. Every preset now shades as Low does: no toon chunk, edge highlight, grime, occlusion, outer line or streak
+  cloud. The code stays for the redesign; the geometry (models, clumps) is not behind the flag.
+- Measured (headless software renderer, so counts and sources, not milliseconds; the frame times were too noisy to
+  quote): shader sources carrying the chunk, field on Medium, main 10 of 54, this change 0 of 54, also 0 on the yard and
+  the town. Full resolution taps on the field on High: pre graphics 10, main 22, this change 10. Programs linked after
+  flight start match main (27 field Medium).
+- What PR 45 left behind, against the pre graphics commit dc3141a, Medium (same on High): field draw calls +2, triangles
+  +4.7%; yard draw calls -33%, triangles +117% (the canopy clumps: free in draw calls, not in vertex work); town draw
+  calls -3%, triangles +20%. These are geometry costs the flag does not remove. Whether a vertex heavy yard is felt on an
+  integrated GPU is not measurable here.
+- Checks: lint:quality 71, lint:frame 34, lint:preload, check:fresh 18, all pass. Not run: verify, shots, a browser on
+  a GPU. Fly it: Medium and High should look like Low's shading with the new models; the Input to screen reading on the
+  laptop is the check.
