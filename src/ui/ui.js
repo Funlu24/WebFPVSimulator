@@ -127,6 +127,30 @@ import { trickByName } from '../game/tricks.js';
 import { TrickFilmPlayer, filmFor, VIEW_LABEL } from './trickfilm.js';
 import { BOARD_WINDOW, WIKI_WINDOW, openNamedWindow } from '../share/windows.js';
 import { BUG_KINDS, submitBug } from '../share/bugs.js';
+import {
+  AIR_GRIP_MAX,
+  AIR_GRIP_MIN,
+  AIR_GRIP_STEP,
+  AIR_GRIP_STOCK,
+  FEEL_WORDS,
+  MOTOR_KV_MAX,
+  MOTOR_KV_MIN,
+  MOTOR_KV_STEP,
+  MOTOR_KV_STOCK,
+  TUNE_MIN_AIR_MS,
+  TUNE_VERDICTS,
+  airtimeWords,
+  buildTunePayload,
+  clampAirGrip,
+  clampMotorKv,
+  effectiveTune,
+  inputKindFromSource,
+  tuneAskReason,
+  tuneCardText,
+  tuneSliderBlurbs,
+  tuneSliderWords,
+  tuneValuesLine,
+} from '../share/tune.js';
 import { nameRules, readPilotName, writePilotName } from '../share/pilot.js';
 import { stampFor, stampKeyForMap } from '../share/stamps.js';
 import { MARK_FINDS } from '../game/egg.js';
@@ -1217,6 +1241,15 @@ const DEFAULTS = {
    */
   stickOverlay: true,
   /*
+   * RACE LINE: in a whoop room, a trail of cream dots through the next gates
+   * showing a good line a pilot can fly, the owner's ask of 2026-10-08 on
+   * behalf of beginners. Off by default: a trail nobody asked for is a trail
+   * in the way, and while it is off nothing is built, loaded or solved. Only
+   * the picture: it reads the course and the room, never the flight. A
+   * boolean so the typeof gate accepts it.
+   */
+  raceLine: false,
+  /*
    * Shadows off: the picture without the sun's shadow map, on any preset.
    * The map is a second draw of the scene and a lookup in every lit pixel,
    * which is most of what Medium and High cost over Low on an integrated
@@ -1241,6 +1274,26 @@ const DEFAULTS = {
    * scaled drag and is not read either.
    */
   weight: WEIGHT_STOCK,
+  /*
+   * FLIGHT FEEL TUNING (src/share/tune.js). A mode, off by default, that puts
+   * two more sliders beside Weight while the quad is on the ground: Air grip,
+   * how far the quad carries, and Motor power, the motors' KV. Both are
+   * percentages of the machine as it ships, 100 is stock, and they are only
+   * ever APPLIED while the mode is on (effectiveTune), so a pilot who turns
+   * it off flies stock whatever is stored here and finds their tune again
+   * when they turn it back on. Per airframe, like weight: see MACHINE_KEYS.
+   *
+   * A flight off stock goes off the public board, because a lap on a quad
+   * that grips the air differently is a lap on a different aircraft and the
+   * board has nowhere to say which. Weight keeps its own rule.
+   */
+  feelTuning: false,
+  airGrip: AIR_GRIP_STOCK,
+  motorKv: MOTOR_KV_STOCK,
+  /* Whether the end of a flight flown off stock asks if it felt better than
+   * stock. "Stop asking" on that question turns it off; Settings turns it
+   * back on. Nothing is ever sent without a yes either way. */
+  feelTuneAsk: true,
   laps: 3,
   sound: true,
   volume: 6,
@@ -1397,6 +1450,26 @@ function markAirHintSeen() {
     localStorage.setItem(AIR_HINT_KEY, '1');
   } catch (e) {
     /* Private mode: dismissed for this session, which is all it can be. */
+  }
+}
+
+/* Flight feel tuning's own card, the same way and for the same reason: its
+ * own key, never a field in the settings blob. */
+const TUNE_HINT_KEY = 'webfpv.tunehint.v1';
+
+function tuneHintSeen() {
+  try {
+    return localStorage.getItem(TUNE_HINT_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function markTuneHintSeen() {
+  try {
+    localStorage.setItem(TUNE_HINT_KEY, '1');
+  } catch (e) {
+    /* Private mode: dismissed for this session. */
   }
 }
 
@@ -1599,6 +1672,11 @@ export function loadSettings() {
    * sim_set_gravity. Against the airframe's own top, which is lower on the
    * whoop than the five inch. */
   s.weight = clampWeight(s.weight, s.airframe);
+  /* And the two tuning sliders, against their own bands: the module refuses
+   * a scale outside 0.5 to 2.0 and 0.8 to 1.2, and a hand edited blob must
+   * not be able to ask for one. */
+  s.airGrip = clampAirGrip(s.airGrip);
+  s.motorKv = clampMotorKv(s.motorKv);
   /*
    * The rate profile, from whichever shape this blob was written in.
    *
@@ -1824,6 +1902,8 @@ function reseatIfForeign(s) {
     s.packVoltage = a.packVoltages[0];
   }
   s.weight = clampWeight(s.weight, a.id);
+  s.airGrip = clampAirGrip(s.airGrip);
+  s.motorKv = clampMotorKv(s.motorKv);
   if (!other) {
     return s;
   }
@@ -1858,7 +1938,7 @@ function reseatIfForeign(s) {
  * The pilot's own "Your edits" dump is per aircraft too, in its own storage:
  * see readFcDump in src/fc/dump.js. The tune here only says it is chosen.
  */
-const MACHINE_KEYS = ['tune', 'packVoltage', 'weight', 'cameraFov', 'cameraAngle', 'pids'];
+const MACHINE_KEYS = ['tune', 'packVoltage', 'weight', 'airGrip', 'motorKv', 'cameraFov', 'cameraAngle', 'pids'];
 
 /* The hangar as a fresh object holding only aircraft this build knows, so a
  * hand edited blob cannot have seatAirframe write through into anything. */
@@ -1929,12 +2009,27 @@ export function seatAirframe(s, id) {
     if (typeof back.weight === 'number') {
       s.weight = back.weight;
     }
+    /* The tuning sliders are the machine's as well: a motor power chosen for
+     * the whoop is not one the five inch should wake up with. A hangar from
+     * before they existed has neither and the aircraft keeps what it has. */
+    if (typeof back.airGrip === 'number') {
+      s.airGrip = back.airGrip;
+    }
+    if (typeof back.motorKv === 'number') {
+      s.motorKv = back.motorKv;
+    }
     s.cameraFov = CAMERA_FOVS.includes(back.cameraFov) ? back.cameraFov : to.cameraFov;
     s.cameraAngle = clampCameraAngle(typeof back.cameraAngle === 'number' ? back.cameraAngle : to.cameraAngle);
     s.pids = normalisePids(back.pids);
   } else if (moving) {
     s.cameraFov = to.cameraFov;
     s.cameraAngle = clampCameraAngle(to.cameraAngle);
+    /* A first visit starts both tuning sliders at stock. A tune is a set of
+     * numbers for one machine, and carrying a five inch's Motor power onto a
+     * whoop that has never been flown would be handing it a tune nobody made
+     * for it. */
+    s.airGrip = AIR_GRIP_STOCK;
+    s.motorKv = MOTOR_KV_STOCK;
   }
   if (!tuneChoices(to.id).includes(s.tune)) {
     s.tune = to.defaultTune;
@@ -1945,6 +2040,8 @@ export function seatAirframe(s, id) {
   /* A five inch at 140 is not a weight the whoop offers, so it comes down to
    * the whoop's top. Anything inside both ranges stays the pilot's. */
   s.weight = clampWeight(s.weight, to.id);
+  s.airGrip = clampAirGrip(s.airGrip);
+  s.motorKv = clampMotorKv(s.motorKv);
   if (ratesMatch(s.rates, from.rates)) {
     s.rates = normaliseRates({ ...s.rates, ...structuredCloneRates(to.rates) });
   }
@@ -2159,7 +2256,89 @@ function makeWeightSlider({ min, max, step, value, label }) {
 
   const cap = el('div', 'osd-air-cap', '');
   box.append(hint, row, cap);
-  return { box, range, cap, hint, dismiss };
+  const tune = makeTuneGroup();
+  box.append(tune.hint, tune.box);
+  return {
+    box, range, cap, hint, dismiss, tune,
+  };
+}
+
+/*
+ * THE TWO SLIDERS FLIGHT FEEL TUNING ADDS, under Weight in the same block.
+ *
+ * They are children of .osd-air and built from the same parts, so they take
+ * the Weight slider's whole life for nothing: the fade in the air, the
+ * return on the ground, the dim under the pause menu, the two classes on the
+ * range that keep the OSD's amber, the focus rule in bindAirSlider. A class
+ * name is a contract across the deploy cache seam (read the note above
+ * makeWeightSlider), so .osd-air and its children are untouched and the new
+ * parts only add classes.
+ *
+ * Hidden until the mode is on (paintAir), so a pilot who never turns it on
+ * has exactly the block they had.
+ *
+ * AIR GRIP runs Carries to Grips because that is the direction a pilot
+ * names it: left, the air lets go and the quad coasts; right, it holds on.
+ * MOTOR POWER runs Softer to Punchier for the same reason.
+ */
+function makeTuneRow({
+  min, max, step, left, right, label,
+}) {
+  const row = el('div', 'osd-air-row');
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.className = 'row-range osd-air-range';
+  range.min = String(min);
+  range.max = String(max);
+  range.step = String(step);
+  range.setAttribute('aria-label', label);
+  row.append(el('span', 'osd-air-end', left), range, el('span', 'osd-air-end', right));
+  /* The row and its caption in a box of their own, so a slider the module
+   * cannot answer is put away as one thing (paintAir): the row's own display
+   * would beat the hidden attribute. */
+  const cap = el('div', 'osd-air-cap', '');
+  const box = el('div', 'osd-tune-item');
+  box.append(row, cap);
+  return {
+    box, row, range, cap,
+  };
+}
+
+function makeTuneGroup() {
+  const box = el('div', 'osd-tune');
+  box.hidden = true;
+  const grip = makeTuneRow({
+    min: AIR_GRIP_MIN,
+    max: AIR_GRIP_MAX,
+    step: AIR_GRIP_STEP,
+    left: 'Carries',
+    right: 'Grips',
+    label: 'Air grip, how far the quad carries',
+  });
+  const power = makeTuneRow({
+    min: MOTOR_KV_MIN,
+    max: MOTOR_KV_MAX,
+    step: MOTOR_KV_STEP,
+    left: 'Softer',
+    right: 'Punchier',
+    label: 'Motor power, how hard the motors pull',
+  });
+  const reset = btn('osd-air-hint-btn osd-tune-reset', 'Reset to stock');
+  box.append(grip.box, power.box, reset);
+  /* Its own card, once ever, the first time the mode is on and the quad is
+   * down. Outside the group so hiding the group never hides it from the
+   * code that raises it; positioned like the Weight card, above the block. */
+  const hint = el('div', 'osd-air-hint osd-tune-hint');
+  hint.hidden = true;
+  hint.append(el('p', 'osd-air-hint-title', 'Flight feel tuning'));
+  /* Kept so setTuneCaps can reword it for a module that has one slider. */
+  const body = el('p', 'osd-air-hint-body', tuneCardText());
+  hint.append(body);
+  const hintBtn = btn('osd-air-hint-btn', 'Got it');
+  hint.append(hintBtn);
+  return {
+    box, grip, power, reset, hint, hintBtn, body,
+  };
 }
 
 /*
@@ -3251,7 +3430,9 @@ function builderReturnItem(s, sharedMap) {
  *
  * `disabled` is honoured by select(), and renderMenu paints it as row-grey.
  */
-function uploadAction(listing, { row = null, timePosted, practice = false }) {
+function uploadAction(listing, {
+  row = null, timePosted, practice = false, tuned = false,
+}) {
   const pending = readPendingTime();
   const shareId = listing && listing.shareId;
   /* The lap this row would send, the run's own or the one kept from an
@@ -3293,10 +3474,14 @@ function uploadAction(listing, { row = null, timePosted, practice = false }) {
       disabled: true,
       /* A pilot who has just flown twenty clean laps in practice and comes
        * here to post one is owed the real reason, not an invitation to fly
-       * the lap they already flew. */
+       * the lap they already flew. The same for laps flown on the tuned air
+       * or motors: they are on the results screen, and the board will not
+       * take them. */
       note: practice
         ? 'Practice laps stay off the public board. A run of 1, 3 or 5 laps puts its best lap here when it finishes.'
-        : 'Fly a clean lap on this track and the lap appears here.',
+        : (tuned
+          ? 'Tuned flight, not posted to the board. Laps flown on Air grip or Motor power off 100 are a different quad from the one everybody else flew. Set both back to 100 and fly it again.'
+          : 'Fly a clean lap on this track and the lap appears here.'),
     };
   }
   const best = readPostedBest(shareId);
@@ -3803,6 +3988,68 @@ function weightItem(s) {
   it.adjust = (d) => set(cur + d * WEIGHT_STEP);
   it.range = { min: WEIGHT_MIN, max: top, step: WEIGHT_STEP };
   return it;
+}
+
+/*
+ * FLIGHT FEEL TUNING'S ROWS, the pause screen's copy of the two sliders under
+ * Weight, for the reason weightItem exists: the flight overlay puts its
+ * sliders away under the pause, and a pilot who paused to move one needs a
+ * row that does. Same setting, same save, same clamp as the overlay's, which
+ * follows it. Drawn only while the mode is on (see the callers), so a pilot
+ * who never turned it on has the menu they had.
+ *
+ * A step is five, the sliders' step: number() would step one, which the
+ * clamp rounds straight back.
+ */
+function tuneSliderItem(label, note, spec, cur, set, step) {
+  const it = number(label, note, spec, cur, set);
+  it.adjust = (d) => set(cur + d * step);
+  it.range = { min: spec.cliMin, max: spec.cliMax, step };
+  return it;
+}
+
+function airGripItem(s) {
+  return tuneSliderItem(
+    'Air grip',
+    `How much the air holds the quad back, so how far it carries with the sticks centred. Left and it coasts on and runs faster; right and the air grips it, it stops sooner and tops out slower. ${AIR_GRIP_STOCK} is the quad as it ships. Changing it mid lap voids the lap, and a flight off ${AIR_GRIP_STOCK} stays off the public board.`,
+    {
+      cliMin: AIR_GRIP_MIN, cliMax: AIR_GRIP_MAX, scale: 1, decimals: 0, unit: '%',
+    },
+    clampAirGrip(s.airGrip),
+    (v) => { s.airGrip = clampAirGrip(v); },
+    AIR_GRIP_STEP,
+  );
+}
+
+function motorKvItem(s) {
+  return tuneSliderItem(
+    'Motor power',
+    `How much speed the motors make for a volt, their KV. Left is softer: a gentler punch and a lower top speed. Right is punchier, and the pack sags more for it, and the quad hovers lower on the stick. ${MOTOR_KV_STOCK} is the quad as it ships. Changing it mid lap voids the lap, and a flight off ${MOTOR_KV_STOCK} stays off the public board.`,
+    {
+      cliMin: MOTOR_KV_MIN, cliMax: MOTOR_KV_MAX, scale: 1, decimals: 0, unit: '%',
+    },
+    clampMotorKv(s.motorKv),
+    (v) => { s.motorKv = clampMotorKv(v); },
+    MOTOR_KV_STEP,
+  );
+}
+
+function tuningItem(s, caps) {
+  return toggle(
+    'Flight feel tuning',
+    `Off by default. On, ${tuneSliderWords(caps) || 'the tuning sliders'} join Weight between the sticks while the quad is on the ground, and a flight flown on your own sliders ends with a question: did that feel better than the stock quad? Nothing is sent unless you say yes. Off, the quad flies as it ships whatever the sliders say. Switching it mid lap voids the lap if it changes the quad you are flying.`,
+    Boolean(s.feelTuning),
+    (v) => { s.feelTuning = Boolean(v); },
+  );
+}
+
+function tuneAskItem(s) {
+  return toggle(
+    'Ask after a tuned flight',
+    'When a flight flown on your own sliders ends, ask whether it felt better than stock. You can always answer no, and nothing is sent without a yes. Off, it never asks; the sliders still work.',
+    Boolean(s.feelTuneAsk),
+    (v) => { s.feelTuneAsk = Boolean(v); },
+  );
 }
 
 function feelItem() {
@@ -4621,8 +4868,30 @@ export class Ui {
      * is what this screen reports; the two differ only on a room run that
      * changed weight between laps. */
     this.resultsBoard = null;
+    /* Whether a lap of the run on screen was left off the board for being
+     * flown on the tuned air or motors. See showResults. */
+    this.resultsOffBoard = false;
     this.resultsDocId = null;
     this.coursePublished = null;
+    /*
+     * FLIGHT FEEL TUNING'S END OF FLIGHT, all of it in one place.
+     *
+     * tuneProbe is main.js's TuneLog read as a function; tuneCaps is which of
+     * the two sliders the loaded module can answer (setTuneCaps); resultsTune
+     * is the flight the results screen on show is about, taken when it was
+     * shown because the log is cleared by the next run; tuneAsked is the
+     * combinations already asked about this session, so one is asked once;
+     * tuneAskTimer is the pending automatic question, so leaving the screen
+     * can cancel it. See maybeAskTune.
+     */
+    this.tuneProbe = null;
+    this.tuneCaps = { air: true, kv: true };
+    this.resultsTune = null;
+    this.tuneAsked = new Set();
+    /* The combinations already sent this session, so the Share row can say
+     * so instead of offering the same tune twice. */
+    this.tuneSent = new Set();
+    this.tuneAskTimer = 0;
     this.padPrev = { up: false, down: false, left: false, right: false, select: false, back: false };
     /* Seed the edges on the next poll rather than acting on them. Set by
      * every screen change; see show(). */
@@ -4676,6 +4945,8 @@ export class Ui {
      * localStorage flag is consulted, so a pilot who dismissed it and then
      * paused and resumed does not get it again on the way back into flight. */
     this.airHintDone = false;
+    /* The same for flight feel tuning's card: see setAirSlider. */
+    this.tuneHintDone = false;
     /* The airtime at which the card first went up, for its eight seconds. */
     this.airHintAtMs = null;
     this.ptrX = null;
@@ -6670,9 +6941,15 @@ export class Ui {
        * arrived with a rates line that says nothing about the throttle
        * unless a cap is already on, so the one setting that answers the
        * complaint was the one thing the report could not carry. Its hover
-       * is at the weight and pack below, so the three agree.
+       * is at the weight, pack and Motor power below, so they agree.
        */
-      throttle: throttleSummary(s.rates || {}, s.airframe, clampWeight(s.weight, s.airframe), s.packVoltage),
+      throttle: throttleSummary(
+        s.rates || {},
+        s.airframe,
+        clampWeight(s.weight, s.airframe),
+        s.packVoltage,
+        this.tuneCaps.kv ? effectiveTune(s).motorKv : MOTOR_KV_STOCK,
+      ),
       /*
        * THE SLIDER'S POSITION, and it belongs in the report for the same
        * reason the throttle curve does: this is the one field that tells the
@@ -7152,6 +7429,39 @@ export class Ui {
       refreshCapHint();
       refreshAirHint();
     });
+    /*
+     * THE DOOR TO FLIGHT FEEL TUNING, on the form where a pilot has just
+     * said how the quad flies. A word tells us what is wrong; the mode lets
+     * them try to put it right and, if a setting beats stock, tell us which.
+     * Two sentences and one button, and the button only while the mode is
+     * off. It turns the mode on and nothing else: the sliders appear on the
+     * ground, the pilot is asked at the end of a flight, and nothing is sent
+     * without a yes. The switch lives in the Quad room as well; this is the
+     * place a pilot who is already unhappy is looking.
+     */
+    const tuneNote = el('p', 'lede feel-hint', '');
+    const tuneDoor = btn('name-dialog-door', 'Turn on flight feel tuning');
+    const paintTuneDoor = () => {
+      const on = Boolean(this.settings.feelTuning);
+      const words = tuneSliderWords(this.tuneCaps);
+      const many = this.tuneCaps.air && this.tuneCaps.kv;
+      /* A module with neither slider has nothing to offer: no door at all. */
+      tuneNote.hidden = !words;
+      if (!words) {
+        tuneDoor.hidden = true;
+        return;
+      }
+      tuneNote.textContent = on
+        ? `Flight feel tuning is on. While you are landed, ${words} ${many ? 'are' : 'is'} beside Weight between the sticks. If a setting feels better than stock you are asked at the end of the flight whether to send it.`
+        : `Want to change it yourself? Flight feel tuning puts ${many ? 'two more sliders' : 'one more slider'} beside Weight while you are on the ground: ${tuneSliderBlurbs(this.tuneCaps)}. If a setting feels better than stock you can send us the numbers after the flight. Off unless you turn it on, and nothing is sent without your yes.`;
+      tuneDoor.hidden = on;
+    };
+    paintTuneDoor();
+    tuneDoor.addEventListener('click', () => {
+      this.settings.feelTuning = true;
+      this.writeSettings();
+      paintTuneDoor();
+    });
 
     const wordsLabel = el('p', 'name-dialog-label', 'In your own words (optional)');
     const words = document.createElement('textarea');
@@ -7181,6 +7491,8 @@ export class Ui {
       issueRow.wrap,
       capHint,
       airHint,
+      tuneNote,
+      tuneDoor,
       wordsLabel, words,
       nameLabel, reporter,
       err, row,
@@ -7310,6 +7622,413 @@ export class Ui {
     const firstChip = feelRow.chips.values().next().value;
     if (firstChip) {
       firstChip.focus();
+    }
+  }
+
+  /*
+   * FLIGHT FEEL TUNING: THE ROWS THE MODE ADDS, AND THE QUESTION THAT ENDS A
+   * FLIGHT FLOWN ON THEM.
+   *
+   * The mode is off by default and everything here is behind it. The rows are
+   * the pause screen's and the Quad room's copy of the two sliders (the
+   * flight screen's own are in makeWeightSlider), drawn only while the mode is
+   * on and only for the sliders the loaded module can answer.
+   */
+  tuneRows(s, withAsk = false) {
+    if (!s.feelTuning) {
+      return [];
+    }
+    return [
+      ...(this.tuneCaps.air ? [airGripItem(s)] : []),
+      ...(this.tuneCaps.kv ? [motorKvItem(s)] : []),
+      ...(withAsk ? [tuneAskItem(s)] : []),
+    ];
+  }
+
+  /*
+   * The flight a question would be about, or null: the combination of the
+   * three sliders flown longest this flight in the mode, when that was at
+   * least TUNE_MIN_AIR_MS. Taken when a results screen is shown or a pilot
+   * leaves a flight, because main.js clears the log when the next run starts.
+   */
+  takeTuneFlight() {
+    if (!this.settings.feelTuning || !this.tuneProbe) {
+      return null;
+    }
+    const f = this.tuneProbe();
+    return f && f.airtimeS * 1000 >= TUNE_MIN_AIR_MS ? f : null;
+  }
+
+  /*
+   * THE ROW FOR A PILOT THE DIALOG CANNOT REACH. A radio cannot answer a
+   * dialog (the pad can only go Back), so the automatic question skips it,
+   * and a touch pilot may simply have said Not now and changed their mind.
+   * This is the same form, one press away on the results screen, for as long
+   * as the flight is on it. It is also the way back after Stop asking.
+   */
+  tuneShareRows() {
+    const f = this.resultsTune;
+    if (!f || !this.settings.feelTuning) {
+      return [];
+    }
+    if (this.tuneSent.has(f.key)) {
+      return [{
+        label: 'Tune sent',
+        action: 'sharetune',
+        disabled: true,
+        note: 'That tune is on the board. Thanks.',
+      }];
+    }
+    return [{
+      label: 'Share this tune',
+      action: 'sharetune',
+      note: `${tuneValuesLine(f, this.tuneCaps)}, ${airtimeWords(f.airtimeS)} in the air. If it felt better than stock, send the numbers with a word or two to the people tuning the sim. Nothing is sent unless you press Send.`,
+    }];
+  }
+
+  /*
+   * ASK, ONCE, AT THE END OF THE FLIGHT, AND ONLY WHEN IT IS WORTH ASKING.
+   *
+   * The decision is tuneAskReason in src/share/tune.js, which says why not in
+   * a word. What is added here is the timing: a beat after the screen lands
+   * so a record celebration is not covered by a form, and never over another
+   * dialog (the once-ever flight feel offer opens at 1.4 seconds, this one
+   * waits for 2.2, and a dialog that is up when the timer fires wins and
+   * this one stays quiet). A combination is marked asked when it is SHOWN, so
+   * it is not asked twice this session whatever the answer.
+   */
+  maybeAskTune(flight) {
+    if (this.tuneAskTimer) {
+      window.clearTimeout(this.tuneAskTimer);
+      this.tuneAskTimer = 0;
+    }
+    const reason = tuneAskReason({
+      flight,
+      tuning: this.settings.feelTuning,
+      ask: this.settings.feelTuneAsk !== false,
+      asked: this.tuneAsked,
+      pad: this.lastInput === 'pad',
+    });
+    if (reason) {
+      return;
+    }
+    this.tuneAskTimer = window.setTimeout(() => {
+      this.tuneAskTimer = 0;
+      if (this.tuneAsked.has(flight.key) || (this.screen !== 'results' && this.screen !== 'title')) {
+        return;
+      }
+      if (this.bugFiling || (this.nameDialog && !this.nameDialog.hidden)) {
+        return;
+      }
+      this.tuneAsked.add(flight.key);
+      this.askTune(flight);
+    }, 2200);
+  }
+
+  /*
+   * THE QUESTION. Four answers and no default that sends: Better than stock
+   * opens the form, Same or worse offers the same form for the negative
+   * result (a worse tune at known values is data too), Not now closes, and
+   * Stop asking turns the question off for good (Settings turns it back on;
+   * the Share row on Results is always there). Nothing is sent from this
+   * dialog, ever.
+   *
+   * Like askConfirm it has no backdrop dismissal and a short deaf period,
+   * because it appears on its own, under a hand that is probably about to
+   * press Fly again, and a stray click must not answer for the pilot.
+   */
+  askTune(flight) {
+    if (this.nameWait) {
+      this.closeNameDialog(null);
+    }
+    const af = airframeById(flight.airframe);
+    const box = el('div', 'name-dialog-box bug tune');
+    box.append(el('h2', null, 'Did that feel better than stock?'));
+    box.append(el(
+      'p',
+      'lede',
+      `${tuneValuesLine(flight, this.tuneCaps)}. ${airtimeWords(flight.airtimeS)} in the air on the ${af.short}.`,
+    ));
+    box.append(el(
+      'p',
+      'lede',
+      'If it did, you can send these numbers with a word or two to the people tuning the sim. Nothing is sent unless you press Send on the next screen.',
+    ));
+    const row = el('div', 'name-dialog-row');
+    const better = btn('name-dialog-btn on', 'Better than stock');
+    const worse = btn('name-dialog-btn', 'Same or worse');
+    const later = btn('name-dialog-btn', 'Not now');
+    const stop = btn('name-dialog-btn', 'Stop asking');
+    row.append(better, worse, later, stop);
+    box.append(row);
+    this.nameDialog.textContent = '';
+    this.nameDialog.append(box);
+    this.nameDialog.hidden = false;
+    this.syncChips();
+
+    const openedAt = performance.now();
+    const deaf = () => performance.now() - openedAt < CONFIRM_DEAF_MS;
+    this.nameWait = () => {};
+    this.nameKeyHandler = (e) => {
+      if (e.key !== 'Escape') {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (!deaf()) {
+        this.closeNameDialog(null);
+      }
+    };
+    this.nameDialog.addEventListener('keydown', this.nameKeyHandler, true);
+    better.addEventListener('click', () => {
+      if (deaf()) {
+        return;
+      }
+      this.closeNameDialog(null);
+      this.askTuneForm(flight, { path: 'better' });
+    });
+    const askNegative = () => {
+      box.textContent = '';
+      box.append(el('h2', null, 'Thanks, that is useful to know'));
+      box.append(el(
+        'p',
+        'lede',
+        'A tune that felt the same or worse tells the people tuning the sim where not to go. Want to send this result too? Nothing is sent unless you say so.',
+      ));
+      const r = el('div', 'name-dialog-row');
+      const close = btn('name-dialog-btn on', 'Close');
+      const send = btn('name-dialog-btn', 'Send this result');
+      r.append(close, send);
+      box.append(r);
+      close.addEventListener('click', () => this.closeNameDialog(null));
+      send.addEventListener('click', () => {
+        this.closeNameDialog(null);
+        this.askTuneForm(flight, { path: 'worse' });
+      });
+      close.focus();
+    };
+    worse.addEventListener('click', () => {
+      if (!deaf()) {
+        askNegative();
+      }
+    });
+    later.addEventListener('click', () => {
+      if (!deaf()) {
+        this.closeNameDialog(null);
+      }
+    });
+    stop.addEventListener('click', () => {
+      if (deaf()) {
+        return;
+      }
+      this.settings.feelTuneAsk = false;
+      saveSettings(this.settings);
+      this.closeNameDialog(null);
+    });
+    better.focus();
+  }
+
+  /*
+   * THE FORM, and the only place a tune is sent from. It shows the numbers
+   * read only (they are what was flown, not what the sliders say now), asks
+   * for the verdict, takes the five feel words the flight feel form uses and
+   * a few words of the pilot's own, and has two buttons: Send, and Don't
+   * send. Nothing leaves the browser until Send, a failure says so in a
+   * sentence and leaves the form as it was, and the sending / sent guards and
+   * the unsaved guard are askFeelReport's, for the reasons written there.
+   *
+   * `path` is how the pilot got here, which decides the verdict chips:
+   * 'better' offers Better and Much better with Better chosen, 'worse'
+   * offers About the same and Worse, 'manual' (the Share row) offers all
+   * four and chooses none, so a pilot sharing a bad result is not nudged.
+   */
+  askTuneForm(flight, { path }) {
+    if (this.nameWait) {
+      this.closeNameDialog(null);
+    }
+    const af = airframeById(flight.airframe);
+    const ids = {
+      better: ['better', 'much_better'],
+      worse: ['same', 'worse'],
+      manual: ['much_better', 'better', 'same', 'worse'],
+    }[path] || ['better', 'much_better', 'same', 'worse'];
+    let verdict = path === 'better' ? 'better' : null;
+    let feel = null;
+
+    const box = el('div', 'name-dialog-box bug tune');
+    box.append(el('h2', null, path === 'worse' ? 'Send this result' : 'Send your tune'));
+    box.append(el(
+      'p',
+      'lede',
+      `${tuneValuesLine(flight, this.tuneCaps)}. ${airtimeWords(flight.airtimeS)} in the air on the ${af.short}. These go to the board with your words, grouped by aircraft and by physics version, so the people tuning the sim can see what pilots prefer. Your tune, your rates and the same details a flight feel report carries go with them.`,
+    ));
+    const chipRow = (options, selected, onPick) => {
+      const wrap = el('div', 'feel-chips');
+      const chips = new Map();
+      for (const opt of options) {
+        const chip = btn(`feel-chip${opt.id === selected ? ' on' : ''}`, opt.label);
+        chip.addEventListener('click', () => {
+          onPick(opt.id, chips);
+        });
+        chips.set(opt.id, chip);
+        wrap.append(chip);
+      }
+      return { wrap, chips };
+    };
+    const verdictRow = chipRow(
+      ids.map((id) => TUNE_VERDICTS.find((v) => v.id === id)),
+      verdict,
+      (id, chips) => {
+        verdict = id;
+        for (const [cid, chip] of chips) {
+          chip.classList.toggle('on', cid === verdict);
+        }
+      },
+    );
+    const feelRow = chipRow(FEEL_WORDS, null, (id, chips) => {
+      feel = feel === id ? null : id;
+      for (const [cid, chip] of chips) {
+        chip.classList.toggle('on', cid === feel);
+      }
+    });
+    const words = document.createElement('textarea');
+    words.className = 'name-dialog-input name-dialog-area';
+    words.maxLength = 2000;
+    words.rows = 3;
+    words.placeholder = 'What changed, and what you would tell the person holding the screwdriver.';
+    const reporter = document.createElement('input');
+    reporter.type = 'text';
+    reporter.className = 'name-dialog-input';
+    reporter.maxLength = 24;
+    reporter.autocomplete = 'nickname';
+    reporter.value = readPilotName() || '';
+    reporter.placeholder = 'Leave blank to stay Anonymous';
+    const err = el('p', 'name-dialog-err', '');
+    const row = el('div', 'name-dialog-row');
+    const send = btn('name-dialog-btn on', 'Send');
+    const dismiss = btn('name-dialog-btn', 'Don\'t send');
+    row.append(send, dismiss);
+    box.append(
+      el('p', 'name-dialog-label', 'Compared with stock it felt'),
+      verdictRow.wrap,
+      el('p', 'name-dialog-label', 'The quad felt (optional)'),
+      feelRow.wrap,
+      el('p', 'name-dialog-label', 'In your own words (optional)'),
+      words,
+      el('p', 'name-dialog-label', 'Your name (optional)'),
+      reporter,
+      err,
+      row,
+    );
+    this.nameDialog.textContent = '';
+    this.nameDialog.append(box);
+    this.nameDialog.hidden = false;
+    this.syncChips();
+
+    let sending = false;
+    let sent = false;
+    const finish = (value) => {
+      this.closeNameDialog(value);
+    };
+    const isDirty = () => !sent && Boolean(feel || words.value.trim());
+    const tryClose = (after) => {
+      if (sending || this.discarding) {
+        return;
+      }
+      this.confirmDiscard(box, {
+        dirty: isDirty,
+        submit: () => submit(),
+        discard: after,
+      });
+    };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (sending) {
+        return;
+      }
+      if (this.discarding) {
+        this.discarding();
+        return;
+      }
+      tryClose(() => finish(null));
+    };
+    this.nameWait = () => {};
+    this.nameKeyHandler = onKey;
+    this.nameDialog.addEventListener('keydown', onKey, true);
+    this.nameClickHandler = (e) => {
+      if (e.target === this.nameDialog && !sending && !this.discarding) {
+        tryClose(() => finish(null));
+      }
+    };
+    this.nameDialog.addEventListener('click', this.nameClickHandler);
+    dismiss.addEventListener('click', () => tryClose(() => finish(null)));
+    const submit = async () => {
+      err.textContent = '';
+      if (!verdict) {
+        err.textContent = 'Pick how it felt compared with stock. One is enough.';
+        return;
+      }
+      const st = this.stickProbe ? this.stickProbe() : null;
+      const payload = buildTunePayload({
+        verdict,
+        feel,
+        words: words.value,
+        reporter: reporter.value,
+        airframe: flight.airframe,
+        airframeShort: af.short,
+        weight: flight.weight,
+        airGrip: flight.airGrip,
+        motorKv: flight.motorKv,
+        gravityScale: flight.gravityScale,
+        airtimeS: flight.airtimeS,
+        flightMode: st && st.flying,
+        tuneId: this.settings.tune,
+        input: inputKindFromSource(st && st.source),
+        rates: this.settings.rates,
+        context: this.feelSnapshot(),
+      });
+      sending = true;
+      send.disabled = true;
+      dismiss.disabled = true;
+      send.textContent = 'Sending';
+      try {
+        const posted = await submitBug(payload);
+        sending = false;
+        sent = true;
+        this.tuneSent.add(flight.key);
+        box.textContent = '';
+        box.append(el('h2', null, 'Thanks'));
+        box.append(el(
+          'p',
+          'lede',
+          `Your tune landed${posted && posted.id ? ` as ${posted.id}` : ''}, with the numbers, your words and the physics version. The people tuning the sim read these side by side.`,
+        ));
+        const doneRow = el('div', 'name-dialog-row');
+        const close = btn('name-dialog-btn on', 'Close');
+        close.addEventListener('click', () => finish(posted));
+        doneRow.append(close);
+        box.append(doneRow);
+        close.focus();
+      } catch (e) {
+        sending = false;
+        send.disabled = false;
+        dismiss.disabled = false;
+        send.textContent = 'Send';
+        /* A board that has not been updated yet refuses the kind with a 400
+         * and a sentence about kinds, which means nothing to a pilot. */
+        err.textContent = e && e.status === 400 && /pick a kind/i.test(e.message || '')
+          ? 'The board has not been updated to take tunes yet, so nothing was sent. Try again later.'
+          : ((e && e.message) || 'The board could not take that tune.');
+      }
+    };
+    send.addEventListener('click', submit);
+    const first = verdictRow.chips.get(verdict) || verdictRow.chips.values().next().value;
+    if (first) {
+      first.focus();
     }
   }
 
@@ -8121,6 +8840,15 @@ export class Ui {
           (v) => { s.launchControl = Boolean(v); },
         ),
         /*
+         * FLIGHT FEEL TUNING, the mode's switch. On, it adds Air grip and
+         * Motor power to the room as rows and to the flight screen as
+         * sliders beside Weight; the question about a tuned flight is its
+         * other half. The rows after the switch exist only while it is on,
+         * so a pilot who never turned it on sees one more row and no more.
+         */
+        ...(this.tuneCaps.air || this.tuneCaps.kv ? [tuningItem(s, this.tuneCaps)] : []),
+        ...this.tuneRows(s, true),
+        /*
          * A SIGNPOST, not a copy. Rates are the pilot's, and configs/rates.js
          * says so in capitals: no tune here sets rates. Putting the real row
          * here would be the four-copies-of-Tune problem starting again, so
@@ -8396,6 +9124,14 @@ export class Ui {
             : 'Off: no stick boxes on the flight picture. Turn it on to see what your sticks are telling the quad.',
           s.stickOverlay,
           (v) => { s.stickOverlay = v; },
+        ),
+        toggle(
+          'Race line',
+          s.raceLine
+            ? 'On: in a whoop room, a trail of dots through the next gates shows a good line to fly, from the gate you have just flown to the one after the next. Dots close together mean slow down, amber ones mean slowest. Rooms only, and a few tracks have no line yet.'
+            : 'Off: no trail. Turn it on in a whoop room to see a good line through the next gates, drawn as dots.',
+          s.raceLine,
+          (v) => { s.raceLine = v; },
         ),
         { label: 'Sound', section: true },
         toggle('Sound', 'All sound: motors, wind, music, cues and every lap time called out loud.', s.sound, (v) => { s.sound = v; }),
@@ -8721,6 +9457,18 @@ export class Ui {
           note: 'How far the sticks go, and the throttle limit. Yours, not the tune\'s. Changing them here leaves the quad where it is and the clock running.',
         },
         weightItem(s),
+        /*
+         * FLIGHT FEEL TUNING'S TWO SLIDERS, as rows, only while the mode is
+         * on: this is where a keyboard or radio pilot who has just felt
+         * something wrong can move them (the flight screen's own are
+         * pointer sliders). The mode's SWITCH is not here and that is
+         * arithmetic, not taste: this list has no room to spare at 1280 by
+         * 720 (scripts/shell-check.js records its fold, and one row more
+         * hung 47 px under the command bar), so the switch lives in the
+         * Quad room and in the flight feel form, and a pilot who never
+         * turned the mode on has the menu they had. See tuneSliderItem.
+         */
+        ...this.tuneRows(s),
         feelItem(),
         /*
          * ELSEWHERE IS TWO DOORS AND THE WAY OUT (MENUS-PLAN.md 2.2).
@@ -8798,7 +9546,8 @@ export class Ui {
                * why it is off is the same answer given before it is needed.
                */
               disabled: built || nothing || Boolean(run && run.assisted)
-                || (run && run.timed === false) || Boolean(run && run.weightMixed),
+                || (run && run.timed === false) || Boolean(run && run.weightMixed)
+                || Boolean(run && run.tuned),
               note: built ? (this.sharedMap ? BOARD_MAP_OFF_BOARD : BUILT_OFF_BOARD) : (nothing
                 ? 'A run with no tricks in it is not a score. Fly one and it appears here.'
                 : (run && run.timed === false
@@ -8811,7 +9560,12 @@ export class Ui {
                      * left. See submitFreestyleRun in main.js. */
                     : (run.weightMixed
                       ? 'The weight changed during this run, so it has no one weight for the board to show. Fly it again at one weight.'
-                      : `${formatScore(run.total)} from ${run.tricks} tricks${Number.isInteger(run.weight) && run.weight !== WEIGHT_STOCK ? `, marked Weight ${run.weight}%` : ''}. One entry per pilot on the board, and only your best.`)))),
+                      /* Weight is printed on the board; Air grip and Motor
+                       * power are not, so a run landed on them is a run on
+                       * another quad and stays off. */
+                      : (run.tuned
+                        ? 'Tuned flight, not posted to the board. Tricks landed on Air grip or Motor power off 100 are a different quad from the one everybody else flew. Set both back to 100 and fly it again.'
+                        : `${formatScore(run.total)} from ${run.tricks} tricks${Number.isInteger(run.weight) && run.weight !== WEIGHT_STOCK ? `, marked Weight ${run.weight}%` : ''}. One entry per pilot on the board, and only your best.`))))),
             },
           /*
            * THE SHARE CARD, the run's manga page beside its score. A row of
@@ -8840,6 +9594,7 @@ export class Ui {
             action: 'leaderboard',
             note: 'Every published track and map, and the times flown on them. Opens in a new tab.',
           },
+          ...this.tuneShareRows(),
           feelItem(),
           { label: 'Back to title', action: 'title' },
         ];
@@ -8847,6 +9602,7 @@ export class Ui {
       if (!listing) {
         return [
           { label: 'Fly again', action: 'restart', primary: true },
+          ...this.tuneShareRows(),
           feelItem(),
           { label: 'Back to title', action: 'title' },
         ];
@@ -8866,6 +9622,7 @@ export class Ui {
           uploadAction(listing, {
             row: this.resultsBoard,
             timePosted: this.timePosted,
+            tuned: this.resultsOffBoard,
           }),
           publishAction(listing, this.coursePublished),
         ]),
@@ -8875,6 +9632,7 @@ export class Ui {
           action: 'seat-board',
           note: `${listing.name || 'This track'} on the public board, opened on its own page: every time posted on it and who flew them. Opens in a new tab.`,
         }] : []),
+        ...this.tuneShareRows(),
         feelItem(),
         { label: 'Back to title', action: 'title' },
       ];
@@ -13274,6 +14032,10 @@ export class Ui {
   showResults(log, best, recordAtStart, ghostNote = null, opts = {}) {
     this.resultsBody.textContent = '';
     this.resultsNote.textContent = '';
+    /* The flight flown on the tuned sliders, if there was one: taken now
+     * because the results menu is built from it and the log is cleared when
+     * the next run starts. */
+    this.resultsTune = this.takeTuneFlight();
     const clean = log.filter((l) => Number.isFinite(l.ms)).map((l) => l.ms);
     const fastest = clean.length ? Math.min(...clean) : null;
     const slowest = clean.length ? Math.max(...clean) : null;
@@ -13449,7 +14211,11 @@ export class Ui {
     /* The row the board would be sent, from the race (boardRow). The one
      * caller always hands it; one that did not would get the fastest lap
      * and the three with no weight, which every reader takes as stock. */
-    this.resultsBoard = fastest == null
+    /* A run whose laps were all flown on the tuned air or motors has no row
+     * at all (race.boardRow), and must not fall through to the fastest lap
+     * with no weight, which every reader takes as a stock lap. */
+    this.resultsOffBoard = Boolean(opts.offBoard);
+    this.resultsBoard = fastest == null || (!opts.board && this.resultsOffBoard)
       ? null
       : (opts.board || { lapMs: fastest, threeMs: Number.isFinite(opts.threeMs) ? opts.threeMs : null, weight: null });
     /* Which course this lap was flown on. The time and the document have to
@@ -13460,7 +14226,7 @@ export class Ui {
       try {
         const listing = inspectCourse();
         this.resultsDocId = listing && listing.doc ? listing.doc.id : null;
-        if (listing && listing.canPostTime && listing.shareId) {
+        if (listing && listing.canPostTime && listing.shareId && this.resultsBoard) {
           writePendingTime({
             trackId: listing.shareId,
             lapMs: this.resultsBoard.lapMs,
@@ -13489,6 +14255,9 @@ export class Ui {
     /* The one automatic offer of the flight feel question, because this is
      * the only place a first race finishes. */
     this.maybeOfferFeel();
+    /* And, when the flight was flown on the tuned sliders, whether it was
+     * better than stock. */
+    this.maybeAskTune(this.resultsTune);
   }
 
   /*
@@ -14306,6 +15075,8 @@ export class Ui {
     this.freestyleRun = summary;
     this.runPosted = null;
     this.cardSaved = null;
+    /* See showResults: taken before the menu is built. */
+    this.resultsTune = this.takeTuneFlight();
     this.resultsBody.textContent = '';
     this.resultsNote.textContent = '';
     const screen = this.screens.results;
@@ -14429,6 +15200,7 @@ export class Ui {
     screen.classList.toggle('has-manga', this.mangaPanels.length > 0);
     this.show('results');
     this.showMangaPage();
+    this.maybeAskTune(this.resultsTune);
   }
 
   /*
@@ -14800,7 +15572,92 @@ export class Ui {
       e.stopPropagation();
       this.dismissAirHint();
     });
+    this.bindTuneSliders();
     this.paintAir();
+  }
+
+  /*
+   * THE TWO TUNING SLIDERS, bound the way the Weight slider is and for the
+   * same reasons: they commit live on 'input' so the change is felt arriving
+   * under the craft, they never keep focus (read the long note in
+   * bindAirSlider: a range holding focus eats the arrow keys that fly the
+   * quad and the Escape that pauses it), and a touch on the track answers
+   * the card. What a change does is main.js's: applySettings pushes the new
+   * scale to the module and voids a lap the change lands in.
+   */
+  bindTuneSliders() {
+    const t = this.osdAir && this.osdAir.tune;
+    if (!t) {
+      return;
+    }
+    const rows = [
+      [t.grip.range, 'airGrip', clampAirGrip],
+      [t.power.range, 'motorKv', clampMotorKv],
+    ];
+    for (const [range, key, clamp] of rows) {
+      range.addEventListener('input', () => {
+        const v = clamp(range.value);
+        if (v === this.settings[key]) {
+          this.paintAir();
+          return;
+        }
+        this.settings[key] = v;
+        this.paintAir();
+        saveSettings(this.settings);
+        if (this.onSettings) {
+          this.onSettings(this.settings);
+        }
+      });
+      range.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        this.dismissTuneHint();
+      });
+      range.addEventListener('click', (e) => e.stopPropagation());
+      range.tabIndex = -1;
+      const release = () => {
+        if (document.activeElement === range) {
+          range.blur();
+        }
+      };
+      range.addEventListener('pointerup', release);
+      range.addEventListener('pointercancel', release);
+      range.addEventListener('change', release);
+    }
+    t.reset.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.resetTune();
+    });
+    t.hintBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dismissTuneHint();
+    });
+  }
+
+  /* All three sliders back to the quad as it ships, in one settings write,
+   * so a lap is voided once and not three times. */
+  resetTune() {
+    const s = this.settings;
+    if (s.weight === WEIGHT_STOCK && s.airGrip === AIR_GRIP_STOCK && s.motorKv === MOTOR_KV_STOCK) {
+      return;
+    }
+    s.weight = WEIGHT_STOCK;
+    s.airGrip = AIR_GRIP_STOCK;
+    s.motorKv = MOTOR_KV_STOCK;
+    this.paintAir();
+    saveSettings(s);
+    if (this.onSettings) {
+      this.onSettings(s);
+    }
+  }
+
+  dismissTuneHint() {
+    const t = this.osdAir && this.osdAir.tune;
+    if (!t || this.tuneHintDone) {
+      return;
+    }
+    this.tuneHintDone = true;
+    t.hint.hidden = true;
+    markTuneHintSeen();
   }
 
   /*
@@ -14889,7 +15746,50 @@ export class Ui {
         this.airHintAtMs = airMs;
       }
     }
+    /*
+     * FLIGHT FEEL TUNING'S CARD: once ever, on the ground, with the mode on,
+     * and never at the same time as the Weight card or under a dialog. It is
+     * put away the moment the quad leaves the ground, and remembered as seen
+     * only if that was a takeoff and not a dialog: a card the pilot never got
+     * to read comes back.
+     */
+    const tuneHint = air.tune && air.tune.hint;
+    if (tuneHint) {
+      const room = this.tuneCardRoom();
+      if (!tuneHint.hidden && (ready || dialog || !room || !this.settings.feelTuning)) {
+        if (ready) {
+          this.dismissTuneHint();
+        } else {
+          tuneHint.hidden = true;
+        }
+      } else if (tuneHint.hidden && !ready && !dialog && room && air.hint.hidden && this.settings.feelTuning
+        && !this.tuneHintDone && !tuneHintSeen()) {
+        tuneHint.hidden = false;
+      }
+    }
     Ui.klass(air.box, ready && air.hint.hidden ? 'osd-air is-aloft' : 'osd-air');
+  }
+
+  /*
+   * WHETHER THE SCREEN HAS ROOM FOR FLIGHT FEEL TUNING'S CARD. It hangs
+   * above the block and is about as tall as the block is wide, so on a short
+   * screen it lands on the launch banner and the clock, which is the one
+   * thing a pilot sitting on the start block needs to read (measured on an
+   * 844 by 390 landscape phone: the card ran from y 97 to 280 and the banner
+   * from 20 to 120). The Weight card meets the same screen by hanging below
+   * its slider; this block is the lowest thing on the glass and there is no
+   * below, so on a short screen the card is simply not raised, and not
+   * remembered as seen, so a pilot who later has a taller window is told
+   * once then. The line is the sheet's own short screen line, 560 px.
+   * The query is made once: setAirSlider runs every frame.
+   */
+  tuneCardRoom() {
+    if (this.tuneRoomQuery === undefined) {
+      this.tuneRoomQuery = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(min-height: 561px)')
+        : null;
+    }
+    return this.tuneRoomQuery ? this.tuneRoomQuery.matches : true;
   }
 
   /*
@@ -14905,6 +15805,9 @@ export class Ui {
       return;
     }
     air.hint.hidden = true;
+    if (air.tune) {
+      air.tune.hint.hidden = true;
+    }
     if (air.box.__wfClass === 'osd-air is-aloft') {
       Ui.klass(air.box, 'osd-air');
     }
@@ -14957,6 +15860,43 @@ export class Ui {
     const stock = v === WEIGHT_STOCK;
     air.cap.textContent = `Weight ${v}%`;
     Ui.klass(air.cap, stock ? 'osd-air-cap is-stock' : 'osd-air-cap');
+    /*
+     * And the two tuning sliders, when the mode is on. Hidden is the whole
+     * of "off": the group takes no space and no pointer, and nothing below
+     * runs. Painted the way Weight is, slate at stock and amber off it.
+     */
+    const tune = air.tune;
+    if (tune) {
+      const on = Boolean(this.settings.feelTuning);
+      if (tune.box.hidden === on) {
+        tune.box.hidden = !on;
+      }
+      if (on) {
+        const rows = [
+          [tune.grip, clampAirGrip(this.settings.airGrip), AIR_GRIP_STOCK, 'Air grip', this.tuneCaps.air],
+          [tune.power, clampMotorKv(this.settings.motorKv), MOTOR_KV_STOCK, 'Motor power', this.tuneCaps.kv],
+        ];
+        for (const [row, value, base, name, able] of rows) {
+          /* A slider the module cannot answer is not drawn: see setTuneCaps. */
+          if (row.box.hidden === able) {
+            row.box.hidden = !able;
+          }
+          if (Number(row.range.value) !== value) {
+            row.range.value = String(value);
+          }
+          row.cap.textContent = `${name} ${value}%`;
+          Ui.klass(row.cap, value === base ? 'osd-air-cap is-stock' : 'osd-air-cap');
+        }
+        /* The way home is offered only when there is somewhere to go back
+         * from: at stock the button is a line of height spent on nothing. */
+        const stockAll = v === WEIGHT_STOCK
+          && clampAirGrip(this.settings.airGrip) === AIR_GRIP_STOCK
+          && clampMotorKv(this.settings.motorKv) === MOTOR_KV_STOCK;
+        if (tune.reset.hidden !== stockAll) {
+          tune.reset.hidden = stockAll;
+        }
+      }
+    }
   }
 
   /*
@@ -15307,6 +16247,30 @@ export class Ui {
   /* The craft's state for a report: see bugSnapshot, and main.js where it is read. */
   setCraftProbe(fn) {
     this.craftProbe = typeof fn === 'function' ? fn : null;
+  }
+
+  /* The flight the end of flight question is about, as a function, because it
+   * is the shell's to know and it changes every frame: see main.js, TuneLog. */
+  setTuneProbe(fn) {
+    this.tuneProbe = typeof fn === 'function' ? fn : null;
+  }
+
+  /*
+   * Which of flight feel tuning's two sliders the loaded module can answer.
+   * A module without the export would take the slider and ignore it, so the
+   * row is not drawn: main.js says what it has once it has loaded, and an
+   * older dist/sim.wasm simply shows fewer sliders.
+   */
+  setTuneCaps(caps) {
+    this.tuneCaps = { air: Boolean(caps && caps.air), kv: Boolean(caps && caps.kv) };
+    const tune = this.osdAir && this.osdAir.tune;
+    if (tune) {
+      tune.body.textContent = tuneCardText(this.tuneCaps);
+    }
+    this.paintAir();
+    if (this.screen === 'quad' || this.screen === 'paused') {
+      this.renderMenu();
+    }
   }
 
   /* Input to screen and the facts beside it, for the Settings row: see
@@ -16485,6 +17449,14 @@ export class Ui {
       this.openFeelReport();
       return;
     }
+    /* The tune form, from the Results row: the way in for a pilot the
+     * automatic question cannot reach. See tuneShareRows. */
+    if (action === 'sharetune') {
+      if (this.resultsTune && !this.tuneSent.has(this.resultsTune.key)) {
+        this.askTuneForm(this.resultsTune, { path: 'manual' });
+      }
+      return;
+    }
     /*
      * The guided first flight.
      *
@@ -17199,6 +18171,13 @@ export class Ui {
       this.renderMenu();
       return;
     }
+    /* Leaving a flight for the menu is an end of flight as well: take what
+     * was flown on the tuned sliders before main.js clears it with the run
+     * (onAction 'title' resets), and ask once the title is up. From Results
+     * the question was asked on arrival and is not asked again. */
+    const leaving = action === 'title' && (this.screen === 'paused' || this.screen === 'flight')
+      ? this.takeTuneFlight()
+      : null;
     if (action === 'title' || action === 'paused') {
       this.show(action);
     }
@@ -17209,6 +18188,10 @@ export class Ui {
     }
     if (this.onAction) {
       this.onAction(action, this.settings);
+    }
+    if (leaving) {
+      this.resultsTune = null;
+      this.maybeAskTune(leaving);
     }
   }
 

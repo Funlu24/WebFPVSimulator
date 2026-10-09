@@ -69253,6 +69253,810 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 - Flown: the owner flew the live build carrying this change and wrote "flys good" at 05:40:56Z on 2026-10-09. A pilot's word, not a check. Still open: check:wall's gentle rebound band (0.194 against 0.20) and the iterm_relax_cutoff 8 offer.
 - Missed at push time and fixed after, test only: `npm run check:clip` (src/trackbuilder/selftest.js) asserted the whoop rests on a typed 0.045, so it failed one line on main from 10b8bea. It now reads the five inch table's vHalfDown, which is the plant's hull_hz_down, so it follows the plant. 2559 passed, 0 failed. Reported by the CommunityGow thread; this entry's check list above did not include check:clip.
 
+## 2026-10-08 | tuning, board | Flight feel tuning: Air grip, the end of flight question and tune tickets (branch claude/project-thread-yofdnj, draft PRs here and in the board's repository)
+
+*Corrected by the entry at the end of this file, 2026-10-08 | tuning, physics: the whoop figures in the Air grip table below were measured on a plant the shell never flies, Motor power is now in the physics module with the owner's yes of 13:08Z, and `npm run verify` has been run.*
+
+The owner, 11:44Z and 11:51Z in the flight feel thread: two more on screen sliders, "air grippyness, carry or momentum"
+and "motor power /kv", shown on the ground like the Weight slider; at the end of a flight the pilot is asked whether
+they got a better flight feel than stock and, if so, whether they can submit their tune with comments, with a no or an
+opt out always there; and the bug tickets changed so the data can be aggregated over time, to make this the best
+feeling sim there is. Then, once the prompt was written: "lets go sonnet, build this, if no sliders are touched the
+existing flight feel is maintained".
+
+### What it is now
+
+- **A mode, off by default** (`feelTuning`). Off, or on with every slider at 100, the quad is the one that shipped. This
+  is checked on the real page, not argued: `window.__air().calls` is the number of times the shell has invoked
+  `sim_set_air` or `sim_set_motor_kv`, and it is 0 on a default page and 0 with the mode on and nothing moved, in the
+  air as well as on the ground, with the module still holding air 1.0. The apply block compares the SCALE it wants with
+  the one it holds and calls the module only when they differ, so stock never reaches the exports; the record key gains
+  `.a85` or `.k110` only off 1.0, so every key that exists stays where it is.
+- **Air grip**, 50 to 150, step 5, left Carries and right Grips. It is the existing `sim_set_air` (the scale on the body
+  drag, the rotor H force and the ducted descent brake), exposed as a slider for the first time since the first air
+  slider came out on 2026-09-18. Measured off the module by `scripts/tune-measure.js` (`npm run feel:measure`), hands off
+  carry in angle mode from 20 m/s (12 on the whoop) to half of it, sticks centred at hover throttle, at the machine the
+  shell flies:
+
+  | | 50 | 100 | 150 |
+  |---|---|---|---|
+  | five inch carry | 54.8 m | 26.9 m | 18.0 m |
+  | five inch flat out | 221 km/h | 152 | 113 |
+  | whoop carry | 18.8 m | 9.4 m | 6.4 m |
+  | whoop flat out | 115 km/h | 81 | 61 |
+
+  Hover does not move at all (0.350 five inch, 0.502 whoop). The two ends are twice as far and two thirds as far, which
+  is a corner's difference, not the "hardly discernable" one the first air slider was reported as: that was asked
+  vertically, and the vertical axis is gravity's.
+- **Motor power**, 80 to 120: the shell side is built and tested, and the module side is NOT. There is no
+  `sim_set_motor_kv` in dist/sim.wasm, so on this build the Motor power row and slider are not drawn and the copy never
+  names it (`ui.setTuneCaps`, feature detected). The change to the module is put to the owner below and waits for the
+  answer.
+- **Where they are.** On the flight screen as a group under the Weight slider in the same block (`.osd-tune`, new class
+  names only, because `.osd-air*` is the contract across the deploy cache seam), on the ground only, faded in the air by
+  the Weight slider's own rule; as rows in the Quad room and, while the mode is on, in the pause menu; the switch is in
+  the Quad room and as a door on the flight feel form. A once-ever card explains the group on a screen at least 561 px
+  tall. Reset to stock appears only off stock. Moving a slider mid lap voids the lap ("Feel changed, Lap voided"), as
+  Weight does. A first visit to the other aircraft puts both sliders back to stock.
+- **The question.** A flight flown on the mode with any of the three sliders off 100 for at least 30 s of sim airtime
+  (the combination flown longest, if it changed) asks "Did that feel better than stock?" a beat after Results or the
+  title arrives: Better than stock, Same or worse, Not now, Stop asking. Better opens the form (verdict, the five feel
+  words, a few words, a name, Send or Don't send). Same or worse asks once more whether to send that result too, and
+  Close sends nothing. Nothing is sent unless Send is pressed. It is asked once per combination per session, never over
+  another dialog, and not at all to a pilot on a radio (the pad can only go Back, so Results has a Share this tune row,
+  which also serves a touch pilot who said Not now, and is the way back after Stop asking).
+- **The tickets.** Kind `tune`, a typed `tune` object, and on EVERY ticket now a top level `airframe` and
+  `sim: {wasm, deploy}` (the first 16 hex characters of the SHA-256 of the dist/sim.wasm the page loaded, and the deploy
+  stamp), so tickets can be grouped by aircraft and by physics over time. The contract is the board's README, under
+  "Tune tickets"; the board's own validator accepts what the page sends (checked below, with the board's code and not a
+  copy of it).
+- **The board half** is its own commit in the other repository (4c1ce87 on the same branch name, base 4b4c614): the
+  `tune` kind, three new columns on `bugs`, a typed `feel_tunes` table written in the same transaction as its ticket,
+  `GET /api/feel/summary` behind the inbox's own check (an admin or `BUGS_TOKEN`, never public) and a Tunes panel in the
+  inbox. It has to be live before this ships: a simulator that sends a `tune` to a board that does not know the kind is
+  told so in a sentence and nothing is lost, but there is nothing to read the data with.
+
+### Decisions made without asking, and what to change if they are wrong
+
+- A lap flown off stock stays off the public board, as does a freestyle run with a trick landed off stock. The board has
+  nowhere to say which aircraft it was, and a record on a different quad is the thing the board exists to prevent. The
+  record key carries the suffix, so personal bests stay apart locally. `Race.boardRow` leaves such laps out and the
+  results screen says why. If the owner wants tuned laps on the board, that is a board column first.
+- The mode's switch is not a pause menu row: an always on row there broke `lint:shell`'s 1280x720 fold ("paused: the
+  list hangs 47 px under the command bar, was 0 px"). The sliders appear in the pause menu only while the mode is on.
+- The card is not raised below 561 px of height, not remembered as seen there, and the Quad room, the pause menu and the
+  flight feel form are where a phone pilot meets the mode.
+- 30 s of airtime is the line for asking. It is `TUNE_MIN_AIR_MS` in `src/share/tune.js`.
+- Same or worse can also be sent (a tune that did not help marks where not to go), where the ask was only the pilots who
+  did better. It is a second confirmation away from a ticket and sends nothing on Close.
+- A pilot on a radio or a gamepad is not asked on their own, which is not what the plan said to the owner ("they can
+  answer with a radio or gamepad"). A dialog here can be answered by a pad only with Back, and the existing Flight feel
+  form is already "never on its own for a radio or a gamepad" for the same reason, so this follows it: Results carries a
+  Share this tune row for them, reached with a mouse or keyboard, and the row is the way back after Stop asking.
+- The board's helper settled eight small ambiguities in the contract I wrote, and recorded each in the board's README
+  and commit. The three that matter here: a tune with no weight is refused (the stock weight reader would have taken an
+  absent weight as 100); a tune with no `sim` is refused (any other kind folds a bad one to empty); a version with an
+  empty wasm fingerprint is a group of its own and cannot be asked for by name.
+
+### Checks run in this turn
+
+Simulator, on this tree (last source edit 12:44Z, last script edit 12:47Z, every run below after both):
+
+- `npm run tune:selftest`: 59 of 59 checks clean, among them the board's own validator loaded from the sibling checkout at its commit 4c1ce87.
+- `node scripts/tune-check.js`, the real page: 80 passed, 0 failed on the third run (what the first two caught is under
+  "What went wrong"). It covers a default page (stock, `calls` 0, the group not drawn), the mode on and untouched at
+  1600x900, 1280x720 and 960x540 (stock, `calls` 0, the group inside the screen and adding no overlap the Weight slider
+  did not already have), a phone at 844x390 and held upright, a tuned page (the module holds 0.85, one call, the key,
+  Reset to stock), a real 30 s flight to the question and through the form to a ticket that the board's own validator
+  accepts, the old board 400 sentence, Not now, Stop asking and a 12 s flight that is not asked.
+- `npm run check:longflight` all pass. `npm run lint:boot` 9 of 9. `npm run lint:frame` 34 passed, 0 failed.
+  `npm run check:fresh` 18 passed, 0 failed. `npm run lint:preload` up to date (boot 134 modules, 259 served).
+- `npm run lint:nouns` PASS. `npm run lint:board` PASS, with the board's checkout beside this one under the name the
+  check looks for (a symlink to `webfpvsimulator-leaderboard`; without it the check says SKIP).
+- `npm run lint:input`: all 246 passed, 317 s. `npm run lint:responsive`: PASS, freestyle 333 frames, worst gap 381 ms, none over 500 ms. `npm run lint:scale`: PASS.
+- `npm run lint:fc`, `lint:presets`, `lint:catalog`: 4 of 4 presets clean, the catalog agrees with valueTable and bf_settings.c, 33 of 33 traces clean.
+- `npm run lint:shell` FAILS, 7 problems: overflow on Pilot, Rates, PIDs, FC and Tricks, a 2 px hang on Paused at
+  1280x720 and 125 px on Stick help at 844x390. The same seven fail, with the same numbers, on an unmodified da4e4b7
+  (`git archive` of it, run in this container), because the container's font metrics are not the ones the baseline was
+  recorded with. The only differences from that run are the ones this change makes on purpose: the Quad room has one
+  more stop (11, was 10) and there is one more named row (319, was 318). No threshold was touched.
+- Not run: `npm run verify`. Nothing here reaches physics, the plant, the module ABI or the build:
+  `git diff --stat vendor/betaflight` is empty and dist/sim.wasm is unchanged. No adversarial or multi agent review.
+
+Board, on its commit 4c1ce87:
+
+- `npm test`: all passed, 1059 pass, 0 FAIL, 2 skip (the admin password, and the Postgres half).
+- `BOARD_SELFTEST_DATABASE_URL=... npm test` against a scratch Postgres 16 made for the run and removed after it: all
+  passed, 1085 pass, 0 FAIL, 1 skip (the admin password), no schema left behind.
+- `npm run lint:licence` (30 files carry the notice) and `npm run lint:nouns` PASS.
+- Run by the helper and not repeated by me: four mutation checks (each restored byte for byte), the real server on a
+  scratch Postgres (an old build files two tickets, the new one migrates in place and reads them back identical, seven
+  tunes in, the summary equal to `percentile_cont` in psql), and the inbox page in headless Chromium at six widths.
+
+### What went wrong
+
+- An always on pause row broke the fold at 1280x720 (above); the row came out.
+- `.osd-air-row { display: flex }` beat the `hidden` attribute on a tune row, so a slider the module cannot answer would
+  have been drawn anyway; each row and its caption now sit in a `.osd-tune-item` with its own `[hidden]` rule.
+- `clampAirGrip(null)` returned the floor, 50, because `Number(null)` is 0: a corrupt stored blob would have put a pilot
+  on a quad that carries twice as far. null, the empty string and booleans are now stock.
+- The first real page run showed the tuning card hung over the launch banner and the clock on an 844x390 screen (card
+  y 97 to 280, banner 20 to 120), which is the one thing a pilot on the start block needs to read. The card is now not
+  raised on a screen under 561 px tall (`tuneCardRoom`).
+- The first overlap assertions in `scripts/tune-check.js` failed on 480x300 and 390x844 desktop windows. Not the
+  feature's: main's Weight block alone already sits on the pack bar there (measured on a `git archive` of da4e4b7). The
+  check now judges what the group ADDS to the Weight slider's own overlaps.
+- The check's "module not touched in the air" assertion read a cumulative count that already held the ground sliders'
+  calls; it compares against the count taken before the flight.
+- Two real page runs in a row then failed one assertion: the question's text was expected to name "Motor power 100%", and
+  this build, which has no such export, correctly does not. The expectation now comes from `ui.tuneCaps`, the same
+  source the copy uses. The code was right and the assertion was wrong; the third run is the 80 of 80 above.
+- The tuning switch's note first said switching the mode "puts the quad back on the start line", which is false; it now
+  says a lap is voided only when the change alters the quad being flown.
+- A duplicate `const t` in `scripts/tune-selftest.js` was a SyntaxError that stopped the file; renamed.
+- `lint:board` skipped itself at first because it looks for `../WebFPVSimulator-LeaderBoard` and the checkout here is
+  `webfpvsimulator-leaderboard`. It was run through a symlink once the board half was committed.
+- `lint:shell` fails 7 ways on unmodified main in this container, as above. Not this change's, not touched.
+- The board's remote printed "This repository moved" (now `WebFPVSimulator-LeaderBoard.git`) on the helper's push. The
+  push went through; the old address still resolves.
+
+### Owed
+
+- **Motor power, in the module, needs the owner's word.** What changes: one more mode export beside `sim_set_air`,
+  `sim_set_motor_kv` with a getter `sim_motor_kv`, refused outside 0.8 to 1.2, which models a rewound motor (the back
+  EMF constant divided by the scale and the winding resistance by its square, at the six places `plant_step` uses them),
+  survives a reset the way SIM_AIR and SIM_GRAVITY do, and is never called at 1.0. The ABI version stays 1 and nothing
+  existing changes meaning. Why: it is the second slider the owner asked for, and the one that moves thrust, top speed
+  and how hard the quad snaps to a stick, which no other slider here does. What it could break: the plant's golden
+  trace if 1.0 were not a bit exact no op (it is compared on the scale and never called, and check:plant has to show the
+  golden unchanged); the wasm fingerprint every tune ticket is grouped by changes with the module, which is the intent
+  and means the first tunes on this build are a group of their own; hover throttle moves with kv, so the keyboard's
+  hover spring needs a kv axis (`syncKeyHover` is already called from the apply block) and the flight check's hover
+  tables want one; and the module's exports and the build both change, so it goes through the whole suite. The coverage
+  rule comes first: check:plant, check:takeoff, check:crash and check:wall were green on unmodified main in this
+  container before any of this started and have to be green again before the module is touched, then
+  `npm run verify` after, and `node scripts/tune-measure.js --sweep=kv` to say what the slider does. Put to the owner
+  as a decision card in the flight feel thread at 11:58Z on 2026-10-08, options Add it (recommended) and Skip Motor
+  power. No answer when this entry was written, so nothing in the module was touched. If the answer is no, this ships
+  as Air grip only and the Motor power rows stay out of sight, which is how it is built.
+- Nobody has flown it. Air grip is measured off the module, driven on the real page headless and checked as a ticket,
+  and never flown by a person. The band, 50 to 150, is the measurement's first guess at where the ends feel too much.
+  A slider moved in the middle of a lap voiding the lap is Weight's own rule copied, and no check exercises it.
+- No frame time on real hardware. The group costs a few comparisons a frame in the apply block and DOM work only when a
+  slider moves or a dialog opens, and `lint:frame` passes; none of that is a weak laptop.
+- The board half has to be merged and live first. The inbox panel was looked at only in headless Chromium.
+
+## 2026-10-08 | tuning, physics | Motor power in the physics module: sim_set_motor_kv, on the same draft PR (branch claude/project-thread-yofdnj)
+
+### The owner's word
+
+The entry above left Motor power in the module owed to the owner, because it changes the module's exports and the build. The
+decision card went up in the flight feel thread at 11:58Z on 2026-10-08, "Add a Motor power setting to the physics module?",
+with Add it (recommended) and Skip Motor power. At 13:08Z the owner tapped Add it.
+
+What that covers: `sim_set_motor_kv` and `sim_motor_kv` in dist/sim.wasm, 80 to 120 percent, on the draft pull request and
+nowhere else, with stock flight bit identical at 100. What it does not cover: anything reaching main (the board's pull
+request #12 first, then the simulator's #49, each on the owner's word), and the rewrite of `tests/goldens/plant.json`
+described below, whose own note asks for the owner's approval. That rewrite is flagged as his call. If he would rather the
+golden were not touched, the hash line and the six new scenarios come out and nothing else changes; `npm run check:motorkv`
+would still pin the direction of the knob, though not its bits.
+
+The golden rewrite was approved afterwards, by the owner at 23:21Z on 2026-10-08: see the last entry in this file.
+
+### What changed
+
+- **The module.** At the top of `plant_step` (`src/native/plant.c`) the back EMF constant becomes `ke / s` and the winding
+  resistance `r_motor / (s * s)`, and every place `plant_step` read `ke` and `r_motor` reads those (the bus voltage solve,
+  the motor current, the torque on the rotor and the reaction on the frame). `src/native/sim.c` holds the scale
+  (`SIM_MOTOR_KV`, 1.0), `sim_set_motor_kv` (refuses anything outside 0.8 to 1.2, NaN and infinity included, with
+  `SIM_ERR_BAD_ARG`, and leaves the value it held) and `sim_motor_kv`. It is a mode like the air and gravity scales: it
+  survives `sim_reset` and `sim_init`, and the shell owns asserting it. The model, what follows from it and what it leaves
+  alone are written out at `SIM_MOTOR_KV` in `sim_internal.h` and `sim_abi.h`. The ABI version stays 1 (two additive entry
+  points, nothing existing moved). `bf_glue.c`'s raw readbacks of the table's `r_motor` and `ke` are deliberately unscaled:
+  they report the table.
+- **The build.** dist/sim.wasm is rebuilt, 141813 to 141948 bytes, SHA-256 0a1f60b4...9ffa to 9d6544ee...4576. Rebuilding
+  the unmodified sources first reproduced the old bytes exactly, so the build is reproducible and the difference is the
+  change. The first 16 hex characters of the new hash, 9d6544ee6cd982ef, are the fingerprint every tune ticket carries, so
+  the tunes sent from this build are a group of their own on the board, which is what that field is for.
+  `git diff --stat vendor/betaflight` is empty after the build.
+- **The keyboard's hover spring has a Motor power axis.** Hover sits lower on the stick as the scale rises, so a spring to
+  the stock number would drop or climb the quad every time a key came up (bug-3a7be142 again). `configs/rates.js` gains
+  two measured edge tables per aircraft, at 80 and at 120, read with `node scripts/flightcheck.js --kv=...` at each of the
+  nine weight and charge pairs and nine caps, and `hoverStickPercent` takes the scale and interpolates in 1 / kV, because
+  hover is a duty and duty goes as 1 / kV. At 100 it returns the stock table entry untouched, so the keyboard's stock
+  spring is exactly what it was. `syncKeyHover` passes the scale; the feel report's throttle line passes it too.
+- **The Motor power rows now draw**, because the module has the export (feature detected, as before). A module without it,
+  such as a cached older one, still hides the rows and never has the export called.
+- **Scripts.** `scripts/motor-kv-check.js` (`npm run check:motorkv`, new): the surface, the identity of the setter's own
+  history, the direction of the knob, the motor's time constant, and the spring. `scripts/plant-golden.js` flies six
+  Motor power scenarios. `scripts/flightcheck.js` takes `--kv=`. `scripts/tune-check.js` has a Motor power page.
+  `scripts/input-selftest.js` has four Motor power hover cases. `scripts/tune-measure.js` is corrected (below).
+
+### What the knob is, and what it claims
+
+The same motor wound hotter or milder on the same pack. Turns go as 1 / s for a kV scale of s and resistance as turns
+squared, so the back EMF constant is divided by s and the winding resistance by s squared. That is one fact, not two free
+knobs. It follows, and none of it is tuned, that the no load speed and the stall torque go up by s and the stall current by
+s squared, while the motor's own time constant (J R / ke squared) stays where it was. Hover wants the same rotor speed and
+torque, so hover duty goes as 1 / s: lower on the stick above 1. Full throttle turns the rotor faster, which is more
+thrust, more current and more sag. It does not touch mass, inertia, the prop, the pack, the air or any Betaflight setting.
+One simplification: `r_motor` is the airframe's lumped figure for motor, ESC and leads, so scaling all of it overstates a
+real rewind's stall current a little (the ESC and the leads would not change).
+
+### What it does, measured off the module
+
+`node scripts/tune-measure.js --sweep=kv`, a fresh module per row, at the gravity the shell flies, on the verification
+fixture's tune. Five inch, gravity 1.62:
+
+| Motor power | 80 | 100 | 120 |
+|---|---|---|---|
+| hover, percent of stick | 43.8 | 35.0 | 29.1 |
+| punch from a hover, speed reached | 20.3 m/s | 26.7 | 31.7 |
+| punch from a hover, height gained | 12.7 m | 17.4 | 21.4 |
+| flat out, angle mode | 143 km/h | 152 | 159 |
+| hands off carry, 20 to 10 m/s | 26.6 m | 26.9 | 27.1 |
+
+The whoop as the shell flies it (the five inch plant at gravity 2.025): hover 50.0, 39.9 and 33.2 percent; punch speed
+18.7, 25.3 and 30.5 m/s; punch height 11.6, 16.4 and 20.5 m; flat out 152, 163 and 170 km/h; carry 24.7, 24.7 and 24.9 m.
+So the knob moves power and leaves carry alone, which is the job Air grip does and the reason there are two sliders.
+On the shell's own default tune (`configs/betaflight-default.diff`) hover, flat out and the punch come out the same to the
+digit and carry 1 to 3 percent shorter.
+
+On the four motor bench in `check:motorkv`, full duty for three seconds: rotor speed 22193, 26077 and 28602 rpm at 80, 100
+and 120 (less than the scale itself, because the prop takes some of it back, so static thrust, which goes about as the
+square, is roughly 28 percent less at 80 and 20 percent more at 120), pack current 79, 130 and 201 A, pack voltage 24.0,
+23.2 and 22.2 V. The motor's 63 percent rise, check 8's procedure at each scale, is 27, 26, 26, 26 and 25 ms at 80, 90,
+100, 110 and 120.
+
+### Coverage first, as the owner required on 2026-09-24
+
+Before any native file was touched, on the unmodified module (wasm 0a1f60b4...), 13:10 to 13:15Z: `check:plant` all
+passed, `check:takeoff` all pass, `check:crash` 0 guards failed, `check:wall` 78 passed, 0 failed (targets, not counted:
+1 met, 3 not met), and `npm run verify` 18 of 18, 127 s. Then the module changed.
+
+### Stock is bit identical, measured and not argued
+
+- `tests/goldens/plant.json`: regenerating it on the new module reproduces the 23 scenarios that existed, byte for byte.
+  Each entry is a hash of the whole state block at every 1 ms step, plus windows and samples, so one bit anywhere in any
+  of 23 flights would have shown.
+- `npm run verify` after the change, 14:14Z: 18 of 18, and every row's measured value and threshold is identical to the
+  baseline's, including check 2 and 3's replay hash, 4cadc5ef7d6e in Node and in headless Chromium, and check 4's single
+  hash across four frame rates. Check 1 rebuilt the module from the sources and got the same bytes, and the vendor diff
+  is empty. The determinism checks are not blind to this knob: `check:motorkv` flies the same 6000 step script with the
+  export never called, called with 1.0, and sent to 1.2 and back, gets one hash three times (55cfcfc45493), and at 1.05
+  gets a different one (3a8994ab03cc).
+- `node scripts/flightcheck.js --gravity=1.62`, the stock cap table, reads 35.0, 38.3, 42.5, 44.9, 47.8, 51.1, 54.9, 64.9
+  and 79.8, the nine figures in `HOVER_5IN_AT_BASE`.
+- **Off stock, Node and the browser agree too.** The same 6000 step stick script, hashed over the whole state block at
+  every step, in Node and in headless Chromium 141: identical at the export never called, 1.0, 0.8, 0.85 at the shell's
+  weight, 1.05, 1.2, 1.2 on a sagging 3.5 V pack, and 1.1 on the module's own whoop plant. 8 cases, 7 distinct hashes (never
+  called and 1.0 are the one), 0 differ between the hosts. This is a one off script and is not kept; verify's check 3 does
+  the stock replay only.
+- **Cost.** One physics step with Betaflight in Node on this machine: 1.74 us before and 1.77 us after (medians of 16
+  interleaved runs of 10000 steps, ratio 1.019). Not a weak laptop, and the step is 0.2 percent of its millisecond here.
+
+### New coverage for the knob itself
+
+- **Plant golden: six scenarios added** (29 now), the new module hash recorded: free air at 1.2 and at 0.8, free air on a
+  sagging pack at 1.2, a grass takeoff, hover and landing at 1.1 and at 0.85 at the weight the shell flies, and the
+  module's own whoop at 1.2. Each has an `exercises` guard. `npm run check:plant:selftest` (3 mutations) still turns
+  exactly the scenarios it should red.
+- **`npm run check:motorkv`**, all passed, 2 s: the nine slider stops are taken exactly; everything outside 0.8 to 1.2
+  and every non number is refused and leaves the value; init, reset and an airframe swap leave it alone; hover times scale
+  is within 0.4 percent of stock at every stop (the law is 1 / scale, held to two percent); full throttle rotor speed,
+  current and punch height rise at every step and the pack sags further; the motor's rise time is within one millisecond
+  of stock at every stop; and the spring: the keyboard's hover number holds altitude to 0.07 m a second at worst across
+  36 settings (nine Motor power stops at four caps, weights and charges).
+- `npm run input:selftest` 384 passed (four new). `npm run tune:selftest` 59 of 59. `node scripts/tune-check.js`, the real
+  page, 102 passed, 0 failed, among them a Motor power page (the rows draw, the module holds the scale, the key gains
+  `.k110`, a ticket's title and body carry it and the board's own validator takes it) and the 30 s real flight.
+
+### Checks run in this turn
+
+All on this tree, one browser check at a time, after the last edit to any file the check reads (13:37Z). A comment in
+`scripts/tune-measure.js` changed after the measurements and no code did.
+
+- `npm run verify`: 18 of 18, 161 s, rows identical to the baseline's (above).
+- `check:plant` all passed (29 scenarios), `check:plant:selftest` all passed, `check:motorkv` all passed.
+- `check:takeoff` all pass, run twice (52 s each); `check:crash` 0 guards failed (106 s); `check:wall` 78 passed, 0 failed,
+  targets 1 met and 3 not met, as before the change; `check:longflight` all pass; `lint:boot` 9 of 9; `lint:frame` 34
+  passed, 0 failed; `check:fresh` 18 passed, 0 failed; `lint:preload` up to date (boot 134 modules, 259 served).
+  `check:takeoff` flies the real page at real frame pacing, so its timings move from run to run: the whoop's first ramp
+  reached 1 m at 3.538 s on the unmodified module and at 3.542 and 3.556 s on the new one in two runs, the punch at 0.648
+  against 0.637 and 0.667 s. Every verdict is the same.
+- `lint:presets` 4 of 4 clean, `lint:catalog` ok, `lint:fc` 33 of 33, `lint:nouns` PASS, `lint:board` PASS (through the
+  sibling name symlink).
+- `lint:shell` FAILS, 7 problems: overflow on Pilot, Rates, PIDs, FC and Tricks, a 2 px hang on Paused at 1280x720 and
+  125 px on Stick help at 844x390. The same seven with the same numbers fail on an unmodified da4e4b7 in this container
+  (font metrics) and failed at c028efc. Its output is the same as at c028efc line for line. No threshold was touched.
+- `lint:input`: 245 passed, 1 FAILED, 305 s. The one failure is in the builder's chooser, "a key pressed at the question
+  does nothing behind it": the 3D view was already on when it was read. It is not this change. That section run alone
+  fails the same assertion with the same state on an unmodified da4e4b7 in 6 of 6 runs, on c028efc in 6 of 6 and on this
+  tree in 7 of 9, and it passed in the full run at c028efc, so it is an intermittent race in this container. The
+  builder's key handler does return while the chooser is up (`bindKeys` in `src/trackbuilder/app.js`), so the V key did not
+  put the view into 3D; something else did, which a late finishing 3D load would. Not touched: neither the check nor its
+  bands were edited, and it is the owner's to look at.
+- Not run: `lint:responsive` and `lint:scale`, which run with the tuning mode off and so cannot see the Motor power rows
+  (the page flow that does, `tune-check.js`, measured the group at 1600x900, 1280x720, 960x540 and 844x390); the
+  screenshots (`node scripts/shots.js`); no adversarial or multi agent review.
+
+### Corrections to the entry above
+
+- **The whoop figures in the Air grip table were measured on a plant the shell never flies, and are wrong.** The entry
+  says whoop carry 18.8, 9.4 and 6.4 m, flat out 115, 81 and 61 km/h, hover 0.502. `scripts/tune-measure.js` flew the
+  module's own whoop plant (airframe 1) on the whoop champion tune. Both airframe entries in `configs/airframes.js`
+  carry `simId: 0`, so the shell flies the five inch plant at gravity 2.025 as the whoop, and `configs/rates.js` says so
+  at the hover tables. Measured as the shell flies it: carry 50.3, 24.7 and 16.6 m at Air grip 50, 100 and 150; flat out
+  234, 163 and 124 km/h; hover 0.399 (which agrees with the 39.9 in the whoop hover table). The five inch figures were
+  right and are unchanged. `tune-measure.js` is fixed and its comments say why. The pull request text never quoted the
+  whoop figures.
+- The entry above says Motor power's physics export was not in this pull request, that nothing reached physics, the plant,
+  the module ABI or the build, and that `npm run verify` was not run. All three are now otherwise, as this entry says.
+  Its Owed item for the owner's word is closed by the 13:08Z answer.
+
+### Decisions made without asking
+
+- Outside 0.8 to 1.2 is refused, not clamped, as `sim_set_air` does. The shell clamps first, so this is only for a caller
+  that is not the shell.
+- `r_motor` is scaled whole (see Owed). The alternative, leaving a share for the ESC and leads, would be a number
+  nobody has measured.
+- The hover spring reads two edge tables and interpolates, rather than nine tables for the nine stops. The cost of that
+  is the third Owed item.
+- Six golden scenarios, not more: both ends, a sagging pack, the grass at two settings and the module's own whoop.
+
+### What went wrong
+
+- The whoop was measured on the wrong plant (above). I found it by reading `configs/airframes.js` and the notes at the
+  hover tables before the figures went anywhere else, and the near miss was about to read the whoop's hover edge tables
+  with `--airframe=whoop65`, which is a plant the shell does not select. The tables are read with `--gravity` and no
+  `--airframe`. A second slip in the same place: the comment I wrote in `tune-measure.js` said the whoop flies the five
+  inch's default tune, but the script loads the verification fixture, which is shorter than
+  `configs/betaflight-default.diff`. The comment now says which, and the difference was measured (above).
+- A comment in `sim.c` said a fifth either way is as far as the tune was checked to hold. Nothing had checked that, so it
+  came out before the build.
+- A golden scenario meant to fly the whoop weight on Motor power 0.8 was hollow: it fell and never climbed (peak height
+  0.25 m), so it would have pinned nothing. It was replaced by a plain free air run at 0.8 and a grass takeoff at 0.85
+  at the weight the shell flies, and the golden was regenerated from the saved original.
+- The check's header first claimed full speed ratios of 1.14 and 0.84, from a one motor bench. The four motor bench the
+  check really flies reads 1.097 and 0.851. The header and the bands were corrected to the measurement before the final
+  run. They are claims about the physics, and the 1.05 to 1.20 and 0.80 to 0.92 bands leave room either side.
+- The Motor power page of `tune-check.js` first asserted the ticket title contains "Motor power 110". The real format is
+  "Tune: much better, 5 inch, grip 100, motor 110, weight 100", so the assertion became `/motor 110/` before the run. A
+  tautological assertion drafted in `input-selftest.js` was replaced by a composed hover check before it ran.
+- `lint:input` failed once on the builder chooser, and I did not at first know whether it was mine. Running the section
+  alone against the unmodified trees settled it (above) before I wrote that it was not.
+- The 1 / kV interpolation of the hover tables is not exact where a table entry is clipped at full stick: see Owed.
+
+### Owed
+
+- **Nobody has flown it.** The harness is green and the feel is awaiting the pilot. The band, 80 to 120, is a first guess
+  at where the ends stop being fun: the bench draws 201 A at 120 against 130 stock, which is a strong motor and a real
+  amount of sag. Whether 120 is too much, or 80 too little to notice, is for the pilot to say.
+- **The keyboard's hover spring is least accurate where the stick is nearly out.** Interpolating in 1 / kV against
+  `flightcheck` at 85, 90, 110 and 115 over all 18 aircraft, weight and charge columns at nine caps (648 values): where hover
+  is below 80 percent of the stick (543 of them) the mean error is 0.04 of a point and the worst 0.15. Between 80 and 90
+  percent it is 0.9 worst, and past 90 it is 1 to 6 points under the true figure, which is a cap of 40 or 50 on a low
+  kV, a tired pack or a heavy quad with next to no travel left above hover. The quad flown at the spring number drifts
+  0.07 m a second at worst in the 36 settings `check:motorkv` flies, none of them in that corner.
+- **`r_motor` is lumped** (motor, ESC and leads), so the stall current at 120 is a little overstated against a real rewind.
+- **The fingerprint changes with the module**, so the board will hold the tunes sent from this build as their own group,
+  and tunes before and after cannot be compared on the board without the group by version that PR #12 provides.
+- **`tests/goldens/plant.json` was rewritten**: the hash line and six added scenarios, the 23 older entries unchanged. Its
+  note asks for the owner's approval of a rewrite. It is on this draft pull request for him to accept or to say no.
+- **`lint:input` has one intermittently failing builder check** that is not this change (above). It will keep the suite
+  red on this container until someone looks at the race.
+- No frame time on real hardware. The step cost above is Node on this machine, not a weak laptop.
+- No adversarial or multi agent review was run. Nothing is merged and neither pull request is out of draft.
+
+## 2026-10-08 | tuning, physics | The owner approved the plant golden rewrite for Motor power
+
+At 23:21Z on 2026-10-08 the owner tapped Approve on the decision card "Approve the rewritten plant golden for Motor
+power?" in the flight feel thread. The card was posted at 16:00Z with Approve recommended, beside a second card on how to
+check Motor power.
+
+What it covers: `tests/goldens/plant.json` as pushed on the draft pull request at b194605, which is the new module hash
+(9d6544ee...4576) and the six Motor power scenarios, with the 23 older entries byte for byte unchanged. The golden's own
+note asks for the owner's approval of a rewrite, and this is it. The file stays as pushed. What it does not cover:
+anything reaching main, and the check scale. The second card, "How should Motor power be checked before it merges?", has
+not been answered, so how the build is to be checked is still open (`npm run verify` has run, 18 of 18, and nobody has
+flown it), and each merge, the board's #12 first and then the simulator's #49, stays on his word. This closes the golden
+item under Owed in the entry above.
+
+Nothing but this record and the pull request text changed in this turn: no code, no check and no threshold. Nothing went
+wrong in it.
+
+## 2026-10-09 | tuning | Flight feel tuning on the test branches: main merged in, the module rebuilt, the Motor power flights re-recorded (draft PRs #49 and board #12)
+
+Not on main, and both pull requests stay drafts. This turn rebuilt the physics module and re-recorded part of `tests/goldens/plant.json`, so `npm run verify` was run, and its result is below.
+
+- Approval: the owner wrote four messages in this thread on 2026-10-09: "push to test" (05:41:59Z), "there is a test branch" (05:44:56Z), "merge with htat" (05:44:58Z) and "acuually rabase test branch its behind main" (05:51:33Z). They cover putting this branch, and the board's, on each repository's `test` branch, merged with what `test` already holds. They do not cover main: each merge, the board's #12 first and then the simulator's #49, is still on his word. Nor are they his answer to the card "How should Motor power be checked before it merges?", which is still open. I took "push to test" as him choosing to fly it there, and say so in the thread.
+- "Rebase": `test` had been behind main (c87488d, 20 commits behind) until about 05:50Z, when the race line thread, on his word of 05:40Z, merged main into its branch and fast forwarded `test` to 2d49147, which is main (595ed93) plus the race line. When I fetched after his message it was 0 commits behind main and 9 ahead. A rebase would have rewritten nine commits that thread had just pushed on his word, and it needs a force push, so `test` was not rebased. This branch was merged onto it and `test` moves forward only. If he wants its history flattened, that is his call and nothing here stands in the way.
+- Board (the sibling repository): main (ec26922, "Remove hard-coded default admin and partner credentials", #14) merged into the PR 12 branch with no conflicts (df8733d), and the board's `test`, which sat at 4b4c614 one commit behind its main, fast forwarded to df8733d. On that tree `npm test` passes 1068 with the Postgres rows skipped and 1094 against a scratch Postgres 16, and `lint:licence` (31 files) and `lint:nouns` pass. The board's main is not touched.
+- Simulator, main merged in: main (595ed93) went into the PR 49 branch as 59e1c83. `PROGRESS.md`, `dist/sim.wasm` and `tests/goldens/plant.json` conflicted and nothing else did, `src/main.js`, `src/ui/ui.js`, `src/fresh.js` and `src/native/plant.c` included. `plant.c` against main is now this branch's Motor power lines and nothing else. `PROGRESS.md` keeps main's entries, then this branch's. The module was rebuilt from the merged sources, not picked from either side: `npm run build:wasm` gives d88ccdc9fd30b155 (141948 bytes, main's is cff8160c8791ede4), and `npm run verify` rebuilds it as its first row without moving the hash. `git diff --stat vendor/betaflight` is empty.
+- Then `test` merged in (deacc59): the race line's files and entries came in with no conflict beyond `PROGRESS.md`, which keeps `test`'s entries then this branch's. Neither side touches the module or the goldens the other does.
+- Stock flight against the new main, proved before anything was re-recorded: the 23 scenarios in main's `tests/goldens/plant.json`, which PR 56 re-recorded at the owner's word of 05:29Z, reproduced byte for byte on the rebuilt module. The check failed only on five of this branch's own six Motor power scenarios, recorded on the physics before PR 56. After `node scripts/plant-golden.js --write` a comparison of the two JSON files shows main's 23 entries unchanged. So with Flight feel tuning off, or on with every slider at 100, the quad is main's to the last bit.
+- What changed under the owner's approval of the plant golden (23:21Z on 2026-10-08, Approve on the card "Approve the rewritten plant golden for Motor power?"): the card covered the file as pushed at b194605, the new module hash and six Motor power scenarios with the 23 older entries byte for byte unchanged. The file has that shape still. The 23 are main's own, the module hash is the new one, and the same six flights were re-recorded on PR 56's physics: five moved ("free air, motor power 1.2", "free air, motor power 0.8" and "free air, sagging pack, motor power 1.2" through the halved prop wash, and the two grass "takeoff hover and land" flights through the lower belly) and one did not ("whoop, free air acro, motor power 1.2", which flies the module's own whoop plant, and PR 56 did not touch that). The numbers in those five are not the ones on the card, so this goes to the owner in the thread. I read his Approve as covering the same six flights on the new physics, he can overrule that, and nothing goes to main without his word anyway.
+- Checks, run this turn on the merged tree (head deacc59, which is `test` plus this branch; this entry is the only thing added after it):
+  - `npm run verify`: 18 of 18. Replay hash cbcf8c24bde7 in Node and in headless Chromium, frame independence 1 distinct hash across 4 rates, world-golden 36 of 36 runs, crash-pacing 48 of 48; the module and the tree were unchanged by the run and the vendor diff is empty. The same command on main (595ed93) in a worktree prints the same hash and the same figures in rows 2 to 18 (hover 0.2793, punch out 80.0 m, terminal velocity 31.0 m/s, motor step 26 ms, rate tracking 672.1 deg/s, battery sag 11.14 percent, and the rest) apart from the audio bed's clock reading, 2.50 against 2.51 s. Row 1 could not run there: the worktree has no `vendor/betaflight`, so it SKIPs and says so.
+  - Passing: `check:tune` (102: stock, mode on and untouched, a phone, Motor power, and a real 30 second tuned flight through the question to a ticket the board accepts), `check:raceline` (91), `check:takeoff`, `check:crash` (0 guards failed), `check:crash-pacing`, `check:longflight`, `lint:boot` (9 of 9), `lint:frame` (34), `check:fresh` (18), `check:plant` (29 scenarios) and its selftest, `check:motorkv`, `tune:selftest` (59 of 59), `input:selftest` (384), `lint:preload` (up to date, 138 boot modules), `lint:nouns`, `lint:board`, `lint:presets` (4 of 4), `lint:catalog`, `lint:fc` (33 of 33), `lint:quality` (71 of 71), `lint:memory`, `micro:check`, `lint:partners` (88), `check:room` (71), `whoop:gates` (21 of 21) and `contact:selftest`.
+  - Failing the same way without this branch: `check:wall`, 77 passed and 1 failed, the gentle rebound band reading 0.194 to 0.285 m/s against its 0.20 to 0.30. Main in a worktree prints the identical line, it is the line PR 56 left for the owner, and the threshold is untouched. `lint:shell` fails the same seven ways on main, on `test` and on the merged tree, with the pilot screen at 792 px on main, 837 on `test` and 837 here, so the 45 px is the race line's row and this branch adds nothing to any screen it tracks. `lint:input` is the next bullet.
+  - `npm run feel:measure` re-run on the merged module: the Motor power sweep is identical to the one in the entry above, and the Air grip sweep moved in one cell (carry at 50 percent, 54.8 to 54.9 m).
+  - Not run: `node scripts/shots.js`, so the merged menu has only been seen in the pictures `check:tune` leaves (I looked at two, the landed screen with the three sliders and the question, and both read as meant); `lint:responsive` and `lint:scale`, which run with the mode off and cannot see the new rows; any review.
+- `lint:input` failed 2 of 246 in its one full run on the merged tree (head deacc59). One is the track builder chooser check "a key pressed at the question does nothing behind it", which fails on unmodified main here as before. The other is the touch laptop check "a finger on the glass brings the plates back, and the thumbs are the source again". It reads `input.source` right after the frame that raises the thumb plates, and the source is set by the 2 ms poll timer, not by the frame, so a read that lands between the two sees the keyboard. That is a race in the check, and the section's own comment already calls its neighbour flaky. To see whether this branch made it likelier I ran that section alone, one run at a time: round robin over four trees, six rounds, main (595ed93) failed 1 of 6, `test` (main and the race line) 3 of 6, this branch on main 1 of 6 and the merged tree 2 of 6. An earlier alternation of main against the merged tree read 0 of 8 and 2 of 8, and the merged tree alone 1 of 4. In all, main 1 of 14, `test` 3 of 6, the merged tree 5 of 18. Every tree fails it, `test` included, which carries none of this branch's code, so it is not this branch's. I did not run enough to rank the rates. The check is not changed.
+- Latency, the project rule: none that I can measure, and none on the input path by reading the diff. This branch changes nothing under `src/input` or `src/render` (its diff against `test` is empty there), so stick sampling, the poll and the hand-off to physics and the renderer are as they were. The module reads kV once at the top of `plant_step` and divides two constants by it: the step costs 2.03 us on main's module and 2.04 us on this one (10000 steps of a recorded flight, Node, 16 runs interleaved after 4 warm up; the medians are 1.003 apart and the minimums 0.999), inside the noise. In the shell, a stock flight pays one string comparison per airborne frame (`tuneLogKey !== ''`). With the mode on and a slider off stock it pays one map lookup and add per airborne frame, allocating on the first frame of a combination only. The sliders, `applySettings`, the question and the form are event driven, and nothing in the flying frame repaints them. The module's SHA-256 is taken once after load through `crypto.subtle`, async and off the frame loop. The boot graph grows by about 80 KB of source (`tune.js` 16.6 KB, `ui.js` 38 KB, `main.js` 10.5 KB, `rates.js` 8.7 KB, and a few KB across `bugs.js`, `index.html` and `race.js`), parsed once at boot: `lint:boot` is 9 of 9 and `lint:preload` is up to date. Not measured: boot on a weak laptop, a real GPU, or any hitch on real hardware.
+- To fly it on `test`: Settings, Quad, Flight feel tuning on; land; move each slider. Look for: Motor power right punching harder with the hover sitting lower on the stick, and left the reverse; on the keyboard, letting go of the throttle key holding the height at either end of Motor power (a quad that climbs or falls then is the spring being wrong); Air grip left carrying further and right stopping sooner; the sliders only on the ground; the question after 30 seconds on a setting off stock and none with everything at 100; both sliders at 100 flying exactly as it did before, which is the property the proof above is about. Wrong would be the keyboard throttle drifting off its hover, a hitch on the first frame after a slider moves, or anything off stock with the mode off.
+- What went wrong: five of the six Motor power flights failed the plant golden after the merge, because PR 56's physics moved under them. That was expected, and they are re-recorded above. The first full `lint:input` run on the merged tree failed one check more than this branch had before, and the first `lint:shell` read of the pilot screen (837 px against the 747 an earlier run on main printed) looked like a regression of this branch too. Neither was: the touch laptop check fails on main and on `test` as well, and main has moved since that 747, it prints 792 now. Chasing them cost about 45 runs of one section and a worktree for each tree.
+- Owed: nobody has flown this, and the 80 to 120 band is a first guess. The check scale card ("How should Motor power be checked before it merges?") is still unanswered, and I read "push to test" as fly it. Whether the six re-recorded Motor power flights need a fresh Approve before main is the owner's call. The wall tap band (0.194 against 0.20) is PR 56's open line, not this branch's. The merge words, the board's #12 first and then the simulator's #49, are still to come.
+
+## 2026-10-09 | tuning, board | Flight feel tuning goes to main on the owner's word (board #12 first, then simulator #49)
+
+The owner, in this thread at 08:01:59Z on 2026-10-09: "these are good go to main , but ensure we have an onboarding tutorial when someone tries whoops for the first time." The second half is a new request and is not part of this entry.
+
+- What the words cover. I read "these" as this thread's two draft PRs: the board's #12 (tune tickets) and this repository's #49 (Air grip, Motor power, the end of flight question). The race line (#48) belongs to another thread and was not touched: this branch was cut from main and does not contain it, so `test` keeps carrying it alone. I also read "these are good go to main" as the answer to the question the entry above left open, whether the six re-recorded Motor power flights in `tests/goldens/plant.json` need a fresh Approve after PR 56 moved the physics. That is a reading of his words and not a separate approval of those entries. He approved the rewrite itself at 23:21Z on 2026-10-08 ("Approve"); the six flights were then re-recorded with `node scripts/plant-golden.js --write` on the new physics (five moved, "whoop, free air acro, motor power 1.2" did not), and main's 23 entries are byte identical to main's.
+- Order and mechanics. Board first: main was fast-forwarded from ec26922 to df8733d (4c1ce87 and its merge of main) after a fetch showed main unmoved; no force. Here: main had moved to 04cc343 (check:clip reads the plant's belly height) since the last merge, so it is merged into the branch (6469d52), not rebased. The one conflict was two appends at the end of this file: main's bullet closes the PR 56 entry and this branch's entries follow it. 04cc343 touches PROGRESS.md and src/trackbuilder/selftest.js only, and `git diff f6c1439 HEAD -- dist src/native configs tests` is empty, so the module (d88ccdc9fd30b155, 141948 bytes), the sources and the goldens are the ones the 18 of 18 `npm run verify` on the previous head ran against.
+- Checks run this turn on 6469d52, node only and one at a time: check:clip 2559 passed, 0 failed; check:plant, check:plant:selftest and check:motorkv all passed; tune:selftest 59 of 59; input:selftest 384 passed; lint:preload up to date (137 boot modules); lint:nouns; lint:board against the board checkout at df8733d; lint:presets 4 of 4; lint:catalog; lint:fc 33 of 33; lint:memory; lint:boot 9 of 9; check:fresh 18 passed, 0 failed. `git diff --stat vendor/betaflight` is empty.
+- Not run: `npm run verify` again, because nothing it reads changed since the run on the previous head (above); `lint:input` and `lint:shell`, which carry the baseline failures and the touch laptop race recorded in the entry above; the merged tree in a browser; any review.
+- Latency: unchanged from the entry above, none that I can measure. The merge adds one test file change and nothing on the flying path.
+- What went wrong: nothing new in this step beyond the PROGRESS.md conflict, which is the same two appends at the tail that every thread that merges main hits.
+- Owed: nobody has flown this on main yet. The Motor power band is still a first guess, and the wall tap band (0.194 against 0.20) is still PR 56's open line.
+
+## 2026-10-08 | racing | Breadcrumb trail on the RaceGOW rooms: an investigation and a prototype
+
+The owner asked whether a trail showing beginners a good line can be built, starting with the RaceGOW tracks. This turn
+changed no sim code: `scripts/breadcrumb-proto.js` is new and reads the plant, the race and the builder's line without
+changing any of them. It is a prototype and an experiment, not a feature, and nothing in the shell loads it.
+
+- What it does: takes the line `courseFromDocument` already derives for a RaceGOW room, resamples it at 5 cm, gives it
+  a speed from a point mass limit (thrust vector at most sqrt(1 + lat_g^2) g, forward and backward passes), then flies
+  that timed path through `dist/sim.wasm` with Betaflight's loop, in Node, using the rig in `scripts/lib/flightrig.js`.
+  It scores the flight with the real `Race`. Four laps; tracking error read on laps 2 to 4 because lap 1 starts from rest.
+- Finding 1, the builder's line is a line through the openings and not a racing line. Three point radius over 0.15 m:
+  tightest 0.09 to 0.45 m on the eight rooms, 25 to 29 percent of each line tighter than 1 m, 68 to 80 percent tighter
+  than 3 m, on a craft 0.35 m across. At 2 g of lateral load a 1 m radius is 4.4 m/s, so the speed profile is held to a
+  mean of 3 to 5 m/s by the line's shape and not by the plant.
+- Finding 2, the plant is not the limit. With a stiff tracker (kp 14, kd 7.5, ka 20; hover throttle 0.28 at 4.0 V) at
+  1 g of lateral load seven of the eight rooms score all four laps (Track 6 scores three) with mean error 0.3 to 0.4 m.
+  At 2 g Tracks 1, 2, 3 and 8 score all four, Tracks 4, 5 and 7 two or three, Track 6 none. At 3 g and above laps are
+  lost on most rooms. The worst error sits at the tightest kinks of the line.
+- What went wrong: the rig's default tracker (kp 3.5, kd 4.5, ka 7) lost the path at 1 g with 2 m of mean error, and
+  its default hover throttle (0.345) sat 0.33 m high at a hover. The first sweep read as "the line is unflyable at any
+  speed" and was the tracker. Raising the gains and bisecting the hover throttle fixed it; the 0.15 g trace showed 0.1 to
+  0.4 m of error, which is how the tracker was ruled in and the line ruled out.
+- Not measured: collisions (the plant world is empty sky), a human's reaction lag, wrong-way and stray crossings of
+  other openings (my crossing test used a guessed plane normal and was thrown away), the drag the plant's quadratic
+  model puts on a long fast run.
+- Verification: `node scripts/breadcrumb-proto.js "Track 1" 1 2 3 4 6` and the other tracks, run this turn. Not run:
+  `npm run verify`, because nothing in the physics, plant, ABI or build changed.
+
+## 2026-10-08 | racing | Race line: a toggleable trail of dots on the whoop rooms (draft PR #48)
+
+The owner's ask, 2026-10-08 12:26Z, in the breadcrumb thread: "lets do it, add a toggleablee feature in whoop tracks for
+race line". That is approval to build the feature on the draft PR and not to push it to main, so none of this is on
+main. No physics, plant, module ABI or build change: the line is arithmetic over the course and the room's solids and
+it feeds nothing back into the flight, so `npm run verify` was not run (see the end).
+
+### What shipped
+
+- `src/game/raceline.js` (new, 1660 lines) is the solver and `src/render/raceline.js` (new, 441 lines) draws the dots.
+  `src/game/trackdoc.js` hands a whoop course its builder knots and the station each one made (a micro course only; any
+  other course is the object it was). `src/render/scene.js`, `src/main.js` and `src/ui/ui.js` wire it, `src/fresh.js`
+  is regenerated for the two modules, `scripts/raceline-check.js` is the check and `package.json` has `check:raceline`.
+- A "Race line" toggle on the Pilot settings screen, beside Stick overlay, off by default. On, in a whoop room, a trail
+  of dots runs from the gate just flown to the one after the next, so the trail is about two gates long and not a whole
+  lap of dots. The dots are dropped at equal intervals of lap time, so close together means slow down. Cream is fast and amber is slow,
+  set over that lap's own 10th to 90th percentile of speed, because a fixed scale put every dot at amber (the laps run
+  at 1 to 3 m/s).
+- Off costs nothing. The solver is a dynamic import and only the small render module is in the preload list, so with
+  the setting off nothing is requested, solved or drawn (Chromium, Track 1: `phase` idle, and the resource list holds
+  the render module and not the solver).
+- On, the solve is sliced at 5 ms a frame and kept for the last four tracks. The line is solved, then flown through the
+  real `Race` for three laps, and only shown when all three are credited and no built opening is crossed out of turn
+  or backward. A track that cannot be given one says so in words: "No race line for this track yet: a clean way
+  through the whole lap was not found."
+
+### How the line is found
+
+The long form is in the header of `src/game/raceline.js`. The builder's knots are the skeleton. Each knot slides
+inside its hole, less the craft's sweep (0.1735 m) and a 0.25 m margin, its heading may lean off the gate's normal and
+its tangent length is free, with cubic Hermite legs between. The cost is lap time from a point mass speed profile under
+a thrust ball (0.35 g sideways, 6 m/s cap) plus walls: 60 s for crossing a built opening out of turn or backward and a
+steep ramp for touching a pipe or a frame. Coordinate descent, then a detour knot round a hard stray, then a second
+strategy if the first is not clean. It is deterministic.
+
+The pace is an effective figure and not a measurement. It was set against the board's best on the five tracks with 18
+or more times posted (2026-10-08): RaceGOW5 Track 1 0.93, RaceGOW5 Track 2 1.06, RaceGOW6 Track 1 1.44, Whoop Triple
+Stack 0.72, Master before buying Mobula8 0.91, a geometric mean of 0.99. The spread is the model's: a point mass has no
+inertia in its attitude, so loop heavy tracks come out slow and tracks of short straights fast.
+
+### Run, in the same turn
+
+- `node scripts/raceline-check.js` (5 s): all eight RaceGOW5 presets pass. A line is found and clean, the real Race
+  credits three laps of it, the built gates are passed in order and no others (found again by the check's own plane
+  test, so a mistake in the solver's crossing count cannot also be the check's), the gaps in the lattice are passed in
+  order, the craft keeps its clearance from every solid (the check's own distance functions), the line beats the
+  builder's through the same openings, the ratio to the board is 0.99 on the two that are presets, no two crumbs are
+  more than 1 m apart, the gate table on the crumbs is in order and a second solve is identical to the last bit.
+- `node scripts/raceline-check.js --fly` (16 s): the line flown through `dist/sim.wasm` with Betaflight's loop, in empty
+  sky, on a follower of the check's own. All eight rooms credit four laps of four, in 1.05 to 1.17 times the line's
+  time (Track 1 1.08, 2 1.13, 3 1.11, 4 1.17, 5 1.09, 6 1.08, 7 1.05, 8 1.10), with a mean error of 0.18 to 0.30 m and a
+  worst of 1.0 to 2.1 m at the sharpest corners. The time allowed, 1.5 times the line's, was fixed before the last run.
+  As a negative control (a scratch copy, not committed) the same rooms asked for 4 g of sideways load make it fail:
+  Tracks 3 and 7 credit two laps of four and Track 1 three, and at 2 g the replay slows to 1.34 to 1.40 times, so the
+  check moves with what the line asks of the craft but is not fine enough to see a small overreach.
+- The 17 tracks on the board, in Node: 14 are clean. Powerloop 1 (4 built openings crossed out of turn) and 3 cubes
+  (13) refuse. Garagetrack, twice, and Whoop Tech Flow report a piece Node does not model (a barrier, a flag), because
+  Node's solids come from the course and the browser's from the real colliders.
+- Chromium through `node scripts/shots.js` at low graphics and 1280x720, in the real shell, with the setting on: Track 1
+  solves in 147 ms of CPU, Whoop Tech Flow 341, RaceGOW6 Track 1 531, Garagetrack 849, Track 8 1003, Whoop Triple Stack
+  104 and Mobula8 130. 3 cubes and Powerloop 1 refuse with the sentence above. The only console error is the board
+  fetch being refused here. At 60 Hz a 5 ms slice a frame makes the wall time about 3.3 times the CPU time (computed
+  from those figures, not measured at 60 Hz): about half a second for Track 1, three and a half for Track 8 and four
+  and a half for 3 cubes, which is the slowest refusal. Headless frames take 120 ms here, so the wall times the harness
+  printed are not those.
+- `lint:preload`, `lint:quality` (71 of 71), `lint:boot`, `lint:nouns`, `lint:frame` (34 of 34), `lint:memory`,
+  `check:fresh`, `micro:check`, `check:room` (71 of 71), `lint:presets` and `lint:partners` pass.
+- `lint:shell` FAILS, and fails on main. On da4e4b7, in a scratch worktree, it reports the same seven findings as here
+  except one number: the Pilot screen is 747 px past its recorded 678 there and 792 px with the toggle row, so the row
+  is 45 px. The other six (rates, pids, fc, tricks, the paused fold and the stickhelp fold) are identical on main and
+  not from this change. I did not re-record the baseline, because that would also bury those six. That is the
+  owner's call.
+
+### What went wrong, and the one judgement call
+
+- The first version refused RaceGOW6 Track 1 in the browser ("the line did not score a lap"). The verify flew a lead in
+  and three rounds, and when the timing gate's crossing fell on the wrap segment the last lap's closing crossing was
+  one point past the end, so two laps of three were credited. It now flies until three are credited, for at most five
+  rounds.
+- The independent check, once written, found two to five crossings of unbuilt openings on Tracks 5 to 8 that the
+  solver's own count could not see, because an unbuilt gap in the lattice had no window in it. The solver has them now.
+  A route that crossed none was contrived on Track 7 (two hard strays were left), so a stray through an unbuilt gap is a
+  price (3 s) and not a wall. THIS IS MY CALL AND NOT THE OWNER'S, and it has not been put to them: Track 7's line
+  crosses two gaps out of turn, which a pilot cannot see because a gap has no pipe. A built opening is still a wall.
+  [Reversed the same day on the owner's ask to follow RaceGOW's rules: a gap is a wall now. See the next entry.]
+- The plant replay misled me for a while. With the rig's own tracker (the one the prototype of this morning used and
+  I trusted) Tracks 3 and 7 credited two laps of four, which read as a line the plant could not follow. It was the
+  tracker. Its throttle trim integrates climb rate, so a trim wound by one moment stayed wound and held the craft
+  0.8 m under the line for a minute, with the proportional term and the trim cancelling to the digit (Track 7). And it
+  rolls the craft over for half a metre of height error with a metre a second of climb behind it (Track 3, the end of
+  the first lap). A sweep of 27 gain sets on those two tracks gave 0 to 4 laps with no trend, which is how it was ruled
+  out. The follower in the check chases a point that waits when the craft falls behind it (the first version chased a
+  stopwatch), caps the line's own feed forward at 5 m/s^2 (a kink 7 cm across in Track 7's line asked for 14 m/s^2 for
+  a tenth of a second), and never asks for thrust under 15 percent of a hover or more than 80 degrees off the
+  vertical. Each came from a cause read in a trace and not from the lap count, and with all three it credits all
+  eight. So the prototype entry above, "seven of the eight at 1 g", was partly luck of that tracker. Its finding that
+  the builder's line is not a racing line stands, because that was geometry. `scripts/lib/flightrig.js` is unchanged:
+  a tilt limit added to it made the replay worse and was reverted.
+- The lines have corners. Every preset has a place where the model slows to 0.2 to 0.35 m/s, and on Tracks 1 and 3 they
+  are turns of 80 to 140 degrees within a metre, near knots, with a few curls a few centimetres across (Track 7 has one).
+  The model makes these cheap, the dots bunch there, which reads as "slow right down", and the plant follows them. By
+  the model's own numbers under 1 percent of any lap (0.0 to 0.7) has the thrust pointing down. Whether a person finds
+  such a corner natural is what this thread cannot measure, and it is the thing to look at when flying it.
+
+### Not measured, not run
+
+- No frame cost on a real GPU or a low end laptop, only the container's rasteriser. The setting is off by default and
+  the draw is one call on the window of the lap's crumbs (about 400 for the whole of the longest lap, Track 8), but that is a
+  reading and not a measurement. While solving, the 5 ms slice is about a third of a 60 Hz frame for the seconds the
+  solve takes, once per track, so on a machine already at its budget it is a stutter for those seconds. The slice is
+  the dial if it shows.
+- A human following the trail. A collision in the plant replay (empty sky). Touch devices.
+- `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`.
+- `scripts/breadcrumb-proto.js`, the prototype in the entry above, is removed. What it did lives on in the check's
+  `--fly`, and the file is in 53aa025.
+
+## 2026-10-08 | racing | Race line: held to RaceGOW's rules, so a gap in the lattice is a wall (draft PR #48)
+
+The owner, 14:37Z: "re the unbuilt gap crossing, go read the racegow rules here https://www.racegow.com/ make sure we
+adhear to that". That reverses the one judgement call in the entry above, where a pass through an unbuilt gap out of
+turn was a 3 s price and I wrote that it was my call and not the owner's. Still on the draft PR and not on main. No
+physics, plant, module ABI or build change, so `npm run verify` was not run (see the end).
+
+### What the rules say
+
+Read whole, as text, on 2026-10-08: the four documents linked from racegow.com (the Basic Concept and classes, the
+General Rules with the Code of Ethics and the season scoring, the RaceGOW6 micro tiers one, and "Track Building Rules
+and Information", Google doc 1RDksQXnRSFZk1Xtg7ERQPjo_-OQ_DxJzZDR5UEtFjFY, which `src/trackbuilder/racegow.js` already
+quotes). They were fetched with curl and read directly. WebFetch was redirected and its summary paraphrased, so nothing
+was taken from it.
+
+- General Track Rule 5: "Tracks must be built and flown exactly as shown, no modifications allowed. Mirror image
+  builds are not allowed". The Basic Concept says the same of the video: "fly them as shown in the flythrough video".
+- General Track Rule 7: "You cannot intentionally fly through any gates in the opposite direction to shorten your
+  line. For example if you have to go past a gate and then back through it, you cannot just fly through it backward and
+  then spin 180 back through the gate like a "cheese" move that many angle pilots use in place of a split-S or
+  corkscrew type maneuver on Velocidrone."
+- Rule 6 leaves the turn direction free where none is specified. Gate Rule 2: a gate "must be fully enclosed". The
+  score is the best three consecutive laps, the Code of Ethics is an honour system with zero tolerance, and there is no
+  penalty list and no gate miss rule.
+- Nothing about an opening with no pipe round it. So the rules do not forbid a pass through a gap in the lattice, and
+  my 3 s price was not their position on it either way. It was my argument (a pilot cannot see a stray through
+  something with no pipe), made without reading them.
+
+### What the line does now, and why it is stricter than the rules
+
+A framed opening and a gap are alike a wall out of turn and the wrong way. The reasons are ours and not the rules':
+the game scores a gap and lights it as an opening, so a pass through one the way the lap does not is the shortcut rule 7
+names, and a pass of one at a moment the lap does not is a route that is not the one shown (rule 5).
+
+That is stricter than RaceGOW's own flythroughs. TRACK-FROM-GIF.md step 8 records them crossing openings more often
+than the lap scores them (Track 6 five times under its left bar where the lap scores two, Track 3 four where it scores
+two), and Track 7's own builder line, the solver's baseline, crosses five openings out of turn on this reading (five
+walls, a penalty of 300 s). Whether the trail should be this strict or only as strict as rule 7 (never backward) is the
+owner's to say. The looser reading is the old behaviour at 7ccbe63, and putting it back is a change and not a switch.
+
+### What changed
+
+- `src/game/raceline.js`: `PEN_GAP` and the `soft` flag on a window are gone, so a gap's window is a wall like a
+  frame's in `legPenalty`, the tallies and the result (`gaps` is no longer a field of it). The header says what the
+  rules are and why the line is stricter. The detour loop covers gaps, and a detour is kept for what the lap costs once
+  the search has settled round it and not for what it costs the moment it goes in; one that does not pay is taken out
+  again with everything the settling moved. (Judged at the moment it went in, the first detour on Track 7 looks like a
+  loss, because it is the next two that clear the strays.)
+- `scripts/raceline-check.js`: the openings are one list, framed and gap alike, and the line must go through them in the
+  course's order and the right way and through no other, found again from the Race's own frames as before. Built and
+  gap are also checked on their own so that a failure names the kind. The "each gap, in order" test is gone: it was the
+  check agreeing with the price.
+
+### Run, in the same turn
+
+- `node scripts/raceline-check.js` (6 s): 91 checks, all pass, on all eight RaceGOW5 presets. With `--fly` (14 s): 99,
+  all pass, and every room credits four laps of four, at 1.08 to 1.17 times the line's time (Track 1 1.08, 2 1.13,
+  3 1.11, 4 1.17, 5 1.09, 6 1.08, 7 1.12, 8 1.10).
+- Against the committed solver (7ccbe63, run beside it on this machine), the 17 tracks on the board: eleven clean laps
+  are identical to the hundredth of a second, RaceGOW5 Track 7 goes from 36.09 s to 37.13 s, and Powerloop 1 (4 strays)
+  and 3 cubes (13) still refuse, Powerloop with a different refused answer. Garagetrack twice and Whoop Tech Flow,
+  which Node refuses for a barrier and a flag, give the identical line on both solvers with that piece ignored (43.84,
+  27.15 and 43.84 s), so no track without a lattice gap moved.
+- Track 7's line crosses no opening out of turn now (the old one crossed two gaps). It is 63.6 m against 61.9, reaches
+  the same 4.12 m at its highest, and asks the same of a point mass at 10 Hz (3.52 g at worst, in one kink both lines
+  share, and the thrust pointing down for 0.5 percent of the lap against 0.6).
+- Cost: Track 7 solves in about 0.9 s of CPU against 0.4, and Track 6 in 1.75 s against 0.85 for the same 51.57 s line.
+  Strategy "first" now ends unclean on Track 6 (3 strays, 1.4 s) and "always" finds the line in 0.46 s, while Track 3
+  and Track 7 need "first", so trying them the other way round moves the cost from one track to another. At 5 ms a
+  frame, under the "Working out the race line." notice, the wait on Track 6 goes from about three seconds to about six
+  (computed from the CPU time, as before, and not measured at 60 Hz or in a browser).
+- Also pass: `lint:preload`, `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71),
+  `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4) and `lint:partners`
+  (88). The changed files hold no em or en dash and keep their GPLv3 headers.
+
+### What went wrong
+
+- The 3 s price was a call made without reading the rules. It left Track 7's line crossing two gaps it should not have,
+  and the check agreed with it because I had written the check to the price.
+- Putting the walls in broke Track 6 before it fixed Track 7. A detour accepted on a loose test cleared Track 7 and
+  slowed Track 6 to 53.58 s, and a strict test refused the first detour on Track 7, which is the right one. The test
+  that works is the settled one above.
+- I guessed that Track 6's extra detours came from the solver's coarse 0.25 m sampling of its legs and tried 0.05 m. It
+  was wrong (Track 6 came out at 53.31 s) and it is reverted. The cost is the unclean first strategy.
+- Track 7's plant replay printed a worst error of 4.55 m, against 1.0 to 2.1 m for every other room, and I took it for
+  something in the line. It is the check's follower: its throttle trim winds up on a height error. In a scratch copy
+  with the trim gain at nothing, a quarter and a half of its value, the same line is flown 4 laps of 4 with a worst error
+  of 1.71, 1.27 and 1.96 m (1.18, 1.08 and 1.13 times the line's time, against 4.55 m and 1.12 at full). The check
+  asserts the laps and not that figure, and the follower's gains were fixed before this line existed, so I did not
+  change them to flatter it. It is still printed, and it is the follower and not a hump in the line.
+
+### Not measured, not run
+
+- Whether the official Track 7 flythrough passes the openings in the lap's order and no other. The sim's own knots, taken
+  from the GIF, do not on this reading, so the trail is the strict reading of the lap and may differ from the route the
+  video shows.
+- No frame cost on a real GPU or a low end laptop, and the longer solve was timed in Node. A human following the trail.
+  A collision in the plant replay (empty sky). Touch devices.
+- `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`, and `lint:shell`, which
+  fails on main as the entry above says and was not run again. `node scripts/shots.js`: the render did not change, but
+  the line it draws on Track 7 did, so flying it is the check that sees that.
+
+## 2026-10-09 | latency | Race line: the solve no longer runs inside a flying frame
+
+- The owner's project rule of 2026-10-09: latency is the most important thing. Audit of this draft: with the setting off
+  the cost is zero (nothing imported). With it on, the solve ran in 5 ms slices while the pilot flew, 2 to 8 s of
+  frames carrying about +5.5 ms, one knot up to 18 ms (Node, warm JIT, a CPU proxy; a cold browser is worse).
+- Change: `canSolve` in `src/render/raceline.js`, set by the shell, so a slice runs only on a menu, the pause or the
+  loading hold. If the pilot flies before it finishes, the trail waits for the next pause. Cost: that wait.
+- Checked: `node scripts/raceline-check.js` all passed. Not run: a browser, a GPU. Fly it: Race line on, Track 6, look
+  for stutter in the first seconds after the load.
+- Open: precomputing the crumbs per preset would remove the solve; it changes the build, so it goes to the owner first.
+
+## 2026-10-09 | racing | Race line: main merged in, and the latency rule applied to the draft (draft PR #48)
+
+Nothing here is on main, and no physics, plant, module ABI or build change, so `npm run verify` was not run.
+
+- Another session, the latency audit, pushed fbb1600 to this branch at 00:34Z: a solve slice now runs only when the pilot
+  is not in a flying frame (`canSolve`, set by the shell). I read it and changed nothing. `mode` and `ui.screen` are in
+  scope where the closure is made, `later` is `requestAnimationFrame`, so a waiting solve costs one function call a
+  frame, and the last slice, `verifyRaceLine` and the build of the points all run in the one allowed frame, so none of
+  it lands in a flying one. The shell draws the world while paused and on the results screen (`worldLive`), so a trail
+  built there is first drawn there.
+- The PR showed as conflicting because main had moved 12 commits (the performance pass, PR 50, went to main on the
+  owner's word). Main is merged in as 705d27a. Only the tail of PROGRESS.md conflicted, where both sides appended: both
+  are kept, main's first. My breadcrumb prototype section was a bare ### heading under the previous entry, which the
+  merge put under "PR 50 to main", so it is an entry of its own now. `src/fresh.js`, `src/main.js` and
+  `src/render/scene.js` merged without conflict and the preload list is up to date (135 boot modules).
+- Run on the merged tree, this turn: `node scripts/raceline-check.js` (91 checks) and with `--fly` (99, four laps of
+  four in every room), `lint:preload`, `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71),
+  `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4) and `lint:partners` (88).
+  The added lines hold no em or en dash.
+- Latency, under the owner's rule of 2026-10-09 (latency is the most important thing, and every PR states its effect).
+  The setting is off by default and then nothing is imported, solved or drawn, so there is no effect. On, no solve slice
+  runs in a flying frame, so what is left of the solve is a wait and not a hitch: a pilot who flies before it ends gets
+  the trail at the next pause or menu (Track 6 is about 1.75 s of CPU in 5 ms slices, so about six seconds of such
+  frames). The trail in flight is one extra draw call of at most two gates' crumbs, a few hundred points, with one
+  uniform set in `onBeforeRender` and no allocation per frame. That draw is the one rise, it is opt in, and the owner
+  asked for the feature; it needs his word as the rule says.
+- Read from the code and not measured: the draw call's cost on a real GPU or a low end laptop, and whether the trail's
+  shader can be first drawn in a flying frame (it is built at load from a cached answer, or when a gated solve ends, and
+  the world is drawn in both places). Precomputing the crumbs for the presets would remove the wait and the solve; it
+  changes the build, so it goes to the owner first, as the audit's entry says.
+- Not run: the merged tree in a browser with the setting on (`node scripts/shots.js`), `npm run verify`, `lint:input`
+  and `lint:shell`, which fails on main as the earlier entry says.
+
+## 2026-10-09 | racing | Race line: on the test branch at the owner's word (draft PR #48)
+
+Not on main. No physics, plant, module ABI or build change here, so `npm run verify` was not run.
+
+- Approval: the owner wrote "push to the test branch" in the thread at 05:40:46Z on 2026-10-09. It covers putting this
+  branch (draft PR #48) on the simulator's `test`. It does not cover main, and the PR stays a draft. The board
+  repository also has a `test` branch, one commit behind its main; this turn did not touch it.
+- What `test` was: c87488d, which is main as of 00:18Z, so 20 commits behind main (595ed93) with no commit of its own.
+  No workflow or deploy file in the repository names it (DEPLOY.md wires the Render sites to `main`), so where it
+  deploys is outside the repository and was not checked.
+- What was pushed: main (595ed93) merged into this branch (faee85b), then `test` fast forwarded from c87488d to the
+  head of this branch, so `test` is main plus the race line and nothing else. No force, no rewrite, main untouched.
+  Conflicts were the tail of PROGRESS.md and the settings defaults in `src/ui/ui.js`, where this branch's `raceLine`
+  and main's `shadowsOff` were added at the same spot: both kept in each, main's entries first. `src/fresh.js`,
+  `src/main.js` and `src/render/scene.js` merged without conflict. The wasm, the goldens and the plant are main's,
+  untouched by this branch.
+- Run on the merged tree, this turn, all passing: `node scripts/raceline-check.js` (91) and with `--fly` (99, four laps
+  of four in all eight rooms), `lint:preload` (up to date, 137 boot modules), `check:fresh` (18), `lint:nouns`,
+  `lint:boot` (9 of 9), `lint:quality` (71 of 71), `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71),
+  `lint:presets` (4 of 4), `lint:partners` (88) and `lint:fc` (33 of 33).
+- Not run: `lint:catalog`, which cannot start in this container because `vendor/betaflight` is not checked out (it
+  fails opening `parameter_names.h`) and which nothing here reaches; `npm run verify`; `node scripts/shots.js`, so the
+  merged tree has not been driven in a browser with the setting on; `lint:input`; `lint:shell`, which fails on main
+  here as the earlier entry says.
+- Latency, as in the entry above and unchanged by the merge. Setting off, the default: nothing imported, solved or
+  drawn. On: one extra draw call a frame of at most two gates' crumbs, and no solve slice in a flying frame, so what is
+  left of the solve is a wait at the next pause, not a hitch. The draw call is the one rise, it is opt in, and `test` is
+  where the owner flies it before it goes near main. Its cost on a real GPU or a low end laptop was not measured.
+- To fly it on `test`: Settings, pilot screen, Race line on, then a whoop room (RaceGOW5 Track 6 or 7). Wrong would be a
+  hitch in the first seconds after the load, dots through an opening the wrong way, or a gate the trail skips. The
+  trail waits for a pause if the pilot flies before it is solved (Track 6 is about 1.75 s of CPU).
+- What went wrong: nothing in the code. The harness refused one `rm` in a shell line whose path used an unset-able
+  variable; the line did not need it, because the directory was new, and was rerun without it.
+
+## 2026-10-09 | racing | Race line goes to main on the owner's word (PR #48)
+
+- Approval: the owner wrote "push to main branch" in the thread at 08:20:32Z on 2026-10-09, after the race line had been
+  on `test` since about 05:50Z. It covers PR #48 as it stood on `test`, plus the merge of current main that a fast forward
+  needs. It does not cover anything else on `test`. No flight report had arrived when it was given: the word is the
+  approval, not a flight. The PR was a draft; after this push its commits are on main, so GitHub should show it merged.
+- Latency, under the project rule of 2026-10-09, unchanged from the entries above. With Race line off, the default,
+  nothing is imported, solved or drawn. On, one extra draw call a frame, and no solve slice in a flying frame. That draw
+  is the one rise; the reply of 00:43Z on 2026-10-09 and the PR body both named it as needing the owner's word, and
+  "push to main branch" is taken as that word. Its cost on a real GPU or a low end laptop was never measured and still
+  is not.
+- What was pushed: main (afda081) merged into this branch as 962311b, then main fast forwarded to the head of this
+  branch. No force. Main had moved 8 commits since the `test` push: the flight feel tuning (PR 49, Motor power in the
+  physics module) went to main at about 08:10Z on the owner's word in its own thread. Only the tail of PROGRESS.md
+  conflicted (both sides kept, main's first); `src/ui/ui.js`, `src/main.js`, `src/fresh.js` and `package.json` merged
+  without conflict. The merged tree differs from `test` (ca2f52e, the flight feel thread's integration of the same two
+  branches) in one file, `src/trackbuilder/selftest.js`, which main changed after that merge. So what goes to main is
+  what the owner could fly on `test`, plus that file.
+- Run on the merged tree, this turn, all passing: `node scripts/raceline-check.js` (91) and with `--fly` (99, four laps
+  of four in all eight rooms, through main's new module), `check:plant` (all passed), `lint:preload` (up to date, 138
+  boot modules), `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71), `lint:frame` (34),
+  `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4), `lint:partners` (88) and `lint:fc` (33 of 33).
+- Not run: `npm run verify` (this branch changes no physics, plant, module ABI or build; PR 49's own physics change is
+  already on main under its own entry), `lint:input`, `lint:shell` (fails on main, baseline not re-recorded),
+  `lint:catalog` (cannot start in this container, `vendor/betaflight` is not checked out), `node scripts/shots.js`, and
+  a browser run of the merged tree with the setting on.
+- If the live build is wrong: the setting is off by default, so a pilot only meets it by turning Race line on, and the
+  first step is to leave it off. To take it out, revert the race line code commits (7ccbe63, 2ff7188 and fbb1600; the
+  others are PROGRESS entries and merges). The shared files they touch are `src/main.js`, `src/ui/ui.js`,
+  `src/render/scene.js`, `src/fresh.js` and `package.json`.
+- Still open with the owner, not decided by this push: whether the trail should be only as strict as RaceGOW's Rule 7
+  (never backward), and not also refuse an opening out of turn. The check card of 2026-10-08 never got an answer.
+- What went wrong: nothing new.
 ## 2026-10-09: softer default rates, Actual 60 / 600 (the owner's ask), and the feel tickets read
 
 - Ask: the owner, 2026-10-09 08:02Z: "i want to scrape all the flight feel tickets and make the thing feel better. Overall its twitchy, so im gonna suggest we start with lowering the default rates just a little". On a draft PR, not on main or `test`.

@@ -15,7 +15,7 @@
  *
  * So this flies a set of scripted runs through dist/sim.wasm in Node and
  * hashes the full state block after every 1 ms step: free air in acro,
- * angle and arcade, the air and gravity knobs, a sagging pack, takeoff and
+ * angle and arcade, the air, gravity and motor power knobs, a sagging pack, takeoff and
  * landing, a hard drop, a belly crash at speed, an inverted landing and a
  * turtle, a slope, the launch stand, a deck edge that lifts the plane under
  * a moving craft, a side arrival, and every contact entry point the shell
@@ -413,6 +413,42 @@ const SCENARIOS = [
     sticks: runIn(3, 2000, (ms, st, ctx) => [0, 0, 0, heightHold(ctx, st, 3)]),
     exercises: (s) => s.speedDrop(2000) > 2,
   },
+  /*
+   * MOTOR POWER, pinned 2026-10-08, the day the module got sim_set_motor_kv.
+   * Every scenario above runs with the scale never set, which is 1.0, and
+   * their hashes did not move when the export arrived: that is the proof that
+   * stock flight is untouched. These fly the scale itself, so the winding
+   * model (ke / s and r_motor / s^2 at the top of plant_step) is pinned as
+   * well as the default. Both ends of the slider's 0.8 to 1.2, free air and
+   * the grass, a sagging pack for the current the hotter wind draws, the five
+   * inch at the weight the shell flies it, and the module's whoop plant.
+   */
+  {
+    name: 'free air, motor power 1.2', ms: 5000, kv: 1.2, sticks: FREESTYLE,
+    exercises: (s) => s.maxRate > 8 && s.maxSpeed > 8,
+  },
+  {
+    name: 'free air, motor power 0.8', ms: 5000, kv: 0.8, sticks: FREESTYLE,
+    exercises: (s) => s.maxRate > 8 && s.maxZ > 3,
+  },
+  {
+    name: 'free air, sagging pack, motor power 1.2', ms: 5000, kv: 1.2, cellV: 3.5, sticks: FREESTYLE,
+    exercises: (s) => s.minVolts < 3.5 * 6,
+  },
+  {
+    name: 'grass, takeoff hover and land, motor power 1.1', ms: 7000, kv: 1.1, ground: 'grass',
+    sticks: takeoffLand,
+    exercises: (s) => s.maxZ > 1.2 && s.lastContactMs > 4000 && s.endSpeed < 0.2 && s.endUpZ > 0.95,
+  },
+  {
+    name: 'grass, takeoff hover and land, motor power 0.85 at the weight the shell flies', ms: 7000,
+    kv: 0.85, gravity: 1.62, ground: 'grass', sticks: takeoffLand,
+    exercises: (s) => s.maxZ > 1.2 && s.lastContactMs > 4000 && s.endSpeed < 0.2 && s.endUpZ > 0.95,
+  },
+  {
+    name: 'whoop, free air acro, motor power 1.2', ms: 6000, airframe: 1, kv: 1.2, sticks: FREESTYLE,
+    exercises: (s) => s.maxRate > 8 && s.minUpZ < -0.5,
+  },
 ];
 
 const CONFIG_FOR = {
@@ -535,6 +571,9 @@ async function fly(wasm, configs, sc) {
   }
   if (sc.gravity != null) {
     call(sim, 'sim_set_gravity', sc.gravity);
+  }
+  if (sc.kv != null) {
+    call(sim, 'sim_set_motor_kv', sc.kv);
   }
   if (sc.stand) {
     const s0 = sim.readState().state;

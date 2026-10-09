@@ -618,10 +618,13 @@ export function ratesShort(r) {
  * weight of 70 and a keyboard hover of 32.3 in the same report. A hover that
  * makes the quad sound heavier than it was flown points the reader at the
  * wrong answer. Left out, both are the shipped machine's, as the menu quotes.
+ * Motor power is the same: it moves hover, so the report passes the pilot's
+ * (a percent, 100 when the tuning mode is off) and the line agrees with the
+ * keyboard's.
  */
-export function throttleSummary(r, airframe = '5inch', weight = 100, cellV = 4.2) {
+export function throttleSummary(r, airframe = '5inch', weight = 100, cellV = 4.2, motorKv = 100) {
   const p = normaliseRates(r);
-  const hover = hoverStickPercent(p.throttleCap, airframe, weight, cellV);
+  const hover = hoverStickPercent(p.throttleCap, airframe, weight, cellV, motorKv);
   const curve = p.thrExpo > 0 ? `, mid ${p.thrMid} expo ${p.thrExpo}` : ', no expo';
   return `cap ${p.throttleCap}${curve}, hover near ${hover.toFixed(1)} percent of stick`;
 }
@@ -835,23 +838,231 @@ const HOVER_WHOOP = new Map([
     ]),
   ]],
 ]);
+/*
+ * AND AT THE PILOT'S MOTOR POWER, because the Motor power slider moves hover
+ * too. A motor wound for a higher kV turns the same prop at the same speed on
+ * less duty (sim_set_motor_kv; src/native/sim_internal.h has the model), so
+ * hover sits lower on the stick, and the keyboard's throttle springs back to
+ * it: without this axis every Motor power setting but 100 would make letting
+ * go of W a climb or a fall.
+ *
+ * The four tables below are the stock ones read again at the two ends of the
+ * slider, 80 and 120, one pair per airframe, with the same bisection and the
+ * same flags plus --kv:
+ *
+ *     node scripts/flightcheck.js --gravity=0.972 --cell=4.2 --kv=0.8
+ *
+ * and so on at each of the nine gravity and charge pairs, at 0.8 and at 1.2.
+ * The whoop's are read at its own gravities with no --airframe, because it
+ * flies the five inch plant, as the note above HOVER_5IN_AT_BASE says.
+ *
+ * Between a stop and 100 the answer is interpolated in 1 / kV and not in kV.
+ * Hover is a duty, and duty goes as 1 / kV (the rotor needs the same speed
+ * and torque, and the back EMF per unit speed is 1 / kV of what it was), so
+ * the stick, which is affine in duty, is linear in 1 / kV. Measured against
+ * flightcheck at 85, 90, 110 and 115, on all 18 airframe, weight and charge
+ * columns at nine caps each (648 values): wherever hover is below 80 percent
+ * of the stick, 543 of them, the mean error is 0.04 of a point and the worst
+ * 0.15, where interpolating in kV itself is 0.5 on average and 1.15 at worst.
+ * It grows only where the quad is nearly out of stick, because a table entry
+ * is clipped at full stick and the interpolation cannot see past the clip:
+ * 0.9 of a point worst between 80 and 90 percent, and 1 to 6 points under the
+ * true figure past 90, which is a cap of 40 or 50 on a low kV, a tired pack
+ * or a heavy quad, with next to no travel left above hover to climb with.
+ */
+const HOVER_5IN_KV80 = new Map([
+  [4.2, [
+    new Map([
+      [100, 32.7], [90, 35.7], [80, 39.6], [75, 41.9], [70, 44.6],
+      [65, 47.6], [60, 51.1], [50, 60.3], [40, 74.1],
+    ]),
+    new Map([
+      [100, 43.8], [90, 48.2], [80, 53.5], [75, 56.7], [70, 60.4],
+      [65, 64.7], [60, 69.6], [50, 82.6], [40, 100],
+    ]),
+    new Map([
+      [100, 53.5], [90, 58.9], [80, 65.7], [75, 69.6], [70, 74.3],
+      [65, 79.6], [60, 85.8], [50, 100], [40, 100],
+    ]),
+  ]],
+  [3.8, [
+    new Map([
+      [100, 36.2], [90, 39.6], [80, 44.0], [75, 46.6], [70, 49.5],
+      [65, 52.9], [60, 56.9], [50, 67.3], [40, 82.9],
+    ]),
+    new Map([
+      [100, 48.6], [90, 53.4], [80, 59.5], [75, 63.1], [70, 67.2],
+      [65, 72.0], [60, 77.5], [50, 92.1], [40, 100],
+    ]),
+    new Map([
+      [100, 59.3], [90, 65.4], [80, 72.9], [75, 77.4], [70, 82.6],
+      [65, 88.6], [60, 95.5], [50, 100], [40, 100],
+    ]),
+  ]],
+  [3.5, [
+    new Map([
+      [100, 39.3], [90, 43.1], [80, 48.0], [75, 50.8], [70, 54.1],
+      [65, 57.9], [60, 62.2], [50, 73.6], [40, 90.8],
+    ]),
+    new Map([
+      [100, 52.8], [90, 58.2], [80, 64.8], [75, 68.8], [70, 73.4],
+      [65, 78.6], [60, 84.7], [50, 100], [40, 100],
+    ]),
+    new Map([
+      [100, 64.6], [90, 71.3], [80, 79.5], [75, 84.5], [70, 90.1],
+      [65, 96.6], [60, 100], [50, 100], [40, 100],
+    ]),
+  ]],
+]);
+const HOVER_5IN_KV120 = new Map([
+  [4.2, [
+    new Map([
+      [100, 21.7], [90, 23.5], [80, 25.8], [75, 27.2], [70, 28.8],
+      [65, 30.6], [60, 32.7], [50, 38.2], [40, 46.5],
+    ]),
+    new Map([
+      [100, 29.1], [90, 31.7], [80, 35.1], [75, 37.1], [70, 39.3],
+      [65, 42.0], [60, 45.0], [50, 53.1], [40, 65.1],
+    ]),
+    new Map([
+      [100, 35.5], [90, 39.0], [80, 43.1], [75, 45.7], [70, 48.6],
+      [65, 51.9], [60, 55.9], [50, 65.9], [40, 81.2],
+    ]),
+  ]],
+  [3.8, [
+    new Map([
+      [100, 24.0], [90, 26.1], [80, 28.7], [75, 30.3], [70, 32.1],
+      [65, 34.2], [60, 36.6], [50, 42.9], [40, 52.4],
+    ]),
+    new Map([
+      [100, 32.2], [90, 35.3], [80, 39.1], [75, 41.3], [70, 43.9],
+      [65, 46.8], [60, 50.4], [50, 59.4], [40, 73.0],
+    ]),
+    new Map([
+      [100, 39.4], [90, 43.2], [80, 48.0], [75, 50.8], [70, 54.2],
+      [65, 57.9], [60, 62.3], [50, 73.7], [40, 90.9],
+    ]),
+  ]],
+  [3.5, [
+    new Map([
+      [100, 26.1], [90, 28.4], [80, 31.4], [75, 33.1], [70, 35.1],
+      [65, 37.4], [60, 40.1], [50, 47.1], [40, 57.6],
+    ]),
+    new Map([
+      [100, 35.1], [90, 38.4], [80, 42.6], [75, 45.0], [70, 48.0],
+      [65, 51.2], [60, 55.1], [50, 65.1], [40, 80.1],
+    ]),
+    new Map([
+      [100, 43.0], [90, 47.1], [80, 52.4], [75, 55.5], [70, 59.1],
+      [65, 63.3], [60, 68.1], [50, 80.8], [40, 99.7],
+    ]),
+  ]],
+]);
+const HOVER_WHOOP_KV80 = new Map([
+  [4.2, [
+    new Map([
+      [100, 37.2], [90, 40.7], [80, 45.1], [75, 47.8], [70, 50.8],
+      [65, 54.4], [60, 58.5], [50, 69.2], [40, 85.2],
+    ]),
+    new Map([
+      [100, 50.0], [90, 55.0], [80, 61.3], [75, 65.0], [70, 69.3],
+      [65, 74.2], [60, 80.0], [50, 94.9], [40, 100],
+    ]),
+    new Map([
+      [100, 55.8], [90, 61.4], [80, 68.5], [75, 72.7], [70, 77.5],
+      [65, 83.1], [60, 89.6], [50, 100], [40, 100],
+    ]),
+  ]],
+  [3.8, [
+    new Map([
+      [100, 41.1], [90, 45.1], [80, 50.2], [75, 53.1], [70, 56.5],
+      [65, 60.5], [60, 65.2], [50, 77.2], [40, 95.2],
+    ]),
+    new Map([
+      [100, 55.4], [90, 61.0], [80, 68.0], [75, 72.2], [70, 77.0],
+      [65, 82.6], [60, 89.0], [50, 100], [40, 100],
+    ]),
+    new Map([
+      [100, 61.9], [90, 68.2], [80, 76.1], [75, 80.8], [70, 86.2],
+      [65, 92.4], [60, 99.8], [50, 100], [40, 100],
+    ]),
+  ]],
+  [3.5, [
+    new Map([
+      [100, 44.8], [90, 49.1], [80, 54.6], [75, 58.0], [70, 61.7],
+      [65, 66.0], [60, 71.2], [50, 84.4], [40, 100],
+    ]),
+    new Map([
+      [100, 60.3], [90, 66.5], [80, 74.1], [75, 78.8], [70, 84.0],
+      [65, 90.1], [60, 97.2], [50, 100], [40, 100],
+    ]),
+    new Map([
+      [100, 67.4], [90, 74.3], [80, 82.9], [75, 88.2], [70, 94.1],
+      [65, 100], [60, 100], [50, 100], [40, 100],
+    ]),
+  ]],
+]);
+const HOVER_WHOOP_KV120 = new Map([
+  [4.2, [
+    new Map([
+      [100, 24.6], [90, 26.8], [80, 29.5], [75, 31.1], [70, 33.0],
+      [65, 35.2], [60, 37.6], [50, 44.1], [40, 53.9],
+    ]),
+    new Map([
+      [100, 33.2], [90, 36.3], [80, 40.2], [75, 42.6], [70, 45.2],
+      [65, 48.4], [60, 52.0], [50, 61.3], [40, 75.3],
+    ]),
+    new Map([
+      [100, 37.1], [90, 40.6], [80, 45.0], [75, 47.7], [70, 50.7],
+      [65, 54.3], [60, 58.3], [50, 69.0], [40, 84.9],
+    ]),
+  ]],
+  [3.8, [
+    new Map([
+      [100, 27.3], [90, 29.7], [80, 32.8], [75, 34.7], [70, 36.8],
+      [65, 39.2], [60, 42.1], [50, 49.4], [40, 60.5],
+    ]),
+    new Map([
+      [100, 36.8], [90, 40.3], [80, 44.8], [75, 47.4], [70, 50.4],
+      [65, 53.9], [60, 58.0], [50, 68.5], [40, 84.4],
+    ]),
+    new Map([
+      [100, 41.1], [90, 45.1], [80, 50.1], [75, 53.1], [70, 56.5],
+      [65, 60.5], [60, 65.1], [50, 77.2], [40, 95.1],
+    ]),
+  ]],
+  [3.5, [
+    new Map([
+      [100, 29.7], [90, 32.4], [80, 35.8], [75, 37.8], [70, 40.2],
+      [65, 42.9], [60, 46.1], [50, 54.3], [40, 66.5],
+    ]),
+    new Map([
+      [100, 40.1], [90, 44.0], [80, 48.8], [75, 51.7], [70, 55.1],
+      [65, 58.9], [60, 63.4], [50, 75.1], [40, 92.5],
+    ]),
+    new Map([
+      [100, 44.8], [90, 49.2], [80, 54.7], [75, 58.0], [70, 61.8],
+      [65, 66.1], [60, 71.3], [50, 84.5], [40, 100],
+    ]),
+  ]],
+]);
 const HOVER_STICK_PERCENT = {
-  '5inch': { weights: [60, 100, 140], cells: HOVER_5IN },
-  whoop65: { weights: [60, 100, 120], cells: HOVER_WHOOP },
+  '5inch': {
+    weights: [60, 100, 140],
+    cells: HOVER_5IN,
+    kv: { 80: HOVER_5IN_KV80, 120: HOVER_5IN_KV120 },
+  },
+  whoop65: {
+    weights: [60, 100, 120],
+    cells: HOVER_WHOOP,
+    kv: { 80: HOVER_WHOOP_KV80, 120: HOVER_WHOOP_KV120 },
+  },
 };
 
-/*
- * Where hover sits on the stick, as a percentage of travel, for this cap on
- * this aircraft. The airframe is optional and defaults to the five inch,
- * which is what every caller meant when there was one aircraft.
- *
- * Weight and the pack's starting charge per cell are optional too, and
- * default to the shipped machine on a fresh pack, which is what the menu
- * quotes. The keyboard passes the run's own, because it flies on the answer.
- */
-export function hoverStickPercent(cap, airframe = '5inch', weight = 100, cellV = 4.2) {
-  const table = HOVER_STICK_PERCENT[airframe] ?? HOVER_STICK_PERCENT['5inch'];
-  const cols = table.cells.get(nearest(HOVER_CELLS, Number(cellV) || 4.2));
+/* One table's answer for this cap, weight and charge: the weight columns
+ * interpolated, the pack block picked by the nearest charge. */
+function hoverAt(table, cells, cap, weight, cellV) {
+  const cols = cells.get(nearest(HOVER_CELLS, Number(cellV) || 4.2));
   const c = nearest(THROTTLE_CAP_CHOICES, cap);
   const at = (i) => cols[i].get(c) ?? cols[i].get(100);
   const [light, mid, heavy] = table.weights;
@@ -861,4 +1072,33 @@ export function hoverStickPercent(cap, airframe = '5inch', weight = 100, cellV =
   const edge = w < mid ? 0 : 2;
   const u = (w - mid) / ((edge === 0 ? light : heavy) - mid);
   return u === 0 ? at(1) : at(1) + (at(edge) - at(1)) * u;
+}
+
+/*
+ * Where hover sits on the stick, as a percentage of travel, for this cap on
+ * this aircraft. The airframe is optional and defaults to the five inch,
+ * which is what every caller meant when there was one aircraft.
+ *
+ * Weight, the pack's starting charge per cell and Motor power are optional
+ * too, and default to the shipped machine on a fresh pack, which is what the
+ * menu quotes. The keyboard passes the run's own, because it flies on the
+ * answer. Motor power is a percent, 80 to 120, and 100 returns the table's own
+ * figure exactly as it always did: that branch is taken before any of the new
+ * arithmetic, so a pilot who never touches the slider reads the numbers that
+ * were measured before it existed.
+ */
+export function hoverStickPercent(cap, airframe = '5inch', weight = 100, cellV = 4.2, motorKv = 100) {
+  const table = HOVER_STICK_PERCENT[airframe] ?? HOVER_STICK_PERCENT['5inch'];
+  const stock = hoverAt(table, table.cells, cap, weight, cellV);
+  const kv = Math.min(120, Math.max(80, Number(motorKv) || 100));
+  if (kv === 100) {
+    return stock;
+  }
+  const stop = kv < 100 ? 80 : 120;
+  const far = hoverAt(table, table.kv[stop], cap, weight, cellV);
+  if (kv === stop) {
+    return far;
+  }
+  /* Linear in 1 / kV between 100 and the stop: see the note above the tables. */
+  return stock + (far - stock) * ((100 / kv - 1) / (100 / stop - 1));
 }
