@@ -105,6 +105,41 @@ export function* buildWorldSteps(scene, { bake = true } = {}) {
    * floating over it -- true since the channel went in.  See `canal.js`. */
   const cuts = [];
 
+  /* A per cell index over `platforms`, so `heightAt` tests the few platforms
+   * whose box reaches the query's cell and not all of them (801 in the town).
+   * A platform is listed in every cell its box touches, and the answer is a
+   * max, which does not depend on the order platforms are visited in, so
+   * every result is bit identical to the scan it replaces.  A platform wider
+   * than BIG_SPAN cells either way, or with an unbounded box, goes in `wide`
+   * and is tested for every query.  The array is append only (builders push
+   * into it right up to the end, and `places` pushes after), so the index
+   * is topped up from `indexed` to the current length on each query. */
+  const PLATFORM_CELL = 4;
+  const BIG_SPAN = 24;
+  const cells = new Map();
+  const wide = [];
+  const none = [];
+  let indexed = 0;
+  const cellKey = (i, j) => i * 4194304 + j;
+  const platformsNear = (x, z) => {
+    for (; indexed < platforms.length; indexed++) {
+      const p = platforms[indexed];
+      const i0 = Math.floor(p.x0 / PLATFORM_CELL), i1 = Math.floor(p.x1 / PLATFORM_CELL);
+      const j0 = Math.floor(p.z0 / PLATFORM_CELL), j1 = Math.floor(p.z1 / PLATFORM_CELL);
+      if (!(i1 - i0 < BIG_SPAN && j1 - j0 < BIG_SPAN)) { wide.push(p); continue; }
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const k = cellKey(i, j);
+          const a = cells.get(k);
+          if (a === undefined) cells.set(k, [p]); else a.push(p);
+        }
+      }
+    }
+    const here = cells.get(cellKey(Math.floor(x / PLATFORM_CELL), Math.floor(z / PLATFORM_CELL)));
+    if (wide.length === 0) return here === undefined ? none : here;
+    return here === undefined ? wide : here.concat(wide);
+  };
+
   const ctx = {
     scene,
     root,
@@ -837,7 +872,9 @@ export function* buildWorldSteps(scene, { bake = true } = {}) {
         if (x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1) h = Math.min(h, c.top);
       }
       const reach = fromY === undefined ? Infinity : fromY + 0.55;
-      for (const p of platforms) {
+      const cand = platformsNear(x, z);
+      for (let i = 0; i < cand.length; i++) {
+        const p = cand[i];
         if (x <= p.x0 || x >= p.x1 || z <= p.z0 || z >= p.z1) continue;
         /* **A platform may name a SURFACE rather than a height**, and the one
          * that needs to is the mountain over a tunnel.  A flat top cannot

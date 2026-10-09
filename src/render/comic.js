@@ -535,6 +535,37 @@ export const SIL_GLSL = /* glsl */ `
 const MARK = '/* COMIC_V1 */';
 const KEY = '|comic1';
 
+/*
+ * ONE PROGRAM FOR EVERY SHADOW TINT.
+ *
+ * The town's cel factory (maps/city/vendored/core/toon.js) keys its program
+ * on the tint's hex, 'celTint_6a5a78', although the tint reaches the shader
+ * as a uniform on each material (uShadowTint, from onBeforeCompile) and the
+ * GLSL it compiles is the same text for every tint. Keyed that way three
+ * compiled and linked the same program again for each tint a building, a
+ * roof or a prop happened to carry: 102 programs for 27 distinct shader
+ * sources in the yard, 128 for about 44 in the town, counted by hashing the
+ * source of every program at link. Each is a compile that blocks the main
+ * thread the first time something wearing that tint is drawn, which is why
+ * the first seconds of a flight and the first turn toward a new street
+ * stalled: the tint a prop wore decided whether its program existed yet.
+ *
+ * The program is the same, the uniform is not. Every material keeps its own
+ * tint (it lives in the uniform object its own hook assigned, and three
+ * uploads a material's uniforms whenever the material changes), so a
+ * shared program draws every tint exactly as its own did. What does tell
+ * two materials apart is a look, not a program, and the town's bake keeps
+ * asking the unfolded key for that (see lookKey in maps/city/bake.js).
+ *
+ * The file cannot be changed at the source: it is vendored and stays
+ * byte identical to its patched self, and this wrapper is where every toon
+ * key already passes.
+ */
+const TINT_KEY = /^celTint_[0-9a-f]{6}$/;
+function programKey(own) {
+  return TINT_KEY.test(own) ? 'celTint' : own;
+}
+
 const VERT_HEAD = /* glsl */ `
 varying vec3 vComicWorld;
 flat varying float vComicBlob;
@@ -1206,7 +1237,7 @@ if (!P[INSTALLED]) {
       const key = function comicKey() {
         let k = '';
         if (self._comicUserKey) {
-          k = String(self._comicUserKey.call(self));
+          k = programKey(String(self._comicUserKey.call(self)));
         } else if (self._comicUserHook) {
           k = self._comicUserHook.toString();
         }

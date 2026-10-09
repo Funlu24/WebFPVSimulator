@@ -28,6 +28,7 @@ import { buildFieldScene } from '../render/scene.js';
 import { yieldToPaint } from '../ui/loading.js';
 import { buildComposer } from '../render/post.js';
 import { qualityFor } from '../render/quality.js';
+import { warmPrograms } from '../render/warm.js';
 
 /*
  * Give a built scene its composer, and a dispose that frees both.
@@ -36,10 +37,13 @@ import { qualityFor } from '../render/quality.js';
  * the custom map are the same world with a different course in it, and the
  * dispose in particular is not a detail to keep two copies of.
  */
-export function attachComposer(shell, map, q) {
+export async function attachComposer(shell, map, q) {
   const post = buildComposer(shell.renderer, map.scene, shell.camera, q);
   const d = shell.resize();
   post.setSize(d.w, d.h);
+  /* The scene's programs, linked now and against the composer's own target,
+   * which is what its frames draw into: see render/warm.js. */
+  await warmPrograms(shell.renderer, map.scene, shell.camera, post.composer.renderTarget1);
   const sceneDispose = map.dispose;
   map.post = post;
   map.dispose = () => {

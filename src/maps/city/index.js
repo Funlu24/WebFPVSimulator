@@ -77,6 +77,7 @@ import { buildPlaces } from './places/index.js';
 import { drawnBoxes } from './drawn.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { warmPrograms } from '../../render/warm.js';
 
 /*
  * Where a run starts. On the road south of the level crossing, facing north
@@ -2656,6 +2657,10 @@ export async function buildMap(shell, onProgress, options) {
   pipeline.setSize(d.w, d.h);
 
   scene.add(shell.quad);
+  /* Every program the street draws, linked now and against the pipeline's
+   * scene target instead of one at a time as the pilot first sees each: see
+   * render/warm.js. */
+  await warmPrograms(renderer, scene, camera, pipeline.rtScene);
   progress(1);
 
   const shadowTarget = new THREE.Vector3();

@@ -156,8 +156,12 @@ function makeBaker() {
         b = { material: o.material, hull: o.material.userData.hullColor != null, geos: [] };
         buckets.set(key, b);
       }
-      /* Non-indexed so polyhedra and cylinders merge into one buffer. */
-      const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      /* Every member is indexed, so polyhedra and cylinders merge into one indexed buffer and a shared vertex is
+       * shaded once, not once per triangle corner. A member that arrives without an index is welded first, with a
+       * tolerance far under the smallest prop (the whoop room is built at MICRO_SCALE, and the default 1e-4 could
+       * weld neighbouring vertices of a small one). mergeVertices joins vertices equal in EVERY attribute, so a
+       * flat face keeps its own corners, its normal differs, and the picture is the one the exploded buffer drew. */
+      const geo = o.geometry.index ? o.geometry.clone() : mergeVertices(o.geometry, 1e-6);
       geo.applyMatrix4(o.matrixWorld);
       b.geos.push(geo);
     });
@@ -1350,9 +1354,12 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   return c;
 }
 
-function terrain(height, samples, pitch) {
+function terrain(height, samples, pitch, indoor = false) {
   const size = 1700;
-  const seg = 230;
+  /* Indoors the height field is dead level and the room's boards lie over the terrain to well past its walls, so
+   * nothing of it is ever seen: two cells a side hold the plane, instead of 105,800 triangles drawn in two of the
+   * room's three passes. The mesh stays because the ambient occlusion pass below reads its vertices. */
+  const seg = indoor ? 2 : 230;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -5266,7 +5273,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const clubPad = clubhousePad(clubSite);
   const height = makeHeightField(samples, pitch, clubPad, indoor);
 
-  const ground = terrain(height, samples, pitch);
+  const ground = terrain(height, samples, pitch, indoor);
   scene.add(ground);
 
   /*
@@ -6914,7 +6921,11 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * the most expensive single thing in this function on a cold cache and has
    * no inside to report from. */
   await report(0.86);
-  renderer.compile(scene, camera);
+  /* Not made here any more: the argument above stands, but a compile has to run against the target the frames are
+   * drawn into, and that is the composer's, which is built from this scene after it. Made here with nothing bound it
+   * linked the sRGB programs, which nothing draws, and left the ones that are drawn to the first frame.
+   * attachComposer (maps/field.js) makes it, through render/warm.js, before buildMap returns, so the world is still
+   * compiled when it loads. */
   progress(1);
 
   /*
