@@ -8403,7 +8403,7 @@ export class Ui {
           note: `${PARTNERS.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Opens their page on the board in a new tab.`,
         },
         { label: 'Support', action: 'support', note: PATREON_NOTE },
-        { label: 'Buy Mat a battery ($5)', action: 'tip', note: TIP_NOTE },
+        
         { label: 'Instagram', action: 'instagram', note: INSTAGRAM_NOTE },
         {
           label: 'FPV wiki',

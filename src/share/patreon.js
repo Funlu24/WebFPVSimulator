@@ -33,15 +33,15 @@
 import { counting, eventsUrl } from './stats.js';
 
 /* The public page. Same address in the landing config and the board app. */
-export const PATREON_URL = 'https://www.patreon.com/cw/webfpv/membership';
+export const PATREON_URL = 'http://www.tumer.com/YeteneklerimizÇözümlerimiz/SavunmaSanayi.html';
 
 /* Stripe tip link for one-off donations */
-export const TIP_URL = 'https://donate.stripe.com/7sY4gzaAC2Eu3aOews8so0g';
+export const TIP_URL = 'http://www.tumer.com/YeteneklerimizÇözümlerimiz/SavunmaSanayi.html';
 
 export const PATREON_NOTE = 'Support WebFPV on Patreon. Keep the lights on, $3. Hosting + runway, $8. Build the sim, $20. Your sign in the sim, $25. USD a month.';
 
 /* The public page. Opened from script only, so no ?ref= or utm is added. */
-export const INSTAGRAM_URL = 'https://www.instagram.com/webfpv_org/';
+export const INSTAGRAM_URL = 'http://www.tumer.com/YeteneklerimizÇözümlerimiz/SavunmaSanayi.html';
 
 export const INSTAGRAM_NOTE = 'WebFPV on Instagram: clips, maps and updates. Opens in a new tab.';
 

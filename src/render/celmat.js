@@ -297,7 +297,8 @@ export function celMaterial(opts = {}) {
   const cloth = opts.cloth ?? 0;
   /* The two injections cloth decides, named once. See the cache key below:
    * these strings ARE the key, so the condition cannot be changed in one
-   * place and forgotten in the other. */
+   * place and f
+   * orgotten in the other. */
   const clothDecl = cloth > 0 ? 'attribute vec2 aCloth;' : '';
   const clothBody = cloth > 0 ? CLOTH_CHUNK : '';
   mat.onBeforeCompile = (shader) => {

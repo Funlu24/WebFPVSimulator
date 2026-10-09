@@ -116,51 +116,23 @@ const partner = (p) => Object.freeze({
  */
 export const PARTNERS = Object.freeze([
   partner({
-    slug: 'gds',
-    name: 'Global Drone Solutions',
-    short: 'GDS',
+    slug: 'tumer',
+    name: 'Tümer Savunma',
+    short: 'Tümer',
     role: 'training',
-    about: 'CASA approved drone training across Australia, from a first Remote Pilot Licence to Beyond Visual Line of Sight and the Powered Lift endorsement. Over 7,500 graduates.',
+    about: 'Şirketin kısa tanıtım metni.',
     links: [
-      /* globaldronesolutions.com.au answers with a redirect to this address,
-       * so the link goes to where it lands rather than through a hop. */
-      { kind: 'site', label: 'Visit Global Drone Solutions', href: 'https://gdronesolutions.com/' },
+      { kind: 'site', label: 'Tümer Savunma', href: 'http://www.tumer.com/YeteneklerimizÇözümlerimiz/SavunmaSanayi.html' },
     ],
-    logo: { colour: 'gds/colour.svg', mono: 'gds/mono.svg', aspect: 208 / 72 },
-    mark: { field: '#19171e' },
+    logo: { colour: 'tumer/colour.png', mono: 'tumer/mono.png', aspect: 600 / 200 },
+    mark: { field: '#ffffff' },
   }),
-  partner({
-    slug: 'mantisfpv',
-    name: 'Mantis FPV',
-    short: 'Mantis FPV',
-    role: 'retail',
-    about: 'Australian FPV drone parts and service, online and in store in Parramatta, Sydney, with a repair and build service and one to one coaching in their workshop. Australian based, with worldwide shipping.',
-    links: [
-      { kind: 'site', label: 'Visit Mantis FPV', href: 'https://www.mantisfpv.com.au/' },
-    ],
-    logo: { colour: 'mantisfpv/colour.svg', mono: 'mantisfpv/mono.svg', aspect: 1868.79 / 329.61 },
-    mark: { field: '#f3ead4' },
-  }),
-  partner({
-    slug: 'wcmrc',
-    name: 'West Coast Multirotor Club',
-    short: 'WCMRC',
-    role: 'club',
-    about: "Perth's FPV drone racing club. Fortnightly race events through the year, plus casual beginner friendly race and freestyle days, at their home base, Thomas Kelly Pavilion in Kwinana.",
-    /* The three the owner named on 2026-09-27. wcmrc.com.au is a different
-     * club, West Coast Model RC, which races cars: never link it. The
-     * club's own site links its Facebook group by name,
-     * facebook.com/groups/westcoastmultirotorclub; the number here is the
-     * one the owner gave, and whether the two are one group could not be
-     * checked without a Facebook login. */
-    links: [
-      { kind: 'site', label: 'Visit the club', href: 'https://westcoastmultirotors.com.au/' },
-      { kind: 'youtube', label: 'YouTube', href: 'https://www.youtube.com/@westcoastmultirotorsclub' },
-      { kind: 'facebook', label: 'Facebook group', href: 'https://www.facebook.com/groups/657768627690432' },
-    ],
-    logo: { colour: 'wcmrc/colour.png', mono: 'wcmrc/mono.png', aspect: 708 / 252 },
-    mark: { field: '#f3ead4' },
-  }),
+]);
+
+export const MAP_ONLY_PARTNERS = Object.freeze([
+]);
+
+export const PATRON_MAP_BRANDS = Object.freeze([
 ]);
 
 /*
@@ -172,30 +144,7 @@ export const PARTNERS = Object.freeze([
  * choose to display them separately from PARTNERS (e.g., as "Supporters" or
  * "Sponsors").
  */
-export const MAP_ONLY_PARTNERS = Object.freeze([
-  partner({
-    slug: 'mattsflooring',
-    name: "Matt's Flooring Pty Ltd",
-    short: "Matt's Flooring",
-    about: 'Flooring company.',
-    links: [
-      { kind: 'site', label: "Visit Matt's Flooring", href: 'https://www.mattsflooring.com.au/' },
-    ],
-    logo: { colour: 'mattsflooring/colour.png', mono: 'mattsflooring/mono.png', aspect: 499 / 111 },
-    mark: { field: '#f3ead4' },
-  }),
-  partner({
-    slug: 'yourfpv',
-    name: 'YourFPV',
-    short: 'YourFPV',
-    about: 'Sheffield, UK based FPV shop. Curated FPV drone parts and accessories shipped from their UK warehouse.',
-    links: [
-      { kind: 'site', label: 'Visit YourFPV', href: 'https://www.yourfpv.co.uk/' },
-    ],
-    logo: { colour: 'yourfpv/colour.png', mono: 'yourfpv/mono.png', aspect: 869 / 570 },
-    mark: { field: '#f3ead4' },
-  }),
-]);
+
 
 /*
  * Patron map brands: Patreon supporter tier. Each patron's logo, or a name
@@ -206,16 +155,7 @@ export const MAP_ONLY_PARTNERS = Object.freeze([
  * findable: their signs do not stamp, count toward achievements, or show the
  * found panel when discovered.
  */
-export const PATRON_MAP_BRANDS = Object.freeze([
-  // Magnus Arge's $25 Patreon 'Your sign in the sim' logo, supplied by the patron on 2026-10-06, OK'd by the owner.
-  partner({
-    slug: 'quadconfig',
-    name: 'Quad Configurator',
-    short: 'Quad Configurator',
-    logo: { colour: 'quadconfig/colour.png', mono: 'quadconfig/mono.png', aspect: 1882 / 400 },
-    mark: { field: '#323f5d' },
-  }),
-]);
+
 
 export const PARTNER_SLUGS = Object.freeze(PARTNERS.map((p) => p.slug));
 export const MAP_ONLY_PARTNER_SLUGS = Object.freeze(MAP_ONLY_PARTNERS.map((p) => p.slug));
