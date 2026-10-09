@@ -69752,3 +69752,14 @@ The owner, in this thread at 08:01:59Z on 2026-10-09: "these are good go to main
   by 844 phone layout. Not run: `npm run verify` (no physics, plant, ABI or build change), `shots.js`.
 - What went wrong: the first strip had no deadline on its read of the community, which `lint:boot`'s rule (every
   board read has one) would have wanted; it has the board's 8 s now, and a slow board still lets Send work.
+- Test branches: the owner wrote "push this feature to test branch" in the thread at 08:19:54Z on 2026-10-09,
+  while the card asking how to check it before main was still open. It covers putting this feature on `test` in
+  both repositories, not main, and both PRs stay drafts. Board: PR 13's branch merged board main first (1bed022,
+  bringing the tune tickets; npm test passed on the file store and twice on one scratch Postgres, lint:licence
+  and lint:nouns pass) and board `test` was fast-forwarded to it, df8733d to 1bed022. Simulator: this branch
+  merged main (10b2c32, the flight feel tuning; check:clip 2594 passed, lint:preload, lint:boot, lint:memory,
+  lint:nouns and check:fresh pass), and `test` takes it as a merge on top of `test` as it was (the race line and
+  the flight feel tuning) with main merged in first, pushed as a fast-forward. No force push, main untouched.
+- Latency: unchanged, nothing on the flying path. Where `test` deploys is not written down anywhere in either
+  repository, so which board the test simulator reads, and which simulator the test board's Fly and builder links
+  open, were not checked from here.
