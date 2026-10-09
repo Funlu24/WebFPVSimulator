@@ -76,22 +76,30 @@ import { latticeMap, latticeNoiseGlsl } from './lattice.js';
  * which is what makes it look drawn rather than shaded.
  */
 function celRamp() {
-  const stops = [
-    [0.30, 0.38, 0.62], /* deep shadow, sky blue bounce */
-    [0.42, 0.51, 0.72], /* shadow */
-    [0.94, 0.80, 0.62], /* terminator, warm sliver where light wraps */
-    [1.00, 0.97, 0.88], /* sunlit */
+  /* Seven bands, cool shadow to warm light, from the Gem look (look.js). More, finer steps than
+   * the four it had, so neighbouring facets of a polygon land on different tones. The ramp is a
+   * texture's content: it costs nothing a pixel that the four band one did not. The warm sliver
+   * at the terminator is kept, because a surface half in shade reads tan and not grey. */
+  const bands = [
+    [0.00, [0.26, 0.30, 0.58]],
+    [0.30, [0.36, 0.41, 0.68]],
+    [0.40, [0.50, 0.56, 0.80]],
+    [0.46, [0.88, 0.76, 0.64]],
+    [0.54, [0.97, 0.84, 0.66]],
+    [0.66, [1.00, 0.97, 0.88]],
+    [0.82, [1.00, 1.00, 0.96]],
   ];
   const width = 64;
   const data = new Uint8Array(width * 4);
   for (let i = 0; i < width; i += 1) {
     const t = i / (width - 1);
-    /* Hard steps with a one texel soft edge so it does not alias. */
     let band = 0;
-    if (t > 0.36) band = 1;
-    if (t > 0.46) band = 2;
-    if (t > 0.53) band = 3;
-    const c = stops[band];
+    for (let k = 0; k < bands.length; k += 1) {
+      if (t >= bands[k][0]) {
+        band = k;
+      }
+    }
+    const c = bands[band][1];
     data[i * 4 + 0] = Math.round(c[0] * 255);
     data[i * 4 + 1] = Math.round(c[1] * 255);
     data[i * 4 + 2] = Math.round(c[2] * 255);

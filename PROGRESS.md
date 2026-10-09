@@ -69065,6 +69065,193 @@ append conflict at the end of this file and nothing else in these files.
   targeted checks, which passed at e5c31b3, before a merge that brought only main's partner roster and its marks.
 - If it is wrong live, the way back is a revert on main, never a reset.
 
+### The performance pass from the 2026-10-08 hunt (draft PR #50)
+
+Implements the hunt's findings in order, one commit per item, on `claude/project-thread-lq1t4u` from main at da4e4b7.
+Nothing here is on main. Render and shell side only: no physics, plant, module ABI or build change, so `npm run verify`
+was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milliseconds are not claimed; counts are.
+
+- Item 2, index the baked merges (eaf0197). Field, Medium: non indexed triangles 313,735 to 9,441; the 99,192
+  triangle hull mesh 297,576 vertices to 80,179; top mesh attribute bytes 32.1 MB to 11.6 MB. Parked shots differ from
+  main only where two runs of main differ (clouds, flags). `lint:quality`, `check:room`, `check:props` pass.
+- Item 9, no outdoor terrain grid in the room (2ca9b51). The terrain mesh stays (the ambient occlusion pass reads its
+  vertices) at two cells a side; the height field is untouched. Room scene triangles 117,358 to 11,566; three parked
+  views are pixel identical to main. `check:room`, `lint:quality` pass.
+- Item 12, one state view and one report view (a067ddd). The gamepad half is NOT done: input.js polls the roster on
+  purpose ("rather than trusted to gamepadconnected", Chrome hides a pad until it moves) and a slower pad poll changes
+  input latency, which is the owner's call. `input:selftest` 380, `check:plant:selftest`, `check:world-golden` pass.
+  `lint:input` is 245 of 246, and the one failure (builder chooser, "a key pressed at the question") fails the same
+  way on da4e4b7.
+- Item 3, parallel shader compile (446ccd0). Field and room wait on `compileAsync`; the town and yard, which were never
+  compiled ahead, now compile their whole graph in `precompileWorld` (main.js) against a render target, because three
+  keys programs on the target: against the canvas it linked 282 programs in the town. Programs at ready, then after a
+  flight: town main 125 then 131, branch 157 then 157; yard main 62 then 93, branch 104 then 104; field 46 both.
+  Nothing links in flight any more. First frame under SwiftShader: town 54.8 s to 49.6 s in one run (a later profiled
+  run read 65 s, so call it noise), yard 17.3 s to 22.4 s (more programs linked up front on the same cores), field
+  unchanged. A driver with parallel compile should do better than this, and that is unmeasured here. Not done: keeping
+  programs across a world swap. WebGL 1 boots on all three with zero Shader Error lines. `lint:boot`, `check:fresh`,
+  `lint:preload` pass.
+- Item 7, petals and blossom (bb73454). Half the field a step, each half with the time it waited, because the field
+  is stateful (wind, respawn) and a vertex shader would have changed what it simulates. Town flight profile: petals.js
+  123 ms to 18 ms, blossom.js 44 ms to 10 ms self time. Petals still fall between two shots. `check:world-town` passes.
+  The vendored `PATCH-world-petals.diff` is regenerated (edef203).
+- Item 8, yard shadow proxies (edef203). 1024 map draws 184 to 52 (the rest are cars, wheels and the craft); colour
+  draws 146 to 155. Shadows in frame pixel identical to main. `lint:memory`, `lint:quality` pass. `check:builder`
+  fails one check ("and the ring is at its foot") the same way on da4e4b7.
+- Item 10: tried, not committed. A `fitText` cache took fitText self time from 3030 ms to 2859 ms in the town boot, so
+  the texts do not repeat enough to pay for it. Geometry is already freed at merge in `bakeCitySteps`, and the build
+  already yields there, so there was nothing cheap left.
+- Item 6: not done. The far plane cannot come in: the sky dome is 500 m and the hills live past the fog by design
+  (the comment above CAMERA_FAR). Tiling the merge was measured by an earlier round (MERGE_CELL 80 to 240 lost at
+  every value, 4145 to 4162 against 3831, "the frame is short of draw calls, not triangles"); see the note above in
+  this file. Nothing was re-measured.
+- Item 5: mipmaps not done. Tiles aligned to 16 px with a 16 px gutter grow the sheets by roughly half and the chain
+  adds a third, so texture memory would go up by about two thirds in the town, against the standing low end priority.
+  Half resolution sheets on Low are the visible option: pictures in `/mnt/project-files/perf-hunt/after/item5/` (the
+  spawn views barely show a sign, so they differ by under 0.1 percent).
+- Item 1A, one scene pass: not started, and where it is hard. Multiple render targets need (a) a second output in
+  every material the colour pass draws, the toon hook and every ShaderMaterial (sky, glow, flags), with no way to
+  verify that a material that omits the output leaves the attachment alone, which WebGL leaves undefined; (b) a per
+  attachment clear (three clears all attachments to one colour, the second needs (0,0,1,0) with the horizon colour
+  on the first), by hand through the context; (c) blending on transparent materials applying to both outputs; (d) the
+  composer's ping pong targets cloned from an MRT target. That is more than two days without a GPU to see undefined
+  behaviour on. 1C, half resolution prepasses, was tried locally and not committed: thin lines (poles, tubes) break
+  up and thicken, pictures in `/mnt/project-files/perf-hunt/after/item1c/`. Not recommended.
+- Item 4: the owner has a decision card in the thread; nothing written, because the plant reads this height.
+- What went wrong: the first `precompileWorld` linked 282 programs in the town (wrong render target); the first
+  room pixel diffs were against the menu overlay and said nothing until the overlay was hidden; a 15 minute timeout
+  killed `check:builder` once.
+- Not run: `npm run verify`, `lint:shell`, `lint:responsive`, a flight on real hardware.
+
+## 2026-10-08 (later): item 4, the town height grid, and a warning item 3 had introduced
+
+- Approval: the owner tapped "Yes, do it" on the decision card "Index the town's height query with a cell grid?" at
+  15:01:14Z on 2026-10-08. The card was posted in the earlier analysis thread (draft PR 51, since closed as a duplicate
+  of this one) and its answer was passed to this thread by the coordinator; the tap is a `decide` event in that thread,
+  option 0, by the owner's account. It covered this change only: the plant reads this height, and it promised an own
+  commit, the three golden checks and one `npm run verify`.
+- Item 4. `world.heightAt` in `src/maps/city/vendored/world/index.js` now tests only the platforms whose box reaches
+  the query's 4 m cell, plus a short list of platforms wider than 24 cells (one in the town), instead of all 801. The
+  index is topped up from the append only `platforms` array on each call, because builders and `places` push to it
+  up to the end. Max is order independent, so answers are unchanged. Proof: 290,175 queries (150,000 random points
+  over the town's box and margin, and every platform's edges, centre and 1e-9 inside the edges, at seven `fromY`
+  values including none) hash to the same two values on main and on this branch (FNV over the float bits). Cost of a
+  call, 20,000 calls, headless: 20.45 to 0.205 microseconds. `check:world-golden` all passed, `check:world-town`
+  the fixture is the town, `check:world-engines` equal to the bit. `PATCH-world-index.diff` regenerated against
+  upstream, round trip checked with `patch` and `cmp`. The physics model, the module ABI and the build did not change.
+- What went wrong: the first `npm run verify` on this branch failed checks 15 and 16 (world-scale, map-isolation) with
+  "KHR_parallel_shader_compile extension not supported" as a console warning. That was item 3's `compileAsync`, not
+  item 4: three logs the warning whenever `compileAsync` runs on a context without the extension (SwiftShader here, and
+  any driver or browser that lacks it). Item 3's checks had not run verify, so it was not seen. Fix, own commit: both
+  callers use `compileAsync` only when `renderer.extensions.has('KHR_parallel_shader_compile')`, and otherwise take
+  main's synchronous `compile` (the town and yard warm up skips, as on main). Second `npm run verify`: 17 of 17
+  checks passing, check 1 (build-clean) skipped because there is no emcc in this container. That run is on the head
+  with both commits, so it covers item 3 as well as item 4.
+- Not run: `lint:shell`, `lint:responsive`, a flight on real hardware.
+
+## 2026-10-09: the shader program fold, taken into PR 50
+
+- Approval: the owner tapped "Take it" at 23:58:26Z on 2026-10-08 on the coordinator's card "Add the shader program fold to the performance PR?" (a `decide` event in the project chat, option 0, by the owner's account). The cherry-pick was blocked by the session's permission check twice, and the owner then wrote "apply the diff directly" (00:00:42Z on 2026-10-09), so the commit's diff was applied by hand. It covers this one commit, which can be dropped alone.
+- What it is: commit 489e865 of the closed PR 51, minus its PROGRESS entry. `comic.js` folds `celTint_xxxxxx` into one program key (each material keeps its own tint uniform), `bake.js` keeps two tints apart in the bake, and new `src/render/warm.js` links programs ahead against the target the frames draw into: the composer's in the field and the room, the pipeline's scene target in the town and the yard.
+- Changes from 489e865 so it fits this branch: `scene.js` no longer compiles at the end of `buildFieldScene` (the fold's own change, which replaces item 3's `compileAsync` there); `main.js` loses `precompileWorld`, which the fold makes redundant (it linked against a probe target); and `warmPrograms` takes `renderer.compile` with the target bound when `KHR_parallel_shader_compile` is missing, because three warns on every `compileAsync` without it and verify's world-scale check reads the console.
+- Numbers, Medium, SwiftShader, `progdiff.mjs`, main (da4e4b7) against this head, programs linked by the end of 8 s of flight: field 46 to 27, yard 91 to 29, town 132 to 46. Programs linked after ready: yard 25 to 0, town 8 to 1. Boot to first frame: yard 15.7 s to 11.5 s, town 44.8 s to 28.4 s (ratios, not a laptop). Item 3 alone had the yard at 104 programs and a slower first frame. Evidence: `/mnt/project-files/perf-hunt/after/fold/`. Pixels: the fold's own A/B on PR 51 had the yard at 19 differing pixels against a 20 pixel floor and the town at 38 round the craft; this head's frames were not re-shot.
+- Checks run on this head: `lint:memory`, `lint:quality` (71 of 71), `lint:preload` (after `git add` and `gen-preload`, as the notes say), `check:fresh`, `check:world-town`, `check:town-patrons`, and one `npm run verify`: 17 of 17, check 1 skipped (no emcc).
+- Not run: `lint:shell`, `lint:responsive`, a flight on real hardware, a WebGL 1 pass on this head.
+
+## 2026-10-09: PR 50 to main
+
+- Approval: the owner wrote "push to main" in the performance thread at 00:18:09Z on 2026-10-09, after the fold landed (dd79427). It covers PR 50 as it stood at dd79427 plus this note, fast forwarded onto main (da4e4b7). He chose to fly it himself afterwards; no verification beyond what the entries above record was run for the push. Nothing about the physics model's shape, the module ABI or the build changed in the PR (item 4 reads the same heights bit for bit, approved by the card at 15:01Z on 2026-10-08).
+- If the live build is wrong: the fold is the last code commit (dd79427) and drops alone; item 4 is d937379 and also drops alone.
+
+## 2026-10-09: the pen eased to about half
+
+- Ask: the owner, 2026-10-09 00:22Z, "lets tone down all the inking and pen work, its a bit much", after testers called the look busy (bubbly trees, scribbled shadows). Render only; no physics, ABI or build change.
+- What changed: each strength of the inking and pen work is now one exported constant at the top of `src/render/comic.js`, set to about half. `HATCH_DEPTH` 0.78 to 0.39, `INK_WEIGHT` 1.55 to 1.25 (the pen's width; the crease thresholds follow it as before), `SIL_STRENGTH` new, 0.5 (the outer line, in `post.js` and the freestyle ink), `BRUSH_STRENGTH` 0.11 to 0.055, `FOLIAGE_CLUMP` new, 0.5 (the leaf clumps' light and shade on canopies), `GRIME_STAIN` 0.08 to 0.04, `GRIME_TIDE` 0.12 to 0.06, `CRACK_INK` 0.85 to 0.42. Low draws none of it, unchanged.
+- Cost: every constant is a shader literal or the value of an existing uniform, so instruction counts and programs are what they were. The one structural change is the pen width, which is a uniform. Frame time was not measured; none is expected to move.
+- Checks run: `lint:quality` 71 of 71, `lint:preload`, `lint:memory`, and `shots.js` on field, town, whoop room and yard at High, before (c87488d) and after, no console errors. Pictures in the project folder `graphics-ease/`. Not run: `npm run verify`, Medium shots, a flight on real hardware.
+- Declined: the AO tint, edge highlights and the grade are shading, not pen, and were left alone.
+
+## 2026-10-09 | latency | The comic layer's per pixel work is off on every preset
+
+- The owner, 2026-10-09: "latency is felt on all machines, so if it increases latency then we need to bin it and rethink
+  the art style to be polished but not hinder performance". Medium and High took 1.6 to 3.0 times the pre graphics
+  frame in the sweep above, and an integrated laptop boots on Medium.
+- Change: `COMIC_SHADING = false` in `src/render/comic.js`, read by `setComicQuality` and by the field's sky in
+  `scene.js`. Every preset now shades as Low does: no toon chunk, edge highlight, grime, occlusion, outer line or streak
+  cloud. The code stays for the redesign; the geometry (models, clumps) is not behind the flag.
+- Measured (headless software renderer, so counts and sources, not milliseconds; the frame times were too noisy to
+  quote): shader sources carrying the chunk, field on Medium, main 10 of 54, this change 0 of 54, also 0 on the yard and
+  the town. Full resolution taps on the field on High: pre graphics 10, main 22, this change 10. Programs linked after
+  flight start match main (27 field Medium).
+- What PR 45 left behind, against the pre graphics commit dc3141a, Medium (same on High): field draw calls +2, triangles
+  +4.7%; yard draw calls -33%, triangles +117% (the canopy clumps: free in draw calls, not in vertex work); town draw
+  calls -3%, triangles +20%. These are geometry costs the flag does not remove. Whether a vertex heavy yard is felt on an
+  integrated GPU is not measurable here.
+- Checks: lint:quality 71, lint:frame 34, lint:preload, check:fresh 18, all pass. Not run: verify, shots, a browser on
+  a GPU. Fly it: Medium and High should look like Low's shading with the new models; the Input to screen reading on the
+  laptop is the check.
+## 2026-10-09: shadow cost, a Shadows row and a map redrawn one frame in three
+
+- Ask: the owner said the shadow rendering is slow and looks bad, after two board tickets (bug-baefef1b, bug-09e28ecf). No approval is recorded for main: this is a draft PR. It does not change the physics model, the module ABI or the build.
+- What looks bad: on Medium and High the shadow edge stairsteps in stills, but the steps follow the pen hatching clipped at the shadow edge, not the map (High at 7 cm a texel shows the same). That belongs to the thread easing the ink and hatching, so it is not touched here.
+- What it costs, Medium, GL counts on c87488d: the shadow pass is 90 draws in the field, 52 in the yard, 76 in the town, redrawn every frame. Headless time per drawn frame (SwiftShader, ratios only, two rounds): shadows off is 10 to 12 percent faster in the yard, field and town, so the lookup in every lit pixel is the bulk and the pass itself is small. A cheaper filter can therefore save only a part of that 10 percent, so none was changed.
+- Shadows row (Settings, under Graphics): On or Off, any preset, rebuilds the world like a preset change; Low shows it as off and ignores it. `shadowsOff` in the settings, `withoutShadows` and `qualityOf` in `quality.js`, `view.shadowsOff` in main.js. Proved: toggling off then on rebuilds twice with no loop and no console errors, and the shadow pass draws 0 with it off.
+- Redraw rate: Medium redraws the map at most every third frame, or sooner when the focus has moved a twenty fifth of the box (`src/render/shadowrate.js`, `shadowEvery: 3`). High is unchanged. Parked, the pass runs 1 frame in 3 in all three worlds. Headless time against main: within noise in the yard and field, 3 percent in the town; the saving is draw submission and vertex work, which this container cannot see. Cost to look for: a car's shadow steps at 20 Hz, and the far edge of the shadow box trails by a few metres.
+- Checks run: `lint:quality` 71 of 71, `lint:preload`. Not run: `verify`, `lint:shell`, a flight, WebGL 1.
+## 2026-10-09: the Gem look, a polygon style that costs the flight loop nothing
+
+- Ask: after the comic layer went off (board tickets bug-09e28ecf, bug-baefef1b), the owner asked for a rethought art style polished but not hindering performance, then said "go with gem as recommended" and "merge intelligently with performanceGraphics" (2026-10-09 01:47Z). Pictures and costs of the three directions considered: the Zero Cost Art Style page; files in the project's art-style folder. No physics, ABI or build change, so no approval beyond that.
+- What changed: `src/render/look.js` (new) runs once per built world from `loadMap` in main.js: per vertex tone and hue variation, a darkening at a wall's foot and under overhangs and a lift on upward faces, written only into vertex colours a mesh already has; a fuller sky and fog colour, the fog a fifth toward the sky's horizon; a warmer key light. Fog distances, material colours and gates are not touched. `celmat.js` ramp goes from four bands to seven (the warm terminator band is kept so a half shaded face reads tan). The clouds lose their ink rim (scene.js field clouds, comicsky.js heaps) and the heaps take flat normals.
+- Latency: no change by construction. Draw calls (field 197, yard 113, town 362), triangles, passes and linked programs (22, 25, 40) measured identical to the branch before this commit; nothing runs per frame; no new texture read or shader arithmetic; the cloud shaders get smaller. These are proxies, there is no GPU here. One cost is at load: the tone pass is a single walk over vertex colours (about 1.3 M vertices in the town); its time in the production code was not measured, the prototype took 0.6 s in this container.
+- Not included on purpose: a pixel grain (one texture read a pixel, about +3.5% estimated pixel time on the toon programs by the Renoir compiler), colour on plain materials, the town's vendored ramps (left as they were).
+- Checks run: lint:preload, lint:quality 71 of 71, lint:frame 34, lint:boot 9. Shots of field, yard and town before and after looked as intended. Not run: verify, the sky and gate value ladder checks (none found by name in scripts), a flight, WebGL 1. Fly it: the picture should look like today with cleaner colour and no ink line on clouds; the Input to screen reading and gate legibility are the checks.
+
+## 2026-10-09: review of PerformanceGraphics against main, and six fixes
+
+- Ask: the owner, 2026-10-09 01:23Z, asked for a review of the PerformanceGraphics branch, improvements and bug fixes where they make sense, a call on whether it is good for production, and the metrics it improves over main. Reviewed as one change against main c87488d: the comic layer compiled out, the eased pen, the Shadows row and Medium's redraw rate, and the Gem look (fa161d5), which landed during the review and was merged in. No physics model, module ABI or build change, so nothing here needed the owner's approval before it was made; going to main is his call. The report with every table is in the project folder, `perf-review/report.md`.
+- Fixed:
+  - The Gem tone pass darkened the craft with every world built. The craft outlives every world and every map adds it to its scene, so `applyLook` toned its vertex colours again each time: the sum of its colours fell by about a tenth a world, and after six worlds it was 8847 against main's 17555. `applyLook` now takes the craft as a root to keep and marks a geometry once toned. After: 17555 on every world, main's colours.
+  - The Gem look moved the fog's colour and not the yard's dome below the horizon, which paints the fog colour from its own uniform (`uFog`, `src/maps/built/looks.js`): from altitude a grey band lay over the pink fogged land. Shot from 120 m over the yard on Medium, dome and land: main (231, 228, 223) and (227, 224, 219); before the fix (231, 228, 223) and (231, 222, 216); after (236, 227, 221) and (231, 222, 216), one hue as on main.
+  - Town and yard shadow proxies drew in the colour pass on every frame, colour and depth writes off, for no pixel: 11 draws and 65 k triangles a frame in the town on Medium, 9 draws and 61 k in the yard, a third of the yard's colour pass triangles. They are now shown only on a frame that redraws the shadow map. High redraws every frame and is unchanged.
+  - The field's outline prepass consumed Medium's pending shadow redraw: Three draws a pending map in the first render call of a frame with that call's layer mask, so the map was drawn from layer 0 alone. No caster is on another layer today, so nothing on screen changed; a caster added on one would have lost its shadow on Medium only. The flag is held over the prepass.
+  - A bug report's perf probe carries the Shadows row (`shadowsOff`), inside the existing perf key.
+  - A comment: the cloud heaps are not faceted, as the comment and the Gem entry above said. The puffs are indexed, so `computeVertexNormals` averages them. The code is unchanged, because the pictures the look was picked from showed what it does.
+- Measured, main against the branch with these fixes, headless Chromium on SwiftShader at 640 by 360. Counts are exact and do not depend on the size; milliseconds are this CPU and ratios only; there is no GPU here. Parked at one spawn view for 30 drawn frames; two rounds on Medium, three on field and town Low, one otherwise.
+  - Medium, draws a frame (average; a frame that redraws the map is main's count, never more): field 299 to 239, town 456 to 398, yard 208 to 167, room 209 to 209. Triangles: field 1.02 M to 0.90 M, town 1.33 M to 1.14 M, yard 322 k to 179 k. Three's CPU per frame: field 4.21 to 3.10 ms, town 7.17 to 6.09, yard 3.06 to 2.10, room 2.31 to 1.97. SwiftShader per frame: field 272 to 186 ms, town 1007 to 442, yard 419 to 221, room 117 to 68.
+  - High: the same draws and triangles. Three's CPU: field 4.39 to 3.67 ms, town 8.44 to 7.42, yard 2.90 to 2.92. SwiftShader per frame: field 330 to 304 ms, town 1181 to 598, yard 524 to 281.
+  - Low: the same draws, triangles and programs. One field run read 19 percent more CPU on the branch; two more rounds each put it within noise (field 1.57 against 1.66 ms, runs from 1.46 to 1.84 on both builds; town 4.63 against 4.83; SwiftShader 90 against 92 and 239 against 241), and no code that runs per frame on Low differs.
+  - AMD Renoir compiler (RADV, no GPU), median lit program: Medium and High now compile Low's programs. Field Medium 1084 to 291 instructions, 48 to 24 registers, 5 to 10 waves a SIMD; town Medium 950 to 148; yard Medium 1085 to 158; yard High 1834 to 158 and 64 to 24 registers.
+  - Programs linked in flight: 0 on both everywhere. Programs at ready equal, or one fewer in the yard. Fragment source compiled at boot 25 to 31 percent smaller on Medium and High; world ready 0.5 to 1.4 s sooner.
+  - Shadows Off on the branch, Medium: SwiftShader per frame field 186 to 170 ms, town 442 to 344, yard 221 to 174.
+  - Against the pre comic build dc3141a on Medium: SwiftShader per frame field 217 to 186 ms, town 458 to 442, yard 223 to 221; draws 326, 496 and 371 to 239, 398 and 167; triangles field 967 k to 895 k, town 1.09 M to 1.14 M, yard 148 k to 179 k (322 k on a frame that redraws the map: PR 45's models and clumps).
+- Not measured: GPU time on a real GPU and the input to screen time, which only the owner's machine shows; the Gem tone pass on a weak laptop (51 to 92 ms here in the town, about 1 ms in the yard and 3.5 ms in the field, once a world, inside the loading screen); a scripted flight in the whoop room (the rig's flight does not start one on main or the branch, so the room is parked numbers only).
+- Judgement calls: Medium's map redrawn one frame in three is kept. A frame that redraws costs what main's every frame costs, so no frame is dearer than main's; the craft is hidden in the FPV view, so its own shadow is never drawn in flight on either build; what steps is a car's shadow and the far edge of the box. In flight the map redraws on 35 percent of frames in the field, 51 in the town and 64 in the yard, so the flying saving is smaller than the parked one. The canopy clumps on Medium are kept: turning them off saved 10 percent of the yard's triangles and 5 percent of the town's, with no time difference visible here (yard 231 against 221 ms, town 453 against 442, one round); it is `leafClumps: false` in Medium's city block if a laptop shows the yard vertex bound. The pen constants other than `INK_WEIGHT` are dead while `COMIC_SHADING` is false and were left for the style rethink. The board's thumbnails and share cards (`src/share/orbit.js`) are built without the Gem look; offered to the owner rather than changed, because it changes a picture he will see.
+- What went wrong: a `git checkout <ref> --` with no path detached the review checkout at fa161d5 for a minute; nothing was lost (the tree was clean and the branch untouched). The first shots of the yard's horizon had the title menu over them and were retaken with every element but the canvas hidden. The first Low round read high on the branch and needed two more rounds to show it was noise.
+- Checks run on this head: `lint:quality` 71 of 71, `lint:frame` 34, `lint:preload`, `check:fresh` 18 of 18, four WebGL 1 boots and flights (field Medium with shadows on and off, yard and town Medium) with no errors, `lint:shell` (fails the same 7 ways on main c87488d in this container; the branch adds 45 px to the pilot tab's overflow, which is the new Shadows row), the craft colour check over six world builds (on 2a4aebd), the yard horizon shots, the counting rig over 42 runs and RADV compiles of every captured program. Not run: `npm run verify` (no physics, plant, ABI or build change), `shots.js`, a flight on real hardware.
+
+## 2026-10-09: PerformanceGraphics to main
+
+- Approval: the owner wrote "push the performancegraphics branch to main i'll test in prod" in the review thread at 03:55:10Z on 2026-10-09, after the review's verdict above, and tapped "Fly it" on the review's card ("Push PerformanceGraphics to main, and how should it be checked?") at 03:56:16Z. It covers PerformanceGraphics as it stood at d32eb3a plus this note, fast forwarded onto main (c87488d). He chose to test it in production himself, which is the check scale's "fly it"; nothing beyond what the review entry records was run for the push. Nothing about the physics model's shape, the module ABI or the build changed on the branch.
+- What it carries: the eased pen (0d562f6), the comic layer's per pixel work off on every preset (f48eeab, PR 54), the Shadows row and Medium's map redrawn at most every third frame (0730f5e, PR 55), the Gem look (fa161d5), and the review's fixes (a5d3c00, 454f1ca, f327bde, 2a4aebd, dc164e0, 0a9477d). Draft PRs 53, 54 and 55 are all inside it.
+- If the live build is wrong, each piece reverts alone, its later commits first: Gem is fa161d5 with 2a4aebd and dc164e0 on top; the Shadows row and the redraw rate are 0730f5e with a5d3c00, 454f1ca and f327bde on top; the comic layer off is f48eeab; the eased pen is 0d562f6.
+
+## 2026-10-09: the default five inch, prop wash halved, less bounce back, and a lower belly
+
+- Ask: the owner, 2026-10-09 04:11Z: "lets fix the 2 flight charactist in the default tune a user gets, reduce prop wash by 50% its a bit much, reduce bounce back after stop and make the quad a bit smaller, i should be able to get closer to the ground beofre i hit it". Board ticket bug-d9602f2e ("floppy, bounces back after a stop") is the same complaint. Both airframes fly simId 0, so every change here reaches the whoop as well. On draft PR, not on main; the plant golden rewrite and the two re-aims below are the owner's call.
+- Prop wash: `k_propwash` 0.15 to 0.075 in `src/native/plant.c`, the five inch only. Same window, half the strength.
+- Bounce back: `iterm_limit` 400 to 200 in `configs/betaflight-default.diff` (item 5 of its header). `npm run feel:response`, Arcade, ideal pad, where the controller is all there is: full stick yaw turn swing back 6.98 to 4.11 degrees (41 to 23 deg/s), three quarter 4.24 to 4.11; roll and pitch unchanged; yaw run on past centre 21.7 to 24.5 degrees. With the halved wash, Expert on the ideal pad, before and after: full roll stop back 0.37 to 0.36 degrees and settle 210 to 52 ms; three quarter roll settle 842 to 76 ms; full pitch settle 229 to 66 ms; three quarter pitch settle 1019 to 414 ms; full yaw back 7.29 to 4.08. Half stick stops still take about 1.46 s to settle in Expert, which is the craft falling through what wash is left. On the 180 Hz pad a half stick roll stop comes back 0.60 to 0.75 degrees.
+- Not taken, the latency rule: `iterm_relax_cutoff` 8 (from 10) would take the full stick roll and pitch bounce from 0.36 to 0.15 and 0.53 to 0.23 degrees, and it makes the rate trail a 2 Hz stick sine 0.1 ms further on every pad (6.8 to 6.9 ms on the ideal pad). The flick (10, 50, 90 percent) does not move. Offered to the owner. 7 and 5 were also measured: 5 makes the 180 Hz half stick stops 0.84 and 1.44 degrees.
+- Smaller quad: the plant's contact hull `hull_hz_down` 0.045 to 0.033, and every copy of it (`configs/airframes.js` vHalfDown on both airframes, `src/main.js` SPAWN_ALT, `src/game/collide.js`, `sim.c`'s seeded planes, and the checks that type it). The drawn strap is 30 mm under the CG, so the parked five inch floated 15 mm and a low pass met the grass 15 mm before the drawn quad; now 3 mm, and the whoop's drawn ducts sit on the floor to 0.1 mm. CG height at first touch: level 45 to 33 mm, pitched 40 degrees 95 to 86 mm. `scripts/craft-check.js` pins tightened to 3.0 and 0.1 mm. The drawn quad is the same size.
+- What went wrong: the hull's width was cut first too, 0.094 to 0.085, which would have given 80 mm at 40 degrees. It broke the wall: at 3 m/s on all four yaws the craft no longer turned back off the face (check:wall), a side arrival locked attitude (contact:selftest), and with the wash halved one props-check dive drifted out of its bore. Width put back; those all pass.
+- Checks on the final module (cff8160c8791ede4), main run beside it in a worktree: contact:selftest, check:world, check:world-town, check:crash, check:props, check:room, check:takeoff, whoop:gates, craft-check 20 of 20, lint:presets 4 of 4, lint:fc 33 of 33 pass, all as on main. `npm run verify` 16 of 18: world-golden (34 of 36 runs differ, expected for a plant change) and crash-pacing. Failing and waiting on the owner:
+  - check:plant, 14 of the golden scenarios differ, as expected for a plant change. Rewriting `tests/goldens/plant.json` and `world.json` is the owner's call.
+  - check:crash-pacing, 2 lines: the "on the edge" scenario no longer sits on its edge (no pacing reaches a verdict) and a perch now ends a frame before the verdict. It was aimed at the 45 mm belly; at 0.038 it passes and at 0.035 it does not. Re-aiming it is the owner's call, as on 2026-10-04.
+  - check:wall, 1 line: the gentle rebound band reads 0.194 to 0.285 m/s against its 0.20 to 0.30 (main: 0.220 to 0.287). The threshold is not changed.
+- Latency: none added. The tune change moves no flick or sine number; the plant changes are constants inside the existing step. Proxy only, no flight on real hardware.
+- Approval: the owner wrote "push to main   i'll test now" in the thread at 05:29:08Z on 2026-10-09, after the reply and card listing the plant and world golden rewrite, the crash-pacing re-aim and the wall band. It covers this change as on draft PR 56 (c9b4ae3) and the golden rewrite. Re-recorded on module cff8160c8791ede4: `tests/goldens/plant.json` (14 of the scenarios moved: free air acro, the knobs and the sagging pack through the wash; every grass, slope, stand, deck, wall and surface scenario through the lower belly) and `tests/goldens/world.json` (34 of 36 runs); both pass and their `exercises` tests still hold. Not done at push time: the crash-pacing re-aim (follows as its own commit) and the wall band, which stays one line red until the owner says otherwise. He chose to fly it live as the check.
+- Crash-pacing re-aimed after the push, under the same word (the card offered it beside the push): two ground scenarios swept on approach speed only, the stutter one 7.40 to 7.45 and the side touches one 6.90 to 7.08, each keeping its verdict from main (crash at 2998 ms after a bump; no crash). `check:crash-pacing` all passed. The wall band (0.194 against 0.20) is still the one red line, left for the owner.
+- Flown: the owner flew the live build carrying this change and wrote "flys good" at 05:40:56Z on 2026-10-09. A pilot's word, not a check. Still open: check:wall's gentle rebound band (0.194 against 0.20) and the iterm_relax_cutoff 8 offer.
+
 ### The whoop export bundle, 2026-10-08 (draft)
 
 - Asked by the owner (14:08Z in the export thread): each track exportable as files with instructions, the pieces

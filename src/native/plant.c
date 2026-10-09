@@ -248,8 +248,13 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
    * which is half of the 0.30 that was too hot, with the wider descent
    * window kept. The ladder so far: 0.60, 0.12, 0.30, 0.08, 0.12, 0.15,
    * every rung a pilot's word, which is what a FEEL constant means.
+   *
+   * 0.075 on 2026-10-09, half of 0.15, on the owner's word: "reduce prop
+   * wash by 50% its a bit much". The window it applies in is unchanged, so
+   * this is the same wash at half the strength. The ladder is now 0.60,
+   * 0.12, 0.30, 0.08, 0.12, 0.15, 0.075.
    */
-  .k_propwash = 0.15,
+  .k_propwash = 0.075,
   .prop_r = 0.0635,
   /*
    * 0.55, up from the 0.43842 the block at 3b derives, on 2026-10-04 and
@@ -307,9 +312,33 @@ const PlantParams PLANT_TABLE[SIM_AIRFRAME_COUNT] = {
   .pos_z = { 0.020, 0.020, 0.020, 0.020 },
   .cant_radial_deg = { 1.4, 0.85, 1.15, 0.6 },
   .cant_tangent_deg = { -0.9, 1.4, 0.6, -1.2 },
+  /*
+   * THE CONTACT HULL, made smaller on 2026-10-09 on the owner's word: "make
+   * the quad a bit smaller, i should be able to get closer to the ground
+   * before i hit it".
+   *
+   * Down was 0.045 and the lowest thing src/render/herocraft.js draws, the
+   * strap under the pack, is 30 mm under the CG, so a parked five inch
+   * floated 15 mm and a low pass met the grass 15 mm before the drawn quad
+   * did. scripts/craft-check.js pinned that gap and said it waited on a
+   * rebuild of this file. 0.033 leaves 3 mm under the strap, and it is also
+   * where the whoop, which flies this plant, has its drawn ducts: 9.6 mm
+   * under a real whoop's CG through the room's factor is 32.9 mm.
+   *
+   * Across stays 0.094, the motor offset plus an arm pad's radius. 0.085
+   * was tried for the same ask and it is what a wall tap is made of: at
+   * 3 m/s on all four yaws the craft stopped turning back off the face
+   * (npm run check:wall) and a side arrival locked its attitude instead of
+   * rolling (contact:selftest). So the width is the drawn arms and only the
+   * belly moved.
+   *
+   * What it buys, CG height at first touch on flat ground: level, 45 mm to
+   * 33; pitched 40 degrees, 95 mm to 86. Up is unchanged: it is the drawn
+   * stack and an inverted craft rests on it.
+   */
   .hull_hx = 0.094,
   .hull_hy = 0.094,
-  .hull_hz_down = 0.045,
+  .hull_hz_down = 0.033,
   .hull_hz_up = 0.038,
   .contact_patch_r = 0.060,
   .contact_arm_max = 0.20,

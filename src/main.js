@@ -46,7 +46,8 @@
 
 import * as THREE from 'three';
 import { buildShell } from './render/shell.js';
-import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, setInkLines } from './render/quality.js';
+import { applyLook } from './render/look.js';
+import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, qualityOf, setInkLines } from './render/quality.js';
 import { readGpuInfo } from './render/gpuinfo.js';
 import { makeAttractCamera } from './render/attract.js';
 import { MangaLayer } from './render/manga.js';
@@ -170,14 +171,14 @@ const WASM_URL = new URL('../dist/sim.wasm', import.meta.url).href;
  * the collision dimensions and the drawn model: these two are a FRAME, and
  * moving one mid lap would move the floor under a craft that is flying.
  */
-let SPAWN_ALT = 0.045;
+let SPAWN_ALT = 0.033;
 /* The craft rests with its underside on the ground, not its centre.
  * Identical to SPAWN_ALT so the parked pose, the spawn state and a landing
  * all agree about where the ground holds the craft. */
-let REST_HEIGHT = 0.045;
+let REST_HEIGHT = 0.033;
 /* One seat for both, so they cannot drift apart. */
 function seatRestHeight(dims) {
-  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.045;
+  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.033;
   SPAWN_ALT = h;
   REST_HEIGHT = h;
 }
@@ -524,6 +525,9 @@ async function loadMap(shell, id, loading, options) {
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
+  /* The Gem look, once a world is built: colours and vertex tones only, nothing per frame (look.js). */
+  applyLook(map.scene, shell.quad);
+  map.shadowsOff = Boolean(options && options.quality && options.quality.shadowsOff);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a
    * document, and the shell has to tell two of them apart: see
@@ -1291,7 +1295,7 @@ export async function boot({ loading, bootStart, mapId }) {
     : {});
   try {
     view = await loadMap(shell, ui.settings.map, loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
       ...worldDocument(ui.settings.map),
@@ -1311,7 +1315,7 @@ export async function boot({ loading, bootStart, mapId }) {
     ui.settings.map = 'custom';
     ui.renderMenu();
     view = await loadMap(shell, 'custom', loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
     });
@@ -1965,7 +1969,13 @@ export async function boot({ loading, bootStart, mapId }) {
       worldReportPtr = sim.e.malloc(11 * 8);
     }
     sim.e.sim_world_report(worldReportPtr);
-    worldReport.set(new Float64Array(sim.e.memory.buffer, worldReportPtr, 11));
+    /* One view, rebuilt only when the module's memory grows and the buffer changes identity: this runs every step. */
+    const buf = sim.e.memory.buffer;
+    if (worldReportView === null || worldReportViewBuf !== buf) {
+      worldReportView = new Float64Array(buf, worldReportPtr, 11);
+      worldReportViewBuf = buf;
+    }
+    worldReport.set(worldReportView);
     return worldReport;
   }
 
@@ -2996,6 +3006,8 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   const worldReport = new Float64Array(11);
   let worldReportPtr = 0;
+  let worldReportView = null;
+  let worldReportViewBuf = null;
   const frameReport = emptyWorldReport(new Float64Array(11));
   const passStats = {
     steps: 0,
@@ -4604,6 +4616,7 @@ export async function boot({ loading, bootStart, mapId }) {
     return view
       && wantId === view.id
       && wantQ === view.graphics
+      && Boolean(ui.settings.shadowsOff) === Boolean(view.shadowsOff)
       && wantedCourseKey(wantId) === loadedCourseKey(view);
   }
 
@@ -4655,6 +4668,7 @@ export async function boot({ loading, bootStart, mapId }) {
     await yieldToPaint();
     const previous = view.id;
     const previousGraphics = view.graphics;
+    const previousShadowsOff = Boolean(view.shadowsOff);
     /*
      * The published map each side of the swap flies, when it is the built
      * world. The failure below names the one that would not build by its
@@ -4673,7 +4687,7 @@ export async function boot({ loading, bootStart, mapId }) {
     applyPixelRatio(shell, wantQ, renderScaleOf(ui.settings));
     try {
       view = await loadMap(shell, wantId, loading, {
-        quality: wantQ,
+        quality: qualityOf(ui.settings),
         renderScale: renderScaleOf(ui.settings),
         hideSponsors: replayClean,
         ...worldDocument(wantId),
@@ -4697,12 +4711,13 @@ export async function boot({ loading, bootStart, mapId }) {
       };
       ui.settings.map = previous;
       ui.settings.graphics = previousGraphics;
+      ui.settings.shadowsOff = previousShadowsOff;
       sharedMap = previousShared;
       ui.setSharedMap(sharedMap);
       try {
         applyPixelRatio(shell, previousGraphics, renderScaleOf(ui.settings));
         view = await loadMap(shell, previous, loading, {
-          quality: previousGraphics,
+          quality: qualityOf(ui.settings),
           renderScale: renderScaleOf(ui.settings),
           hideSponsors: replayClean,
           ...worldDocument(previous),
@@ -11089,6 +11104,9 @@ export async function boot({ loading, bootStart, mapId }) {
     lowLatency: shell.granted.desynchronized,
     opaque: shell.granted.opaque,
     pixelRatio: Math.round(shell.pixelRatio * 100) / 100,
+    /* The Shadows row, because Medium with it Off is a lighter machine than
+     * the report's graphics field says. */
+    shadowsOff: Boolean(ui.settings.shadowsOff),
     /* Auto graphics: its resolution factor now, and whether it moved the
      * preset this session. Null when the pilot fixed a preset by hand. */
     auto: ui.settings.graphicsAuto
@@ -11483,6 +11501,7 @@ export async function boot({ loading, bootStart, mapId }) {
     name: view.name,
     mode: view.mode,
     graphics: view.graphics,
+    shadowsOff: Boolean(view.shadowsOff),
     gates: view.gates.length,
     sponsorsPainted: view.sponsorsPainted ?? 0,
     spawn: { x: startX, y: startY, z: startZ, yaw: startYaw },

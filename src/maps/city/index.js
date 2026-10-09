@@ -77,6 +77,8 @@ import { buildPlaces } from './places/index.js';
 import { drawnBoxes } from './drawn.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { makeShadowRate } from '../../render/shadowrate.js';
+import { warmPrograms } from '../../render/warm.js';
 
 /*
  * Where a run starts. On the road south of the level crossing, facing north
@@ -2656,9 +2658,15 @@ export async function buildMap(shell, onProgress, options) {
   pipeline.setSize(d.w, d.h);
 
   scene.add(shell.quad);
+  /* Every program the street draws, linked now and against the pipeline's
+   * scene target instead of one at a time as the pilot first sees each: see
+   * render/warm.js. */
+  await warmPrograms(renderer, scene, camera, pipeline.rtScene);
   progress(1);
 
   const shadowTarget = new THREE.Vector3();
+  /* How often the map is redrawn: see render/shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, q.shadows ? (q.city.shadowEvery || 1) : 1, half);
   function seat(light, offset, origin) {
     light.target.position.copy(origin);
     light.position.copy(origin).add(offset);
@@ -2695,6 +2703,15 @@ export async function buildMap(shell, onProgress, options) {
     if (!proxyMeshes.length) {
       return;
     }
+    /* A proxy paints nothing, but the colour pass draws it all the same, so
+     * on a frame that does not redraw the shadow map (shadowrate.js) it is a
+     * draw and its triangles for nothing: every proxy is hidden then. */
+    if (!renderer.shadowMap.autoUpdate && !renderer.shadowMap.needsUpdate) {
+      for (let i = 0; i < proxyMeshes.length; i += 1) {
+        proxyMeshes[i].visible = false;
+      }
+      return;
+    }
     proxyEye.copy(target).add(SUN_OFFSET);
     proxyView.lookAt(proxyEye, target, proxyUp);
     proxyView.setPosition(proxyEye);
@@ -2725,6 +2742,7 @@ export async function buildMap(shell, onProgress, options) {
     seat(sun, SUN_OFFSET, shadowTarget);
     seat(fill, FILL_OFFSET, shadowTarget);
     seat(bounce, BOUNCE_OFFSET, shadowTarget);
+    shadowRate.step(shadowTarget);
     /* The dome is centred on the flat origin, so it has to trail the camera
      * or a quad flying 200 m out flies out of its own sky. */
     sky.dome.position.copy(camera.position);

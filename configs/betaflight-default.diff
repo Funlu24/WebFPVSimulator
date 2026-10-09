@@ -1,12 +1,12 @@
 # diff
 # Betaflight / SITL (SITL) 4.5.1
 #
-# THE DEFAULT TUNE: BETAFLIGHT 4.5.1'S FACTORY TUNE, WITH FOUR SETTINGS
+# THE DEFAULT TUNE: BETAFLIGHT 4.5.1'S FACTORY TUNE, WITH FIVE SETTINGS
 # CHANGED.
 #
 # Every PID and filter value below is Betaflight 4.5.1's own factory
 # default, which is what a freshly flashed 5 inch quad flies before anyone
-# touches it, except the four under WHAT IS NOT FACTORY. Since Karate race
+# touches it, except the five under WHAT IS NOT FACTORY. Since Karate race
 # and Precision were removed it is the only tune that ships.
 #
 # Until 2026-09-28 there were no exceptions, and the reason for that still
@@ -91,16 +91,42 @@
 #    as the three quarter row, a 390 deg/s turn, shows, and so would
 #    iterm_limit 200 at full stick; neither was taken.
 #
-# What the four leave alone: propwash, where a throttle chop and punch
+# 5. iterm_limit 200 (factory 400), on 2026-10-09: the owner asked for
+#    less bounce back after a stop again ("reduce bounce back after stop"),
+#    and a board report the same week said "floppy, bounces back after a
+#    stop". It is the yaw half of the bounce: on a whole yaw turn the yaw I
+#    term reached its cap and handed all of it back at the stop, and 200 is
+#    the value item 3 measured and left untaken. npm run feel:response,
+#    Arcade, the ideal pad, where the controller is all there is: a full
+#    stick yaw turn's swing back 6.98 to 4.11 degrees, at a little over half
+#    the speed (41 deg/s to 23), three quarter stick 4.24 to 4.11. Roll and
+#    pitch do not reach 200 on any stop measured and do not move. It costs
+#    the nose a little more run on past a centred yaw stick, 21.7 degrees to
+#    24.5 on a full turn, and nothing on the flick or the 2 Hz sine.
+#
+#    Taken in the same change and in the plant, not here: propwash halved
+#    (src/native/plant.c, k_propwash). Most of what a pilot reads as a
+#    bounce in Expert is the wash the craft falls through after a stop, so
+#    the two together, Expert on the ideal pad, settle a full stick roll in
+#    52 ms where it took 210, three quarter roll in 76 where it took 842,
+#    and three quarter pitch in 414 where it took 1019.
+#
+#    NOT TAKEN, because the latency rule says it is the owner's word:
+#    iterm_relax_cutoff 8 (item 2's 10). It halves the full stick roll and
+#    pitch bounce again, 0.36 to 0.15 degrees and 0.53 to 0.23, and it
+#    makes the roll rate trail a 2 Hz stick sine 0.1 ms further on every
+#    pad. PROGRESS.md has the tables.
+#
+# What the first four leave alone: propwash, where a throttle chop and punch
 # reads the same to a hundredth of a deg/s; angle mode, which still levels
 # without passing level, 19 to 27 ms sooner; and the flying weights from
 # 0.97 to 2.27 g and the micro's 2.03, where the flick is 5 ms quicker and
 # a full stick flip comes back a quarter or less of what factory's did.
 #
-# To fly Betaflight's factory tune exactly, put seven values back on the
+# To fly Betaflight's factory tune exactly, put eight values back on the
 # Flight controller screen: simplified_feedforward_gain 100, f_roll 120,
-# f_pitch 125, f_yaw 120, iterm_relax RP, iterm_relax_cutoff 15 and
-# pidsum_limit_yaw 400.
+# f_pitch 125, f_yaw 120, iterm_relax RP, iterm_relax_cutoff 15,
+# iterm_limit 400 and pidsum_limit_yaw 400.
 #
 # Provenance: every other value is the one in
 # betaflight/firmware-presets presets/4.5/tune/defaults.txt and
@@ -175,12 +201,12 @@ set acc_limit_yaw = 0
 set acc_limit = 0
 
 set iterm_rotation = OFF
-# Not factory (RP and 15): the header, items 2 and 3.
+# Not factory (RP, 15 and 400): the header, items 2, 3 and 5.
 set iterm_relax = RPY_INC
 set iterm_relax_type = SETPOINT
 set iterm_relax_cutoff = 10
 set iterm_windup = 85
-set iterm_limit = 400
+set iterm_limit = 200
 set pidsum_limit = 500
 
 # 500, not the factory 400. 400 is 40 percent of the mixer's yaw range, and

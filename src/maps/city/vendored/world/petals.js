@@ -78,20 +78,32 @@ export function buildPetals(ctx) {
     p.phase = rng.range(0, 10);
   }
 
+  /* Half the field a step, each half with the time it has waited. A petal that moves every second step at the
+   * town's animation rate is a petal that drifts in two step strides, which a falling card cannot show, and the
+   * sines, the quaternion and the matrix compose are most of what this costs the main thread. */
+  const waited = [0, 0];
+  let half = 0;
+
   function update(dt, gust, gustDir) {
     t += dt;
+    waited[0] += dt;
+    waited[1] += dt;
+    const first = half;
+    half ^= 1;
+    const step = waited[first];
+    waited[first] = 0;
     const wind = gust * 5.4 * gustDir;
     const lift = gust * 1.5;
-    for (let i = 0; i < P.length; i++) {
+    for (let i = first; i < P.length; i += 2) {
       const p = P[i];
       // large slow wave + small fast flutter: reads as air, not noise
       const s = Math.sin(t * p.swayFreq + p.phase);
       const s2 = Math.sin(t * p.swayFreq * 2.7 + p.phase * 1.7);
-      p.y -= (p.fall + gust * 0.4) * dt;
-      p.x += (p.swayAmp * s * 0.55 + p.drift + wind * 0.24) * dt;
-      p.z += (p.swayAmp * s2 * 0.32 + wind * 0.05) * dt;
-      p.y += lift * Math.max(0, 1 - Math.abs(p.z) / 8) * dt;
-      p.angle += p.spinRate * dt * (1 + gust);
+      p.y -= (p.fall + gust * 0.4) * step;
+      p.x += (p.swayAmp * s * 0.55 + p.drift + wind * 0.24) * step;
+      p.z += (p.swayAmp * s2 * 0.32 + wind * 0.05) * step;
+      p.y += lift * Math.max(0, 1 - Math.abs(p.z) / 8) * step;
+      p.angle += p.spinRate * step * (1 + gust);
 
       const cx = centerX(p.z);
       if (p.x < cx - HALF) p.x = cx + HALF;
