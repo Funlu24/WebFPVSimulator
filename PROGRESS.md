@@ -69086,3 +69086,9 @@ newer extra axes mapping, is not warned), on iOS for any pad.
 - `node --check src/ui/ui.js` pass. `padTroubleItem` extracted and called with stub info: android with four axes and ios
   return the new row, android without `fourAxes` and windows do not, a keyboard returns null.
 - Not run: `lint:shell`, `lint:input`, `shots`, `verify`. Nothing renders this row in a browser yet.
+
+## 2026-10-09 | latency | Pad warning row: its strings are built once
+
+- Latency audit under the owner's rule of 2026-10-09. `setPadInfo` runs `padTroubleItem` twice a frame, so the new
+  phone branch built a long string each time on phones. The label and note strings are now module constants. No other
+  change. Checked: `node --check` only; not rendered in a browser.

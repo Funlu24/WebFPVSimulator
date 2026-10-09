@@ -2732,6 +2732,16 @@ function recordSentence(s, trackName) {
  * complaining about. A banner nobody can focus is a banner a radio pilot
  * cannot act on, which would be the same joke twice.
  */
+const PHONE_LABEL_IOS = 'Radios may not work on an iPhone or iPad';
+const PHONE_LABEL_ANDROID = 'Many radios do not work on a phone';
+const PHONE_NOTE_TAIL = ' Nothing in this page can bring a dropped stick back. On a phone, fly with the touch'
+  + ' sticks. To fly with a radio, use a computer. Stick help shows which sticks arrive.';
+const PHONE_NOTE_IOS = 'An iPhone or iPad often refuses a radio, saying it needs too much power, and Safari'
+  + ` hides many that do connect.${PHONE_NOTE_TAIL}`;
+const PHONE_NOTE_ANDROID = 'Chrome on Android passes on only four of a radio\'s axes and drops the rest, so a stick,'
+  + ' most often yaw, may never reach the sim. A DJI controller and a Radiomaster GX12 both'
+  + ` lost yaw on a Pixel 9.${PHONE_NOTE_TAIL}`;
+
 function padTroubleItem(info, platform = 'other') {
   if (!info || !info.count || info.using === 'Keyboard') {
     return null;
@@ -2753,19 +2763,14 @@ function padTroubleItem(info, platform = 'other') {
    * sticks are the way to fly on a phone and the note says so.
    */
   if ((platform === 'android' && info.fourAxes) || platform === 'ios') {
+    /* The strings are built once, at load: setPadInfo runs this twice a frame, and the row's objects are
+     * stamped in place by stampIds so each call still hands back a fresh one. */
     const ios = platform === 'ios';
     return {
-      label: ios ? 'Radios may not work on an iPhone or iPad' : 'Many radios do not work on a phone',
+      label: ios ? PHONE_LABEL_IOS : PHONE_LABEL_ANDROID,
       action: 'stickhelp',
       rowClass: 'row-warn',
-      note: (ios
-        ? 'An iPhone or iPad often refuses a radio, saying it needs too much power, and Safari'
-          + ' hides many that do connect.'
-        : 'Chrome on Android passes on only four of a radio\'s axes and drops the rest, so a stick,'
-          + ' most often yaw, may never reach the sim. A DJI controller and a Radiomaster GX12 both'
-          + ' lost yaw on a Pixel 9.')
-        + ' Nothing in this page can bring a dropped stick back. On a phone, fly with the touch'
-        + ' sticks. To fly with a radio, use a computer. Stick help shows which sticks arrive.',
+      note: ios ? PHONE_NOTE_IOS : PHONE_NOTE_ANDROID,
     };
   }
   if (!info.buttons && !info.hasSelect) {
