@@ -2795,8 +2795,9 @@ function suiteClipCatch() {
    *
    * IT IS THE FIVE INCH'S REACH NOW, and the asymmetry the original defect
    * was about is still the thing being asserted. The whoop flies the five
-   * inch's plant, so its down extent is that plant's 45 mm, the height it
-   * actually rests at; its UP extent is the drawn canopy through the room's
+   * inch's plant, so its down extent is that plant's hull_hz_down, read
+   * from the five inch's table so it follows the plant (45 mm until
+   * 2026-10-09, 33 mm since), the height it actually rests at; its UP extent is the drawn canopy through the room's
    * factor, 61.7 mm, because nothing rests a craft on its canopy and what
    * reads that number is a collider deciding whether the top of the aircraft
    * met a bar. So the two are still different, still in the right order, and
@@ -2806,8 +2807,9 @@ function suiteClipCatch() {
   const whoopRig = reachRig();
   const whoopDown = firstTouch(whoopRig, 0.30, 0.0, false);
   const whoopUp = 1 - firstTouch(whoopRig, 0.70, 1.0, false);
-  check('a whoop rests on the plant\'s 45 mm, which is what it settles at',
-    Math.abs(whoopDown - 0.045) < 1e-3, whoopDown);
+  const plantDown = airframeById('5inch').dims.vHalfDown;
+  check(`a whoop rests on the plant's ${(plantDown * 1000).toFixed(0)} mm, which is what it settles at`,
+    Math.abs(whoopDown - plantDown) < 1e-3, whoopDown);
   check('and it still does not carry its canopy height under it',
     whoopUp > whoopDown, `${whoopUp} above, ${whoopDown} below`);
   setCraftAirframe(fiveBefore);
