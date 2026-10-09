@@ -45,7 +45,7 @@ import {
   celMaterial, outlineHull, updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
-import { setComicQuality } from './comic.js';
+import { setComicQuality, COMIC_SHADING } from './comic.js';
 import { CIRRUS_GLSL, cirrusUniforms } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
@@ -4818,7 +4818,7 @@ function skyDome(q = null) {
    * until the sweep after graphics pass 25, which found Low paying, in a
    * software renderer, for comic code it never drew (src/render/comic.js,
    * chunkOn), and a preset change builds the dome again anyway. */
-  const cirrus = !(q && q.id === 'low');
+  const cirrus = COMIC_SHADING && !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
