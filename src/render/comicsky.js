@@ -214,10 +214,7 @@ const FRAGMENT = /* glsl */ `
     float k = dot(n, normalize(vec3(0.0, 1.0, 0.0) + uSun * 0.9));
     vec3 col = mix(uBelly, uBody, smoothstep(-0.38, -0.32, k));
     col = mix(col, uCrown, smoothstep(0.20, 0.26, k));
-    float facing = abs(dot(normalize(vNView), normalize(vView)));
-    float rim = 1.0 - smoothstep(0.16, 0.26, facing);
-    rim *= 1.0 - smoothstep(0.8, 0.95, -n.y);
-    col = mix(col, uInk, rim * 0.85);
+    /* No ink rim: it clashed with the polygon world (bug-09e28ecf). */
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -394,6 +391,10 @@ function cumulus(group) {
   }
   parts.sort((a, b) => b.d - a.d);
   const geo = mergeGeometries(parts.map((p) => p.geo));
+  if (geo) {
+    /* Flat normals, so a heap is cut from facets like everything else (the Gem look). */
+    geo.computeVertexNormals();
+  }
   for (const p of parts) {
     p.geo.dispose();
   }
