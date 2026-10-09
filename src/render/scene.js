@@ -6915,19 +6915,11 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * the most expensive single thing in this function on a cold cache and has
    * no inside to report from. */
   await report(0.86);
-  /* compileAsync, not compile: compile only queues the links, and the first frame then blocks on every one of them
-   * (three checks the link status on first use). compileAsync polls the driver's parallel compile
-   * (KHR_parallel_shader_compile) between timer ticks, so the loading bar keeps moving, the links finish on the
-   * driver's threads, and the first frame finds programs that are ready. Without the extension it falls back to
-   * waiting a beat and then polling, which costs nothing the synchronous path did not. */
-  const parallelCompile = renderer.extensions.has('KHR_parallel_shader_compile');
-  if (parallelCompile) {
-    await renderer.compileAsync(scene, camera);
-  } else {
-    /* three logs a warning every time compileAsync is asked without the extension, and the page's console must stay
-     * clean (verify's world-scale reads it), so a driver without it takes the synchronous path main used. */
-    renderer.compile(scene, camera);
-  }
+  /* Not made here any more: the argument above stands, but a compile has to run against the target the frames are
+   * drawn into, and that is the composer's, which is built from this scene after it. Made here with nothing bound it
+   * linked the sRGB programs, which nothing draws, and left the ones that are drawn to the first frame.
+   * attachComposer (maps/field.js) makes it, through render/warm.js, before buildMap returns, so the world is still
+   * compiled when it loads. */
   progress(1);
 
   /*
