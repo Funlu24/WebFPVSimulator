@@ -419,6 +419,25 @@ export function mergeRigs(rigs) {
  * merge itself uses, which is why findAnimated runs first.
  */
 
+/*
+ * THE KEY A LOOK IS READ BY IS NOT THE PROGRAM'S. The cel factory keys its
+ * shader program on the shadow tint, and render/comic.js now folds every
+ * tint into one key so they share a program (programKey there says why).
+ * Two materials that differ only in tint are still two looks, and merging
+ * them would paint one with the other's shadow side. So the look reads the
+ * caller's own key, which still names the tint, as well as the key three
+ * will use. Where comic.js is not loaded there is no unfolded key and this
+ * is exactly what it was.
+ */
+function lookKey(m) {
+  const key = m.customProgramCacheKey;
+  if (typeof key !== 'function') {
+    return '-';
+  }
+  const own = key.comicUserKey;
+  return `${typeof own === 'function' ? own.call(m) : ''}#${key.call(m)}`;
+}
+
 function materialLook(m) {
   const ownCompile = Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile');
   if (m.isShaderMaterial || m.isRawShaderMaterial) {
@@ -442,8 +461,9 @@ function materialLook(m) {
     m.premultipliedAlpha ? 1 : 0, m.polygonOffset ? 1 : 0,
     m.polygonOffsetFactor ?? 0, m.polygonOffsetUnits ?? 0,
     m.visible ? 1 : 0, m.colorWrite ? 1 : 0, m.shadowSide ?? '-',
-    /* Three's own answer to "do these need separate programs". */
-    typeof m.customProgramCacheKey === 'function' ? m.customProgramCacheKey() : '-',
+    /* Three's own answer to "do these need separate programs", and the
+     * caller's own key beside it: see lookKey. */
+    lookKey(m),
   ].join('|');
 }
 
@@ -584,7 +604,7 @@ function lookWithoutColour(m) {
     m.premultipliedAlpha ? 1 : 0, m.polygonOffset ? 1 : 0,
     m.polygonOffsetFactor ?? 0, m.polygonOffsetUnits ?? 0,
     m.colorWrite ? 1 : 0, m.shadowSide ?? '-',
-    typeof m.customProgramCacheKey === 'function' ? m.customProgramCacheKey() : '-',
+    lookKey(m),
   ].join('|');
 }
 
@@ -674,8 +694,9 @@ export function bakeColourToVertices(root, animated) {
        * across the whole frame rather than as anything you could point at.
        *
        * Sharing the closure is correct rather than merely convenient: the
-       * cache key IS the tint, and the key above includes the cache key, so
-       * every material in this group already has the same tint uniform.
+       * caller's own key IS the tint, and the look above includes it (see
+       * lookKey), so every material in this group already has the same tint
+       * uniform.
        */
       white.onBeforeCompile = m.onBeforeCompile;
       if (typeof m.customProgramCacheKey === 'function') {

@@ -98,7 +98,7 @@ const SAMPLE_MS = 250;
 /* Where the plane sits under a level, parked craft: the plant's own
  * hull_hz_down (src/native/plant.c), the same number src/main.js seats
  * REST_HEIGHT from. */
-const REST = { 0: 0.045, 1: 0.010 };
+const REST = { 0: 0.033, 1: 0.010 };
 /* The shell's grass (src/game/collide.js GROUND_MU and GROUND_E). Written
  * out rather than imported, so that retuning the shell's grass shows up here
  * as a deliberate edit and not as a silent golden failure. */

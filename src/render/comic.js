@@ -95,6 +95,31 @@ import { latticeMap, LATTICE_N } from './lattice.js';
  * come in: above litHi a face is lit and clean, below litLo it is in full
  * shadow and carries both sets.
  */
+/*
+ * THE EASED PEN (2026-10-09). Testers called the look busy: bubbly trees,
+ * scribbled shadows. Every strength of the inking and pen work is one named
+ * constant below, set to about half what graphics passes 1 to 25 left it, so
+ * a further tweak is one line. The first number in each comment is what it
+ * was. All are literals in the shader or values of an existing uniform, so
+ * the arithmetic and the program are what they were: no frame time moves.
+ */
+/* How far a hatch stroke darkens what is under it. Was 0.78. */
+export const HATCH_DEPTH = 0.39;
+/* The brush marks on a lit wall, as a share of the colour taken away.
+ * Was 0.11. High only. */
+export const BRUSH_STRENGTH = 0.055;
+/* The leaf clumps' light and shade on a canopy, as a factor on the swing
+ * the detail map gives. Was 1. */
+export const FOLIAGE_CLUMP = 0.5;
+/* The paved ground's stains and their tide line, and the ink in a crack.
+ * Were 0.08, 0.12 and 0.85. */
+export const GRIME_STAIN = 0.04;
+export const GRIME_TIDE = 0.06;
+export const CRACK_INK = 0.42;
+/* The outer line's opacity, as a factor on the line (post.js and the
+ * freestyle ink). Was 1. */
+export const SIL_STRENGTH = 0.5;
+
 export const COMIC = {
   hatch: { value: 1 },
   grit: { value: 1 },
@@ -103,7 +128,7 @@ export const COMIC = {
   litLo: { value: 0.40 },
   litHi: { value: 0.62 },
   /* How far a stroke darkens what is under it, and its width in pixels. */
-  depth: { value: 0.78 },
+  depth: { value: HATCH_DEPTH },
   width: { value: 1.9 },
   /* Spacing between strokes on screen, in pixels. */
   period: { value: 11.0 },
@@ -194,13 +219,24 @@ const LEVELS = {
  * a world (the craft) is compiled again in the next one: see
  * evictSessionRoots in src/render/shell.js.
  */
-let chunkOn = true;
+/*
+ * THE LAYER'S PER PIXEL WORK IS OFF ON EVERY PRESET (owner, 2026-10-09:
+ * latency is the most important thing, and "if it increases latency then we
+ * need to bin it and rethink the art style"). Medium and High took 1.6 to 3.0
+ * times main's frame in the sweep above, and an integrated laptop boots on
+ * Medium. While this is false every preset behaves as Low does: no toon chunk
+ * is compiled, no edge highlight, grime, occlusion or streak cloud, and the
+ * ink is the pass main had. The code stays so the art can be rethought from
+ * it; the geometry (models, clumps) is not behind this flag.
+ */
+export const COMIC_SHADING = false;
+let chunkOn = COMIC_SHADING;
 export function comicChunkOn() {
   return chunkOn;
 }
 
 export function setComicQuality(q, { groundAuto = false, edges = false, grime = false } = {}) {
-  const id = q && q.id ? q.id : 'high';
+  const id = COMIC_SHADING && q && q.id ? q.id : (COMIC_SHADING ? 'high' : 'low');
   chunkOn = id !== 'low';
   /* Every map sets these when it builds, so leaving the town clears them. */
   COMIC.groundAuto.value = groundAuto ? 1 : 0;
@@ -474,8 +510,9 @@ function buildDetailMap() {
 }
 
 /* The heavier pen for the ink passes, as a factor on each pipeline's own
- * line width. 1 is the line before this file. */
-export const INK_WEIGHT = 1.55;
+ * line width. 1 is the line before this file. Was 1.55 until the eased pen
+ * (HATCH_DEPTH, above). */
+export const INK_WEIGHT = 1.25;
 /* The ink itself: near black with a breath of blue, so it reads as ink on
  * paper rather than as a hole in the frame. */
 export const INK_COLOR = 0x0d0f16;
@@ -534,6 +571,37 @@ export const SIL_GLSL = /* glsl */ `
 
 const MARK = '/* COMIC_V1 */';
 const KEY = '|comic1';
+
+/*
+ * ONE PROGRAM FOR EVERY SHADOW TINT.
+ *
+ * The town's cel factory (maps/city/vendored/core/toon.js) keys its program
+ * on the tint's hex, 'celTint_6a5a78', although the tint reaches the shader
+ * as a uniform on each material (uShadowTint, from onBeforeCompile) and the
+ * GLSL it compiles is the same text for every tint. Keyed that way three
+ * compiled and linked the same program again for each tint a building, a
+ * roof or a prop happened to carry: 102 programs for 27 distinct shader
+ * sources in the yard, 128 for about 44 in the town, counted by hashing the
+ * source of every program at link. Each is a compile that blocks the main
+ * thread the first time something wearing that tint is drawn, which is why
+ * the first seconds of a flight and the first turn toward a new street
+ * stalled: the tint a prop wore decided whether its program existed yet.
+ *
+ * The program is the same, the uniform is not. Every material keeps its own
+ * tint (it lives in the uniform object its own hook assigned, and three
+ * uploads a material's uniforms whenever the material changes), so a
+ * shared program draws every tint exactly as its own did. What does tell
+ * two materials apart is a look, not a program, and the town's bake keeps
+ * asking the unfolded key for that (see lookKey in maps/city/bake.js).
+ *
+ * The file cannot be changed at the source: it is vendored and stays
+ * byte identical to its patched self, and this wrapper is where every toon
+ * key already passes.
+ */
+const TINT_KEY = /^celTint_[0-9a-f]{6}$/;
+function programKey(own) {
+  return TINT_KEY.test(own) ? 'celTint' : own;
+}
 
 const VERT_HEAD = /* glsl */ `
 varying vec3 vComicWorld;
@@ -844,7 +912,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     float sfw = max( fwidth( sn ), 1e-5 );
     float stain = smoothstep( 0.71 - sfw, 0.71 + sfw, sn );
     float tide = stain * ( 1.0 - smoothstep( 0.71 + sfw, 0.71 + 3.0 * sfw + 0.01, sn ) );
-    col *= 1.0 - ( stain * 0.08 + tide * 0.12 ) * gm * ( 1.0 - smoothstep( 60.0, 140.0, dist ) );
+    col *= 1.0 - ( stain * ${GRIME_STAIN.toFixed(3)} + tide * ${GRIME_TIDE.toFixed(3)} ) * gm * ( 1.0 - smoothstep( 60.0, 140.0, dist ) );
     /* Compiled in only where it draws (chunkVariant). */
     #ifdef COMIC_CRACKS
     if ( uComicGrime > 1.5 ) {
@@ -877,7 +945,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
          * three quarters across, so a crack at forty metres is still a line. */
         float chalf = max( 0.85, 0.0028 * mix( 0.35, 1.5, comicNoise( gp * 0.8 + 3.9 ) ) / cpix );
         float crack = ( 1.0 - smoothstep( chalf - 0.5, chalf + 0.5, ck.x / cpix ) ) * ck.y * zone;
-        col = mix( col, col * 0.22 + uComicInk * 0.4, crack * 0.85 );
+        col = mix( col, col * 0.22 + uComicInk * 0.4, crack * ${CRACK_INK.toFixed(3)} );
       }
     }
     #endif
@@ -915,7 +983,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
      * which is pale and pink, that turned the feet lavender and the canopy
      * read as marble, so anything not green takes the value alone. */
     float leafy = smoothstep( 0.01, 0.06, col.g - max( col.r, col.b ) );
-    col *= vec3( 1.0 ) + clump * mix( vec3( 0.75 ), vec3( 1.3, 1.05, 0.7 ), leafy );
+    col *= vec3( 1.0 ) + clump * ${FOLIAGE_CLUMP.toFixed(3)} * mix( vec3( 0.75 ), vec3( 1.3, 1.05, 0.7 ), leafy );
   }
 
   if ( uComicHatch > 0.0 ) {
@@ -966,7 +1034,7 @@ vec3 comicShade( vec3 col, vec3 direct, vec3 sunFull, vec3 nView, vec3 viewPos )
     float wall = 1.0 - step( max( wn.x, wn.z ), wn.y );
     if ( uComicBrush > 0.0 && fade * wall > 0.0 ) {
       float bm = comicSet( xb * 0.83 + 3.1, xa * 0.61, fwb * 0.83, 0.0, 1.1, uComicPeriod * 2.2 );
-      col *= 1.0 - bm * 0.11 * fade * square * uComicBrush * ( 1.0 - shade );
+      col *= 1.0 - bm * ${BRUSH_STRENGTH.toFixed(3)} * fade * square * uComicBrush * ( 1.0 - shade );
     }
     #endif
   }
@@ -1206,7 +1274,7 @@ if (!P[INSTALLED]) {
       const key = function comicKey() {
         let k = '';
         if (self._comicUserKey) {
-          k = String(self._comicUserKey.call(self));
+          k = programKey(String(self._comicUserKey.call(self)));
         } else if (self._comicUserHook) {
           k = self._comicUserHook.toString();
         }
@@ -1464,7 +1532,7 @@ ${INK_MAIN_AT}`)
         vec2 tw = t * ${SIL_REACH.toFixed(2)};
         edge = max( edge, comicSilEdge(
           comicSilDir( dc, dl, vUv - vec2( tw.x, 0.0 ) ), comicSilDir( dc, dr, vUv + vec2( tw.x, 0.0 ) ),
-          comicSilDir( dc, du, vUv + vec2( 0.0, tw.y ) ), comicSilDir( dc, dd, vUv - vec2( 0.0, tw.y ) ), 0.0 ) );
+          comicSilDir( dc, du, vUv + vec2( 0.0, tw.y ) ), comicSilDir( dc, dd, vUv - vec2( 0.0, tw.y ) ), 0.0 ) * ${SIL_STRENGTH.toFixed(3)} );
       }
 ${INK_FADE_AT}`);
   mat.needsUpdate = true;

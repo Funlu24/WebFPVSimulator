@@ -183,18 +183,29 @@ export function buildBlossom(ctx, wells = []) {
     p.phase = rng.range(0, 10);
   }
 
+  /* Half the field a step, each half with the time it has waited: see the town's field in
+   * ../vendored/world/petals.js, which this is the same shape as. */
+  const waited = [0, 0];
+  let half = 0;
+
   function update(dt) {
     t += dt;
-    for (let i = 0; i < P.length; i += 1) {
+    waited[0] += dt;
+    waited[1] += dt;
+    const first = half;
+    half ^= 1;
+    const step = waited[first];
+    waited[first] = 0;
+    for (let i = first; i < P.length; i += 2) {
       const p = P[i];
       /* One slow wave and one fast flutter, the same pair the town's field
        * uses: either alone reads as noise, the two together read as air. */
       const s = Math.sin(t * p.swayFreq + p.phase);
       const s2 = Math.sin(t * p.swayFreq * 2.7 + p.phase * 1.7);
-      p.y -= p.fall * dt;
-      p.x += (p.swayAmp * s * 0.55 + p.drift) * dt;
-      p.z += p.swayAmp * s2 * 0.32 * dt;
-      p.angle += p.spinRate * dt;
+      p.y -= p.fall * step;
+      p.x += (p.swayAmp * s * 0.55 + p.drift) * step;
+      p.z += p.swayAmp * s2 * 0.32 * step;
+      p.angle += p.spinRate * step;
 
       if (p.x < AREA.x0) {
         p.x = AREA.x1;

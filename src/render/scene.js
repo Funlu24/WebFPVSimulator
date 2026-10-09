@@ -45,7 +45,7 @@ import {
   celMaterial, outlineHull, updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
-import { setComicQuality } from './comic.js';
+import { setComicQuality, COMIC_SHADING } from './comic.js';
 import { CIRRUS_GLSL, cirrusUniforms } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
@@ -88,6 +88,7 @@ const ROOM_HEIGHT = ROOM_HEIGHT_TRUE * MICRO_SCALE;
 const RACEGOW_PIPE_OD = RACEGOW_PIPE_OD_TRUE * MICRO_SCALE;
 const RACEGOW_GATE_OPENING_MAX = RACEGOW_GATE_OPENING_MAX_TRUE * MICRO_SCALE;
 import { qualityFor } from './quality.js';
+import { makeShadowRate } from './shadowrate.js';
 /* The shape of the built in circuit, shared with the map screen's thumbnail
  * so the picture of the course and the course cannot drift apart. */
 import { circuitPoint, CIRCUIT_POINTS, CIRCUIT_STATIONS } from '../game/circuit.js';
@@ -155,8 +156,12 @@ function makeBaker() {
         b = { material: o.material, hull: o.material.userData.hullColor != null, geos: [] };
         buckets.set(key, b);
       }
-      /* Non-indexed so polyhedra and cylinders merge into one buffer. */
-      const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      /* Every member is indexed, so polyhedra and cylinders merge into one indexed buffer and a shared vertex is
+       * shaded once, not once per triangle corner. A member that arrives without an index is welded first, with a
+       * tolerance far under the smallest prop (the whoop room is built at MICRO_SCALE, and the default 1e-4 could
+       * weld neighbouring vertices of a small one). mergeVertices joins vertices equal in EVERY attribute, so a
+       * flat face keeps its own corners, its normal differs, and the picture is the one the exploded buffer drew. */
+      const geo = o.geometry.index ? o.geometry.clone() : mergeVertices(o.geometry, 1e-6);
       geo.applyMatrix4(o.matrixWorld);
       b.geos.push(geo);
     });
@@ -1349,9 +1354,12 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   return c;
 }
 
-function terrain(height, samples, pitch) {
+function terrain(height, samples, pitch, indoor = false) {
   const size = 1700;
-  const seg = 230;
+  /* Indoors the height field is dead level and the room's boards lie over the terrain to well past its walls, so
+   * nothing of it is ever seen: two cells a side hold the plane, instead of 105,800 triangles drawn in two of the
+   * room's three passes. The mesh stays because the ambient occlusion pass below reads its vertices. */
+  const seg = indoor ? 2 : 230;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -4811,7 +4819,7 @@ function skyDome(q = null) {
    * until the sweep after graphics pass 25, which found Low paying, in a
    * software renderer, for comic code it never drew (src/render/comic.js,
    * chunkOn), and a preset change builds the dome again anyway. */
-  const cirrus = !(q && q.id === 'low');
+  const cirrus = COMIC_SHADING && !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -4916,13 +4924,7 @@ function clouds(rng, count = 26, size = 1) {
          * thing on screen, and a clipped pixel has no hue left either. */
         col *= 0.68;
         col += vec3(1.0, 0.86, 0.60) * pow(max(dot(n, normalize(uSun)), 0.0), 3.0) * 0.08;
-        /* An ink rim round each puff, the comic layer's line on the one
-         * thing the ink pass never reaches: clouds sit past the distance
-         * where it fades out. A slate ink rather than black, because it is
-         * a line seen through a kilometre of air. src/render/comic.js. */
-        float facing = abs(dot(normalize(vNView), normalize(vView)));
-        float rim = 1.0 - smoothstep(0.16, 0.26, facing);
-        col = mix(col, vec3(0.20, 0.24, 0.34), rim * 0.85);
+        /* No ink rim: a line round a cloud clashed with the polygon world (bug-09e28ecf). */
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -5228,6 +5230,8 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   sun.shadow.camera.right = shadowExtent;
   sun.shadow.camera.top = shadowExtent;
   sun.shadow.camera.bottom = -shadowExtent;
+  /* How often the map is redrawn: see shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, sun.castShadow ? (q.field.shadowEvery || 1) : 1, shadowExtent);
   scene.add(sun);
   scene.add(sun.target);
   /* Sky above, warm grass bounce below: this is what keeps shadowed faces
@@ -5265,7 +5269,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const clubPad = clubhousePad(clubSite);
   const height = makeHeightField(samples, pitch, clubPad, indoor);
 
-  const ground = terrain(height, samples, pitch);
+  const ground = terrain(height, samples, pitch, indoor);
   scene.add(ground);
 
   /*
@@ -6908,7 +6912,11 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
    * the most expensive single thing in this function on a cold cache and has
    * no inside to report from. */
   await report(0.86);
-  renderer.compile(scene, camera);
+  /* Not made here any more: the argument above stands, but a compile has to run against the target the frames are
+   * drawn into, and that is the composer's, which is built from this scene after it. Made here with nothing bound it
+   * linked the sRGB programs, which nothing draws, and left the ones that are drawn to the first frame.
+   * attachComposer (maps/field.js) makes it, through render/warm.js, before buildMap returns, so the world is still
+   * compiled when it loads. */
   progress(1);
 
   /*
@@ -6964,6 +6972,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     sun.position.copy(shadowFocus).addScaledVector(keyDir, 130);
     sun.target.position.copy(shadowFocus);
     sun.target.updateMatrixWorld();
+    shadowRate.step(shadowFocus);
   }
 
   function updateWind(t) {
