@@ -77,6 +77,7 @@ import { buildPlaces } from './places/index.js';
 import { drawnBoxes } from './drawn.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { makeShadowRate } from '../../render/shadowrate.js';
 import { warmPrograms } from '../../render/warm.js';
 
 /*
@@ -2664,6 +2665,8 @@ export async function buildMap(shell, onProgress, options) {
   progress(1);
 
   const shadowTarget = new THREE.Vector3();
+  /* How often the map is redrawn: see render/shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, q.shadows ? (q.city.shadowEvery || 1) : 1, half);
   function seat(light, offset, origin) {
     light.target.position.copy(origin);
     light.position.copy(origin).add(offset);
@@ -2730,6 +2733,7 @@ export async function buildMap(shell, onProgress, options) {
     seat(sun, SUN_OFFSET, shadowTarget);
     seat(fill, FILL_OFFSET, shadowTarget);
     seat(bounce, BOUNCE_OFFSET, shadowTarget);
+    shadowRate.step(shadowTarget);
     /* The dome is centred on the flat origin, so it has to trail the camera
      * or a quad flying 200 m out flies out of its own sky. */
     sky.dome.position.copy(camera.position);

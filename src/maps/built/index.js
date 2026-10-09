@@ -89,6 +89,7 @@ import { disposeSceneGraph } from '../../render/shell.js';
 import { SESSION_TEXTURES } from '../../render/session-textures.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { makeShadowRate } from '../../render/shadowrate.js';
 import { readAutosave } from '../../trackbuilder/storage.js';
 import { normalize } from '../../trackbuilder/model.js';
 import { docModeOf } from '../../trackbuilder/elements.js';
@@ -1374,6 +1375,8 @@ export async function buildMap(shell, onProgress, options) {
   progress(1);
 
   const shadowTarget = new THREE.Vector3();
+  /* How often the map is redrawn: see render/shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, q.shadows ? (q.city.shadowEvery || 1) : 1, half);
   function seat(light, offset, origin) {
     light.target.position.copy(origin);
     light.position.copy(origin).add(offset);
@@ -1410,6 +1413,7 @@ export async function buildMap(shell, onProgress, options) {
     seat(sun, SUN_OFFSET, shadowTarget);
     seat(fill, FILL_OFFSET, shadowTarget);
     seat(bounce, BOUNCE_OFFSET, shadowTarget);
+    shadowRate.step(shadowTarget);
     sky.dome.position.copy(camera.position);
     sky.clouds.position.copy(camera.position);
     fadeBackdrop(backdrop, camera.position.y, scene.fog.color);

@@ -88,6 +88,7 @@ const ROOM_HEIGHT = ROOM_HEIGHT_TRUE * MICRO_SCALE;
 const RACEGOW_PIPE_OD = RACEGOW_PIPE_OD_TRUE * MICRO_SCALE;
 const RACEGOW_GATE_OPENING_MAX = RACEGOW_GATE_OPENING_MAX_TRUE * MICRO_SCALE;
 import { qualityFor } from './quality.js';
+import { makeShadowRate } from './shadowrate.js';
 /* The shape of the built in circuit, shared with the map screen's thumbnail
  * so the picture of the course and the course cannot drift apart. */
 import { circuitPoint, CIRCUIT_POINTS, CIRCUIT_STATIONS } from '../game/circuit.js';
@@ -5235,6 +5236,8 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   sun.shadow.camera.right = shadowExtent;
   sun.shadow.camera.top = shadowExtent;
   sun.shadow.camera.bottom = -shadowExtent;
+  /* How often the map is redrawn: see shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, sun.castShadow ? (q.field.shadowEvery || 1) : 1, shadowExtent);
   scene.add(sun);
   scene.add(sun.target);
   /* Sky above, warm grass bounce below: this is what keeps shadowed faces
@@ -6975,6 +6978,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     sun.position.copy(shadowFocus).addScaledVector(keyDir, 130);
     sun.target.position.copy(shadowFocus);
     sun.target.updateMatrixWorld();
+    shadowRate.step(shadowFocus);
   }
 
   function updateWind(t) {

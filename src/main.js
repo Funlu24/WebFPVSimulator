@@ -46,7 +46,7 @@
 
 import * as THREE from 'three';
 import { buildShell } from './render/shell.js';
-import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, setInkLines } from './render/quality.js';
+import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, qualityOf, setInkLines } from './render/quality.js';
 import { readGpuInfo } from './render/gpuinfo.js';
 import { makeAttractCamera } from './render/attract.js';
 import { MangaLayer } from './render/manga.js';
@@ -524,6 +524,7 @@ async function loadMap(shell, id, loading, options) {
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
+  map.shadowsOff = Boolean(options && options.quality && options.quality.shadowsOff);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a
    * document, and the shell has to tell two of them apart: see
@@ -1291,7 +1292,7 @@ export async function boot({ loading, bootStart, mapId }) {
     : {});
   try {
     view = await loadMap(shell, ui.settings.map, loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
       ...worldDocument(ui.settings.map),
@@ -1311,7 +1312,7 @@ export async function boot({ loading, bootStart, mapId }) {
     ui.settings.map = 'custom';
     ui.renderMenu();
     view = await loadMap(shell, 'custom', loading, {
-      quality: ui.settings.graphics,
+      quality: qualityOf(ui.settings),
       renderScale: renderScaleOf(ui.settings),
       hideSponsors: replayClean,
     });
@@ -4612,6 +4613,7 @@ export async function boot({ loading, bootStart, mapId }) {
     return view
       && wantId === view.id
       && wantQ === view.graphics
+      && Boolean(ui.settings.shadowsOff) === Boolean(view.shadowsOff)
       && wantedCourseKey(wantId) === loadedCourseKey(view);
   }
 
@@ -4663,6 +4665,7 @@ export async function boot({ loading, bootStart, mapId }) {
     await yieldToPaint();
     const previous = view.id;
     const previousGraphics = view.graphics;
+    const previousShadowsOff = Boolean(view.shadowsOff);
     /*
      * The published map each side of the swap flies, when it is the built
      * world. The failure below names the one that would not build by its
@@ -4681,7 +4684,7 @@ export async function boot({ loading, bootStart, mapId }) {
     applyPixelRatio(shell, wantQ, renderScaleOf(ui.settings));
     try {
       view = await loadMap(shell, wantId, loading, {
-        quality: wantQ,
+        quality: qualityOf(ui.settings),
         renderScale: renderScaleOf(ui.settings),
         hideSponsors: replayClean,
         ...worldDocument(wantId),
@@ -4705,12 +4708,13 @@ export async function boot({ loading, bootStart, mapId }) {
       };
       ui.settings.map = previous;
       ui.settings.graphics = previousGraphics;
+      ui.settings.shadowsOff = previousShadowsOff;
       sharedMap = previousShared;
       ui.setSharedMap(sharedMap);
       try {
         applyPixelRatio(shell, previousGraphics, renderScaleOf(ui.settings));
         view = await loadMap(shell, previous, loading, {
-          quality: previousGraphics,
+          quality: qualityOf(ui.settings),
           renderScale: renderScaleOf(ui.settings),
           hideSponsors: replayClean,
           ...worldDocument(previous),
@@ -11491,6 +11495,7 @@ export async function boot({ loading, bootStart, mapId }) {
     name: view.name,
     mode: view.mode,
     graphics: view.graphics,
+    shadowsOff: Boolean(view.shadowsOff),
     gates: view.gates.length,
     sponsorsPainted: view.sponsorsPainted ?? 0,
     spawn: { x: startX, y: startY, z: startZ, yaw: startYaw },
