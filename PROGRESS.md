@@ -69157,3 +69157,8 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 - Numbers, Medium, SwiftShader, `progdiff.mjs`, main (da4e4b7) against this head, programs linked by the end of 8 s of flight: field 46 to 27, yard 91 to 29, town 132 to 46. Programs linked after ready: yard 25 to 0, town 8 to 1. Boot to first frame: yard 15.7 s to 11.5 s, town 44.8 s to 28.4 s (ratios, not a laptop). Item 3 alone had the yard at 104 programs and a slower first frame. Evidence: `/mnt/project-files/perf-hunt/after/fold/`. Pixels: the fold's own A/B on PR 51 had the yard at 19 differing pixels against a 20 pixel floor and the town at 38 round the craft; this head's frames were not re-shot.
 - Checks run on this head: `lint:memory`, `lint:quality` (71 of 71), `lint:preload` (after `git add` and `gen-preload`, as the notes say), `check:fresh`, `check:world-town`, `check:town-patrons`, and one `npm run verify`: 17 of 17, check 1 skipped (no emcc).
 - Not run: `lint:shell`, `lint:responsive`, a flight on real hardware, a WebGL 1 pass on this head.
+
+## 2026-10-09: PR 50 to main
+
+- Approval: the owner wrote "push to main" in the performance thread at 00:18:09Z on 2026-10-09, after the fold landed (dd79427). It covers PR 50 as it stood at dd79427 plus this note, fast forwarded onto main (da4e4b7). He chose to fly it himself afterwards; no verification beyond what the entries above record was run for the push. Nothing about the physics model's shape, the module ABI or the build changed in the PR (item 4 reads the same heights bit for bit, approved by the card at 15:01Z on 2026-10-08).
+- If the live build is wrong: the fold is the last code commit (dd79427) and drops alone; item 4 is d937379 and also drops alone.
