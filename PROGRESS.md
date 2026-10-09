@@ -69419,3 +69419,36 @@ owner's to say. The looser reading is the old behaviour at 7ccbe63, and putting 
 - Checked: `node scripts/raceline-check.js` all passed. Not run: a browser, a GPU. Fly it: Race line on, Track 6, look
   for stutter in the first seconds after the load.
 - Open: precomputing the crumbs per preset would remove the solve; it changes the build, so it goes to the owner first.
+
+## 2026-10-09 | racing | Race line: main merged in, and the latency rule applied to the draft (draft PR #48)
+
+Nothing here is on main, and no physics, plant, module ABI or build change, so `npm run verify` was not run.
+
+- Another session, the latency audit, pushed fbb1600 to this branch at 00:34Z: a solve slice now runs only when the pilot
+  is not in a flying frame (`canSolve`, set by the shell). I read it and changed nothing. `mode` and `ui.screen` are in
+  scope where the closure is made, `later` is `requestAnimationFrame`, so a waiting solve costs one function call a
+  frame, and the last slice, `verifyRaceLine` and the build of the points all run in the one allowed frame, so none of
+  it lands in a flying one. The shell draws the world while paused and on the results screen (`worldLive`), so a trail
+  built there is first drawn there.
+- The PR showed as conflicting because main had moved 12 commits (the performance pass, PR 50, went to main on the
+  owner's word). Main is merged in as 705d27a. Only the tail of PROGRESS.md conflicted, where both sides appended: both
+  are kept, main's first. My breadcrumb prototype section was a bare ### heading under the previous entry, which the
+  merge put under "PR 50 to main", so it is an entry of its own now. `src/fresh.js`, `src/main.js` and
+  `src/render/scene.js` merged without conflict and the preload list is up to date (135 boot modules).
+- Run on the merged tree, this turn: `node scripts/raceline-check.js` (91 checks) and with `--fly` (99, four laps of
+  four in every room), `lint:preload`, `check:fresh` (18), `lint:nouns`, `lint:boot` (9 of 9), `lint:quality` (71 of 71),
+  `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71), `lint:presets` (4 of 4) and `lint:partners` (88).
+  The added lines hold no em or en dash.
+- Latency, under the owner's rule of 2026-10-09 (latency is the most important thing, and every PR states its effect).
+  The setting is off by default and then nothing is imported, solved or drawn, so there is no effect. On, no solve slice
+  runs in a flying frame, so what is left of the solve is a wait and not a hitch: a pilot who flies before it ends gets
+  the trail at the next pause or menu (Track 6 is about 1.75 s of CPU in 5 ms slices, so about six seconds of such
+  frames). The trail in flight is one extra draw call of at most two gates' crumbs, a few hundred points, with one
+  uniform set in `onBeforeRender` and no allocation per frame. That draw is the one rise, it is opt in, and the owner
+  asked for the feature; it needs his word as the rule says.
+- Read from the code and not measured: the draw call's cost on a real GPU or a low end laptop, and whether the trail's
+  shader can be first drawn in a flying frame (it is built at load from a cached answer, or when a gated solve ends, and
+  the world is drawn in both places). Precomputing the crumbs for the presets would remove the wait and the solve; it
+  changes the build, so it goes to the owner first, as the audit's entry says.
+- Not run: the merged tree in a browser with the setting on (`node scripts/shots.js`), `npm run verify`, `lint:input`
+  and `lint:shell`, which fails on main as the earlier entry says.
