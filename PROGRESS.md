@@ -69162,3 +69162,11 @@ was not run. Headless numbers are SwiftShader (the GPU is the CPU), so GPU milli
 
 - Approval: the owner wrote "push to main" in the performance thread at 00:18:09Z on 2026-10-09, after the fold landed (dd79427). It covers PR 50 as it stood at dd79427 plus this note, fast forwarded onto main (da4e4b7). He chose to fly it himself afterwards; no verification beyond what the entries above record was run for the push. Nothing about the physics model's shape, the module ABI or the build changed in the PR (item 4 reads the same heights bit for bit, approved by the card at 15:01Z on 2026-10-08).
 - If the live build is wrong: the fold is the last code commit (dd79427) and drops alone; item 4 is d937379 and also drops alone.
+
+## 2026-10-09: the pen eased to about half
+
+- Ask: the owner, 2026-10-09 00:22Z, "lets tone down all the inking and pen work, its a bit much", after testers called the look busy (bubbly trees, scribbled shadows). Render only; no physics, ABI or build change.
+- What changed: each strength of the inking and pen work is now one exported constant at the top of `src/render/comic.js`, set to about half. `HATCH_DEPTH` 0.78 to 0.39, `INK_WEIGHT` 1.55 to 1.25 (the pen's width; the crease thresholds follow it as before), `SIL_STRENGTH` new, 0.5 (the outer line, in `post.js` and the freestyle ink), `BRUSH_STRENGTH` 0.11 to 0.055, `FOLIAGE_CLUMP` new, 0.5 (the leaf clumps' light and shade on canopies), `GRIME_STAIN` 0.08 to 0.04, `GRIME_TIDE` 0.12 to 0.06, `CRACK_INK` 0.85 to 0.42. Low draws none of it, unchanged.
+- Cost: every constant is a shader literal or the value of an existing uniform, so instruction counts and programs are what they were. The one structural change is the pen width, which is a uniform. Frame time was not measured; none is expected to move.
+- Checks run: `lint:quality` 71 of 71, `lint:preload`, `lint:memory`, and `shots.js` on field, town, whoop room and yard at High, before (c87488d) and after, no console errors. Pictures in the project folder `graphics-ease/`. Not run: `npm run verify`, Medium shots, a flight on real hardware.
+- Declined: the AO tint, edge highlights and the grade are shading, not pen, and were left alone.

@@ -54,7 +54,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {
-  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, comicGL2, SIL_GLSL,
+  INK_WEIGHT, SIL_STRENGTH, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, comicGL2, SIL_GLSL,
   SIL_REACH,
 } from './comic.js';
 
@@ -303,7 +303,7 @@ const OutlineShader = {
           comicSilDir(zc, d1 * zr + uGeoNear, vUv + vec2( tw.x,  tw.y)), comicSilDir(zc, d2 * zr + uGeoNear, vUv + vec2(-tw.x, -tw.y)),
           comicSilDir(zc, d3 * zr + uGeoNear, vUv + vec2( tw.x, -tw.y)), comicSilDir(zc, d4 * zr + uGeoNear, vUv + vec2(-tw.x,  tw.y)),
           zr * (2.0 / 65025.0) / zc);
-        edge = max(edge, sil * uStrength * (1.0 - grass) * (1.0 - smoothstep(12.0, 30.0, zc)));
+        edge = max(edge, sil * ${SIL_STRENGTH.toFixed(3)} * uStrength * (1.0 - grass) * (1.0 - smoothstep(12.0, 30.0, zc)));
       }
       #endif
       // never draw on the sky, and let very distant geometry go clean
