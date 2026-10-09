@@ -4552,6 +4552,8 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     if (!trail.heard) {
       trail.heard = true;
+      /* Never solve inside a flying frame: see step in render/raceline.js. */
+      trail.canSolve = () => !(mode === 'flight' && ui.screen === 'flight');
       raceLineSaid = '';
       trail.listen(raceLineNotice);
     }

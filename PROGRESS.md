@@ -69310,3 +69310,14 @@ owner's to say. The looser reading is the old behaviour at 7ccbe63, and putting 
 - `npm run verify`, because nothing in the physics, plant, ABI or build changed. `lint:input`, and `lint:shell`, which
   fails on main as the entry above says and was not run again. `node scripts/shots.js`: the render did not change, but
   the line it draws on Track 7 did, so flying it is the check that sees that.
+
+## 2026-10-09 | latency | Race line: the solve no longer runs inside a flying frame
+
+- The owner's project rule of 2026-10-09: latency is the most important thing. Audit of this draft: with the setting off
+  the cost is zero (nothing imported). With it on, the solve ran in 5 ms slices while the pilot flew, 2 to 8 s of
+  frames carrying about +5.5 ms, one knot up to 18 ms (Node, warm JIT, a CPU proxy; a cold browser is worse).
+- Change: `canSolve` in `src/render/raceline.js`, set by the shell, so a slice runs only on a menu, the pause or the
+  loading hold. If the pilot flies before it finishes, the trail waits for the next pause. Cost: that wait.
+- Checked: `node scripts/raceline-check.js` all passed. Not run: a browser, a GPU. Fly it: Race line on, Track 6, look
+  for stutter in the first seconds after the load.
+- Open: precomputing the crumbs per preset would remove the solve; it changes the build, so it goes to the owner first.

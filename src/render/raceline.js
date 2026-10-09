@@ -333,6 +333,14 @@ export function createRaceLine({
       if (thisJob.cancelled || disposed) {
         return;
       }
+      /* Latency first: a knot can take 10 to 20 ms in one go, which a time
+       * budget cannot split, so the shell says when the pilot is not flying
+       * (a menu, the pause, the loading hold) and the solve waits for that
+       * and never costs a flying frame. */
+      if (api.canSolve && !api.canSolve()) {
+        later(step);
+        return;
+      }
       const t0 = now();
       const end = t0 + SLICE_MS;
       let r;
@@ -378,8 +386,11 @@ export function createRaceLine({
     later(step);
   }
 
-  return {
+  const api = {
     state,
+    /* Set by the shell: true when a slice may run now (the pilot is not in a
+     * flight). Absent means always, which is what a harness wants. */
+    canSolve: null,
     /* One listener, the shell's. */
     listen(fn) {
       listener = fn;
@@ -438,4 +449,5 @@ export function createRaceLine({
       }
     },
   };
+  return api;
 }
