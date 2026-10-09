@@ -721,9 +721,18 @@ export function buildComposer(renderer, scene, camera, quality) {
     /* The prepass overrides every material with one that samples no shadow
      * map, so rebuilding the shadow map for it is pure waste: measured, 74
      * of 310 draw calls and 113260 of 1465708 triangles per frame, because
-     * the map was being rendered twice. Output is bit identical. */
+     * the map was being rendered twice. Output is bit identical.
+     *
+     * A redraw that shadowrate.js has asked for is held over the prepass and
+     * handed back for the colour pass. Left set, the prepass consumed it: Three
+     * renders a pending map in the first render call of the frame, with that
+     * call's layer mask, so on Medium the map was drawn from layer 0 alone and
+     * a caster on any other layer would have lost its shadow on Medium only.
+     * No caster is on another layer today, so nothing on screen changes. */
     const prevShadowAuto = renderer.shadowMap.autoUpdate;
+    const prevShadowNeeds = renderer.shadowMap.needsUpdate;
     renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = false;
     renderer.setRenderTarget(normalTarget);
     renderer.setClearColor(GEO_CLEAR, 0);
 
@@ -763,6 +772,7 @@ export function buildComposer(renderer, scene, camera, quality) {
     renderer.setClearColor(prevClear, prevClearAlpha);
     camera.layers.mask = prevMask;
     renderer.shadowMap.autoUpdate = prevShadowAuto;
+    renderer.shadowMap.needsUpdate = prevShadowNeeds;
     scene.overrideMaterial = prevOverride;
     scene.background = prevBg;
     scene.fog = prevFog;
