@@ -74,7 +74,7 @@ const only = (args.find((a) => a.startsWith('--only=')) || '').split('=')[1] || 
 const verbose = args.includes('--verbose');
 
 const ST = { X: 1, Y: 2, Z: 3, VX: 4, VY: 5, VZ: 6, QW: 7, QX: 8, QY: 9, QZ: 10, P: 11, Q: 12, R: 13 };
-const REST = { 0: 0.045, 1: 0.010 };
+const REST = { 0: 0.033, 1: 0.010 };
 const HOVER = { 0: 0.27, 1: 0.335 };
 /* The shell's own materials (src/game/collide.js contactMaterial). */
 const WALL = { e: 0.15, mu: 0.42 };
@@ -1019,7 +1019,7 @@ function insideBox(l) {
  * keeps pushing sits a face that far into a disc for as long as it pushes,
  * which is the soft prop doing its job. The hull is what must stay out.
  */
-const HULL_BOX = { 0: [0.094, 0.094, 0.045, 0.038], 1: [0.041, 0.041, 0.010, 0.018] };
+const HULL_BOX = { 0: [0.094, 0.094, 0.033, 0.038], 1: [0.041, 0.041, 0.010, 0.018] };
 function hullDepth(row, af, h = row.car.h) {
   const [hx, hy, down, up] = HULL_BOX[af];
   const [w, x, y, z] = row.q;

@@ -89,6 +89,7 @@ import { disposeSceneGraph } from '../../render/shell.js';
 import { SESSION_TEXTURES } from '../../render/session-textures.js';
 import { yieldToPaint } from '../../ui/loading.js';
 import { qualityFor } from '../../render/quality.js';
+import { makeShadowRate } from '../../render/shadowrate.js';
 import { readAutosave } from '../../trackbuilder/storage.js';
 import { normalize } from '../../trackbuilder/model.js';
 import { docModeOf } from '../../trackbuilder/elements.js';
@@ -1016,7 +1017,7 @@ function drawnRelief(chunk, spot, right, share = STF_PROBE_SHARE) {
  * gate on the shadow box (buildShadowProxies in ../city/bake.js); here the
  * chunk's own cull is the gate, so the proxy draws wherever its casters did.
  */
-function proxyCasters(props) {
+function proxyCasters(props, materials) {
   props.updateMatrixWorld(true);
   const proxyMaterials = new Map();
   const stats = { chunks: 0, from: 0, to: 0, triangles: 0 };
@@ -1062,6 +1063,7 @@ function proxyCasters(props) {
         mat.depthWrite = false;
         mat.name = 'shadowProxy';
         proxyMaterials.set(b.side, mat);
+        materials.push(mat);
       }
       geo.computeBoundingSphere();
       const proxy = new THREE.Mesh(geo, mat);
@@ -1340,7 +1342,8 @@ export async function buildMap(shell, onProgress, options) {
   }
 
   /* After the cells are measured, which read the geometry of what is in each chunk and not the proxies. */
-  const proxied = q.shadows ? proxyCasters(props) : null;
+  const proxyMaterials = [];
+  const proxied = q.shadows ? proxyCasters(props, proxyMaterials) : null;
 
   /* THE SOLIDS: exactly what place.js said, into the collider set the
    * shell uploads to the plant. */
@@ -1374,6 +1377,8 @@ export async function buildMap(shell, onProgress, options) {
   progress(1);
 
   const shadowTarget = new THREE.Vector3();
+  /* How often the map is redrawn: see render/shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, q.shadows ? (q.city.shadowEvery || 1) : 1, half);
   function seat(light, offset, origin) {
     light.target.position.copy(origin);
     light.position.copy(origin).add(offset);
@@ -1410,6 +1415,15 @@ export async function buildMap(shell, onProgress, options) {
     seat(sun, SUN_OFFSET, shadowTarget);
     seat(fill, FILL_OFFSET, shadowTarget);
     seat(bounce, BOUNCE_OFFSET, shadowTarget);
+    shadowRate.step(shadowTarget);
+    /* A proxy paints nothing, but the colour pass draws it all the same, so
+     * on a frame that does not redraw the shadow map it is a draw and every
+     * triangle of its chunk's casters for nothing: the proxies are shown only
+     * on a frame that does. A few materials, not a walk of the chunks. */
+    const casting = renderer.shadowMap.autoUpdate || renderer.shadowMap.needsUpdate;
+    for (let i = 0; i < proxyMaterials.length; i += 1) {
+      proxyMaterials[i].visible = casting;
+    }
     sky.dome.position.copy(camera.position);
     sky.clouds.position.copy(camera.position);
     fadeBackdrop(backdrop, camera.position.y, scene.fog.color);

@@ -1216,6 +1216,16 @@ const DEFAULTS = {
    * boolean so the typeof gate accepts it.
    */
   raceLine: false,
+  /*
+   * Shadows off: the picture without the sun's shadow map, on any preset.
+   * The map is a second draw of the scene and a lookup in every lit pixel,
+   * which is most of what Medium and High cost over Low on an integrated
+   * GPU, and a tester asked for it by name (bug-baefef1b). Stored as the
+   * exception so a save from before the row reads as shadows on, and a
+   * boolean so loadSettings' typeof gate accepts it. Changing it rebuilds
+   * the world, as a preset does; Low has no map and ignores it.
+   */
+  shadowsOff: false,
   packVoltage: 4.2,
   /*
    * How heavy the quad is, as a percentage of the weight the airframe is
@@ -8262,6 +8272,16 @@ export class Ui {
         ),
         { label: 'Screen', section: true },
         graphicsItem(s, this.autoScaleNow),
+        toggle(
+          'Shadows',
+          normalizeGraphics(s.graphics) === 'low'
+            ? 'Low draws no shadows at all, so there is nothing to switch. Pick Medium or High to bring them back.'
+            : s.shadowsOff
+              ? 'Off: no shadows from the sun, and the shadow pass and its lookup in every lit pixel are not drawn. The quickest relief on a laptop that is slow. Changing this rebuilds the world.'
+              : 'On: the sun casts shadows, at this preset\'s detail. Turn it off if the picture is slow or the shadow edges bother you. Changing this rebuilds the world.',
+          normalizeGraphics(s.graphics) !== 'low' && !s.shadowsOff,
+          (v) => { if (normalizeGraphics(s.graphics) !== 'low') { s.shadowsOff = !v; } },
+        ),
         /*
          * THE DOOR TO THE KNOBS. Render scale, the frame cap, low latency,
          * predicted view, frame pacing, the input to screen meter and the

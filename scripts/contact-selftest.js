@@ -152,7 +152,7 @@ function speedMag(st) {
  * prove the hull stays on the plane, not just the CG. */
 const HULL_HX = 0.094;
 const HULL_HY = 0.094;
-const HULL_HZ_DOWN = 0.045;
+const HULL_HZ_DOWN = 0.033;
 const HULL_HZ_UP = 0.038;
 const HULL_SLOP = 0.002;
 const HULL_CORNERS = [
@@ -422,7 +422,7 @@ function sameState(a, b) {
 {
   const sim = await fresh();
   /* Seat first, then shove, so the slide is on the grass, not in the air. */
-  sim.e.sim_set_pose(0, 0, 0.045, 1, 0, 0, 0);
+  sim.e.sim_set_pose(0, 0, 0.033, 1, 0, 0, 0);
   sim.rest();
   sim.motorOverride(-1, 0);
   grass(sim);
@@ -519,7 +519,7 @@ function sameState(a, b) {
    * to keep tumbling once the hull leaves the grass; the old "near"
    * flag damped that in free air and left a lucky upright pose. */
   sim.e.sim_set_crashflip(0);
-  sim.e.sim_set_pose(0, 0, 0.045, 1, 0, 0, 0);
+  sim.e.sim_set_pose(0, 0, 0.033, 1, 0, 0, 0);
   sim.rest();
   const z0 = sim.readState().state[ST.Z];
   const up0 = upZ(sim.readState().state);
@@ -741,7 +741,7 @@ function sameState(a, b) {
    * every outbound normal while the hull was in the contact band, so a
    * punch crawled a fraction of a millimetre per step with the motors
    * at the stops. */
-  sim.e.sim_set_pose(0, 0, 0.045, 1, 0, 0, 0);
+  sim.e.sim_set_pose(0, 0, 0.033, 1, 0, 0, 0);
   sim.rest();
   grass(sim);
   let leftAt = -1;

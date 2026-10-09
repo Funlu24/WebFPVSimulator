@@ -45,7 +45,7 @@ import {
   celMaterial, outlineHull, updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
   CLOTH_CHUNK, FLAG_SAIL_CLOTH,
 } from './celmat.js';
-import { setComicQuality } from './comic.js';
+import { setComicQuality, COMIC_SHADING } from './comic.js';
 import { CIRRUS_GLSL, cirrusUniforms } from './comicsky.js';
 import { disposeSceneGraph } from './shell.js';
 import { SESSION_TEXTURES } from './session-textures.js';
@@ -88,6 +88,7 @@ const ROOM_HEIGHT = ROOM_HEIGHT_TRUE * MICRO_SCALE;
 const RACEGOW_PIPE_OD = RACEGOW_PIPE_OD_TRUE * MICRO_SCALE;
 const RACEGOW_GATE_OPENING_MAX = RACEGOW_GATE_OPENING_MAX_TRUE * MICRO_SCALE;
 import { qualityFor } from './quality.js';
+import { makeShadowRate } from './shadowrate.js';
 /* The shape of the built in circuit, shared with the map screen's thumbnail
  * so the picture of the course and the course cannot drift apart. */
 import { circuitPoint, CIRCUIT_POINTS, CIRCUIT_STATIONS } from '../game/circuit.js';
@@ -4819,7 +4820,7 @@ function skyDome(q = null) {
    * until the sweep after graphics pass 25, which found Low paying, in a
    * software renderer, for comic code it never drew (src/render/comic.js,
    * chunkOn), and a preset change builds the dome again anyway. */
-  const cirrus = !(q && q.id === 'low');
+  const cirrus = COMIC_SHADING && !(q && q.id === 'low');
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -4924,13 +4925,7 @@ function clouds(rng, count = 26, size = 1) {
          * thing on screen, and a clipped pixel has no hue left either. */
         col *= 0.68;
         col += vec3(1.0, 0.86, 0.60) * pow(max(dot(n, normalize(uSun)), 0.0), 3.0) * 0.08;
-        /* An ink rim round each puff, the comic layer's line on the one
-         * thing the ink pass never reaches: clouds sit past the distance
-         * where it fades out. A slate ink rather than black, because it is
-         * a line seen through a kilometre of air. src/render/comic.js. */
-        float facing = abs(dot(normalize(vNView), normalize(vView)));
-        float rim = 1.0 - smoothstep(0.16, 0.26, facing);
-        col = mix(col, vec3(0.20, 0.24, 0.34), rim * 0.85);
+        /* No ink rim: a line round a cloud clashed with the polygon world (bug-09e28ecf). */
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -5236,6 +5231,8 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   sun.shadow.camera.right = shadowExtent;
   sun.shadow.camera.top = shadowExtent;
   sun.shadow.camera.bottom = -shadowExtent;
+  /* How often the map is redrawn: see shadowrate.js. */
+  const shadowRate = makeShadowRate(renderer, sun.castShadow ? (q.field.shadowEvery || 1) : 1, shadowExtent);
   scene.add(sun);
   scene.add(sun.target);
   /* Sky above, warm grass bounce below: this is what keeps shadowed faces
@@ -6981,6 +6978,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     sun.position.copy(shadowFocus).addScaledVector(keyDir, 130);
     sun.target.position.copy(shadowFocus);
     sun.target.updateMatrixWorld();
+    shadowRate.step(shadowFocus);
   }
 
   function updateWind(t) {

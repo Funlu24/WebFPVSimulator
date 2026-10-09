@@ -54,7 +54,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {
-  INK_WEIGHT, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, comicGL2, SIL_GLSL,
+  INK_WEIGHT, SIL_STRENGTH, INK_COLOR, AO_GLSL, AO_TINT_GLSL, aoUniforms, updateAoCamera, comicAoOn, comicGL2, SIL_GLSL,
   SIL_REACH,
 } from './comic.js';
 
@@ -303,7 +303,7 @@ const OutlineShader = {
           comicSilDir(zc, d1 * zr + uGeoNear, vUv + vec2( tw.x,  tw.y)), comicSilDir(zc, d2 * zr + uGeoNear, vUv + vec2(-tw.x, -tw.y)),
           comicSilDir(zc, d3 * zr + uGeoNear, vUv + vec2( tw.x, -tw.y)), comicSilDir(zc, d4 * zr + uGeoNear, vUv + vec2(-tw.x,  tw.y)),
           zr * (2.0 / 65025.0) / zc);
-        edge = max(edge, sil * uStrength * (1.0 - grass) * (1.0 - smoothstep(12.0, 30.0, zc)));
+        edge = max(edge, sil * ${SIL_STRENGTH.toFixed(3)} * uStrength * (1.0 - grass) * (1.0 - smoothstep(12.0, 30.0, zc)));
       }
       #endif
       // never draw on the sky, and let very distant geometry go clean
@@ -721,9 +721,18 @@ export function buildComposer(renderer, scene, camera, quality) {
     /* The prepass overrides every material with one that samples no shadow
      * map, so rebuilding the shadow map for it is pure waste: measured, 74
      * of 310 draw calls and 113260 of 1465708 triangles per frame, because
-     * the map was being rendered twice. Output is bit identical. */
+     * the map was being rendered twice. Output is bit identical.
+     *
+     * A redraw that shadowrate.js has asked for is held over the prepass and
+     * handed back for the colour pass. Left set, the prepass consumed it: Three
+     * renders a pending map in the first render call of the frame, with that
+     * call's layer mask, so on Medium the map was drawn from layer 0 alone and
+     * a caster on any other layer would have lost its shadow on Medium only.
+     * No caster is on another layer today, so nothing on screen changes. */
     const prevShadowAuto = renderer.shadowMap.autoUpdate;
+    const prevShadowNeeds = renderer.shadowMap.needsUpdate;
     renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = false;
     renderer.setRenderTarget(normalTarget);
     renderer.setClearColor(GEO_CLEAR, 0);
 
@@ -763,6 +772,7 @@ export function buildComposer(renderer, scene, camera, quality) {
     renderer.setClearColor(prevClear, prevClearAlpha);
     camera.layers.mask = prevMask;
     renderer.shadowMap.autoUpdate = prevShadowAuto;
+    renderer.shadowMap.needsUpdate = prevShadowNeeds;
     scene.overrideMaterial = prevOverride;
     scene.background = prevBg;
     scene.fog = prevFog;
