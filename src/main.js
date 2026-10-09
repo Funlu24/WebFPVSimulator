@@ -46,6 +46,7 @@
 
 import * as THREE from 'three';
 import { buildShell } from './render/shell.js';
+import { applyLook } from './render/look.js';
 import { applyPixelRatio, autoMinPixels, bootGuessGraphics, graphicsLabel, inkLinesOn, internalScale, normalizeGraphics, pixelRatioFor, qualityFor, qualityOf, setInkLines } from './render/quality.js';
 import { readGpuInfo } from './render/gpuinfo.js';
 import { makeAttractCamera } from './render/attract.js';
@@ -524,6 +525,8 @@ async function loadMap(shell, id, loading, options) {
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
   map.graphics = normalizeGraphics(options && options.quality);
+  /* The Gem look, once a world is built: colours and vertex tones only, nothing per frame (look.js). */
+  applyLook(map.scene);
   map.shadowsOff = Boolean(options && options.quality && options.quality.shadowsOff);
   /* The published map a built world was made from, or null for the
    * pilot's own. The world does not say, because to it a document is a

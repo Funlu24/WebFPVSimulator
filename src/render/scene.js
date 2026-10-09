@@ -4924,13 +4924,7 @@ function clouds(rng, count = 26, size = 1) {
          * thing on screen, and a clipped pixel has no hue left either. */
         col *= 0.68;
         col += vec3(1.0, 0.86, 0.60) * pow(max(dot(n, normalize(uSun)), 0.0), 3.0) * 0.08;
-        /* An ink rim round each puff, the comic layer's line on the one
-         * thing the ink pass never reaches: clouds sit past the distance
-         * where it fades out. A slate ink rather than black, because it is
-         * a line seen through a kilometre of air. src/render/comic.js. */
-        float facing = abs(dot(normalize(vNView), normalize(vView)));
-        float rim = 1.0 - smoothstep(0.16, 0.26, facing);
-        col = mix(col, vec3(0.20, 0.24, 0.34), rim * 0.85);
+        /* No ink rim: a line round a cloud clashed with the polygon world (bug-09e28ecf). */
         gl_FragColor = vec4(col, 1.0);
       }
     `,
