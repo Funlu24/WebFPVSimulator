@@ -69541,3 +69541,37 @@ Nothing here is on main, and no physics, plant, module ABI or build change, so `
   changes the build, so it goes to the owner first, as the audit's entry says.
 - Not run: the merged tree in a browser with the setting on (`node scripts/shots.js`), `npm run verify`, `lint:input`
   and `lint:shell`, which fails on main as the earlier entry says.
+
+## 2026-10-09 | racing | Race line: on the test branch at the owner's word (draft PR #48)
+
+Not on main. No physics, plant, module ABI or build change here, so `npm run verify` was not run.
+
+- Approval: the owner wrote "push to the test branch" in the thread at 05:40:46Z on 2026-10-09. It covers putting this
+  branch (draft PR #48) on the simulator's `test`. It does not cover main, and the PR stays a draft. The board
+  repository also has a `test` branch, one commit behind its main; this turn did not touch it.
+- What `test` was: c87488d, which is main as of 00:18Z, so 20 commits behind main (595ed93) with no commit of its own.
+  No workflow or deploy file in the repository names it (DEPLOY.md wires the Render sites to `main`), so where it
+  deploys is outside the repository and was not checked.
+- What was pushed: main (595ed93) merged into this branch (faee85b), then `test` fast forwarded from c87488d to the
+  head of this branch, so `test` is main plus the race line and nothing else. No force, no rewrite, main untouched.
+  Conflicts were the tail of PROGRESS.md and the settings defaults in `src/ui/ui.js`, where this branch's `raceLine`
+  and main's `shadowsOff` were added at the same spot: both kept in each, main's entries first. `src/fresh.js`,
+  `src/main.js` and `src/render/scene.js` merged without conflict. The wasm, the goldens and the plant are main's,
+  untouched by this branch.
+- Run on the merged tree, this turn, all passing: `node scripts/raceline-check.js` (91) and with `--fly` (99, four laps
+  of four in all eight rooms), `lint:preload` (up to date, 137 boot modules), `check:fresh` (18), `lint:nouns`,
+  `lint:boot` (9 of 9), `lint:quality` (71 of 71), `lint:frame` (34), `lint:memory`, `micro:check`, `check:room` (71),
+  `lint:presets` (4 of 4), `lint:partners` (88) and `lint:fc` (33 of 33).
+- Not run: `lint:catalog`, which cannot start in this container because `vendor/betaflight` is not checked out (it
+  fails opening `parameter_names.h`) and which nothing here reaches; `npm run verify`; `node scripts/shots.js`, so the
+  merged tree has not been driven in a browser with the setting on; `lint:input`; `lint:shell`, which fails on main
+  here as the earlier entry says.
+- Latency, as in the entry above and unchanged by the merge. Setting off, the default: nothing imported, solved or
+  drawn. On: one extra draw call a frame of at most two gates' crumbs, and no solve slice in a flying frame, so what is
+  left of the solve is a wait at the next pause, not a hitch. The draw call is the one rise, it is opt in, and `test` is
+  where the owner flies it before it goes near main. Its cost on a real GPU or a low end laptop was not measured.
+- To fly it on `test`: Settings, pilot screen, Race line on, then a whoop room (RaceGOW5 Track 6 or 7). Wrong would be a
+  hitch in the first seconds after the load, dots through an opening the wrong way, or a gate the trail skips. The
+  trail waits for a pause if the pilot flies before it is solved (Track 6 is about 1.75 s of CPU).
+- What went wrong: nothing in the code. The harness refused one `rm` in a shell line whose path used an unset-able
+  variable; the line did not need it, because the directory was new, and was rerun without it.
