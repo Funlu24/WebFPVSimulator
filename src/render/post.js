@@ -114,7 +114,7 @@ const OutlineShader = {
      * sample pair) while true corners near 90 degrees (delta 1.4) still
      * ink. Facet creases were turning every near tree into a wire mesh. */
     uNormalBias: { value: 1.05 },
-    uStrength: { value: 0.85 },
+    uStrength: { value: 0.0 },
     /* A twentieth of the ink threshold. Coverage is wanted on every
      * silhouette in the frame; ink is wanted only on the ones that read as
      * drawn. */

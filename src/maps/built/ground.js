@@ -54,6 +54,24 @@ import { sincos } from '../../props/trig.js';
 import { seededRandom, hashString } from '../../props/parts.js';
 import { paintGroundLogo } from '../../art/banners.js';
 
+
+const PHOTO_GROUND = true;
+const PHOTOS = {
+  grass: 'assets/ground/grass.jpg',
+  tarmac: 'assets/ground/asphalt.jpg',
+  dirt: 'assets/ground/dirt.jpg',
+  yard: 'assets/ground/concrete.jpg',
+};
+
+function photoTexture(url, repeatX, repeatY) {
+  const t = new THREE.TextureLoader().load(url);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  t.anisotropy = 8;
+  return t;
+}
 /* The concrete paving's slab, and how many slabs one texture tile holds.
  * Six metres is a sawn joint spacing a yard slab of this kind really has;
  * four by four slabs per tile is what keeps the stains from repeating
@@ -781,6 +799,7 @@ function dirtRuts(placed, doc, cover) {
   return { mesh, count: paths };
 }
 
+
 /*
  * The plot, its kerb, the verge, the terrain, and the paint on the plot.
  * `cover` is ./roadmesh.js roadCover for the map's roads: no paint of the
@@ -799,15 +818,21 @@ export function buildGround(placed, doc, look, cover) {
    * height the plant flies over, painted with the map's ground. Whatever
    * it is painted as, it is the same flat plane: a ground is paint. */
   const painter = { tarmac: tarmacTexture, grass: grassTexture, dirt: dirtTexture }[groundId];
-  const tile = painter ? GROUND_TILE[groundId] : SLAB * TILE_SLABS;
-  const yard = canvasTexture(painter ? painter() : yardTexture(), W / tile, D / tile);
-  const plot = new THREE.Mesh(
-    painter ? plotGeometry(W, D, groundId, hashString(doc.id)) : new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2),
-    cel({ color: 0xffffff, map: yard, bands: 3, tint: G.tint, vertexColors: Boolean(painter), cache: false }),
-  );
-  plot.receiveShadow = true;
-  plot.name = 'plot';
-  group.add(plot);
+const tile = painter ? GROUND_TILE[groundId] : SLAB * TILE_SLABS;
+const yard = PHOTO_GROUND
+  ? photoTexture(PHOTOS[painter ? groundId : 'yard'], W / tile, D / tile)
+  : canvasTexture(painter ? painter() : yardTexture(), W / tile, D / tile);
+const plotMat = PHOTO_GROUND
+  ? new THREE.MeshStandardMaterial({ map: yard, roughness: 0.95, metalness: 0 })
+  : cel({ color: 0xffffff, map: yard, bands: 3, tint: G.tint, vertexColors: Boolean(painter), cache: false });
+const plot = new THREE.Mesh(
+  painter ? plotGeometry(W, D, groundId, hashString(doc.id)) : new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2),
+  plotMat,
+);
+plot.receiveShadow = true;
+plot.name = 'plot';
+group.add(plot);
+ 
 
   /* The kerb, one box a side, so the ink draws the plot's edge. Paint, not
    * a solid: it is twelve centimetres high and the plant's ground is flat. */
@@ -864,11 +889,15 @@ export function buildGround(placed, doc, look, cover) {
    */
   const TERRAIN = 2000;
   const TERRAIN_CELLS = 50;
-  const terrainTex = canvasTexture(terrainTexture(G.terrain), TERRAIN / 40, TERRAIN / 40);
-  const terrain = new THREE.Mesh(
-    new THREE.PlaneGeometry(TERRAIN, TERRAIN, TERRAIN_CELLS, TERRAIN_CELLS).rotateX(-Math.PI / 2),
-    cel({ color: 0xffffff, map: terrainTex, bands: 3, tint: 0x7a7396, cache: false }),
-  );
+  const terrainTex = PHOTO_GROUND
+  ? photoTexture(PHOTOS.grass, TERRAIN / 10, TERRAIN / 10)
+  : canvasTexture(terrainTexture(G.terrain), TERRAIN / 40, TERRAIN / 40);
+const terrain = new THREE.Mesh(
+  new THREE.PlaneGeometry(TERRAIN, TERRAIN, TERRAIN_CELLS, TERRAIN_CELLS).rotateX(-Math.PI / 2),
+  PHOTO_GROUND
+    ? new THREE.MeshStandardMaterial({ map: terrainTex, roughness: 1, metalness: 0 })
+    : cel({ color: 0xffffff, map: terrainTex, bands: 3, tint: 0x7a7396, cache: false }),
+);
   terrain.position.y = -0.05;
   terrain.receiveShadow = true;
   terrain.name = 'terrain';

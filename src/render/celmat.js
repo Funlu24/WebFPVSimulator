@@ -35,6 +35,7 @@
  */
 
 import * as THREE from 'three';
+const REALISTIC = true;
 
 /*
  * Three.js samples the toon gradient map as
@@ -273,19 +274,23 @@ export function celMaterial(opts = {}) {
   if (opts.map && !opts.key) {
     throw new Error('celmat: a material with a map needs an explicit key');
   }
+  if (REALISTIC) {
+    return new THREE.MeshStandardMaterial({
+      color: opts.color ?? 0xffffff,
+      map: opts.map ?? null,
+      roughness: 0.9,
+      metalness: 0,
+      alphaTest: opts.alphaTest ?? 0,
+      transparent: opts.transparent ?? false,
+      opacity: opts.opacity ?? 1,
+      side: opts.side ?? THREE.FrontSide,
+      fog: opts.fog ?? true,
+    });
+  }
   const mat = new THREE.MeshToonMaterial({
     color: opts.color ?? 0xffffff,
-    gradientMap: celRampTexture(),
-    map: opts.map ?? null,
-    alphaTest: opts.alphaTest ?? 0,
-    transparent: opts.transparent ?? false,
-    opacity: opts.opacity ?? 1,
-    side: opts.side ?? THREE.FrontSide,
-    /* fog false is for the mountain rings: their baked colours ARE the
-     * aerial perspective, in deliberate steps; scene fog would wash all
-     * of them to one wall. */
-    fog: opts.fog ?? true,
   });
+
   const rimColor = new THREE.Color(opts.rimColor ?? 0x9ec8ff);
   const specColor = new THREE.Color(opts.specColor ?? 0xffffff);
   const cloud = (opts.cloudShadow ?? 0) * cloudShadowsOn;

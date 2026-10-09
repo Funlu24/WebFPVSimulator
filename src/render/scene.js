@@ -1378,10 +1378,18 @@ function terrain(height, samples, pitch) {
       colors[i * 3 + 1] += (rockCol.g - colors[i * 3 + 1]) * k;
       colors[i * 3 + 2] += (rockCol.b - colors[i * 3 + 2]) * k;
     }
-  }
-  geo.attributes.color.needsUpdate = true;
+  };
   const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34 });
   mat.vertexColors = true;
+  /* ekleyeceğiniz kısım: */
+  const grassTex = new THREE.TextureLoader().load('assets/ground/grass.jpg');
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(size / 6, size / 6);
+  grassTex.anisotropy = 8;
+  mat.map = grassTex;
+  mat.color.setScalar(1.8);
+  mat.needsUpdate = true;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;
