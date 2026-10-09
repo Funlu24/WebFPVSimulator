@@ -191,8 +191,11 @@ export const AIRFRAMES = [
        * ground plane with exactly these extents, so the collider that sweeps
        * it past a kerb has to be the same machine or the two disagree about
        * where the bottom of the quad is. Measured off dist/sim.wasm, a five
-       * inch dropped on a floor first contacts at a CG height of 45.1 mm and
-       * settles at 43.1 mm, which is what hull_hz_down 0.045 means.
+       * inch dropped on a floor first contacted at a CG height of 45.1 mm and
+       * settled at 43.1 mm, which is what hull_hz_down 0.045 meant. It is
+       * 0.033 since 2026-10-09, the owner's ask to get closer to the ground
+       * before hitting it, so 12 mm lower; it still settles on the contact
+       * model's 2 mm slop, which whoop:gates W15 asserts.
        *
        * This was ONE number, `vHalf: 0.040`, used the same both ways, and its
        * comment explained it as covering the drawn stack, the body's underside
@@ -212,7 +215,7 @@ export const AIRFRAMES = [
        * the real module on a plane raised by this number and fails if it
        * ever stops being where the craft settles.
        */
-      vHalfDown: 0.045,
+      vHalfDown: 0.033,
       vHalfUp: 0.038,
       bodyLength: 0.155,
       bodyWidth: 0.088,
@@ -413,10 +416,10 @@ export const AIRFRAMES = [
        * vHalfDown is where the floor is as far as the shell is concerned:
        * src/main.js seats SPAWN_ALT and REST_HEIGHT from it and the plant
        * settles the craft at its own hull_hz_down, so this HAS to be the five
-       * inch's 45 mm or the aircraft spawns buried or hovering. It costs a
-       * whoop body 12 mm of ground clearance it would not have, 3.5 mm once
-       * divided back down to the size the picture is of, and scripts/craft-check.js
-       * pins it at that.
+       * inch's 33 mm or the aircraft spawns buried or hovering. It cost a
+       * whoop body 12 mm of ground clearance while that was 45 mm; at 33,
+       * since 2026-10-09, the drawn ducts sit on the floor to a tenth of a
+       * millimetre, and scripts/craft-check.js pins it at that.
        *
        * vHalfUp has no such owner. Nothing in the plant rests a craft on its
        * canopy; what reads this is src/game/collide.js, deciding whether the
@@ -432,7 +435,7 @@ export const AIRFRAMES = [
        * 0.0617 is WHOOP_TRUE_DIMS.vHalfUp times MICRO_SCALE, and the
        * assertion under MICRO_SCALE fails the build if the two ever drift.
        */
-      vHalfDown: 0.045,
+      vHalfDown: 0.033,
       vHalfUp: 0.0617,
       bodyLength: 0.155,
       bodyWidth: 0.088,

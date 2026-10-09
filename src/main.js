@@ -171,14 +171,14 @@ const WASM_URL = new URL('../dist/sim.wasm', import.meta.url).href;
  * the collision dimensions and the drawn model: these two are a FRAME, and
  * moving one mid lap would move the floor under a craft that is flying.
  */
-let SPAWN_ALT = 0.045;
+let SPAWN_ALT = 0.033;
 /* The craft rests with its underside on the ground, not its centre.
  * Identical to SPAWN_ALT so the parked pose, the spawn state and a landing
  * all agree about where the ground holds the craft. */
-let REST_HEIGHT = 0.045;
+let REST_HEIGHT = 0.033;
 /* One seat for both, so they cannot drift apart. */
 function seatRestHeight(dims) {
-  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.045;
+  const h = dims && Number.isFinite(dims.vHalfDown) ? dims.vHalfDown : 0.033;
   SPAWN_ALT = h;
   REST_HEIGHT = h;
 }

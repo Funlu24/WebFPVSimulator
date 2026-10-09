@@ -79,7 +79,7 @@ const wasm = await readFile(join(root, 'dist/sim.wasm'));
 const CONFIG = await readFile(join(root, 'tests/fixtures/config-baseline.diff'), 'utf8');
 
 /* The five inch at rest, and at hover, as scripts/world-check.js has them. */
-const REST = 0.045;
+const REST = 0.033;
 const HOVER = 0.27;
 const WALL = contactMaterial('wall');
 /* The shell's RC grid (src/main.js RC_HZ) and its cap on a frame's dt. */

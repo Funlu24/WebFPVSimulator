@@ -64,7 +64,7 @@ static double g_stand_hinge[3];
  * The hull is an OBB around the 5 inch airframe. Half extents in x and y
  * are the motor offset plus a motor-bell radius, so a side arrival contacts
  * an arm, not empty air. Down is REST_HEIGHT so a level craft at plant z = 0
- * sits on a plane at z = -0.045, matching the parked pose. Up is the prop
+ * sits on a plane at z = -0.033, matching the parked pose. Up is the prop
  * disc / camera stack, which is what an inverted craft rests on.
  */
 static int g_ground_on = 0;
@@ -73,7 +73,7 @@ static double g_ground_n[3] = { 0.0, 0.0, 1.0 };
  * sim_set_airframe, because a static initialiser cannot read PLANT. A host
  * that raises its own ground plane overwrites this on the first call
  * anyway; it matters only to a host that never does. */
-static double g_ground_d = -0.045;
+static double g_ground_d = -0.033;
 static double g_ground_mu = 1.40;
 static double g_ground_e = 0.0;
 /* The plane exactly as the shell raised it. g_ground_* above is what the
@@ -81,7 +81,7 @@ static double g_ground_e = 0.0;
  * CG is over (a roof is ground). With no world it is never touched, so the
  * two are the same doubles and every recorded trace stands. */
 static double g_terrain_n[3] = { 0.0, 0.0, 1.0 };
-static double g_terrain_d = -0.045;
+static double g_terrain_d = -0.033;
 static int g_ground_hits = 0;
 static int g_ground_projected = 0;
 static int g_ground_near = 0;
