@@ -70115,9 +70115,10 @@ Not on main. No physics, plant, module ABI or build change here, so `npm run ver
   both repositories, not main, and both PRs stay drafts. Board: PR 13's branch merged board main first (1bed022,
   bringing the tune tickets; npm test passed on the file store and twice on one scratch Postgres, lint:licence
   and lint:nouns pass) and board `test` was fast-forwarded to it, df8733d to 1bed022. Simulator: this branch
-  merged main (10b2c32, the flight feel tuning; check:clip 2594 passed, lint:preload, lint:boot, lint:memory,
-  lint:nouns and check:fresh pass), and `test` takes it as a merge on top of `test` as it was (the race line and
-  the flight feel tuning) with main merged in first, pushed as a fast-forward. No force push, main untouched.
+  merged main twice, 10b2c32 for the flight feel tuning and 6f03780 for the race line, which reached main at 08:24Z
+  while this was under way (check:clip 2594 passed, lint:preload, lint:boot, lint:memory, lint:nouns and
+  check:fresh pass on both), and `test` takes it as a merge on top of `test` as it was (the race line and the
+  flight feel tuning) with main merged in first, pushed as a fast-forward. No force push, main untouched.
 - Latency: unchanged, nothing on the flying path. Where `test` deploys is not written down anywhere in either
   repository, so which board the test simulator reads, and which simulator the test board's Fly and builder links
   open, were not checked from here.
