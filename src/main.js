@@ -11101,6 +11101,9 @@ export async function boot({ loading, bootStart, mapId }) {
     lowLatency: shell.granted.desynchronized,
     opaque: shell.granted.opaque,
     pixelRatio: Math.round(shell.pixelRatio * 100) / 100,
+    /* The Shadows row, because Medium with it Off is a lighter machine than
+     * the report's graphics field says. */
+    shadowsOff: Boolean(ui.settings.shadowsOff),
     /* Auto graphics: its resolution factor now, and whether it moved the
      * preset this session. Null when the pilot fixed a preset by hand. */
     auto: ui.settings.graphicsAuto
