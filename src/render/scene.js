@@ -59,6 +59,50 @@ import { PIPE_OD as RACEGOW_PIPE_OD_TRUE,
   ROOM_HEIGHT as ROOM_HEIGHT_TRUE } from '../trackbuilder/racegow.js';
 import { MICRO_SCALE } from '../game/track.js';
 
+/* ================= GERÇEKÇİ PBR MATERYAL VE OUTLINE İPTALİ ================= */
+// 1. Çizgi film siyah dış çizgilerini (konturlarını) tamamen kapatıyoruz:
+function outlineHull(mesh, scale) {
+  return; // Dış kontur çizimini iptal eder
+}
+
+// 2. celMaterial yerine gerçekçi PBR (Fiziksel Tabanlı) materyal fonksiyonu:
+function celMaterial(opts = {}) {
+  const color = opts.color !== undefined ? opts.color : 0xffffff;
+  
+  // Yüzey tipine göre gerçekçi pürüzlülük (roughness) ve metaliklik
+  let roughness = 0.65;
+  let metalness = 0.05;
+
+  if (opts.comic === 'ground') {
+    roughness = 0.95; // Zemin tamamen mat
+    metalness = 0.0;
+  } else if (opts.comic === 'foliage') {
+    roughness = 0.85; // Ağaç yaprakları
+    metalness = 0.0;
+  } else if (opts.rim && opts.rim > 0.2) {
+    roughness = 0.35; // PVC/Alüminyum kapı boruları hafif parlak
+    metalness = 0.25;
+  }
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: color,
+    roughness: opts.roughness !== undefined ? opts.roughness : roughness,
+    metalness: opts.metalness !== undefined ? opts.metalness : metalness,
+    transparent: Boolean(opts.transparent),
+    side: opts.side !== undefined ? opts.side : THREE.FrontSide,
+  });
+
+  if (opts.map) {
+    mat.map = opts.map;
+  }
+
+  mat.userData.celKey = opts.key || (typeof color === 'number' ? color.toString(16) : 'mat');
+  return mat;
+}
+/* ========================================================================= */
+
+
+
 /*
  * A RACEGOW ROOM, IN THE SCENE'S METRES RATHER THAN RACEGOW'S OWN.
  *
@@ -280,45 +324,21 @@ const SKY_HIGH = 0x6ea3d8;
  */
 const SKY_GLSL = /* glsl */ `
   vec3 celSkyColor(vec3 dir, vec3 sunDir, vec3 horizonCol, vec3 highCol) {
-    /*
-     * Re-normalise. On the dome vDir is a unit vector at each vertex, but a
-     * varying interpolates linearly through the triangle, so inside a face
-     * it is short by up to half a percent on a 40 by 24 dome. That was
-     * invisible in the gradient and fatal to the sun, whose disc is a
-     * threshold on dot(dir, sun): the old step could only fire where the
-     * interpolated length happened to survive, so the disc was not a circle
-     * at all but a patchwork following the tessellation.
-     */
     vec3 vd = normalize(dir);
-    float h = clamp(vd.y * 1.25 + 0.06, 0.0, 1.0);
-    /*
-     * Posterised, but only part way. At five bands with a hard step the band
-     * edge is a single enormous pale arc sweeping across the sky, and in a
-     * still that reads as a rendering fault rather than as a style: it was
-     * the most visible artefact in every frame. Nine bands, a wider smooth
-     * edge, and a mix back toward the smooth gradient keep the poster feel
-     * without the arc.
-     */
-    float b = h * 9.0;
-    float stepped = (floor(b) + smoothstep(0.35, 0.95, fract(b))) / 9.0;
-    float band = mix(h, stepped, 0.5);
-    vec3 col = mix(horizonCol, highCol, band);
-    /*
-     * Sun: a warm glow, then a disc.
-     *
-     * Both terms used to be added on top of a sky that was already at 0.59,
-     * 0.72, 0.83 at the sun's altitude. The glow alone reached 1.0 in every
-     * channel by 7.8 degrees off axis, and the disc, a 4 degree half angle
-     * and thirty times the real sun, then added a further 1.0 on top of
-     * that: 1.9 percent of the frame pinned at 254 or higher. So a tighter
-     * glow in a colour that lifts red and green without pushing the already
-     * high blue, and a disc composed by mix() to a ceiling below full white
-     * with a soft outer ramp so it resolves instead of stairing. Core 1.0
-     * degree half angle, ramp out to 1.6.
-     */
+    // Ufuktan tepeye pürüzsüz yükseklik eğrisi
+    float h = clamp(vd.y * 1.15 + 0.04, 0.0, 1.0);
+    
+    // 9 basamaklı anime posterizasyonu kaldırıldı! Pürüzsüz gökyüzü gradyanı:
+    float atmosphericCurve = pow(h, 0.72);
+    vec3 col = mix(horizonCol, highCol, atmosphericCurve);
+
+    // Gerçekçi Güneş Saçılması (Corona ve Güneş Yuvarlağı)
     float sd = max(dot(vd, normalize(sunDir)), 0.0);
-    col += vec3(1.0, 0.80, 0.42) * pow(sd, 40.0) * 0.30;
-    col = mix(col, vec3(0.985, 0.965, 0.905), smoothstep(0.99961, 0.99985, sd));
+    // Güneş etrafındaki sıcak atmosferik ışık halesi:
+    col += vec3(1.0, 0.86, 0.60) * pow(sd, 18.0) * 0.40;
+    // Gerçekçi güneş parlaması:
+    col += vec3(1.0, 0.98, 0.95) * pow(sd, 600.0) * 1.40;
+
     return col;
   }
 `;
