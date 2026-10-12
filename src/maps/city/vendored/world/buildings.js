@@ -26,15 +26,15 @@ const ROOFS = [PAL.roofSlate, PAL.roofBlue, PAL.roofBrown, PAL.roofTeal];
 const M = {};
 function mats() {
   if (M.roofs) return M;
-  M.walls = WALLS.map((c) => cel({ color: c, bands: 3, tint: 0x6f6790 }));
-  M.roofs = ROOFS.map((c) => cel({ color: c, bands: 3, tint: 0x514b70 }));
-  M.trim = cel({ color: PAL.trim, bands: 3, tint: 0x5c5680 });
-  M.metal = cel({ color: PAL.metal, bands: 3, tint: 0x666090 });
-  M.metalDark = cel({ color: PAL.metalDark, bands: 3, tint: 0x5c5680 });
-  M.glass = flat({ color: PAL.glassDark });
-  M.concrete = cel({ color: PAL.concrete, bands: 3, tint: 0x6f6790 });
-  M.concreteMid = cel({ color: PAL.concreteMid, bands: 3, tint: 0x6a6288 });
-  M.door = cel({ color: 0x8a6f5c, bands: 3, tint: 0x5c5680 });
+  M.walls = WALLS.map((c) => cel({ color: c, bands: 3, tint: 0x6f6790, roughness: 0.9 }));
+  M.roofs = ROOFS.map((c) => cel({ color: c, bands: 3, tint: 0x514b70, roughness: 0.76 }));
+  M.trim = cel({ color: PAL.trim, bands: 3, tint: 0x5c5680, roughness: 0.68 });
+  M.metal = cel({ color: PAL.metal, bands: 3, tint: 0x666090, roughness: 0.38, metalness: 0.42 });
+  M.metalDark = cel({ color: PAL.metalDark, bands: 3, tint: 0x5c5680, roughness: 0.48, metalness: 0.34 });
+  M.glass = cel({ color: PAL.glassDark, roughness: 0.22, metalness: 0.12 });
+  M.concrete = cel({ color: PAL.concrete, bands: 3, tint: 0x6f6790, roughness: 0.94 });
+  M.concreteMid = cel({ color: PAL.concreteMid, bands: 3, tint: 0x6a6288, roughness: 0.9 });
+  M.door = cel({ color: 0x8a6f5c, bands: 3, tint: 0x5c5680, roughness: 0.62 });
   return M;
 }
 

@@ -420,10 +420,12 @@ export function buildPlaces(world, { petals: livePetals = true, treeModel = null
   const children0 = world.root.children.length;
 
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
+  /* Tümer Savunma is the town's sole sponsor. Keep its sign and collectible;
+   * patron and other partner artwork stays off this map. */
   const tumer = PARTNERS.find((partner) => partner.slug === 'tumer');
   const tumerSign = tumer ? buildTumerMark(ctx, tumer) : null;
   const egg = tumerSign?.egg ?? null;
-  const marks = [...(tumerSign ? [tumerSign.partnerMark] : []), ...buildPatronMarks(ctx)];
+  const marks = tumerSign ? [tumerSign.partnerMark] : [];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */
   const holes = parts.flatMap((p) => p.holes ?? []);

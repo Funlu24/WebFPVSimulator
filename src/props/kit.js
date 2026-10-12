@@ -1,5 +1,5 @@
 /*
- * kit.js: turn freestyle assets into meshes, in the town's cel style, in as
+ * kit.js: turn freestyle assets into meshes, in the town's material style, in as
  * few draw calls as the materials allow.
  *
  * Every asset in src/props is a layout (what is solid, pure data) and a draw
@@ -10,8 +10,8 @@
  * thousands. The builder's 3D preview and the sim's built map both draw
  * through here, which is what makes the preview the game.
  *
- * THE MATERIALS ARE THE TOWN'S: cel() and flat() from the vendored toon kit,
- * out of its palette, tinted its cool violet in shadow. A few colours the
+ * THE MATERIALS ARE THE TOWN'S: cel() and flat() from the shared material
+ * kit, out of its palette and shaded under the same daylight. A few colours the
  * town has no use for (a crane's yellow, a container's red, a scaffold's
  * galvanising) are added, each pulled toward the town's range the way
  * src/maps/city/places/kit.js pulls its rust and tile, so a crane beside a

@@ -903,10 +903,10 @@ function mats() {
   if (MAT.dark) {
     return MAT;
   }
-  MAT.dark = cel({ color: 0x36333e, bands: 2, tint: 0x4b4560 });
-  MAT.brite = cel({ color: PAL.metal, bands: 3, tint: 0x666090 });
-  MAT.briteDark = cel({ color: PAL.metalDark, bands: 3, tint: 0x5c5680 });
-  MAT.glass = flat({ color: PAL.glassDark });
+  MAT.dark = cel({ color: 0x36333e, bands: 2, tint: 0x4b4560, roughness: 0.68 });
+  MAT.brite = cel({ color: PAL.metal, bands: 3, tint: 0x666090, roughness: 0.34, metalness: 0.5 });
+  MAT.briteDark = cel({ color: PAL.metalDark, bands: 3, tint: 0x5c5680, roughness: 0.42, metalness: 0.38 });
+  MAT.glass = cel({ color: PAL.glassDark, roughness: 0.2, metalness: 0.14 });
   MAT.glint = flat({ color: GLINT });
   MAT.band = flat({ color: GLASS_BAND });
   MAT.lampF = flat({ color: LAMP_FRONT });
@@ -919,9 +919,9 @@ function mats() {
   MAT.plate = flat({ color: 0xffffff, map: sheet(), cache: false });
   return MAT;
 }
-const paint = (c) => cel({ color: c, bands: 3, tint: 0x6a6288 });
+const paint = (c) => cel({ color: c, bands: 3, tint: 0x6a6288, roughness: 0.43, metalness: 0.08 });
 const deepOf = (c) => new THREE.Color(c).multiplyScalar(0.76).getHex();
-const deepPaint = (c) => cel({ color: deepOf(c), bands: 3, tint: 0x5e5680 });
+const deepPaint = (c) => cel({ color: deepOf(c), bands: 3, tint: 0x5e5680, roughness: 0.48, metalness: 0.06 });
 
 /* ------------------------------------------------------------------ *
  * THE TABLE. Each kind is the vendored row (its sizes, untouched) and a
@@ -5087,11 +5087,11 @@ export function buildCar(o = {}) {
     wheels(M, s, detail, rimRole);
   }
   const bodyMat = truck
-    ? cel({ color: col, bands: 3, tint: 0x8f7050 })
+    ? cel({ color: col, bands: 3, tint: 0x8f7050, roughness: 0.45, metalness: 0.07 })
     : paint(col);
   const matFor = {
     body: bodyMat,
-    deep: truck ? cel({ color: deepOf(col), bands: 3, tint: 0x8f7050 }) : deepPaint(col),
+    deep: truck ? cel({ color: deepOf(col), bands: 3, tint: 0x8f7050, roughness: 0.5, metalness: 0.06 }) : deepPaint(col),
     dark: m.dark,
     brite: m.brite,
     briteDark: m.briteDark,

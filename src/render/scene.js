@@ -1469,15 +1469,16 @@ function makeProceduralGrassTexture() {
     return seed / 4294967296;
   }
 
-  // İnce çim lifleri için nötr tonlar.
+  // Low-contrast green, straw and soil tones add natural variation without
+  // overpowering the terrain's vertex colours.
   const colors = [
-    '#b8b8b8',
-    '#c8c8c8',
-    '#d5d5d5',
-    '#e4e4e4',
-    '#a9a9a9',
-    '#f4f4f4',
-    '#cccccc'
+    '#a8b982',
+    '#b7c58d',
+    '#c2c899',
+    '#d0c49a',
+    '#8f9f70',
+    '#d7d2ad',
+    '#b8ad83'
   ];
 
   ctx.lineCap = 'round';
@@ -1523,10 +1524,12 @@ function makeProceduralGrassTexture() {
   for (let i = 0; i < 4500; i++) {
     const x = rand() * size;
     const y = rand() * size;
-    const shade = Math.floor(175 + rand() * 75);
+    const green = Math.floor(112 + rand() * 66);
+    const red = Math.floor(green * (0.76 + rand() * 0.20));
+    const blue = Math.floor(green * (0.58 + rand() * 0.16));
 
-    ctx.globalAlpha = 0.2 + rand() * 0.3;
-    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.globalAlpha = 0.12 + rand() * 0.22;
+    ctx.fillStyle = `rgb(${red},${green},${blue})`;
 
     const dotSize = 0.5 + rand() * 1.2;
     ctx.fillRect(x, y, dotSize, dotSize);
@@ -1589,17 +1592,55 @@ function terrain(height, samples, pitch, indoor = false) {
    * each its own texture (comic.js, GROUND). */
   const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, comic: 'ground' });
   mat.vertexColors = true;
-  // Harici grass.jpg dosyası yerine kodla üretilen doku.
-const grassTex = makeProceduralGrassTexture();
+  const grassTex = new THREE.TextureLoader().load(
+    new URL('../../assets/ground/grass.jpg', import.meta.url).href,
+    (texture) => {
+      /* The source turf has tiny, very dark blade marks that read as black
+       * specks from the FPV camera. Lift only the deepest tones once at load. */
+      const image = texture.image;
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = pixels.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const luminance = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (luminance < 92) {
+          const lifted = luminance + (92 - luminance) * 0.78;
+          const scale = lifted / Math.max(1, luminance);
+          data[i] = Math.min(255, data[i] * scale);
+          data[i + 1] = Math.min(255, data[i + 1] * scale);
+          data[i + 2] = Math.min(255, data[i + 2] * scale);
+        }
+      }
+      ctx.putImageData(pixels, 0, 0);
+      texture.image = canvas;
+      texture.needsUpdate = true;
+    },
+    undefined,
+    () => {
+      console.warn('Could not load assets/ground/grass.jpg; using procedural grass texture.');
+      const fallback = makeProceduralGrassTexture();
+      fallback.repeat.set(size / 4, size / 4);
+      mat.map = fallback;
+      mat.needsUpdate = true;
+    },
+  );
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.wrapS = THREE.RepeatWrapping;
+  grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.generateMipmaps = true;
+  grassTex.minFilter = THREE.LinearMipmapLinearFilter;
+  grassTex.magFilter = THREE.LinearFilter;
+  grassTex.anisotropy = 8;
+  // One tile covers about four metres on the field.
+  grassTex.repeat.set(size / 4, size / 4);
 
-// Bir doku karosu yaklaşık 4 metreye yayılsın.
-grassTex.repeat.set(size / 4, size / 4);
-
-mat.map = grassTex;
-
-// Aşırı parlaklık çarpanı kullanma.
-mat.color.set(0xffffff);
-mat.needsUpdate = true;
+  mat.map = grassTex;
+  mat.color.set(0xffffff);
+  mat.needsUpdate = true;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;

@@ -7,7 +7,7 @@ import { PAL } from './palette.js';
  *
  *   scene  ->  rtScene (colour + depth texture)
  *          ->  ink pass      : screen-space line work from the depth buffer
- *          ->  grade pass    : anime colour grade + linear->sRGB
+ *          ->  grade pass    : restrained colour grade + linear->sRGB
  *          ->  fxaa pass     : clean up the line work, straight to screen
  *
  * Lines come from a *second difference* of linearised depth.  A first
@@ -33,7 +33,7 @@ const INK_SHADER = {
     uConcaveAmount: { value: 0.42 },
     uFadeStart: { value: 40.0 },
     uFadeEnd: { value: 98.0 },
-    uStrength: { value: 1.0 },
+    uStrength: { value: 0.52 },
     uSkyDepth: { value: 420.0 },
   },
   vertexShader: /* glsl */ `
@@ -100,12 +100,12 @@ const INK_SHADER = {
 const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
-    uShadowTint: { value: new THREE.Color(0xada8d0) },
+    uShadowTint: { value: new THREE.Color(0xb7c1cf) },
     uLightTint: { value: new THREE.Color(0xfff7e8) },
-    uSaturation: { value: 1.12 },
-    uLift: { value: 0.032 },
-    uVignette: { value: 0.15 },
-    uWarmth: { value: 0.05 },
+    uSaturation: { value: 1.02 },
+    uLift: { value: 0.018 },
+    uVignette: { value: 0.06 },
+    uWarmth: { value: 0.025 },
   },
   vertexShader: INK_SHADER.vertexShader,
   fragmentShader: /* glsl */ `

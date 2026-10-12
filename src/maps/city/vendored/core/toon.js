@@ -2,14 +2,13 @@ import * as THREE from 'three';
 import { PAL } from './palette.js';
 
 /* ------------------------------------------------------------------ *
- * Cel shading
+ * Shared city materials.
  *
- * Everything in the scene uses MeshToonMaterial with a hand-authored
- * gradient ramp, so direct sunlight is quantised into 2-4 flat bands
- * instead of a smooth falloff.  On top of that we patch the toon BRDF so
- * the darker bands are *tinted* toward a cool violet rather than simply
- * being a darker version of the base colour -- that hue shift in shadow
- * is most of what separates "anime cel" from "low-poly 3D".
+ * The old toon ramp gave every facade, car and street prop hard, cartoon
+ * shadow bands. Keep this factory and its cache as the stable API for the
+ * vendored builders, but shade the same low-poly geometry with a restrained
+ * physically based material. The geometry remains batched and instanced;
+ * this changes the light response without adding textures or draw calls.
  * ------------------------------------------------------------------ */
 
 const RAMPS = {
@@ -82,8 +81,9 @@ function applyShadowTint(mat, tint) {
 const matCache = new Map();
 
 /**
- * Cel-shaded material factory.  Results are cached by parameter signature so
- * the whole street ends up sharing a few dozen shader programs.
+ * Surface material factory. Legacy bands and tint fields remain accepted so
+ * the world builders do not need duplicated material definitions. They do
+ * not affect the physically based surface response.
  */
 export function cel(opts = {}) {
   const {
@@ -94,6 +94,8 @@ export function cel(opts = {}) {
     map = null,
     emissive = null,
     emissiveIntensity = 1,
+    roughness = 0.84,
+    metalness = 0.015,
     transparent = false,
     opacity = 1,
     side = THREE.FrontSide,
@@ -106,16 +108,17 @@ export function cel(opts = {}) {
   } = opts;
 
   const key = cache && !map && !alphaMap
-    ? [color, bands, tint, flat, emissive, emissiveIntensity, transparent,
-       opacity, side, alphaTest, depthWrite, fog, vertexColors].join('|')
+    ? [color, emissive, emissiveIntensity, transparent,
+       opacity, roughness, metalness, side, alphaTest, depthWrite, fog, vertexColors].join('|')
     : null;
   if (key && matCache.has(key)) return matCache.get(key);
 
-  const mat = new THREE.MeshToonMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     color,
-    gradientMap: gradientMap(bands),
     map,
     alphaMap,
+    roughness,
+    metalness,
     transparent,
     opacity,
     side,
@@ -126,7 +129,6 @@ export function cel(opts = {}) {
     emissiveIntensity,
   });
   if (depthWrite !== null) mat.depthWrite = depthWrite;
-  applyShadowTint(mat, tint);
   if (key) matCache.set(key, mat);
   return mat;
 }

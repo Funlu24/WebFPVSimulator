@@ -483,7 +483,10 @@ class CityPipeline extends Pipeline {
     this.manga = mangaPipeline(this);
     /* The comic layer's pen and grade: see src/render/comic.js. The
      * blobs option is the ink half of markCanopies' comicBlob. */
-    comicPipeline(this, { blobs: true });
+    /* The town uses the shared scene pipeline but keeps its finish quieter
+     * than the freestyle maps: thin contours and a neutral colour grade let
+     * the PBR materials read as painted metal, concrete and glass. */
+    comicPipeline(this, { blobs: true, inkWeight: 0.72, neutralGrade: true });
   }
 
   setSize(w, h) {
@@ -2320,9 +2323,9 @@ export async function buildMap(shell, onProgress, options) {
   camera.far = CAMERA_FAR;
   camera.updateProjectionMatrix();
 
-  /* The two light anime setup the town is authored for: one warm quantised
-   * key, one strong cool bounce carrying the shadow side, a weak underside
-   * bounce, and a hemisphere so nothing in shadow goes black. Directions are
+  /* Soft daylight for the town: one warm key, a cool fill carrying some
+   * sky light into shadow, a weak underside bounce, and a hemisphere so
+   * shaded surfaces retain detail. Directions are
    * the town's own. Without the planet there is no local surface frame to
    * seat them in, so they are plain offsets from the shadow target. */
   const sun = new THREE.DirectionalLight(PAL.sun, 2.25);
@@ -2868,10 +2871,9 @@ export async function buildMap(shell, onProgress, options) {
     /* The parts of the town that move and are solid, for the plant to read
      * every step. See solids in ./animation.js. */
     solids: anim.solids,
-    /* TÜMER sign at the former STF panel; it keeps the same collectible
-     * position and sight direction. Paint only; nothing about it is solid. */
+    /* The Tümer Savunma sponsor sign keeps its collectible location. */
     egg: places.egg,
-    /* The one TÜMER partner mark in the city. */
+    /* Tümer Savunma is the only sponsor mark in the town. */
     marks: places.marks,
     setNextGate() {},
     /* No gates, so nothing is ever the next one. Present so the shell has

@@ -264,7 +264,10 @@ const PRESETS = {
        * same frame the budget check was measured against. */
       minScale: 1,
       preferScale: null,
-      ink: true,
+      /* City materials now carry their shape through lighting and surface
+       * response; the screen-space pen was making every building and car
+       * read as an outlined illustration. */
+      ink: false,
       fxaa: true,
       /* The authored look. Falling blossom down the street corridor, three
        * instanced draws, driven from the fixed step count. */

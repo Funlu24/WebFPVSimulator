@@ -1309,11 +1309,16 @@ if (!P[INSTALLED]) {
  * manga.js edits them. Nothing under vendored/ changes. The pipelines'
  * setSize multiplies its own line width by pipeline.inkWeight.
  */
-export function comicPipeline(pipeline, { blobs = false } = {}) {
+export function comicPipeline(pipeline, {
+  blobs = false,
+  inkWeight = INK_WEIGHT,
+  saturation = 1.26,
+  neutralGrade = false,
+} = {}) {
   /* The pen and the grade below are uniforms and draw on WebGL 1 as they
    * do on 2. The three shader edits are WebGL 2 GLSL, so see comicGL2. */
   const gl2 = comicGL2(pipeline.renderer);
-  pipeline.inkWeight = INK_WEIGHT;
+  pipeline.inkWeight = inkWeight;
   pipeline.comicAo = gl2 && comicAoOn() && addPipelineAo(pipeline);
   pipeline.comicSil = gl2 && comicAoOn() && addPipelineSil(pipeline);
   /* Not on Low, where the chunk that writes the codes is not compiled in
@@ -1336,10 +1341,10 @@ export function comicPipeline(pipeline, { blobs = false } = {}) {
      * the lines heavier; the last tenth is a slightly keener pen.
      */
     if (ink.uSens) {
-      ink.uSens.value *= INK_WEIGHT * 0.9;
+      ink.uSens.value *= inkWeight * 0.9;
     }
     if (ink.uConcave) {
-      ink.uConcave.value *= INK_WEIGHT * 0.9;
+      ink.uConcave.value *= inkWeight * 0.9;
     }
     if (ink.uConcaveAmount) {
       ink.uConcaveAmount.value = Math.min(1, ink.uConcaveAmount.value * 1.3);
@@ -1350,10 +1355,16 @@ export function comicPipeline(pipeline, { blobs = false } = {}) {
     /* More colour and deeper darks: the pastel town moves toward the
      * saturated, high contrast palette the ask names, keeping its hues. */
     if (g.uSaturation) {
-      g.uSaturation.value = 1.26;
+      g.uSaturation.value = neutralGrade ? 1 : saturation;
     }
     if (g.uLift) {
-      g.uLift.value = 0.014;
+      g.uLift.value = neutralGrade ? 0 : 0.014;
+    }
+    if (neutralGrade) {
+      if (g.uShadowTint) g.uShadowTint.value.setRGB(1, 1, 1);
+      if (g.uLightTint) g.uLightTint.value.setRGB(1, 1, 1);
+      if (g.uVignette) g.uVignette.value = 0;
+      if (g.uWarmth) g.uWarmth.value = 0;
     }
   }
 }

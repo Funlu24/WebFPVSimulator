@@ -70,6 +70,9 @@ function smoothedGeometry(geo) {
  * Thickness is in normalised device units (~0.004 reads as a 2px line at 1080p).
  */
 export function hullOutline(mesh, { thickness = 0.0038, color = PAL.ink, opacity = 1 } = {}) {
+  /* Thin architectural edge accents keep forms legible without the heavy
+   * comic-book contour the town used to draw around every prop. */
+  thickness *= 0.68;
   if (!mesh || !mesh.geometry) return null;
   const mat = new THREE.ShaderMaterial({
     uniforms: {
