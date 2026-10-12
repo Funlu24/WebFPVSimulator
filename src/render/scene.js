@@ -961,6 +961,77 @@ function pitchSurface(pitch, course, sponsorMarks) {
         ctx.fillRect(i * stripePx, 0, stripePx, ch);
       }
     }
+// Doğal çim görünümü için küçük renk ve lif farklılıkları.
+// Daha belirgin ve doğal çim yüzeyi ayrıntıları.
+let grassSeed = 73129;
+
+const grassRandom = () => {
+  grassSeed = (grassSeed * 1664525 + 1013904223) >>> 0;
+  return grassSeed / 4294967296;
+};
+
+const grassColors = [
+  '#263b20',
+  '#354e27',
+  '#536c35',
+  '#718345',
+  '#918e50',
+  '#a49b65'
+];
+
+// Önce küçük, düzensiz renk kümeleri oluştur.
+const patchCount = Math.min(
+  12000,
+  Math.max(4500, Math.floor((cw * ch) / 220))
+);
+
+for (let i = 0; i < patchCount; i++) {
+  const x = grassRandom() * cw;
+  const y = grassRandom() * ch;
+
+  const rx = 2 + grassRandom() * 5;
+  const ry = 1 + grassRandom() * 3;
+
+  ctx.globalAlpha = 0.10 + grassRandom() * 0.18;
+  ctx.fillStyle =
+    grassColors[Math.floor(grassRandom() * grassColors.length)];
+
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, grassRandom() * Math.PI, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Ardından daha görünür ince çim lifleri ekle.
+const grassCount = Math.min(
+  42000,
+  Math.max(12000, Math.floor((cw * ch) / 70))
+);
+
+ctx.lineCap = 'round';
+
+for (let i = 0; i < grassCount; i++) {
+  const x = grassRandom() * cw;
+  const y = grassRandom() * ch;
+
+  const length = 2 + grassRandom() * 6;
+  const angle = grassRandom() * Math.PI * 2;
+
+  ctx.strokeStyle =
+    grassColors[Math.floor(grassRandom() * grassColors.length)];
+
+  ctx.globalAlpha = 0.22 + grassRandom() * 0.24;
+  ctx.lineWidth = 0.6 + grassRandom() * 0.8;
+
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(
+    x + Math.cos(angle) * length,
+    y + Math.sin(angle) * length
+  );
+  ctx.stroke();
+}
+
+ctx.globalAlpha = 1;
 
     /* The marking, on the boundary the author drew rather than on the mown
      * edge: the mown ground outside it is run off. */
@@ -1375,6 +1446,106 @@ function groundAlbedo(x, z, y, samples, c, pitch) {
   }
   return c;
 }
+function makeProceduralGrassTexture() {
+  const size = 512;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext('2d');
+
+  // Açık gri taban: arazi renklerinin yeşil ve kahverengi
+  // tonlarını koruyarak ince yüzey ayrıntıları oluşturur.
+  ctx.fillStyle = '#eeeeee';
+  ctx.fillRect(0, 0, size, size);
+
+  // Her yüklemede aynı dokuyu üret.
+  let seed = 73129;
+
+  function rand() {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  }
+
+  // İnce çim lifleri için nötr tonlar.
+  const colors = [
+    '#b8b8b8',
+    '#c8c8c8',
+    '#d5d5d5',
+    '#e4e4e4',
+    '#a9a9a9',
+    '#f4f4f4',
+    '#cccccc'
+  ];
+
+  ctx.lineCap = 'round';
+
+  // Küçük çim lifleri.
+  for (let i = 0; i < 14000; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const length = 2 + rand() * 7;
+    const angle = rand() * Math.PI * 2;
+
+    ctx.strokeStyle = colors[
+      Math.floor(rand() * colors.length)
+    ];
+
+    ctx.globalAlpha = 0.35 + rand() * 0.5;
+    ctx.lineWidth = 0.5 + rand() * 0.8;
+
+    const dx = Math.cos(angle) * length;
+    const dy = Math.sin(angle) * length;
+
+    // Kenardaki liflerin tekrarlanan dokuda kopuk
+    // görünmesini azaltmak için karşı kenara da çiz.
+    const offsetsX = [0];
+    const offsetsY = [0];
+
+    if (x < 8) offsetsX.push(size);
+    if (x > size - 8) offsetsX.push(-size);
+    if (y < 8) offsetsY.push(size);
+    if (y > size - 8) offsetsY.push(-size);
+
+    for (const ox of offsetsX) {
+      for (const oy of offsetsY) {
+        ctx.beginPath();
+        ctx.moveTo(x + ox, y + oy);
+        ctx.lineTo(x + dx + ox, y + dy + oy);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Çok küçük yüzey parçacıkları.
+  for (let i = 0; i < 4500; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const shade = Math.floor(175 + rand() * 75);
+
+    ctx.globalAlpha = 0.2 + rand() * 0.3;
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+
+    const dotSize = 0.5 + rand() * 1.2;
+    ctx.fillRect(x, y, dotSize, dotSize);
+  }
+
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 8;
+
+  return texture;
+}
 
 function terrain(height, samples, pitch, indoor = false) {
   const size = 1700;
@@ -1417,14 +1588,17 @@ function terrain(height, samples, pitch, indoor = false) {
    * each its own texture (comic.js, GROUND). */
   const mat = celMaterial({ color: 0xffffff, rim: 0.0, cloudShadow: 0.34, comic: 'ground' });
   mat.vertexColors = true;
-  const grassTex = new THREE.TextureLoader().load('assets/ground/grass.jpg');
-  grassTex.colorSpace = THREE.SRGBColorSpace;
-  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-  grassTex.repeat.set(size / 6, size / 6);
-  grassTex.anisotropy = 8;
-  mat.map = grassTex;
-  mat.color.setScalar(1.8);
-  mat.needsUpdate = true;
+  // Harici grass.jpg dosyası yerine kodla üretilen doku.
+const grassTex = makeProceduralGrassTexture();
+
+// Bir doku karosu yaklaşık 4 metreye yayılsın.
+grassTex.repeat.set(size / 4, size / 4);
+
+mat.map = grassTex;
+
+// Aşırı parlaklık çarpanı kullanma.
+mat.color.set(0xffffff);
+mat.needsUpdate = true;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;
@@ -1558,14 +1732,120 @@ function lumpCanopy(geo, r, seed) {
   }
   nrm.needsUpdate = true;
 }
+// Ağaç ve kayalar için bir kez oluşturulan ayrıntı dokuları.
+const SCENERY_TEXTURES = {};
+
+function sceneryTexture(type) {
+  if (SCENERY_TEXTURES[type]) {
+    return SCENERY_TEXTURES[type];
+  }
+
+  const size = type === 'leaves' ? 512 : 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext('2d');
+
+  let seed = type === 'bark' ? 12345
+    : type === 'leaves' ? 23456
+    : 34567;
+
+  function random() {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  }
+
+  // Gri tonlar, nesnenin kendi rengini korurken
+  // yüzeydeki ışık ve koyuluk farklılıklarını gösterir.
+  ctx.fillStyle = '#ededed';
+  ctx.fillRect(0, 0, size, size);
+
+  if (type === 'bark') {
+    // Dikey ağaç kabuğu çizgileri.
+    for (let i = 0; i < 180; i++) {
+      const x = random() * size;
+      const shade = Math.floor(105 + random() * 125);
+
+      ctx.strokeStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.globalAlpha = 0.25 + random() * 0.35;
+      ctx.lineWidth = 1 + random() * 3;
+
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.bezierCurveTo(
+        x - 8 + random() * 16, size * 0.3,
+        x - 8 + random() * 16, size * 0.7,
+        x - 5 + random() * 10, size
+      );
+      ctx.stroke();
+    }
+  } else if (type === 'leaves') {
+    // Yaprak kümelerinde küçük renk farklılıkları.
+    for (let i = 0; i < 10000; i++) {
+      const x = random() * size;
+      const y = random() * size;
+      const shade = Math.floor(125 + random() * 125);
+
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.globalAlpha = 0.12 + random() * 0.32;
+
+      ctx.beginPath();
+      ctx.ellipse(
+        x, y,
+        0.6 + random() * 2.5,
+        0.8 + random() * 2.2,
+        random() * Math.PI,
+        0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+  } else if (type === 'stone') {
+    // Taş yüzeylerinde ince renk ve mineral benekleri.
+    for (let i = 0; i < 6500; i++) {
+      const x = random() * size;
+      const y = random() * size;
+      const shade = Math.floor(100 + random() * 145);
+
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.globalAlpha = 0.12 + random() * 0.3;
+
+      const dot = 0.5 + random() * 2;
+      ctx.fillRect(x, y, dot, dot);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 8;
+
+  SCENERY_TEXTURES[type] = texture;
+  return texture;
+}
 
 function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
   const g = new THREE.Group();
   const scale = (0.85 + rng() * 1.5) * bigness;
   const trunkH = (1.5 + rng() * 1.3) * scale;
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.13 * scale, 0.24 * scale, trunkH, 6),
-    celMaterial({ color: 0x6b4a2f, rim: 0.18 }),
+   new THREE.CylinderGeometry(
+  0.13 * scale,
+  0.24 * scale,
+  trunkH,
+  hull ? 10 : 7
+),
+celMaterial({
+  color: 0x6b4a2f,
+  roughness: 0.95,
+  metalness: 0,
+  map: sceneryTexture('bark'),
+  key: 'tree-bark-textured'
+}),
   );
   trunk.position.y = trunkH / 2;
   trunk.castShadow = true;
@@ -1585,12 +1865,22 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
      * toon band and its own crease line, which reads as crumpled paper up
      * close. A smooth blob shades as one round mass with a curved band
      * edge, which is how this style draws a canopy. */
-    let blobGeo = new THREE.IcosahedronGeometry(r, 1);
+   let blobGeo = new THREE.IcosahedronGeometry(
+  r,
+  hull ? 2 : 1
+);
     blobGeo = mergeVertices(blobGeo);
     lumpCanopy(blobGeo, r, x * 0.37 + z * 0.61 + i * 1.7);
     const blob = new THREE.Mesh(
       blobGeo,
-      celMaterial({ color: tint, rim: 0.3, comic: 'foliage' }),
+     celMaterial({
+  color: tint,
+  comic: 'foliage',
+  roughness: 0.96,
+  metalness: 0,
+  map: sceneryTexture('leaves'),
+  key: `tree-leaves-${tint.toString(16)}`
+}),
     );
     const a = rng() * Math.PI * 2;
     const spread = i === 0 ? 0 : (0.35 + rng() * 0.55) * scale;
@@ -1627,8 +1917,14 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
 function rock(rng, height, x, z, caps) {
   const r = 0.6 + rng() * 2.4;
   const m = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(r, 0),
-    celMaterial({ color: 0x8e8b82, rim: 0.26 }),
+new THREE.DodecahedronGeometry(r, 1),
+  celMaterial({
+  color: 0x8e8b82,
+  roughness: 0.95,
+  metalness: 0,
+  map: sceneryTexture('stone'),
+  key: 'rock-stone-textured'
+}),
   );
   m.rotation.set(rng() * 3, rng() * 3, rng() * 3);
   m.scale.set(1, 0.7 + rng() * 0.5, 1);
