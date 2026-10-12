@@ -1833,11 +1833,11 @@ function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
   const scale = (0.85 + rng() * 1.5) * bigness;
   const trunkH = (1.5 + rng() * 1.3) * scale;
   const trunk = new THREE.Mesh(
-   new THREE.CylinderGeometry(
+  new THREE.CylinderGeometry(
   0.13 * scale,
   0.24 * scale,
   trunkH,
-  hull ? 10 : 7
+  hull ? 12 : 7
 ),
 celMaterial({
   color: 0x6b4a2f,
@@ -1856,18 +1856,29 @@ celMaterial({
 
   /* Rounded, slightly irregular canopy masses rather than cones: the
    * silhouette is what sells a stylised tree. */
-  const tints = [0x4c9440, 0x5aa348, 0x429038, 0x69ad4e];
+  const tints = [
+  0x315b2e,
+  0x3f7134,
+  0x507c3d,
+  0x658848,
+  0x79934f
+];
+
+const blobs = hull
+  ? 6 + Math.floor(rng() * 3)
+  : 3 + Math.floor(rng() * 2);
+ for (let i = 0; i < blobs; i += 1) {
   const tint = tints[Math.floor(rng() * tints.length)];
-  const blobs = 3 + Math.floor(rng() * 3);
-  for (let i = 0; i < blobs; i += 1) {
-    const r = (1.05 - i * 0.1 + rng() * 0.35) * scale;
+
+  const r = (1.05 - i * 0.1 + rng() * 0.35) * scale;
     /* Smooth normals: a flat shaded icosahedron gives every facet its own
      * toon band and its own crease line, which reads as crumpled paper up
      * close. A smooth blob shades as one round mass with a curved band
      * edge, which is how this style draws a canopy. */
-   let blobGeo = new THREE.IcosahedronGeometry(
+ let blobGeo = new THREE.SphereGeometry(
   r,
-  hull ? 2 : 1
+  hull ? 16 : 8,
+  hull ? 12 : 6
 );
     blobGeo = mergeVertices(blobGeo);
     lumpCanopy(blobGeo, r, x * 0.37 + z * 0.61 + i * 1.7);
@@ -1905,7 +1916,13 @@ celMaterial({
      * craft's own 0.19 m. */
     caps.addPost('tree', x, z, gy, gy + trunkH, (0.13 + 0.24) * 0.5 * scale);
     for (const c of g.children) {
-      if (c.isMesh && c.geometry.type === 'IcosahedronGeometry') {
+     if (
+  c.isMesh &&
+  (
+    c.geometry.type === 'IcosahedronGeometry' ||
+    c.geometry.type === 'SphereGeometry'
+  )
+) {
         caps.addSphere('canopy', x + c.position.x, gy + c.position.y, z + c.position.z,
           c.geometry.parameters.radius);
       }
