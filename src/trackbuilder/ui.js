@@ -90,6 +90,23 @@ const CHIP_KINDS = {
  * one place the builder converts it. */
 const KMH = 3.6;
 
+/* The builder is Turkish throughout; keep its short control vocabulary in
+ * one place so labels shared by generated panels stay consistent. */
+const TR_UI = {
+  'More': 'Diğer', 'Tools': 'Araçlar', 'Details': 'Ayrıntılar', 'Close': 'Kapat',
+  'Copy': 'Kopyala', 'Remove': 'Kaldır', 'Delete': 'Sil', 'Open': 'Aç', 'Opening': 'Açılıyor',
+  'Loading': 'Yükleniyor', 'Save': 'Kaydet', 'Load': 'Yükle', 'Undo': 'Geri al', 'Redo': 'Yinele',
+  'Fly': 'Uç', 'Publish': 'Yayımla', 'Update board': 'Panoyu güncelle', 'Cancel': 'İptal',
+  'Done': 'Tamam', 'Yes': 'Evet', 'No': 'Hayır', 'None': 'Yok', 'Auto': 'Otomatik',
+  'Flat': 'Yatay', 'On end': 'Dikey', 'Forward': 'İleri', 'Reverse': 'Geri',
+  'Built': 'Görünür', 'Invisible': 'Görünmez', 'Straight': 'Düz', 'Weave': 'Slalom',
+  'Style': 'Stil', 'Points': 'Puan', 'Traffic': 'Trafik', 'Drift car': 'Drift aracı',
+  'One lane': 'Tek şerit', 'Two lanes': 'Çift şerit', 'Open road': 'Açık yol', 'Loop': 'Döngü',
+  'Road': 'Yol', 'Vehicle': 'Araç', 'Tree': 'Ağaç', 'Gate': 'Kapı', 'Flag': 'Bayrak',
+  'Ruler': 'Cetvel', 'Waypoint': 'Ara nokta', 'Section': 'Bölüm', 'Wall': 'Duvar',
+};
+const trUi = (value) => typeof value === 'string' ? (TR_UI[value] || value) : value;
+
 /*
  * THE PLAIN WORDS. The panels were written in the model's words, and a pilot
  * who has never seen the tool does not know what a sill is, or that Yaw is
@@ -138,7 +155,7 @@ function el(tag, cls, text) {
     n.className = cls;
   }
   if (text != null) {
-    n.textContent = text;
+    n.textContent = trUi(text);
   }
   return n;
 }
@@ -147,7 +164,7 @@ function button(label, cls, onClick, title) {
   const b = el('button', cls, label);
   b.type = 'button';
   if (title) {
-    b.title = title;
+    b.title = trUi(title);
   }
   b.addEventListener('click', onClick);
   return b;
@@ -456,7 +473,7 @@ export class Panels {
     /* A phone's palette is a drawer, with its own close button; the
      * stylesheet shows it only there. */
     const close = button('×', 'tb-tools-x', () => this.host.closeTools(), 'Close the palette. Esc');
-    close.setAttribute('aria-label', 'Close the palette');
+    close.setAttribute('aria-label', 'Araç paletini kapat');
     host.append(close);
     if (mode === 'freestyle') {
       this.buildFreestylePalette(host, cls);
@@ -1185,8 +1202,8 @@ export class Panels {
       }
     });
     return [
-      { label: 'Flat', on: q === 0, run: stand(0, 'lay it flat') },
-      { label: 'On end', on: q !== 0, run: stand(Math.PI / 2, 'stand it on end') },
+      { label: 'Yatay', on: q === 0, run: stand(0, 'yatay yerleştir') },
+      { label: 'Dikey', on: q !== 0, run: stand(Math.PI / 2, 'dikey yerleştir') },
     ];
   }
 
@@ -1388,9 +1405,9 @@ export class Panels {
     const closed = element.closed === true;
     const n = element.nodes.length;
     return [
-      { label: 'Open road', on: !closed, run: () => this.host.setRoadClosed(id, false) },
+      { label: 'Açık yol', on: !closed, run: () => this.host.setRoadClosed(id, false) },
       {
-        label: 'Loop',
+        label: 'Döngü',
         on: closed,
         run: () => this.host.setRoadClosed(id, true),
         disabled: !closed && n < 3,
@@ -1403,8 +1420,8 @@ export class Panels {
     const id = element.id;
     const lanes = element.dims.lanes === 1 ? 1 : 2;
     return [
-      { label: 'One lane', on: lanes === 1, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 1; }) },
-      { label: 'Two lanes', on: lanes === 2, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 2; }) },
+      { label: 'Tek şerit', on: lanes === 1, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 1; }) },
+      { label: 'Çift şerit', on: lanes === 2, run: () => this.host.editRoad('lanes', id, (e2) => { e2.dims.lanes = 2; }) },
     ];
   }
 
@@ -1497,7 +1514,7 @@ export class Panels {
     const styleSpeed = (style) => styleDims('vehicle', style)?.speed ?? def.dims.speed;
     return [
       {
-        label: 'Traffic',
+        label: 'Trafik',
         on: !drift,
         run: () => this.host.edit('drift', (d) => {
           const e2 = elementById(d, id);
@@ -1506,7 +1523,7 @@ export class Panels {
         }),
       },
       {
-        label: 'Drift car',
+        label: 'Drift aracı',
         on: drift,
         title: `Corners twice as hard and slides, its nose into every bend, at ${Math.round(DRIFT.speed * KMH)} km/h on the straights`,
         run: () => this.host.edit('drift', (d) => {
@@ -1522,8 +1539,8 @@ export class Panels {
     const id = element.id;
     const reverse = element.reverse === true;
     return [
-      { label: 'Forward', on: !reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = false; }) },
-      { label: 'Reverse', on: reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = true; }) },
+      { label: 'İleri', on: !reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = false; }) },
+      { label: 'Geri', on: reverse, run: () => this.host.edit('direction', (d) => { elementById(d, id).reverse = true; }) },
     ];
   }
 
@@ -2736,19 +2753,19 @@ export class Panels {
         ? 'Turn it a quarter. E turns it fifteen degrees one way and Q the other; Shift with either is a quarter'
         : 'Turn it a quarter. E turns it one way and Q the other'));
     }
-    const copyBtn = button('Copy', 'tb-btn', () => this.host.copySelection(), metric
-      ? 'A copy beside it. Control D'
-      : 'A copy beside it, 30 in on. Control D');
-    const removeBtn = button('Remove', 'tb-btn tb-danger', () => this.host.deleteSelection(), 'Delete');
+    const copyBtn = button('Kopyala', 'tb-btn', () => this.host.copySelection(), metric
+      ? 'Yanına bir kopya oluştur (Ctrl D)'
+      : '30 inç uzağına bir kopya oluştur (Ctrl D)');
+    const removeBtn = button('Kaldır', 'tb-btn tb-danger', () => this.host.deleteSelection(), 'Sil');
     actions.append(
       copyBtn,
       removeBtn,
-      button('More', 'tb-btn', (e) => this.host.toggleDrawer(true, { from: e.currentTarget, keys: e.detail === 0 }), metric
-        ? 'Everything else about it: the frame, its size, how a stack is flown'
-        : 'Everything else about it: the frame, the flag, how a stack is flown'),
+      button('Diğer', 'tb-btn', (e) => this.host.toggleDrawer(true, { from: e.currentTarget, keys: e.detail === 0 }), metric
+        ? 'Çerçeve, boyut ve kapı dizilimi gibi diğer ayarlar'
+        : 'Çerçeve, bayrak ve kapı dizilimi gibi diğer ayarlar'),
     );
-    const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Let go of it. Escape');
-    close.setAttribute('aria-label', 'Let go of it');
+    const close = button('\u00d7', 'tb-btn tb-mini tb-card-x', () => this.host.setSelection([]), 'Seçimi bırak (Esc)');
+    close.setAttribute('aria-label', 'Seçimi bırak');
 
     /* A WALL, as the whole piece it is. */
     const wall = ids.length > 1 && this.wholeGroup(doc, ids) ? wallOf(doc, ids[0]) : null;
@@ -2828,7 +2845,7 @@ export class Panels {
         : 'Add a pass over the middle of it, a metre above the top, at the end of the lap'), copyBtn);
     }
     if (flown > 1) {
-      removeBtn.textContent = 'Remove piece';
+      removeBtn.textContent = 'Parçayı kaldır';
       removeBtn.title = `Takes the piece and its ${flown} passes out of the track. Delete`;
       if (touched && at) {
         /* The chips that carry this button on a fine pointer are not on this card. */
@@ -3274,11 +3291,11 @@ export class Panels {
     const hidden = isUnbuilt(element);
     card.append(this.cardChoice('Frame', [
       {
-        label: 'Built', on: !hidden, run: () => this.host.setPieceInvisible(element.id, false),
+        label: 'Görünür', on: !hidden, run: () => this.host.setPieceInvisible(element.id, false),
         title: 'Pipe round the opening, as a gate or a letter is built',
       },
       {
-        label: 'Invisible', on: hidden, run: () => this.host.setPieceInvisible(element.id, true),
+        label: 'Görünmez', on: hidden, run: () => this.host.setPieceInvisible(element.id, true),
         title: 'Nothing built: the opening still scores and lights, and there is nothing to hit. A flag goes with the frame.',
       },
     ], 'Whether the opening has a frame round it'));
@@ -3350,11 +3367,11 @@ export class Panels {
         : `There is no flag on the ${key} hand upright as this pass flies it. Flags puts one there.`,
     });
     card.append(this.cardChoice(label, [
-      { label: 'None', on: !now, run: () => this.host.clearRoundFlag(at.id), title: 'Straight into the gate: no figure in front of this pass' },
+      { label: 'Yok', on: !now, run: () => this.host.clearRoundFlag(at.id), title: 'Doğrudan kapıya gir: bu geçişte önünde şekil yok' },
       side('left', 'Left', 'anticlockwise'),
       side('right', 'Right', 'clockwise'),
       {
-        label: 'Spiral down',
+        label: 'Spiral iniş',
         toggle: true,
         on: spiral,
         /* On a pass with the figure in front of it, this makes it again the other way round the same flag. Without
@@ -3373,8 +3390,8 @@ export class Panels {
     card.append(head);
     const woven = wallIsWoven(doc, id);
     card.append(this.cardChoice('Flown', [
-      { label: 'Weave', on: woven, run: () => this.host.setWeave(id, true), title: 'A slalom: each bay the other way to the one before' },
-      { label: 'Straight', on: !woven, run: () => this.host.setWeave(id, false), title: 'Every bay the same way' },
+      { label: 'Slalom', on: woven, run: () => this.host.setWeave(id, true), title: 'Slalom: her kapı aralığı bir öncekinden ters yönde' },
+      { label: 'Düz', on: !woven, run: () => this.host.setWeave(id, false), title: 'Tüm kapı aralıkları aynı yönde' },
     ]));
     const size = wallSizeOf(doc, id);
     card.append(this.cardChoice('Bay', [
@@ -3619,7 +3636,7 @@ export class Panels {
     /* A toolbar: buttons that are one stop for Tab and are walked with the arrow keys,
      * which is what the strip is. (A list item would take the chip's button role away.) */
     strip.setAttribute('role', 'toolbar');
-    strip.setAttribute('aria-label', 'The lap, pass by pass');
+    strip.setAttribute('aria-label', 'Tur ve geçiş sırası');
     const host = this.host;
     /* One tab stop for the whole strip: thirty chips are thirty presses of Tab to get
      * past, and the arrow keys walk them. The stop is the chip that last had the
@@ -3712,7 +3729,7 @@ export class Panels {
     });
     const add = el('button', armed ? 'tb-chip tb-chip-add on' : 'tb-chip tb-chip-add', '+');
     add.type = 'button';
-    add.setAttribute('aria-label', 'Fly order: click the pieces in the order you fly them');
+    add.setAttribute('aria-label', 'Uçuş sırası: parçaları uçulacak sırayla seçin');
     add.title = 'Fly order (N). Click the pieces in the order you fly them: a click on a piece again is another pass through it.';
     add.tabIndex = stop === 'add' ? 0 : -1;
     add.addEventListener('focus', () => takeStop(add));
@@ -3797,8 +3814,8 @@ export class Panels {
         fig('Warnings', String(bad), bad ? 'bad' : 'good'),
         el('span', 'tb-lap-gap'),
         button(`Plot ${sayLength(doc, doc.field.width).replace(' m', '')} \u00d7 ${sayLength(doc, doc.field.depth)}`, 'tb-btn', () => this.host.openFieldSettings(),
-          'How big the plot is, the grid, the time of day and the ground'),
-        this.drawerToggle('Details', 'Everything about what is selected, the plot, and every warning', 'Close the panel. Esc'),
+          'Alan boyutu, ızgara, günün saati ve zemin ayarları'),
+        this.drawerToggle('Ayrıntılar', 'Seçili parça, alan ve uyarılarla ilgili tüm bilgiler', 'Paneli kapat (Esc)'),
       );
       return;
     }

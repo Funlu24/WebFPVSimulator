@@ -380,6 +380,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
 
   const partners = section('Partners', 'They back WebFPV.');
   const partnerRow = el('div', 'credit-row partners');
+  partnerRow.classList.toggle('is-featured', PARTNERS.length === 1);
   for (const p of PARTNERS) {
     partnerRow.append(partnerCard(p));
   }

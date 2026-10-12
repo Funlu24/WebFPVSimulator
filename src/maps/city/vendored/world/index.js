@@ -89,7 +89,7 @@ export function buildWorld(scene, opts) {
  * caller can spread the work over frames and keep a page moving while the
  * town goes up.  It yields a short label after each step and returns the
  * world; the order of every call is the order buildWorld makes them in. */
-export function* buildWorldSteps(scene, { bake = true } = {}) {
+export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) {
   const root = new THREE.Group();
   root.name = 'world';
   scene.add(root);
@@ -431,12 +431,12 @@ export function* buildWorldSteps(scene, { bake = true } = {}) {
   planting.groveAfter = groveKept.length;
   planting.cedarAfter = cedarKept.length;
   planting.bambooAfter = bambooKept.length;
-  buildGrove(ctx, groveKept);
+  buildGrove(ctx, groveKept, treeModel);
   yield 'grove';
   /* The 杉林 merges the same way the grove does -- one baked stem mesh and three
    * instanced crowns for every plantation in the world -- so it has to run here
    * and not inside `hills.js`, which is also where its spots come from. */
-  buildCedar(ctx, cedarKept);
+  buildCedar(ctx, cedarKept, treeModel);
   yield 'cedar';
   buildBamboo(ctx, bambooKept);
   yield 'bamboo';
@@ -633,7 +633,7 @@ export function* buildWorldSteps(scene, { bake = true } = {}) {
   planting.sakuraBefore = sakuraSpots.length;
   const sakuraKept = thinSpots(sakuraSpots, TREE_KEEP, 7);
   planting.sakuraAfter = sakuraKept.length;
-  buildSakura(ctx, sakuraKept);
+  buildSakura(ctx, sakuraKept, treeModel);
   yield 'sakura';
 
   /* -------------------------------- shrubbery -------------------------------- */

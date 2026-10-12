@@ -28,11 +28,11 @@
   You should have received a copy of the GNU General Public License
   along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
 -->
-<html lang="en">
+<html lang="tr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Builder, WebFPV</title>
+    <title>Harita Oluşturucu — WebFPV</title>
     <!--
       THE SCRIPTS OF THE DEPLOY THIS PAGE CAME FROM, ALWAYS: see src/fresh.js,
       and the same lines at the top of the simulator's index.html. This page
@@ -70,23 +70,23 @@
       rendered a picture. The image is the simulator's own card, because the
       thing a builder link leads to is a course flown in that simulator.
     -->
-    <meta name="description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times. No install, no account." />
+    <meta name="description" content="Beş inç yarış pisti, whoop pisti veya serbest uçuş haritası oluşturun; tarayıcıda uçup derecenizi paylaşın." />
     <link rel="canonical" href="https://webfpv.org/sim/src/trackbuilder/index.html" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebFPV" />
     <meta property="og:url" content="https://webfpv.org/sim/src/trackbuilder/index.html" />
-    <meta property="og:title" content="WebFPV Builder" />
-    <meta property="og:description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times." />
+    <meta property="og:title" content="WebFPV Harita Oluşturucu" />
+    <meta property="og:description" content="Beş inç veya whoop yarış pisti ya da serbest uçuş haritası oluşturun. Tarayıcıda uçun ve derecenizi paylaşın." />
     <meta property="og:image" content="https://webfpv.org/sim/og.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="WebFPV Builder" />
-    <meta name="twitter:description" content="Build a five inch race track, a whoop track or a freestyle map, fly it in the browser, and publish it to Tracks and times." />
+    <meta name="twitter:title" content="WebFPV Harita Oluşturucu" />
+    <meta name="twitter:description" content="Beş inç veya whoop yarış pisti ya da serbest uçuş haritası oluşturun. Tarayıcıda uçun ve derecenizi paylaşın." />
     <meta name="twitter:image" content="https://webfpv.org/sim/og.png" />
-    <meta name="theme-color" content="#0f150f" />
+    <meta name="theme-color" content="#10284a" />
     <!--
       THE STYLES ARE INLINE, like the simulator's own index.html, and for one
       more reason than convention: the repository's dev server, which this
@@ -117,12 +117,12 @@
         /*
          * INK. What type and marks are made of.
          */
-        --cream: #f3ead4;
+        --cream: #f5f9ff;
         --slate: #9db3c8;
         --dim: #8a9a86;
-        --sakura: #e8a8b8;
-        --amber: #ffd45c;
-        --mint: #7dffb4;
+        --sakura: #55aaff;
+        --amber: #a8d6ff;
+        --mint: #9ce6ff;
         --bad: #ff8f8f;
 
         /*
@@ -138,10 +138,10 @@
          * the same token before, which is why the inspector's inputs and its
          * cards looked like the same object.
          */
-        --deep: #0f150f;
-        --sunk: #141d16;
-        --panel: #1c261e;
-        --raised: #243026;
+        --deep: #10284a;
+        --sunk: #132f52;
+        --panel: #18365c;
+        --raised: #214673;
 
         /*
          * EDGES, two of them, because a rule between rows and the border of
@@ -158,17 +158,17 @@
          * draws a hairline brighter than the label inside it, which trades
          * one legibility problem for another.
          */
-        --rule: rgba(243, 234, 212, 0.09);
-        --edge: rgba(243, 234, 212, 0.3);
+        --rule: rgba(245, 249, 255, 0.09);
+        --edge: rgba(245, 249, 255, 0.3);
 
         /* Neutral lift, for hover and for a chip's ground. One value each,
            rather than the four alphas of the same colour that were in here. */
-        --lift: rgba(243, 234, 212, 0.07);
-        --lift-2: rgba(243, 234, 212, 0.13);
+        --lift: rgba(245, 249, 255, 0.07);
+        --lift-2: rgba(245, 249, 255, 0.13);
 
         /* Amber, in the two weights selection needs. */
-        --pick: rgba(255, 212, 92, 0.16);
-        --pick-edge: rgba(255, 212, 92, 0.55);
+        --pick: rgba(168, 214, 255, 0.16);
+        --pick-edge: rgba(168, 214, 255, 0.55);
 
         /*
          * SCALES. Three radii, five spaces, five sizes. There were seven
@@ -247,7 +247,7 @@
         border-radius: 999px;
       }
       .tb-panel::-webkit-scrollbar-thumb:hover, .tb-modal::-webkit-scrollbar-thumb:hover {
-        background: rgba(243, 234, 212, 0.24);
+        background: rgba(245, 249, 255, 0.24);
         background-clip: padding-box;
       }
 
@@ -288,8 +288,8 @@
         align-self: center;
         display: inline-flex; align-items: center; gap: 7px;
         height: 28px; padding: 0 11px 0 8px; border-radius: 3px;
-        background: rgba(16, 22, 17, 0.72);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.16);
+        background: rgba(8, 24, 48, 0.72);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.16);
         color: var(--cream);
         font: 600 12px/1 var(--ui-font); letter-spacing: 0.02em;
         text-decoration: none; flex: 0 0 auto; white-space: nowrap;
@@ -481,7 +481,7 @@
          --------------------------------------------------------------- */
       .tb-class {
         display: inline-flex;
-        border: 1px solid rgba(232, 168, 184, 0.45);
+        border: 1px solid rgba(85, 170, 255, 0.45);
         border-radius: 6px;
         overflow: hidden;
         flex: 0 0 auto;
@@ -499,8 +499,8 @@
         cursor: pointer;
         transition: color 120ms ease, background-color 120ms ease;
       }
-      .tb-class-btn + .tb-class-btn { border-left: 1px solid rgba(232, 168, 184, 0.28); }
-      .tb-class-btn:hover { color: var(--cream); background: rgba(232, 168, 184, 0.12); }
+      .tb-class-btn + .tb-class-btn { border-left: 1px solid rgba(85, 170, 255, 0.28); }
+      .tb-class-btn:hover { color: var(--cream); background: rgba(85, 170, 255, 0.12); }
       .tb-class-btn.on {
         color: var(--deep);
         background: var(--sakura);
@@ -510,8 +510,8 @@
          sakura, so the author sees where the way back to the other two
          canvases lives. The global reduced motion rule flattens it. */
       @keyframes tb-class-hint {
-        0% { box-shadow: 0 0 0 0 rgba(232, 168, 184, 0.75); }
-        100% { box-shadow: 0 0 0 9px rgba(232, 168, 184, 0); }
+        0% { box-shadow: 0 0 0 0 rgba(85, 170, 255, 0.75); }
+        100% { box-shadow: 0 0 0 9px rgba(85, 170, 255, 0); }
       }
       .tb-class.tb-class-hint { animation: tb-class-hint 0.9s ease-out 2; }
 
@@ -531,7 +531,7 @@
         min-width: 96px;
         transition: border-color var(--quick), background var(--quick);
       }
-      .tb-name:hover { border-color: rgba(243, 234, 212, 0.3); }
+      .tb-name:hover { border-color: rgba(245, 249, 255, 0.3); }
       .tb-name:focus { outline: none; border-color: var(--sakura); background: var(--deep); }
       .tb-name:focus-visible { outline: none; }
 
@@ -547,8 +547,8 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .tb-listing.owned { color: var(--mint); border-color: rgba(125, 255, 180, 0.35); }
-      .tb-listing.remix { color: var(--sakura); border-color: rgba(232, 168, 184, 0.35); }
+      .tb-listing.owned { color: var(--mint); border-color: rgba(156, 230, 255, 0.35); }
+      .tb-listing.remix { color: var(--sakura); border-color: rgba(85, 170, 255, 0.35); }
 
       .tb-bargroup {
         display: flex;
@@ -610,7 +610,7 @@
       .tb-btn:hover:not(:where(:disabled, .on, .tb-primary, .tb-danger, .tb-quiet)) {
         color: var(--cream);
         background: var(--lift-2);
-        border-color: rgba(243, 234, 212, 0.34);
+        border-color: rgba(245, 249, 255, 0.34);
       }
       .tb-btn.on:hover:not(:disabled) { background: #ffdd7a; border-color: #ffdd7a; }
       .tb-btn.tb-primary:hover:not(:disabled) { background: #99ffc4; border-color: #99ffc4; }
@@ -683,7 +683,7 @@
         gap: var(--s3);
         padding: var(--s2);
         border-radius: var(--r-panel);
-        background: rgba(8, 13, 20, 0.72);
+        background: rgba(16, 40, 74, 0.72);
       }
       .tb-play[hidden] { display: none; }
       .tb-play-btn { min-width: 7.5em; }
@@ -707,7 +707,7 @@
         gap: var(--s4);
         align-items: center;
         padding: var(--s2) var(--s3);
-        background: linear-gradient(180deg, rgba(8, 13, 20, 0), rgba(8, 13, 20, 0.9) 40%);
+        background: linear-gradient(180deg, rgba(16, 40, 74, 0), rgba(16, 40, 74, 0.9) 40%);
         border-radius: 0 0 var(--r-panel) var(--r-panel);
         font-size: var(--t-micro);
         color: var(--dim);
@@ -771,7 +771,7 @@
         height: 22px;
         padding: 0;
         border-radius: 50%;
-        border: 1px solid rgba(15, 21, 15, 0.7);
+        border: 1px solid rgba(16, 40, 74, 0.7);
         background: var(--cream);
         color: var(--deep);
         font: 600 var(--t-small) / 20px var(--ui-font);
@@ -829,7 +829,7 @@
         height: 20px;
         padding: 0;
         border-radius: 50%;
-        border: 1px solid rgba(15, 21, 15, 0.7);
+        border: 1px solid rgba(16, 40, 74, 0.7);
         background: var(--bad);
         color: var(--deep);
         font: 700 var(--t-label) / 18px var(--ui-font);
@@ -847,7 +847,7 @@
         padding: var(--s2) var(--s3);
         border: 1px solid var(--edge);
         border-radius: var(--r-ctl);
-        background: rgba(8, 13, 20, 0.94);
+        background: rgba(16, 40, 74, 0.94);
         color: var(--cream);
         font: 400 var(--t-small) / 1.45 var(--ui-font);
         pointer-events: none;
@@ -862,7 +862,7 @@
         translate: -50% -50%;
         padding: 1px 6px;
         border-radius: var(--r-chip);
-        background: rgba(8, 13, 20, 0.82);
+        background: rgba(16, 40, 74, 0.82);
         color: var(--cream);
         font: 500 var(--t-small) / 1.6 var(--mono);
         white-space: nowrap;
@@ -964,7 +964,7 @@
         font-size: var(--t-micro);
         color: var(--cream);
       }
-      .tb-tool.on .tb-tool-key { background: rgba(15, 21, 15, 0.28); color: var(--deep); }
+      .tb-tool.on .tb-tool-key { background: rgba(16, 40, 74, 0.28); color: var(--deep); }
       /* A tool with no hotkey keeps its chip, empty and fainter, so the
          labels in a group still start on one line. */
       .tb-tool-key.none { background: var(--lift); }
@@ -975,7 +975,7 @@
         line-height: 1.2;
         color: var(--dim);
       }
-      .tb-tool.on .tb-tool-note { color: rgba(15, 21, 15, 0.7); }
+      .tb-tool.on .tb-tool-note { color: rgba(16, 40, 74, 0.7); }
 
       /* ---------------- panels ---------------- */
 
@@ -1072,7 +1072,7 @@
         padding: 3px var(--s2);
         transition: border-color var(--quick), background var(--quick);
       }
-      .tb-field input:hover, .tb-field select:hover { border-color: rgba(243, 234, 212, 0.3); }
+      .tb-field input:hover, .tb-field select:hover { border-color: rgba(245, 249, 255, 0.3); }
       .tb-field input:focus, .tb-field select:focus {
         outline: none;
         border-color: var(--sakura);
@@ -1147,7 +1147,7 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--sakura);
-        border: 1px solid rgba(232, 168, 184, 0.4);
+        border: 1px solid rgba(85, 170, 255, 0.4);
         border-radius: var(--r-chip);
         padding: 1px var(--s1);
       }
@@ -1529,7 +1529,7 @@
       #tb-modal {
         position: fixed;
         inset: 0;
-        background: rgba(8, 13, 20, 0.72);
+        background: rgba(16, 40, 74, 0.72);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1551,8 +1551,8 @@
         max-width: 420px; width: calc(100% - 40px);
         padding: 24px 48px 24px 24px;
         border-radius: 6px;
-        background: rgba(16, 22, 17, 0.95);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(244, 236, 214, 0.2);
+        background: rgba(8, 24, 48, 0.95);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(245, 249, 255, 0.2);
         backdrop-filter: blur(8px);
       }
       .support-prompt-message {
@@ -1570,13 +1570,13 @@
         font: 600 13px/1 var(--ui-font); letter-spacing: 0.02em;
         text-decoration: none; white-space: nowrap;
         cursor: pointer; transition: all 0.15s ease;
-        background: rgba(244, 236, 214, 0.1);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.2);
+        background: rgba(245, 249, 255, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.2);
         color: var(--cream);
       }
       .support-prompt-btn:hover {
-        background: rgba(244, 236, 214, 0.15);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.3);
+        background: rgba(245, 249, 255, 0.15);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.3);
       }
       .support-prompt-btn-primary {
         background: #FF424D;
@@ -1608,7 +1608,7 @@
         cursor: pointer; border-radius: 3px;
       }
       .support-prompt-close:hover {
-        background: rgba(244, 236, 214, 0.1);
+        background: rgba(245, 249, 255, 0.1);
         color: var(--cream);
       }
       .support-prompt-close:focus-visible {
@@ -1675,7 +1675,7 @@
         margin: 0;
         padding: 0;
         border: 0;
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
         border-radius: 4px;
         overflow: hidden;
         background: var(--raised);
@@ -1980,7 +1980,7 @@
         gap: var(--s2) var(--s4);
         padding: var(--s2) var(--s4);
         border-radius: var(--r-panel);
-        background: rgba(8, 13, 20, 0.86);
+        background: rgba(16, 40, 74, 0.86);
         box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.16);
         font-size: var(--t-label);
         color: var(--slate);
@@ -2046,7 +2046,7 @@
         height: 8px;
         border-radius: 50%;
         background: var(--bad);
-        border: 1px solid rgba(15, 21, 15, 0.7);
+        border: 1px solid rgba(16, 40, 74, 0.7);
       }
       /* What kind of piece it is: a mark, so a strip can be read without the room. */
       .tb-chip[data-kind]:not(.tb-chip-add):not(.tb-chip-bend)::after {
@@ -2068,7 +2068,7 @@
       /* An opening with no frame is dashed, as the plan draws it. */
       .tb-chip[data-invisible]:not(.tb-chip-add):not(.tb-chip-bend)::after { border-style: dashed; }
       .tb-chip[data-kind="cone"]::after { width: 0; height: 0; border: 4px solid transparent; border-bottom: 8px solid currentColor; border-top-width: 0; border-radius: 0; }
-      .tb-chip-bend { min-width: 10px; width: 10px; height: 10px; padding: 0; border-radius: 50%; background: rgba(255, 212, 92, 0.5); border-color: transparent; }
+      .tb-chip-bend { min-width: 10px; width: 10px; height: 10px; padding: 0; border-radius: 50%; background: rgba(168, 214, 255, 0.5); border-color: transparent; }
       .tb-chip-bend.on { background: var(--amber); }
       .tb-chip-add { border-style: dashed; color: var(--amber); }
       .tb-chip-add.on { background: var(--amber); color: var(--deep); border-style: solid; }
@@ -2082,7 +2082,7 @@
         max-width: calc(100% - 2 * var(--s5));
         padding: var(--s2) var(--s5);
         border-radius: 999px;
-        background: rgba(8, 13, 20, 0.86);
+        background: rgba(16, 40, 74, 0.86);
         box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.16);
         color: var(--cream);
         font-size: var(--t-label);
@@ -2099,7 +2099,7 @@
         width: min(420px, calc(100% - 2 * var(--s5)));
         padding: var(--s5);
         border-radius: var(--r-panel);
-        background: rgba(8, 13, 20, 0.86);
+        background: rgba(16, 40, 74, 0.86);
         box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.2);
         text-align: center;
       }
@@ -2270,7 +2270,7 @@
         /* A waypoint stays a dot to look at and is a finger to press: the button is
          * 44 px tall and the dot is drawn inside it. */
         .tb-chip-bend, .tb-chip-bend:hover, .tb-chip-bend.on { min-width: 24px; width: 24px; height: 44px; padding: 0; border: 0; border-radius: 0; background: none; }
-        .tb-chip-bend::after { content: ''; width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 212, 92, 0.5); }
+        .tb-chip-bend::after { content: ''; width: 12px; height: 12px; border-radius: 50%; background: rgba(168, 214, 255, 0.5); }
         .tb-chip-bend.on::after { background: var(--amber); }
         .tb-strip { gap: 6px; }
         .tb-card-passes .tb-chip { height: 44px; min-width: 44px; }
@@ -2340,7 +2340,7 @@
           text-overflow: ellipsis;
           white-space: nowrap;
           color: var(--mint);
-          border-color: rgba(125, 255, 180, 0.6);
+          border-color: rgba(156, 230, 255, 0.6);
         }
         /* One row, held sideways: the drawers at the two ends, as they open. */
         .tb-tools-btn { order: 1; }
@@ -2439,7 +2439,7 @@
           position: absolute;
           inset: 0;
           z-index: 12;
-          background: rgba(8, 13, 20, 0.45);
+          background: rgba(16, 40, 74, 0.45);
         }
 
         /* More, from the bar's right, as tall as the screen allows. */
@@ -2551,8 +2551,8 @@
         <!-- The sentence after the bold is app.js's, in the canvas's own noun
              (placeKeep): a map's notice says maps. -->
         <p>
-          <strong>This browser only.</strong>
-          <span id="tb-keep-text">Tracks you build stay here. Clearing the browser, or opening another device, starts you from nothing. Publish a track to put it on the board.</span>
+          <strong>Yalnızca bu tarayıcıda.</strong>
+          <span id="tb-keep-text">Oluşturduğunuz pistler burada kalır. Tarayıcı verilerini silmek veya başka bir cihaz kullanmak her şeyi sıfırlar. Pistleri panoda paylaşmak için yayımlayın.</span>
         </p>
       </div>
       <main id="tb-main">
@@ -2568,7 +2568,7 @@
           <div id="tb-lapbar"></div>
           <!-- The honest line for a screen too small even for the phone
                layout (MENUS-PLAN.md 4.4). The bar above it still works. -->
-          <p id="tb-small">This screen is too small to build on: the Builder needs 300 pixels each way. Fly and Load on the bar above still work.</p>
+          <p id="tb-small">Ekran oluşturmak için çok küçük. Oluşturucu en az 300 piksel genişlik ve yükseklik ister. Yukarıdaki Uç ve Yükle seçenekleri kullanılabilir.</p>
           <div id="tb-status">
             <span id="tb-readout"></span>
             <!--
@@ -2579,30 +2579,30 @@
             <span class="tb-keys">
               <!-- What a finger does, in place of the keys a touched screen
                    has none of: the room and the plan, each its own. -->
-              <span class="tb-touch-hint" data-whoop data-3d-only>Tap a piece to select it. Drag it to move it. Two fingers slide, pinch and twist the room.</span>
-              <span class="tb-touch-hint" data-2d-only>Tap a tool, then tap the plan to place it. Drag a piece to move it, or empty ground to select several. Two fingers slide and pinch the plan.</span>
-              <span><kbd>Wheel</kbd>zoom</span>
-              <span><kbd>Mid</kbd>pan</span>
-              <span><kbd>Click</kbd>select</span>
-              <span><kbd>Shift</kbd>add</span>
-              <span data-whoop><kbd>Drag</kbd>move</span>
-              <span data-whoop><kbd>Shift drag</kbd>box select</span>
-              <span data-whoop><kbd>Ring</kbd>turn</span>
-              <span data-whoop><kbd>Ctrl D</kbd>copy</span>
-              <span data-whoop><kbd>F</kbd>frame</span>
-              <span><kbd>Q E</kbd>rotate</span>
-              <span><kbd>Alt</kbd>off grid</span>
-              <span data-race-only><kbd>X</kbd>flip face</span>
-              <span><kbd>V</kbd>2D and 3D</span>
-              <span><kbd>Del</kbd>remove</span>
-              <span><kbd>Ctrl Z</kbd>undo</span>
+              <span class="tb-touch-hint" data-whoop data-3d-only>Bir parçayı seçmek için dokunun. Taşımak için sürükleyin. İki parmakla sahneyi kaydırın, yakınlaştırın ve döndürün.</span>
+              <span class="tb-touch-hint" data-2d-only>Bir araç seçip plana dokunarak yerleştirin. Parçayı taşımak için sürükleyin; boş alana dokunup sürükleyerek birden çok parça seçin. İki parmakla planı kaydırıp yakınlaştırın.</span>
+              <span><kbd>Wheel</kbd>yakınlaştır</span>
+              <span><kbd>Mid</kbd>kaydır</span>
+              <span><kbd>Click</kbd>seç</span>
+              <span><kbd>Shift</kbd>ekle</span>
+              <span data-whoop><kbd>Drag</kbd>taşı</span>
+              <span data-whoop><kbd>Shift drag</kbd>alan seç</span>
+              <span data-whoop><kbd>Ring</kbd>döndür</span>
+              <span data-whoop><kbd>Ctrl D</kbd>kopyala</span>
+              <span data-whoop><kbd>F</kbd>kadrajla</span>
+              <span><kbd>Q E</kbd>döndür</span>
+              <span><kbd>Alt</kbd>ızgara dışı</span>
+              <span data-race-only><kbd>X</kbd>yönü çevir</span>
+              <span><kbd>V</kbd>2B ve 3B</span>
+              <span><kbd>Del</kbd>kaldır</span>
+              <span><kbd>Ctrl Z</kbd>geri al</span>
             </span>
           </div>
         </div>
         <aside id="tb-side">
           <!-- Shown where this column is a drawer (the whoop canvas, and a
                phone): see .tb-drawer-x. -->
-          <button type="button" id="tb-side-x" class="tb-drawer-x" aria-label="Close the panel" title="Close the panel. Esc">&times;</button>
+          <button type="button" id="tb-side-x" class="tb-drawer-x" aria-label="Paneli kapat" title="Paneli kapat (Esc)">&times;</button>
           <section id="tb-inspector" class="tb-panel"></section>
           <section id="tb-sequence" class="tb-panel"></section>
           <section id="tb-results" class="tb-panel"></section>

@@ -9,10 +9,9 @@
  *   ひばり台市民プール (./pool.js)  the municipal pool, x 53..91, z 82.6..114
  *   ひばり台ドローン練習場 (./training.js)  the practice field, x 0..128, z 118..188
  *
- * And two things that are not places: the STF mark, painted on the side of a
- * corner shop at the end of the street the pilot starts in (buildStfMark,
- * below), and the partners' marks, one each (buildPartnerMarks), and the
- * patrons' (buildPatronMarks).
+ * And two things that are not places: one TÜMER sign on the old STF panel,
+ * which retains the STF and partner discoveries, and any patrons'
+ * (buildPatronMarks).
  *
  * All three stand on land the town has never built on: a survey of the built
  * world's own collider list puts nothing at all east of x = 30 past z = 78,
@@ -75,7 +74,6 @@ import { buildWorks, WORKS_SITE, WORKS_LANDMARK } from './works.js';
 import { buildPool, POOL_SITE, POOL_LANDMARK } from './pool.js';
 import { buildTraining, TRAINING_SITE, TRAINING_LANDMARK } from './training.js';
 import { buildBlossom } from './blossom.js';
-import { makeStfMark } from '../../../art/stf.js';
 import { makePartnerMark, signAspect } from '../../../art/partnermark.js';
 import { PARTNERS, PATRON_MAP_BRANDS } from '../../../partners/roster.js';
 import { choosePatrons } from '../../../partners/patrons.js';
@@ -254,30 +252,32 @@ const STF_SPOT = {
   y: 4.85,
   face: 49.15,
   w: 4.0,
-  h: 2.0,
   off: 0.015,
 };
 
 /*
- * Paint the mark STF_SPOT names and return where it is, as the `egg`
- * src/maps/README.md describes: the centre of the painted face, the way it
- * faces, the way its lettering reads up, and its size, in world metres.
- * Drawn and never solid: makeStfMark names it with the Trim suffix, which is
- * what keeps the collider fit, the cover pass and the audit off it (see
- * ./kit.js), and nothing here calls ctx.collide.
+ * Paint TÜMER at the old STF panel and return the same position as the
+ * city's existing collectible, plus its partner marker. One physical sign
+ * carries both discoveries, so the wall shows TÜMER alone without changing
+ * either progression path. Drawn, never solid, and lifted off the wall.
  */
-function buildStfMark(ctx) {
+function buildTumerMark(ctx, partner) {
+  const w = STF_SPOT.w;
+  const h = w / signAspect(partner);
   const egg = {
     key: 'city',
     p: [STF_SPOT.x, STF_SPOT.y, STF_SPOT.face - STF_SPOT.off],
     n: [0, 0, -1],
     up: [0, 1, 0],
-    w: STF_SPOT.w,
-    h: STF_SPOT.h,
+    w,
+    h,
   };
-  /* In shade: the flank faces -z, and the town's golden sun stands at the
-   * south west, so no direct light ever reaches it (see makeStfMark). */
-  const mark = makeStfMark(THREE, { width: egg.w, height: egg.h, shade: true });
+  const partnerMark = {
+    ...egg,
+    slug: partner.slug,
+    key: `city#${partner.slug}`,
+  };
+  const mark = makePartnerMark(THREE, partner, { width: w, height: h, shade: true });
   /* The plane's own +X, +Y and +Z onto the lettering's right, its up and the
    * way it faces. */
   const n = new THREE.Vector3(...egg.n);
@@ -286,83 +286,7 @@ function buildStfMark(ctx) {
   mark.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, n));
   mark.position.set(...egg.p);
   ctx.add(mark);
-  return egg;
-}
-
-/*
- * THE PARTNERS' MARKS (src/partners/roster.js), one each, by hand. The
- * built maps choose theirs by rule (src/maps/built/egg.js); the town is one
- * place, so its are chosen the way the STF mark's was, by looking, and each
- * one is where a partner of its kind would put a sign in a town like this:
- *
- *   Mantis FPV, the retail partner: a shop's panel over the street the
- *   pilot starts in. The south flank of the house on the right of the
- *   street, 15 m ahead and 13 m to the right of the pads, is plain wall
- *   from x -16.4 to -9.8 and up to 6.3 m, and it faces the pads square, so
- *   the panel is in the first frame beside the STF mark and reads as a
- *   different thing: a sign on a shop, where the STF mark is a tag on a
- *   wall. Its collider face is at z 39.30, measured from the town's own
- *   collider list 2026-09-27, and the paint stands `off` in front of it for
- *   STF_SPOT's reason.
- *
- *   Global Drone Solutions, the training partner: the practice field's tap
- *   wall (WALL in ./training.js, x 50 to 62, face south at z 152.325),
- *   below the tap line and left of the target, where every pilot running at
- *   the target has it in the frame. It stops 0.3 m short of the target and
- *   0.2 m under the tap line, so both still read as what they are.
- *
- *   The West Coast Multirotor Club, the club partner: the same wall's back,
- *   facing north over the Split-S and the free practice box, above the
- *   buttresses (2.6 m high) and under the coping, a club's banner over the
- *   ground a club flies.
- *
- * The slab is solid to its drawn face (skipFit in ./kit.js), so the paint
- * on the tap wall stands `off` in front of the drawn concrete. A partner the
- * roster adds is painted nowhere in the town until a spot is measured for
- * it here: a guessed spot is how paint ends up inside a wall.
- */
-const PARTNER_SPOTS = {
-  mantisfpv: { x: -13.08, y: 4.8, face: 39.3, n: -1, w: 5.0 },
-  gds: { x: 52.1, y: 2.6, face: 152.325, n: -1, w: 3.6 },
-  wcmrc: { x: 56.0, y: 5.35, face: 152.875, n: 1, w: 6.0 },
-};
-
-/*
- * Paint each partner's mark PARTNER_SPOTS names and return where they are,
- * as `marks` (src/maps/README.md): the `egg` shape with the slug, key
- * 'city#' and the slug. Every one of them faces along z, so `n` is the sign
- * along z and its height comes from the partner's sign (signAspect). In
- * shade on a face turned to -z, as the STF mark is, and lit on the one
- * turned to +z, which the town's south west sun reaches.
- */
-function buildPartnerMarks(ctx) {
-  const out = [];
-  for (const partner of PARTNERS) {
-    const spot = PARTNER_SPOTS[partner.slug];
-    if (!spot) {
-      continue;
-    }
-    const w = spot.w;
-    const h = w / signAspect(partner);
-    const mark = {
-      slug: partner.slug,
-      key: `city#${partner.slug}`,
-      p: [spot.x, spot.y, spot.face + spot.n * STF_SPOT.off],
-      n: [0, 0, spot.n],
-      up: [0, 1, 0],
-      w,
-      h,
-    };
-    const mesh = makePartnerMark(THREE, partner, { width: w, height: h, shade: spot.n < 0 });
-    const n = new THREE.Vector3(...mark.n);
-    const up = new THREE.Vector3(...mark.up);
-    const right = new THREE.Vector3().crossVectors(up, n);
-    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, n));
-    mesh.position.set(...mark.p);
-    ctx.add(mesh);
-    out.push(mark);
-  }
-  return out;
+  return { egg, partnerMark };
 }
 
 /*
@@ -386,7 +310,7 @@ function buildPartnerMarks(ctx) {
  * `face` is the wall's COLLIDER face, the one the plant flies against and the
  * find's sight line is tested against, and the paint stands `off` in front of
  * it for STF_SPOT's reason. `x` and `y` are the panel's centre, and `n` is
- * the way the wall looks along z, as PARTNER_SPOTS has it.
+ * the way the wall looks along z, as the measured panel has it.
  *
  * WHY THESE WALLS AND NOT THE ONES THE SPOTS WERE FIRST WRITTEN FOR. They
  * were written for the works office's east gable, the pool block's south
@@ -464,7 +388,7 @@ export function patronMark(spot, patron) {
  * of them while there are three or fewer, otherwise a pick that is the same
  * every time the town is built. Patron i goes on spot i, and a roster of more
  * than PATRON_SPOTS holds is not painted past the last. In shade on a face
- * turned to -z and lit on one turned to +z, as buildPartnerMarks has it.
+ * turned to -z and lit on one turned to +z.
  *
  * `patrons` is a parameter so the check and a picture can hand it a roster of
  * their own while the real one is empty.
@@ -488,7 +412,7 @@ export function buildPatronMarks(ctx, patrons = PATRON_MAP_BRANDS) {
   return out;
 }
 
-export function buildPlaces(world, { petals: livePetals = true } = {}) {
+export function buildPlaces(world, { petals: livePetals = true, treeModel = null } = {}) {
   const t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
   const ctx = placeContext(world);
   const colliders0 = world.colliders.length;
@@ -496,8 +420,10 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   const children0 = world.root.children.length;
 
   const parts = [buildWorksRoad(ctx), buildWorks(ctx), buildPool(ctx), buildTraining(ctx)];
-  const egg = buildStfMark(ctx);
-  const marks = [...buildPartnerMarks(ctx), ...buildPatronMarks(ctx)];
+  const tumer = PARTNERS.find((partner) => partner.slug === 'tumer');
+  const tumerSign = tumer ? buildTumerMark(ctx, tumer) : null;
+  const egg = tumerSign?.egg ?? null;
+  const marks = [...(tumerSign ? [tumerSign.partnerMark] : []), ...buildPatronMarks(ctx)];
 
   /* The one hole either place needs cut in the drawn ground. See cutGround. */
   const holes = parts.flatMap((p) => p.holes ?? []);
@@ -522,10 +448,10 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   const shrubs = parts.flatMap((p) => p.shrubs ?? []);
   const petals = parts.flatMap((p) => p.petals ?? []);
   if (sakura.length) {
-    buildSakura(ctx, sakura);
+    buildSakura(ctx, sakura, treeModel);
   }
   if (grove.length) {
-    buildGrove(ctx, grove);
+    buildGrove(ctx, grove, treeModel);
   }
   if (shrubs.length) {
     buildShrubs(ctx, shrubs);
@@ -556,11 +482,10 @@ export function buildPlaces(world, { petals: livePetals = true } = {}) {
   return {
     references,
     blossom,
-    /* Where the STF mark is painted, for the town's MapInstance to hand the
-     * shell. See STF_SPOT. */
+    /* The old STF location, now showing the TÜMER sign, remains the city's
+     * collectible location. */
     egg,
-    /* And the partners', one each, then the patrons'. See PARTNER_SPOTS and
-     * PATRON_SPOTS. */
+    /* The one visible partner mark and any patrons'. */
     marks,
     updaters: ctx.updaters,
     sites: { works: WORKS_SITE, pool: POOL_SITE, training: TRAINING_SITE },

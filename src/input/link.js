@@ -71,7 +71,7 @@
  * lap time.
  */
 export const LINK_PRESETS = {
-  perfect: { label: 'Perfect (no radio)', hz: 250, delayMs: 0, jitterMs: 0, lossPpm: 0 },
+  perfect: { label: 'Kusursuz (kumandasız)', hz: 250, delayMs: 0, jitterMs: 0, lossPpm: 0 },
   elrs500: { label: 'ELRS 500 Hz', hz: 500, delayMs: 3.0, jitterMs: 0.4, lossPpm: 200 },
   elrs250: { label: 'ELRS 250 Hz', hz: 250, delayMs: 4.0, jitterMs: 0.8, lossPpm: 400 },
   elrs150: { label: 'ELRS 150 Hz', hz: 150, delayMs: 6.0, jitterMs: 1.4, lossPpm: 800 },

@@ -360,24 +360,24 @@ function keepSentence(noun) {
 const CHOICES = [
   {
     canvas: 'full',
-    label: 'Five inch racing',
+    label: 'Beş inç yarışı',
     art: '../../assets/gate/race.jpg',
-    blurb: 'A race track on a sixty metre field. MultiGP gates, flags and dive gates on a grid in metres, flown on the five inch and published to the board.',
-    facts: ['5 ft gates', '60 m field', 'The board'],
+    blurb: '60 metrelik yarış sahasında MultiGP kapıları, bayraklar ve dalış kapıları. Beş inç araçla uçun ve panoda paylaşın.',
+    facts: ['5 ft kapılar', '60 m saha', 'Pano'],
   },
   {
     canvas: 'micro',
-    label: 'Whoop racing',
+    label: 'Whoop yarışı',
     art: '../../assets/gate/whoop.jpg',
-    blurb: 'A room for the 65 mm whoop. RaceGOW’s 28 inch gates in a ten by twelve metre hall, a grid in inches, and RaceGOW’s own rules checking the layout.',
-    facts: ['28 in gates', 'Indoors', 'RaceGOW'],
+    blurb: '65 mm whoop için salon. 10 × 12 metrelik alanda RaceGOW 28 inç kapıları ve yerleşimi denetleyen RaceGOW kuralları.',
+    facts: ['28 inç kapılar', 'Kapalı alan', 'RaceGOW'],
   },
   {
     canvas: 'freestyle',
-    label: 'Freestyle',
+    label: 'Serbest uçuş',
     art: '../../assets/gate/freestyle.jpg',
-    blurb: 'A map of your own on a 160 metre plot. Buildings, cranes, a skate set and named gaps wherever you put them, flown on the five inch with no gates and no clock.',
-    facts: ['No gates', '160 m plot', 'Five inch'],
+    blurb: '160 metrelik alanda kendi haritanız. Binaları, vinçleri, kaykay setini ve boşlukları yerleştirin; kapısız ve süresiz uçun.',
+    facts: ['Kapısız', '160 m alan', 'Beş inç'],
   },
 ];
 
@@ -602,19 +602,19 @@ const SIDE_WORDS = {
 const ANIMATION_SIZES = [
   {
     edge: ANIMATION_EDGE,
-    label: 'Standard',
+    label: 'Standart',
     note: 'The usual size, around 1 to 2 MB, which posts anywhere. About a minute.',
   },
   {
     edge: 1024,
-    label: 'High',
+    label: 'Yüksek',
     note: 'Four times the pixels, so lines and lettering stay sharp on a big screen. '
       + 'The file is about two and a half times the size of Standard, and it takes '
       + 'about three times as long.',
   },
   {
     edge: 2048,
-    label: 'Very high',
+    label: 'Çok yüksek',
     note: 'Sixteen times the pixels of Standard, for a poster or a projector. The file is '
       + 'about seven times the size, around 6 MB for a long lap, which is more than some '
       + 'chats take, and it takes roughly a dozen times as long. It wants a computer with a '
@@ -632,12 +632,12 @@ const ANIMATION_SIZES = [
 const ANIMATION_SETTINGS = [
   {
     id: 'stage',
-    label: 'Black stage',
+    label: 'Siyah etap',
     note: 'The track on a black floor, as it has always been shot.',
   },
   {
     id: 'field',
-    label: 'Race field, sponsors on the grass',
+    label: 'Yarış sahası, çimde sponsorlar',
     note: 'The track on striped grass, the way the game shows it, with the sponsors\' logos '
       + 'painted where you put them, the gates and flags wearing them too, and no name on it. The file is bigger, because the grass is not black.',
   },
@@ -3094,7 +3094,7 @@ export class App {
     const lit = this.armed ? document.querySelector('#tb-palette .tb-tool[aria-pressed="true"] .tb-tool-label') : null;
     const name = lit ? lit.textContent.trim() : '';
     if (b.textContent !== (name || 'Tools')) {
-      b.textContent = name || 'Tools';
+      b.textContent = name || 'Araçlar';
     }
     b.classList.toggle('tb-in-hand', Boolean(name));
     b.title = name
@@ -5830,8 +5830,8 @@ export class App {
       return b;
     };
 
-    this.undoBtn = btn('Undo', () => this.undo(), 'Control Z');
-    this.redoBtn = btn('Redo', () => this.redo(), 'Control Shift Z');
+    this.undoBtn = btn('Geri al', () => this.undo(), 'Control Z');
+    this.redoBtn = btn('Yinele', () => this.redo(), 'Control Shift Z');
     /*
      * ONE VIEW VOCABULARY (MENUS-PLAN.md 4.2): 2D and 3D on every canvas, and
      * V goes between them. 3D is where every canvas is built (the whoop's, the
@@ -5842,19 +5842,19 @@ export class App {
      * above. Any press on a view button is the author's own choice, and the
      * room opening by itself on a canvas never overrules it.
      */
-    this.mode2d = btn('2D', () => this.show2d(), 'Top down authoring view');
-    this.mode3d = btn('3D', () => this.show3d(), 'Build here, in 3D');
-    this.topBtn = btn('Top', () => this.toggleTop(), 'Look straight down on the room, north up, for measuring. Press again for the angle you had. Every gesture is the same.');
+    this.mode2d = btn('2B', () => this.show2d(), 'Üstten görünüm');
+    this.mode3d = btn('3B', () => this.show3d(), '3B görünümde oluştur');
+    this.topBtn = btn('Üstten', () => this.toggleTop(), 'Ölçüm için sahneyi kuzey yukarıda kalacak şekilde üstten görüntüle. Önceki açıya dönmek için yeniden basın.');
     /* Plain, not primary. There is one green button on this bar and it is
      * the one that leaves for the air; a second would make neither read as
      * the thing to press. Show line goes amber while a line is showing,
      * which is the state that matters. */
     /* The line is derived on every edit now, so this only paints it. */
-    this.pathBtn = btn('Show line', () => this.togglePath(), 'Draw the racing line on the canvas');
-    this.labelsBtn = btn('Labels', () => this.toggleLabels(), 'Flying-order numbers on the gates. Turn them off to see the racing line.');
-    this.squareBtn = btn('Square', () => this.toggleSquare(), 'New gates face along the nearest axis and stay there, as a plan is drawn. Off, they face along the line from the one before.');
+    this.pathBtn = btn('Çizgiyi göster', () => this.togglePath(), 'Yarış çizgisini planda göster');
+    this.labelsBtn = btn('Etiketler', () => this.toggleLabels(), 'Kapılardaki uçuş sırası numaralarını göster veya gizle');
+    this.squareBtn = btn('Eksen hizası', () => this.toggleSquare(), 'Yeni kapıları en yakın eksene hizala');
     /* Whoop canvas only: with it off, a click in a gate is a click on the gate. */
-    this.bendBtn = btn('Bend line', () => this.toggleBendLine(), 'Drag the racing line to bend it into a waypoint. Off, a click on a gate is a click on the gate.');
+    this.bendBtn = btn('Çizgiyi bük', () => this.toggleBendLine(), 'Yarış çizgisini sürükleyerek yeni bir ara nokta ekle');
 
     const file = document.createElement('input');
     file.type = 'file';
@@ -5874,8 +5874,8 @@ export class App {
      * somebody to remember to press Save before they fly is asking them to
      * fly the wrong track once.
      */
-    this.flyBtn = btn('Fly this track', () => this.flyThisTrack(), 'Build the world around this track and fly it', 'tb-btn tb-primary');
-    this.publishBtn = btn('Publish', () => this.openPublish(), 'Put this track on the public board, logos and all', 'tb-btn tb-publish');
+    this.flyBtn = btn('Bu pisti uçur', () => this.flyThisTrack(), 'Pistin çevresini oluştur ve uç', 'tb-btn tb-primary');
+    this.publishBtn = btn('Yayımla', () => this.openPublish(), 'Bu pisti logolarıyla birlikte panoda paylaş', 'tb-btn tb-publish');
     this.listingChip = document.createElement('span');
     this.listingChip.className = 'tb-listing';
 
@@ -5886,7 +5886,7 @@ export class App {
     const back = document.createElement('a');
     back.className = 'tb-btn tb-quiet tb-back';
     back.href = simulatorLink(this.doc);
-    back.textContent = 'Back to the simulator';
+    back.textContent = 'Simülatöre dön';
     this.backLink = back;
 
     /*
@@ -5906,13 +5906,13 @@ export class App {
     this.moreWrap = document.createElement('div');
     this.moreWrap.className = 'tb-more';
     /* A click a keyboard made has no pointer position and a detail of 0. */
-    this.moreBtn = btn('More', (e) => this.toggleMore(e.detail === 0), 'Import, export, duplicate, delete');
+    this.moreBtn = btn('Diğer', (e) => this.toggleMore(e.detail === 0), 'İçe aktar, dışa aktar, çoğalt veya sil');
     this.moreMenu = document.createElement('div');
     this.moreMenu.className = 'tb-more-menu';
     this.moreMenu.id = 'tb-more-menu';
     this.moreMenu.hidden = true;
     this.moreMenu.setAttribute('role', 'menu');
-    this.moreMenu.setAttribute('aria-label', 'More');
+    this.moreMenu.setAttribute('aria-label', 'Diğer işlemler');
     this.moreBtn.setAttribute('aria-haspopup', 'menu');
     this.moreBtn.setAttribute('aria-expanded', 'false');
     this.moreBtn.setAttribute('aria-controls', 'tb-more-menu');
@@ -6019,9 +6019,9 @@ export class App {
       this.classToggle,
       name,
       Object.assign(group(
-        (this.newBtn = btn('New', () => this.newTrack(), 'Start a blank track', 'tb-btn tb-new')),
-        (this.saveBtn = btn('Save', () => this.save(), 'Control S', 'tb-btn tb-save')),
-        (this.loadBtn = btn('Load', () => this.openLoad(), 'Open a saved track')),
+        (this.newBtn = btn('Yeni', () => this.newTrack(), 'Boş pist oluştur', 'tb-btn tb-new')),
+        (this.saveBtn = btn('Kaydet', () => this.save(), 'Control S', 'tb-btn tb-save')),
+        (this.loadBtn = btn('Yükle', () => this.openLoad(), 'Kaydedilmiş bir pisti aç')),
       ), { className: 'tb-bargroup tb-file-group' }),
       this.keptChip,
       this.moreWrap,
@@ -6063,7 +6063,7 @@ export class App {
     this.toolsBtn = btn('Tools', (e) => this.toggleTools(null, { keys: e.detail === 0 }), 'The palette: pick a piece, then tap where it goes', 'tb-btn tb-phone-only tb-tools-btn');
     this.toolsBtn.setAttribute('aria-controls', 'tb-palette');
     this.toolsBtn.setAttribute('aria-expanded', 'false');
-    this.detailsBtn = btn('Details', (e) => this.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
+    this.detailsBtn = btn('Ayrıntılar', (e) => this.toggleDrawer(null, { from: e.currentTarget, keys: e.detail === 0 }),
       'What is selected, the flying order and the results', 'tb-btn tb-phone-only tb-details-btn');
     this.detailsBtn.setAttribute('aria-controls', 'tb-side');
     this.detailsBtn.setAttribute('aria-expanded', 'false');
@@ -6126,11 +6126,11 @@ export class App {
     };
     this.phoneItems = new Map();
     seg('canvas', 'Which canvas', CANVAS_ORDER.map((c) => [c, CANVAS_WORDS[c].label, () => this.setCanvas(c), CANVAS_WORDS[c].makes]));
-    item('new', 'New', () => this.newTrack(), 'Start a blank one');
-    item('save', 'Save', () => this.save(), 'Keep it in Load, in this browser');
+    item('new', 'Yeni', () => this.newTrack(), 'Boş bir harita oluştur');
+    item('save', 'Kaydet', () => this.save(), 'Bu tarayıcıya kaydet');
     seg('view', 'View', [
-      ['2d', '2D', () => this.show2d(), 'The plan from above'],
-      ['3d', '3D', () => this.show3d(), 'The track in 3D'],
+      ['2d', '2B', () => this.show2d(), 'Üstten görünüm'],
+      ['3d', '3B', () => this.show3d(), '3B görünüm'],
     ]);
     item('fit', 'Fit', () => this.frameAll(), 'Frame the whole of it');
     item('top', 'Top', () => this.toggleTop(), 'Look straight down on the room');
@@ -6139,7 +6139,7 @@ export class App {
     item('square', 'Square', () => this.toggleSquare(), 'New gates face along the nearest axis and stay there, as a plan is drawn');
     item('labels', 'Labels', () => this.toggleLabels(), 'Numbers and names on the drawing');
     item('logos', 'Sponsor logos', () => this.openLogo(), 'Up to five sponsors’ logos');
-    item('publish', 'Publish', () => this.openPublish(), 'Put it on the board');
+    item('publish', 'Yayımla', () => this.openPublish(), 'Panoda paylaş');
     const back = document.createElement('a');
     back.className = 'tb-more-item tb-phone-only';
     back.setAttribute('role', 'menuitem');
@@ -6245,8 +6245,8 @@ export class App {
     if (this.viewGroup && this.viewGroup.firstElementChild !== lead) {
       this.viewGroup.prepend(lead);
     }
-    this.mode2d.title = 'The plan from above, the canvas this builder has always had. V for 3D';
-    this.mode3d.title = `Build here, in 3D: pick a piece on the left, click the ${whoop ? 'floor' : (map ? 'plot' : 'ground')}, drag a piece to move it. V for 2D`;
+    this.mode2d.title = 'Üstten plan görünümü. 3B için V tuşuna basın.';
+    this.mode3d.title = `3B görünümde oluşturun: soldan parça seçin, ${whoop ? 'zemine' : (map ? 'alana' : 'sahaya')} tıklayarak yerleştirin. Taşımak için sürükleyin. 2B için V tuşuna basın.`;
     /* Top is a camera of the room's 3D, beside Fit, lit while it looks down. */
     this.topBtn.style.display = room && this.mode === '3d' ? '' : 'none';
     this.topBtn.classList.toggle('on', room && plan);
@@ -6260,7 +6260,7 @@ export class App {
     /* The room's layout: the side column is a drawer and the room's own chrome is shown. See the block in
      * index.html. The class is named for the canvas it was made for and is the room's on every track. */
     document.body.classList.toggle('tb-whoop', room);
-    this.fitBtn.title = map ? `Frame the whole ${wordsFor(this.doc).place}` : 'Frame the track';
+    this.fitBtn.title = map ? `${wordsFor(this.doc).place} alanını kadraja sığdır` : 'Pisti kadraja sığdır';
     if (this.classBtns) {
       const canvas = canvasOf(this.doc);
       for (const [id, b] of this.classBtns) {
@@ -6281,32 +6281,32 @@ export class App {
      */
     this.pathBtn.style.display = map ? 'none' : '';
     this.labelsBtn.title = map
-      ? 'The named gaps\u2019 labels and the names on the plan. Turn them off to see the map.'
-      : 'Flying-order numbers on the gates. Turn them off to see the racing line.';
+      ? 'Adlandırılmış boşlukları ve plandaki adları gösterir. Haritayı görmek için kapatın.'
+      : 'Kapılardaki uçuş sırası numaralarını gösterir. Yarış çizgisini görmek için kapatın.';
     document.body.classList.toggle('tb-map', map);
     /* The status bar's hints for the 3D view's own gestures. */
     document.body.classList.toggle('tb-in-3d', this.mode === '3d');
     /* "Fly", and the rest of the sentence in a span a portrait phone's bar
      * leaves out for room; the button's text is still the whole of it. */
-    this.flyBtn.replaceChildren('Fly', Object.assign(document.createElement('span'), {
-      className: 'tb-long', textContent: map ? ' this map' : ' this track',
+    this.flyBtn.replaceChildren('Uç', Object.assign(document.createElement('span'), {
+      className: 'tb-long', textContent: map ? ' bu haritayı' : ' bu pisti',
     }));
     this.flyBtn.title = map
-      ? 'Build this map in the town\u2019s style and fly it on the five inch'
-      : 'Build the world around this track and fly it';
-    this.newBtn.title = map ? 'Start a blank map' : 'Start a blank track';
-    this.loadBtn.title = map ? 'Open a saved map' : 'Open a saved track';
+      ? 'Bu haritayı kasaba ortamında oluşturun ve beş inç araçla uçun'
+      : 'Pistin çevresini oluşturun ve uçun';
+    this.newBtn.title = map ? 'Boş harita oluştur' : 'Boş pist oluştur';
+    this.loadBtn.title = map ? 'Kaydedilmiş haritayı aç' : 'Kaydedilmiş pisti aç';
     if (this.moreItems) {
-      const noun = map ? 'map' : 'track';
-      this.moreItems.get('duplicate').title = `Copy this ${noun} under a new name`;
-      this.moreItems.get('import').title = `Read a .json ${noun} file`;
-      this.moreItems.get('export').title = `Write a .json ${noun} file`;
-      this.moreItems.get('delete').title = `Remove this ${noun} from this browser`;
+      const noun = map ? 'haritayı' : 'pisti';
+      this.moreItems.get('duplicate').title = `Bu ${noun} yeni adla kopyala`;
+      this.moreItems.get('import').title = `Bir .json ${noun} dosyasını içe aktar`;
+      this.moreItems.get('export').title = `Bir .json ${noun} dosyasını dışa aktar`;
+      this.moreItems.get('delete').title = `Bu ${noun} tarayıcıdan sil`;
       this.moreItems.get('animation').style.display = map ? 'none' : '';
       /* Says who is signed in, so an admin can see it from here. Hidden on a
        * map: the board takes maps without any official mark. */
       const adminNow = readAdminSession(boardOrigin());
-      this.moreItems.get('admin').textContent = adminNow ? `Admin: ${adminNow.email || 'signed in'}` : 'Admin';
+      this.moreItems.get('admin').textContent = adminNow ? `Yönetici: ${adminNow.email || 'oturum açık'}` : 'Yönetici';
       this.moreItems.get('admin').style.display = map ? 'none' : '';
       /* The share link is a race track's, on either canvas (MENUS-PLAN.md
        * 4.2b); the build sheet and the picture are the room's. */

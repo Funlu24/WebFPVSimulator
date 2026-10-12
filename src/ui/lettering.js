@@ -77,7 +77,7 @@ export const INKS = {
    * over the sky it is the colour of, because a close call is about the
    * world round the craft rather than the craft. */
   sky: '#8fe0ff',
-  sakura: '#e8a8b8',
+  sakura: '#55aaff',
   bail: '#ff7d96',
   drift: '#ffc46b',
   slate: '#9db3c8',

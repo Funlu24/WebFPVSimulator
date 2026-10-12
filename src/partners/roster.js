@@ -1,12 +1,8 @@
 /*
  * roster.js: the partners, and the one list all three repositories read.
  *
- * WHO. Three businesses and a club back WebFPV, each exclusive in its kind:
- * Global Drone Solutions as the official training partner, Mantis FPV as the
- * official retail partner, and the West Coast Multirotor Club as the official
- * club partner. The owner named them on 2026-09-27 and approved the plan that
- * puts them on the front door, on Tracks and Times, on a partners page with a
- * dashboard for each of them, and painted into every freestyle map.
+ * WHO. TÜMER Savunma is WebFPV's sponsor. Its mark appears in the simulator,
+ * on the partners page, and on measured advertising panels in freestyle maps.
  *
  * WHY ONE LIST, AND WHY HERE. The front door draws their marks, the board
  * prints their cards and counts what they are owed, and the simulator paints
@@ -25,7 +21,7 @@
  *   name    the name as the partner writes it.
  *   short   the name where there is room for little: a find callout lettered
  *           over the flying, a table column.
- *   role    'training', 'retail' or 'club'. ROLE_TITLES says it in words.
+ *   role    the partner kind. ROLE_TITLES says it in words.
  *   about   what they do, in a sentence or two, for their card on the
  *           partners page. DRAFTS, and each partner signs off their own
  *           before the page ships. THE RULE FOR THEM: say only what the
@@ -84,12 +80,12 @@
  * along with WebFPVSimulator. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* The three kinds, and how each is said. "Official" because each partner is
- * the only one of its kind, which is what the owner agreed with them. */
+/* Partner types and the label shown on each partner card. */
 export const ROLE_TITLES = Object.freeze({
   training: 'Official training partner',
   retail: 'Official retail partner',
   club: 'Official club partner',
+  sponsor: 'WebFPV sponsor',
 });
 
 /* What a link on a partner's card can be. A closed list, because the board
@@ -107,25 +103,21 @@ const partner = (p) => Object.freeze({
 });
 
 /*
- * The list, in the order every surface shows it: training, retail, club.
- *
- * GDS's files are a WebFPV redraw of their public logo, not a file GDS
- * supplied, and each file's <title> says so. They stand until GDS approves
- * the redraw or sends a vector of their own. The club's are a PNG, so its one
- * colour file is a PNG too; a vector from the club replaces both.
+ * TÜMER's lockup is a WebFPV-made sponsor mark based on the supplied name,
+ * not an official corporate logo file.
  */
 export const PARTNERS = Object.freeze([
   partner({
     slug: 'tumer',
-    name: 'Tümer Savunma',
-    short: 'Tümer',
-    role: 'training',
-    about: 'Şirketin kısa tanıtım metni.',
+    name: 'TÜMER Savunma',
+    short: 'TÜMER',
+    role: 'sponsor',
+    about: "TÜMER Savunma, WebFPV'nin sponsorudur.",
     links: [
-      { kind: 'site', label: 'Tümer Savunma', href: 'http://www.tumer.com/YeteneklerimizÇözümlerimiz/SavunmaSanayi.html' },
+      { kind: 'site', label: 'TÜMER Savunma', href: 'https://www.tumer.com/Yeteneklerimiz%C3%87%C3%B6z%C3%BCmlerimiz/SavunmaSanayi.html' },
     ],
-    logo: { colour: 'tumer/colour.png', mono: 'tumer/mono.png', aspect: 600 / 200 },
-    mark: { field: '#ffffff' },
+    logo: { colour: 'tumer/colour.svg', mono: 'tumer/mono.svg', aspect: 3 },
+    mark: { field: '#1557a6' },
   }),
 ]);
 

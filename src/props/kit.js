@@ -696,7 +696,7 @@ export class PropKit {
    * src/maps/built/looks.js, or nothing for the town's own golden hour.
    * `clumps` false draws a canopy's blobs round rather than lumpy (see
    * clumpBlob), as a built map does on Low. */
-  constructor(look = null, { clumps = true } = {}) {
+  constructor(look = null, { clumps = true, treeModel = null } = {}) {
     /* Handed to a family's draw() so it can build a geometry the kit has no
      * word for, without importing a renderer into a file Node must load. */
     this.THREE = THREE;
@@ -711,6 +711,7 @@ export class PropKit {
     /* Canopy blobs drawn so far, which hands out their codes: codedLeaf. */
     this.leaves = 0;
     this.clumps = clumps !== false;
+    this.treeModel = treeModel;
   }
 
   /* Where the next element goes: world position and heading. */

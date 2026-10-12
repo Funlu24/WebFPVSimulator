@@ -110,10 +110,101 @@ function roundBlobGeometry() {
   return geo;
 }
 
+/* Use one shared, low-poly GLTF canopy for a whole planting set. The glTF
+ * meshes become InstancedMeshes, so each material is submitted once for all
+ * trees in this set instead of cloning the model and adding draw calls. */
+function buildModelTrees(ctx, spots, model, name, baseHeight = 7.5) {
+  if (!model || !spots.length) return null;
+  model.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(model);
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const uniform = baseHeight / Math.max(0.001, size.y);
+  const normalize = new THREE.Matrix4()
+    .makeScale(uniform, uniform, uniform)
+    .multiply(new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z));
+  const parts = [];
+  model.traverse((object) => {
+    if (!object.isMesh || !object.geometry || !object.material) return;
+    const geometry = object.geometry.clone();
+    geometry.applyMatrix4(object.matrixWorld);
+    geometry.applyMatrix4(normalize);
+    geometry.computeBoundingSphere();
+    parts.push({ geometry, material: object.material });
+  });
+  if (!parts.length) return null;
+
+  const cells = new Map();
+  for (const spot of spots) {
+    const key = `${Math.floor(spot.x / 40)},${Math.floor(spot.z / 40)}`;
+    let cell = cells.get(key);
+    if (!cell) cells.set(key, cell = []);
+    cell.push(spot);
+  }
+
+  for (const [partIndex, part] of parts.entries()) {
+    for (const cellSpots of cells.values()) {
+      const mesh = new THREE.InstancedMesh(part.geometry, part.material, cellSpots.length);
+      mesh.name = `treeCanopyModel_${name}_${partIndex}`;
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      for (let i = 0; i < cellSpots.length; i += 1) {
+        const spot = cellSpots[i];
+        const rng = rngKit(spot.seed ?? i + 1);
+        const scale = spot.scale ?? 1;
+        const lean = spot.lean ?? 0;
+        const leanDir = spot.leanDir ?? rng.range(0, Math.PI * 2);
+        const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          lean * Math.sin(leanDir), rng.range(0, Math.PI * 2), -lean * Math.cos(leanDir),
+        ));
+        const matrix = new THREE.Matrix4().compose(
+          new THREE.Vector3(spot.x, spot.y ?? 0, spot.z),
+          rotation,
+          new THREE.Vector3(uniform * scale, uniform * scale, uniform * scale),
+        );
+        mesh.setMatrixAt(i, matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      ctx.add(mesh);
+    }
+  }
+
+  /* Keep a narrow trunk collider and a few canopy lobes. A single box around
+   * the whole tree would make empty space between branches feel solid. */
+  const leaves = [];
+  for (const spot of spots) {
+    if (spot.collide === false) continue;
+    const scale = (spot.scale ?? 1) * uniform;
+    const y = spot.y ?? 0;
+    const trunkRadius = 0.18 * scale;
+    ctx.collide(spot.x - trunkRadius, spot.z - trunkRadius,
+      spot.x + trunkRadius, spot.z + trunkRadius, y + baseHeight * scale * 0.48, y);
+    const canopyRx = size.x * scale * 0.42;
+    const canopyRz = size.z * scale * 0.42;
+    for (const [dx, dz, level, rx, rz] of [
+      [0, 0, 0.56, 0.78, 0.78], [-0.30, 0, 0.68, 0.62, 0.68],
+      [0.30, 0, 0.68, 0.62, 0.68], [0, -0.30, 0.77, 0.62, 0.62],
+      [0, 0.30, 0.77, 0.62, 0.62], [0, 0, 0.89, 0.48, 0.48],
+    ]) {
+      const radiusX = canopyRx * rx;
+      const radiusZ = canopyRz * rz;
+      leaves.push({
+        x: spot.x + dx * canopyRx, z: spot.z + dz * canopyRz,
+        y: y + baseHeight * scale * level,
+        rx: radiusX, rz: radiusZ, ry: Math.min(radiusX, radiusZ) * 0.72,
+      });
+    }
+  }
+  collideLeaves(ctx, leaves);
+  return { spots: spots.length, meshes: parts.length };
+}
+
 /**
  * @param spots [{ x, z, y, scale, seed, lean, tone }]
  */
-export function buildSakura(ctx, spots) {
+export function buildSakura(ctx, spots, treeModel = null) {
+  if (treeModel) return buildModelTrees(ctx, spots, treeModel, 'sakura');
   const woodParts = [];
   const blobs = [[], [], []];
   const trunkGeo = new THREE.CylinderGeometry(0.7, 1.0, 1, 7, 1);
@@ -324,7 +415,8 @@ const GREEN_TONES = [0x8cb884, 0x5f9470, PAL.cedar, PAL.willow];
 /**
  * @param spots [{ x, z, y, scale, seed, lean, leanDir, spread, tone }]
  */
-export function buildGrove(ctx, spots) {
+export function buildGrove(ctx, spots, treeModel = null) {
+  if (treeModel) return buildModelTrees(ctx, spots, treeModel, 'grove');
   if (!spots.length) return null;
   const woodParts = [];
   const blobs = [[], [], [], []];
@@ -590,7 +682,8 @@ const CEDAR_TONES = [PAL.cedarLit, PAL.cedar, PAL.cedarDeep];
 /**
  * @param spots [{ x, z, y, scale, seed, lean, leanDir, collide }]
  */
-export function buildCedar(ctx, spots) {
+export function buildCedar(ctx, spots, treeModel = null) {
+  if (treeModel) return buildModelTrees(ctx, spots, treeModel, 'cedar', 10.6);
   if (!spots.length) return null;
   const woodParts = [];
   const tiers = [[], [], []];

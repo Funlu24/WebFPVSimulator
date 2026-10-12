@@ -361,24 +361,24 @@ const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'laun
  */
 const SCREEN_TITLES = {
   title: 'WebFPV',
-  courses: 'Tracks',
-  freestyle: 'Maps',
-  pilot: 'Settings',
+  courses: 'Pistler',
+  freestyle: 'Haritalar',
+  pilot: 'Ayarlar',
   quad: 'Quad',
-  launch: 'Before you fly',
-  standings: 'Standings',
-  rates: 'Rates',
-  pids: 'Tune',
-  fc: 'Firmware bench',
-  paused: 'Paused',
-  results: 'Run complete',
-  howto: 'How to fly',
-  tricks: 'Trick list',
-  credits: 'About',
-  stickhelp: 'Stick help',
-  advanced: 'Advanced',
-  calibrate: 'Calibrate sticks',
-  padpick: 'Choose joystick',
+  launch: 'Uçmadan önce',
+  standings: 'Sıralama',
+  rates: 'Oranlar',
+  pids: 'PID ayarları',
+  fc: 'Firmware tezgâhı',
+  paused: 'Duraklatıldı',
+  results: 'Uçuş tamamlandı',
+  howto: 'Nasıl uçulur',
+  tricks: 'Hareket listesi',
+  credits: 'Hakkında',
+  stickhelp: 'Çubuk yardımı',
+  advanced: 'Gelişmiş',
+  calibrate: 'Çubukları kalibre et',
+  padpick: 'Joystick seç',
 };
 /*
  * The crumb's trail, as the room is reached from its home. crumbTrail()
@@ -387,24 +387,24 @@ const SCREEN_TITLES = {
  * Rates opened from Quad reads Quad / Rates, and Escape goes to Quad.
  */
 const CRUMBS = {
-  courses: ['Tracks'],
-  freestyle: ['Maps'],
-  pilot: ['Settings'],
+  courses: ['Pistler'],
+  freestyle: ['Haritalar'],
+  pilot: ['Ayarlar'],
   quad: ['Quad'],
-  launch: ['Before you fly'],
-  standings: ['Tracks', 'Standings'],
-  rates: ['Settings', 'Rates'],
+  launch: ['Uçmadan önce'],
+  standings: ['Pistler', 'Sıralama'],
+  rates: ['Ayarlar', 'Oranlar'],
   pids: ['Quad', 'Tune'],
-  fc: ['Quad', 'Firmware bench'],
-  paused: ['Paused'],
-  results: ['Run complete'],
-  howto: ['How to fly'],
-  tricks: ['Maps', 'Trick list'],
-  credits: ['About'],
-  stickhelp: ['Settings', 'Stick help'],
-  advanced: ['Settings', 'Advanced'],
-  calibrate: ['Settings', 'Calibrate sticks'],
-  padpick: ['Settings', 'Choose joystick'],
+  fc: ['Quad', 'Firmware tezgâhı'],
+  paused: ['Duraklatıldı'],
+  results: ['Uçuş tamamlandı'],
+  howto: ['Nasıl uçulur'],
+  tricks: ['Haritalar', 'Hareket listesi'],
+  credits: ['Hakkında'],
+  stickhelp: ['Ayarlar', 'Çubuk yardımı'],
+  advanced: ['Ayarlar', 'Gelişmiş'],
+  calibrate: ['Ayarlar', 'Çubukları kalibre et'],
+  padpick: ['Ayarlar', 'Joystick seç'],
   title: ['WebFPV'],
 };
 
@@ -537,7 +537,7 @@ export const LAP_COUNTS = [1, 3, 5, PRACTICE_LAPS];
 
 /* A lap count as the launch card writes it. */
 function lapsLabel(n) {
-  return n === PRACTICE_LAPS ? 'Practice' : `${n}`;
+  return n === PRACTICE_LAPS ? 'Antrenman' : `${n}`;
 }
 
 /* Render scale, percent of the preset's resolution, and the frame cap in
@@ -706,7 +706,7 @@ export function gravityScaleFor(weight, airframeId) {
  * See DEFAULTS.freestyleScoring for why off is the default.
  */
 export const FREESTYLE_SCORING = ['off', 'free', 'scored'];
-const FREESTYLE_SCORING_LABEL = { off: 'Lines only', free: 'Free flight', scored: 'Scored run' };
+const FREESTYLE_SCORING_LABEL = { off: 'Sadece çizgiler', free: 'Serbest uçuş', scored: 'Puanlı uçuş' };
 
 /*
  * THE WARNING, and it comes FIRST when trick names are on, because a row
@@ -823,7 +823,7 @@ function counterBestSentence(s) {
 const COURSE_ORDERS = [['flown', 'Most flown'], ['newest', 'Newest'], ['name', 'A to Z']];
 const COURSE_ORDER_IDS = COURSE_ORDERS.map(([id]) => id);
 
-const KEEP_NOTE = 'Tracks you build stay in this browser. Clearing it, or another device, starts you from nothing. Publish a track to put it on the public board.';
+const KEEP_NOTE = 'Oluşturduğunuz pistler bu tarayıcıda kalır. Tarayıcı verisini silmek ya da başka bir cihaz kullanmak sıfırdan başlatır. Herkese açık panoya koymak için bir pist yayınlayın.';
 
 /* How many kinds of trick a freestyle result lists before "N more". */
 const RESULT_TRICK_ROWS = 3;
@@ -896,9 +896,9 @@ function localBestOf(s) {
  */
 function byLine(t) {
   if (t && t.designer) {
-    return `by ${t.designer}`;
+    return `${t.designer} tarafından`;
   }
-  return t && t.author ? `by ${t.author}` : '';
+  return t && t.author ? `${t.author} tarafından` : '';
 }
 
 /* What a board map's card says about it, as the board's own card does: its
@@ -2208,7 +2208,7 @@ function makeWeightSlider({ min, max, step, value, label }) {
 
   const hint = el('div', 'osd-air-hint');
   hint.hidden = true;
-  hint.append(el('p', 'osd-air-hint-title', 'Weight'));
+  hint.append(el('p', 'osd-air-hint-title', 'Ağırlık'));
   hint.append(el(
     'p',
     'osd-air-hint-body',
@@ -2229,7 +2229,7 @@ function makeWeightSlider({ min, max, step, value, label }) {
   range.step = String(step);
   range.value = String(value);
   range.setAttribute('aria-label', label);
-  row.append(el('span', 'osd-air-end', 'Floaty'), range, el('span', 'osd-air-end', 'Sinky'));
+  row.append(el('span', 'osd-air-end', 'Hafif'), range, el('span', 'osd-air-end', 'Ağır'));
 
   const cap = el('div', 'osd-air-cap', '');
   box.append(hint, row, cap);
@@ -2307,7 +2307,7 @@ function makeTuneGroup() {
    * code that raises it; positioned like the Weight card, above the block. */
   const hint = el('div', 'osd-air-hint osd-tune-hint');
   hint.hidden = true;
-  hint.append(el('p', 'osd-air-hint-title', 'Flight feel tuning'));
+  hint.append(el('p', 'osd-air-hint-title', 'Uçuş hissi ayarı'));
   /* Kept so setTuneCaps can reword it for a module that has one slider. */
   const body = el('p', 'osd-air-hint-body', tuneCardText());
   hint.append(body);
@@ -2860,16 +2860,16 @@ function seatIsRace(s) {
  * run and the only place it can still change anything.
  */
 function recordSentence(s, trackName) {
-  const style = s.flightStyle === 'arcade' ? 'Arcade' : 'Expert';
-  const link = s.link === 'perfect' ? 'a perfect link' : LINK_PRESETS[s.link].label;
+  const style = s.flightStyle === 'arcade' ? 'Eğlence modeli' : 'Uzman modeli';
+  const link = s.link === 'perfect' ? 'kusursuz bağlantı' : LINK_PRESETS[s.link].label;
   /* Practice is not in the list, because it is not a different best: a
    * practice lap is held against the same record a counted lap is. What it
    * changes is the board, and the last sentence says so. */
   const bits = [
-    `${style} physics`,
-    `${s.packVoltage.toFixed(2)} V per cell`,
-    ...(s.laps === PRACTICE_LAPS ? [] : [`${s.laps} lap${s.laps === 1 ? '' : 's'}`]),
-    `the ${tuneById(s.tune).name} tune`,
+    style,
+    `hücre başına ${s.packVoltage.toFixed(2)} V`,
+    ...(s.laps === PRACTICE_LAPS ? [] : [`${s.laps} tur`]),
+    `${tuneById(s.tune).name} ayarı`,
   ];
   /* clampWeight rather than s.weight raw, the same guard bugSnapshot uses:
    * every settings object that reaches here has been through loadSettings,
@@ -2881,20 +2881,20 @@ function recordSentence(s, trackName) {
      * physics model: the slider on the flight screen scales the weight the
      * craft carries. A pilot who nudged it mid flight and forgot has exactly
      * the problem this sentence exists to prevent. */
-    bits.splice(1, 0, `weight at ${weight} percent`);
+    bits.splice(1, 0, `ağırlık ${weight} yüzde`);
   }
-  return `Your best on ${trackName} is filed under exactly this: ${bits.join(', ')}.`
-    + ' Change any part of it and you are on a different board.'
+  return `${trackName} pistindeki en iyi turunuz şu koşullarla kaydedilir: ${bits.join(', ')}.`
+    + ' Bu koşullardan biri değişirse ayrı bir derece tablosu kullanılır.'
     + (s.laps === PRACTICE_LAPS
-      ? ' Practice laps stay off the public board, so this run will not count there.'
+      ? ' Antrenman turları genel derece tablosuna eklenmez.'
       : s.flightStyle === 'arcade'
-        ? ' Arcade times stay off the public board, so this run will not count there.'
+        ? ' Eğlence modelindeki turlar genel derece tablosuna eklenmez.'
         : weight !== WEIGHT_STOCK
           /* It used to say a time off 100 stays off the public board. The
            * board takes it now and prints the weight beside the name, the
            * owner's ask of 2026-09-27, so the sentence says that instead. */
-          ? ` This run is on ${link}, and a time from it goes on the public board marked Weight ${weight}%.`
-          : ` This run is on ${link}.`);
+          ? ` Bu uçuş ${link} ile yapılıyor; derece genel tabloda %${weight} ağırlık bilgisiyle görünür.`
+          : ` Bu uçuş ${link} ile yapılıyor.`);
 }
 
 /*
@@ -3758,7 +3758,7 @@ function orderedCourses(list, order) {
  * they cannot drift apart again. Each used to end "Choosing it loads the
  * track and flies it here", which stopped being true on 2026-08-19, when
  * choosing a card started listing what it can do. */
-const CARD_PRESS_NOTE = 'Choose it to see what you can do with it, or double click it to fly it.';
+const CARD_PRESS_NOTE = 'Ne yapabileceğinizi görmek için seçin, uçmak için çift tıklayın.';
 
 /*
  * The tune, as named choices.
@@ -3785,13 +3785,13 @@ const CARD_PRESS_NOTE = 'Choose it to see what you can do with it, or double cli
  * left behind: an arrow key on the pause menu cost a lap with no warning.
  * The row says so now, and so does the hint on the screen itself.
  */
-const MID_RUN_WARNING = ' Changing it during a run puts the quad back on the start line.';
+const MID_RUN_WARNING = ' Uçuş sırasında değiştirmek quadı başlangıç çizgisine geri koyar.';
 
 function tuneItem(s, midRun) {
   const name = tuneById(s.tune).name;
   const adjusted = pidsAdjusted(s.pids, s.tune);
   return {
-    label: 'Tune',
+    label: 'Uçuş ayarı',
     /*
      * THE ADJUSTMENT STAYS ON THE ROW. That was the PIDs row's whole
      * contribution, and dropping it would have been the one thing lost in
@@ -3802,7 +3802,7 @@ function tuneItem(s, midRun) {
      */
     value: adjusted ? `${name}, ${pidsSummary(s.pids, s.tune).toLowerCase()}` : name,
     action: 'pids',
-    note: `${tuneById(s.tune).note} Opens ${SCREEN_TITLES.pids}, where the tune is chosen and Betaflight's own sliders adjust it. Your rates are kept.${midRun ? MID_RUN_WARNING : ''}`,
+    note: `${tuneById(s.tune).note} PID ayarlarını burada düzenleyebilirsiniz; uçuş oranlarınız korunur.${midRun ? MID_RUN_WARNING : ''}`,
   };
 }
 
@@ -4448,8 +4448,8 @@ const WAYS = [
     mode: 'race',
     label: 'Beş inç yarış',
     art: 'assets/gate/race.jpg',
-    blurb: 'A gated track on a sixty metre field, against the clock. A 710 gram 6S quad at forty metres a second, and every lap you finish can go on the public board.',
-    facts: ['6S', '220 mm', 'The board'],
+    blurb: 'Altmış metrelik sahada kapılardan geçerek zamana karşı yarışın. 710 gramlık 6S quad ile saniyede 40 metre hıza ulaşın; derecenizi genel tabloya gönderin.',
+    facts: ['6S', '220 mm', 'Derece tablosu'],
   },
   {
     id: 'race-whoop65',
@@ -4462,25 +4462,25 @@ const WAYS = [
      * picture is a whoop's and the hands get the five inch. The old line
      * promised three times the angular acceleration, which was true of a
      * plant nothing selects now. */
-    blurb: 'The same clock, indoors. A 65 mm ducted whoop through a track that fits in a living room, on 28 inch gates.',
-    facts: ['1S', '65 mm', 'Indoors'],
+    blurb: 'Aynı heyecan, bu kez kapalı alanda. 65 mm korumalı pervaneli whoop ile salonunuza sığan pistte, 28 inç kapılardan uçun.',
+    facts: ['1S', '65 mm', 'Kapalı alan'],
   },
   {
     id: 'freestyle-5inch',
     airframe: '5inch',
     mode: 'freestyle',
-    label: 'Freestyle',
+    label: 'Serbest uçuş',
     art: 'assets/gate/freestyle.jpg',
     /* No clock and no score in the line, because neither is on until a
      * pilot asks for them. See DEFAULTS.freestyleScoring. The aircraft is
      * named because this card seats one: the town is five hundred metres
      * across and it is the five inch's. */
-    blurb: 'The whole town on the five inch, or a map you build yourself. Roofs, alleys and a level crossing, or cranes and bandos wherever you put them. No clock, no gates, and trick names are a switch inside.',
+    blurb: 'Beş inç quad ile kasabada ya da kendi haritanızda serbestçe uçun. Çatılar, ara sokaklar ve hemzemin geçitler sizi bekliyor. Tur saati ve kapılar yok; akrobasi puanlamasını içeriden açabilirsiniz.',
     /* The mode's three, not the machine's, and the machine is on the card
      * anyway: the plan mark over the picture is the five inch's. Three
      * words that fit one line on a landscape phone, where the blurb is
      * hidden and these are the whole of the card. */
-    facts: ['No gates', 'No clock', 'Build a map'],
+    facts: ['Kapı yok', 'Saat yok', 'Harita oluştur'],
   },
 ].map((w) => ({ ...w, action: `way-${w.id}` }));
 
@@ -4504,8 +4504,8 @@ const BUILDER_CARD = {
   id: 'builder',
   label: 'Oluşturucu',
   art: 'assets/gate/builder.jpg',
-  blurb: 'Make your own. A race track for the five inch, a room for the whoop, or a freestyle map of bandos, cranes and named gaps, drawn from above and flown from the same page.',
-  facts: ['Tracks', 'Rooms', 'Maps'],
+  blurb: 'Kendi pistinizi, whoop için kapalı alan parkurunuzu veya serbest uçuş haritanızı oluşturun. Yapılar, vinçler ve isimlendirilmiş boşluklar ekleyip aynı ekrandan uçun.',
+  facts: ['Pistler', 'Kapalı alan', 'Haritalar'],
   action: 'builder',
 };
 
@@ -4969,7 +4969,7 @@ export class Ui {
     /* The clock is a lap on the race field and an airtime in freestyle, and
      * an unlabelled number that means two different things is how a pilot
      * learns to distrust an instrument. */
-    this.osdClockLabel = el('div', 'osd-label', 'Lap');
+    this.osdClockLabel = el('div', 'osd-label', 'Tur');
     this.osdTimer = el('div', 'osd-timer', '--.--');
     this.osdGate = el('div', 'osd-gate', '');
     this.osdBest = el('div', 'osd-best', '');
@@ -5002,7 +5002,7 @@ export class Ui {
      * left corner is the pack and the mode, and the top right is speed and
      * height up to Pause. Off on a desk, where the mode is under the speed. */
     this.osdFlightTouch = el('div', 'osd-sub osd-mode osd-mode-touch', '');
-    packBlock.append(el('div', 'osd-label', 'Pack'), this.osdPack, packBar, this.osdFlightTouch);
+    packBlock.append(el('div', 'osd-label', 'Pil'), this.osdPack, packBar, this.osdFlightTouch);
     this.osdHits = el('div', 'osd-sub osd-hits', '');
     packBlock.append(this.osdHits);
     this.osdSpeed = el('div', 'osd-value', '');
@@ -5018,7 +5018,7 @@ export class Ui {
     const thrBar = el('div', 'bar');
     thrBar.append(this.osdThrBar);
     const flightBlock = el('div', 'osd-corner osd-right');
-    flightBlock.append(this.osdSpeed, this.osdFlight, this.osdAlt, el('div', 'osd-label', 'Throttle'), thrBar);
+    flightBlock.append(this.osdSpeed, this.osdFlight, this.osdAlt, el('div', 'osd-label', 'Gaz'), thrBar);
     const sticks = el('div', 'osd-sticks is-off');
     this.osdStickLeft = makeGimbal('Yaw, throttle');
     this.osdStickRight = makeGimbal('Roll, pitch');
@@ -5198,6 +5198,18 @@ export class Ui {
     beta.append(betaTag, el('span', 'sr-only', ` ${betaLine}`));
     const chips = el('div', 'brand-chips');
     chips.append(beta);
+    const tumer = PARTNERS.find((p) => p.slug === 'tumer');
+    if (tumer) {
+      const sponsor = el('span', 'brand-tumer');
+      sponsor.setAttribute('role', 'img');
+      sponsor.setAttribute('aria-label', `Destekçi: ${tumer.name}`);
+      const mark = el('img');
+      mark.src = `assets/partners/${tumer.logo.mono}`;
+      mark.alt = '';
+      mark.setAttribute('aria-hidden', 'true');
+      sponsor.append(mark, el('span', null, 'DESTEKÇİ'));
+      chips.append(sponsor);
+    }
     brand.append(chips);
     /*
      * The support link lives HERE on the title, under the wordmark, because
@@ -5220,10 +5232,10 @@ export class Ui {
      * the builder's own strip, which already said it.
      */
     /* First run only. */
-    this.firstNote = el('p', 'keep-note first-note', 'A quad has no brakes and no wings. Point it where you want to go and push. Two minutes and you will be through a gate.');
+    this.firstNote = el('p', 'keep-note first-note', 'Quadın freni ve kanadı yok. Gitmek istediğiniz yöne çevirip gaz verin. Birkaç dakika içinde kapılardan geçmeye başlayacaksınız.');
     brand.append(this.firstNote);
     this.wikiTeaser = btn('wiki-teaser', 'Simulating FPV, for nerds');
-    this.wikiTeaser.setAttribute('aria-label', 'Open the FPV wiki');
+    this.wikiTeaser.setAttribute('aria-label', 'FPV rehberini aç');
     this.wikiTeaser.addEventListener('click', () => this.act('wiki'));
     brand.append(this.wikiTeaser);
     const titleBlock = wrapMenu();
@@ -5278,10 +5290,10 @@ export class Ui {
      * one it opens on.
      */
     const howto = el('div', 'screen screen-page screen-howto');
-    howto.append(el('h2', null, 'How to fly'));
+    howto.append(el('h2', null, 'Nasıl uçulur'));
     /* ONE LINE (MENUS-PLAN.md 2.5). The gate colours went to the line under
      * the keys, with the rest of what a first run needs (see renderHowto). */
-    howto.append(el('p', 'howto-lede', 'No brakes and no wings: to slow down or turn, point the quad somewhere else and push.'));
+    howto.append(el('p', 'howto-lede', 'Freni ve kanadı yoktur. Yavaşlamak veya dönmek için quadı başka yöne çevirip gaz verin.'));
 
     const howtoTabs = el('div', 'howto-tabs');
     this.howtoTabs = {};
@@ -5337,7 +5349,7 @@ export class Ui {
      * shape the scorer does not want. See src/ui/trickfilm.js.
      */
     const tricks = el('div', 'screen screen-page screen-tricks');
-    tricks.append(el('h2', null, 'Trick list'));
+    tricks.append(el('h2', null, 'Hareket listesi'));
     tricks.append(el('p', 'rates-lede', 'Every trick the scorer is known to name, what it pays, and what it looks like. Pick one and watch it: the picture is drawn from the same definition the scorer matches against, so what you see is exactly what it is waiting for. Each one has been flown and scored in testing, which is what earns it a place here. Points are before the combo, which multiplies them.'));
     const trickStage = el('div', 'trick-stage');
     this.trickCanvas = el('canvas', 'trick-film');
@@ -5369,8 +5381,8 @@ export class Ui {
      * content, the rows are the furniture, and furniture goes by the door.
      */
     const credits = el('div', 'screen screen-page screen-credits');
-    credits.append(el('h2', null, 'About'));
-    credits.append(el('p', 'rates-lede', 'Who made this, whose work it stands on, and how to reach them.'));
+    credits.append(el('h2', null, 'Hakkında'));
+    credits.append(el('p', 'rates-lede', 'Bu simülatörü kimin yaptığını, hangi çalışmalardan yararlandığını ve ekibe nasıl ulaşacağınızı öğrenin.'));
     this.creditsRoll = el('div', 'credits-roll');
     fillCredits(this.creditsRoll, { assetBase: 'assets/credits' });
     const creditsBlock = wrapMenu();
@@ -5406,7 +5418,7 @@ export class Ui {
      * new one, then the track builder page itself.
      */
     const courses = el('div', 'screen screen-page screen-maps screen-courses');
-    courses.append(el('h2', null, 'Tracks'));
+    courses.append(el('h2', null, 'Pistler'));
     /*
      * WHICH AIRCRAFT THIS LIST IS FOR, said out loud.
      *
@@ -5512,7 +5524,7 @@ export class Ui {
     /* Freestyle. Same card machinery as Race, different contents, and no
      * publish cluster because nothing here is timed or posted. */
     const freestyle = el('div', 'screen screen-page screen-courses screen-freestyle');
-    freestyle.append(el('h2', null, 'Maps'));
+    freestyle.append(el('h2', null, 'Haritalar'));
     /*
      * The lede used to end "Pick one and fly it", which was the instruction
      * for a screen that offered four worlds, and it said "no board", which
@@ -5580,7 +5592,7 @@ export class Ui {
     this.quadHelp = quadBlock.help;
     this.craftQuadFrame = el('div', 'craft-showcase-frame');
     this.craftQuadFrame.append(this.craftCanvas);
-    this.craftCaption = el('div', 'craft-showcase-cap', 'Acro. Sticks are rates. Hands off holds.');
+    this.craftCaption = el('div', 'craft-showcase-cap', 'Acro modu: çubuklar doğrudan uçuş oranlarını kontrol eder. Bıraktığınızda quad konumunu korur.');
     const quadShowcase = el('div', 'craft-showcase');
     quadShowcase.append(this.craftQuadFrame, this.craftCaption);
     quadBlock.stage.prepend(quadShowcase);
@@ -5588,8 +5600,8 @@ export class Ui {
     this.screens.quad = quad;
 
     const pilot = el('div', 'screen screen-page screen-pilot');
-    pilot.append(el('h2', null, 'Settings'));
-    pilot.append(el('p', 'rates-lede', 'You, your radio and your rates, the picture and the sound.'));
+    pilot.append(el('h2', null, 'Ayarlar'));
+    pilot.append(el('p', 'rates-lede', 'Pilot bilgileri, kumanda, uçuş oranları, görüntü ve ses ayarları.'));
     const pilotBlock = wrapMenu();
     this.pilotMenu = pilotBlock.menu;
     this.pilotMenu.classList.add('menu-scroll');
@@ -5608,8 +5620,8 @@ export class Ui {
      * under the same Settings styling, with Escape back to Settings.
      */
     const advanced = el('div', 'screen screen-page screen-pilot screen-advanced');
-    advanced.append(el('h2', null, 'Advanced'));
-    advanced.append(el('p', 'rates-lede', 'For when something is wrong. Auto suits most machines.'));
+    advanced.append(el('h2', null, 'Gelişmiş'));
+    advanced.append(el('p', 'rates-lede', 'Bir sorun olduğunda kullanın. Otomatik ayar çoğu bilgisayar için uygundur.'));
     const advancedBlock = wrapMenu();
     this.advancedMenu = advancedBlock.menu;
     this.advancedMenu.classList.add('menu-scroll');
@@ -5632,7 +5644,7 @@ export class Ui {
      * link for sending somebody rather than as the only way to see a time.
      */
     const standings = el('div', 'screen screen-page screen-standings');
-    standings.append(el('h2', null, 'Standings'));
+    standings.append(el('h2', null, 'Sıralama'));
     this.standingsLede = el('p', 'rates-lede', '');
     standings.append(this.standingsLede);
     this.standingsTable = el('div', 'standings-table');
@@ -5666,7 +5678,7 @@ export class Ui {
      * readout for the one flag that does change a freestyle flight.
      */
     const launch = el('div', 'screen screen-page screen-launch');
-    launch.append(el('h2', null, 'Before you fly'));
+    launch.append(el('h2', null, 'Uçmadan önce'));
     this.launchLede = el('p', 'rates-lede', '');
     launch.append(this.launchLede);
     const launchBlock = wrapMenu();
@@ -5695,7 +5707,7 @@ export class Ui {
      * src/fc/ratescurve.js. The dots on it are the live sticks.
      */
     const rates = el('div', 'screen screen-page screen-rates');
-    rates.append(el('h2', null, 'Rates'));
+    rates.append(el('h2', null, 'Oranlar'));
     rates.append(el(
       'p',
       'rates-lede',
@@ -5821,7 +5833,7 @@ export class Ui {
     this.screens.fc = fc;
 
     const calibrate = el('div', 'screen screen-page screen-calibrate');
-    calibrate.append(el('h2', null, 'Calibrate sticks'));
+    calibrate.append(el('h2', null, 'Çubukları kalibre et'));
     this.calKicker = el('div', 'cal-kicker', '');
     this.calPrompt = el('p', 'cal-prompt', '');
     this.calHint = el('p', 'cal-hint', '');
@@ -5905,7 +5917,7 @@ export class Ui {
      * can leave it and the shell check walks it.
      */
     const stickhelp = el('div', 'screen screen-page screen-stickhelp');
-    stickhelp.append(el('h2', null, 'Stick help'));
+    stickhelp.append(el('h2', null, 'Çubuk yardımı'));
     stickhelp.append(el(
       'p',
       'stickhelp-lede',
@@ -5932,9 +5944,9 @@ export class Ui {
     this.screens.stickhelp = stickhelp;
 
     const padpick = el('div', 'screen screen-page screen-padpick');
-    padpick.append(el('h2', null, 'Choose joystick'));
-    this.padKicker = el('div', 'cal-kicker', 'Which device');
-    this.padPrompt = el('p', 'cal-prompt', 'Move the joystick you want to fly with.');
+    padpick.append(el('h2', null, 'Joystick seç'));
+    this.padKicker = el('div', 'cal-kicker', 'Aygıt seçimi');
+    this.padPrompt = el('p', 'cal-prompt', 'Uçuşta kullanacağınız kumandayı hareket ettirin.');
     this.padHint = el('p', 'cal-hint', '');
     this.padCards = el('div', 'pad-cards');
     const padBtns = el('div', 'cal-actions pad-actions');
@@ -5963,7 +5975,7 @@ export class Ui {
     /* screen-paused names it for the checks, which find a screen's list by
      * its class: without it the shell walk measured nothing here. */
     const paused = el('div', 'screen screen-modal screen-paused');
-    paused.append(el('h2', null, 'Paused'));
+    paused.append(el('h2', null, 'Duraklatıldı'));
     const pausedBlock = wrapMenu();
     this.pausedMenu = pausedBlock.menu;
     this.pausedHelp = pausedBlock.help;
@@ -5974,9 +5986,9 @@ export class Ui {
     const resultsCopy = el('div', 'results-copy');
     const resultsTop = el('div', 'results-top');
     this.resultsKicker = el('div', 'results-kicker', '');
-    this.resultsHead = el('h2', 'results-head', 'Run complete');
+    this.resultsHead = el('h2', 'results-head', 'Uçuş tamamlandı');
     this.resultsHero = el('div', 'results-hero');
-    this.resultsHeroCap = el('div', 'results-hero-cap', 'Best lap');
+    this.resultsHeroCap = el('div', 'results-hero-cap', 'En iyi tur');
     this.resultsHeroTime = el('div', 'results-hero-time', '');
     this.resultsHeroMeta = el('div', 'results-hero-meta', '');
     this.resultsHero.append(this.resultsHeroCap, this.resultsHeroTime, this.resultsHeroMeta);
@@ -6081,12 +6093,12 @@ export class Ui {
 
     this.musicDock = el('div', 'music-dock');
     this.musicDock.setAttribute('role', 'group');
-    this.musicDock.setAttribute('aria-label', 'Music');
+    this.musicDock.setAttribute('aria-label', 'Müzik');
     this.musicPrev = btn('music-skip', '‹');
-    this.musicPrev.setAttribute('aria-label', 'Previous track');
+    this.musicPrev.setAttribute('aria-label', 'Önceki parça');
     this.musicPrev.tabIndex = -1;
     this.musicNext = btn('music-skip', '›');
-    this.musicNext.setAttribute('aria-label', 'Next track');
+    this.musicNext.setAttribute('aria-label', 'Sonraki parça');
     this.musicNext.tabIndex = -1;
     /*
      * THE NAME IS THE MUTE, because the dock is already the shape of the
@@ -6592,7 +6604,7 @@ export class Ui {
       return false;
     }
     const panel = el('div', 'name-dialog-box bug');
-    panel.append(el('h2', null, 'Keep this report?'));
+    panel.append(el('h2', null, 'Bu bildirimi saklayalım mı?'));
     panel.append(el(
       'p',
       'lede',
@@ -7015,7 +7027,7 @@ export class Ui {
       this.closeNameDialog(null);
     }
     const box = el('div', 'name-dialog-box bug');
-    box.append(el('h2', null, 'Report a bug'));
+    box.append(el('h2', null, 'Hata bildir'));
     box.append(el(
       'p',
       'lede',
@@ -7028,7 +7040,7 @@ export class Ui {
     const feelDoor = btn('name-dialog-door', 'Just here to say how it flies? Give flight feel feedback instead.');
     box.append(feelDoor);
 
-    const kindLabel = el('p', 'name-dialog-label', 'Kind');
+    const kindLabel = el('p', 'name-dialog-label', 'Tür');
     const kind = document.createElement('select');
     kind.className = 'name-dialog-input';
     for (const opt of BUG_KINDS) {
@@ -7041,41 +7053,41 @@ export class Ui {
       kind.append(o);
     }
 
-    const titleLabel = el('p', 'name-dialog-label', 'Title');
+    const titleLabel = el('p', 'name-dialog-label', 'Başlık');
     const title = document.createElement('input');
     title.type = 'text';
     title.className = 'name-dialog-input';
     title.maxLength = 120;
-    title.placeholder = 'Short, specific';
+    title.placeholder = 'Kısa ve açıklayıcı';
     title.autocomplete = 'off';
 
-    const whatLabel = el('p', 'name-dialog-label', 'What happened');
+    const whatLabel = el('p', 'name-dialog-label', 'Ne oldu?');
     const what = document.createElement('textarea');
     what.className = 'name-dialog-input name-dialog-area';
     what.maxLength = 4000;
     what.rows = 4;
-    what.placeholder = 'What you saw, heard, or could not do.';
+    what.placeholder = 'Ne gördünüz, duydunuz veya yapamadınız?';
 
-    const expectedLabel = el('p', 'name-dialog-label', 'What you expected (optional)');
+    const expectedLabel = el('p', 'name-dialog-label', 'Ne olmasını bekliyordunuz? (İsteğe bağlı)');
     const expected = document.createElement('textarea');
     expected.className = 'name-dialog-input name-dialog-area';
     expected.maxLength = 2000;
     expected.rows = 2;
 
-    const stepsLabel = el('p', 'name-dialog-label', 'How to reproduce (optional)');
+    const stepsLabel = el('p', 'name-dialog-label', 'Nasıl tekrarlanır? (İsteğe bağlı)');
     const steps = document.createElement('textarea');
     steps.className = 'name-dialog-input name-dialog-area';
     steps.maxLength = 2000;
     steps.rows = 2;
 
-    const nameLabel = el('p', 'name-dialog-label', 'Your name (optional)');
+    const nameLabel = el('p', 'name-dialog-label', 'Adınız (isteğe bağlı)');
     const reporter = document.createElement('input');
     reporter.type = 'text';
     reporter.className = 'name-dialog-input';
     reporter.maxLength = 24;
     reporter.autocomplete = 'nickname';
     reporter.value = readPilotName() || '';
-    reporter.placeholder = 'Leave blank to stay Anonymous';
+    reporter.placeholder = 'Anonim kalmak için boş bırakın';
 
     const err = el('p', 'name-dialog-err', '');
     const row = el('div', 'name-dialog-row');
@@ -7165,12 +7177,12 @@ export class Ui {
     const submit = async () => {
       err.textContent = '';
       if (title.value.trim().length < 8) {
-        err.textContent = 'A title needs at least eight characters.';
+        err.textContent = 'Başlık en az sekiz karakter olmalı.';
         title.focus();
         return;
       }
       if (what.value.trim().length < 20) {
-        err.textContent = 'Say what happened, at least a sentence.';
+        err.textContent = 'Ne olduğunu anlatın, en az bir cümle.';
         what.focus();
         return;
       }
@@ -7186,13 +7198,13 @@ export class Ui {
       sending = true;
       send.disabled = true;
       cancel.disabled = true;
-      send.textContent = 'Sending';
+      send.textContent = 'Gönderiliyor';
       try {
         const posted = await submitBug(payload);
         sending = false;
         sent = true;
         box.textContent = '';
-        box.append(el('h2', null, 'Sent'));
+    box.append(el('h2', null, 'Gönderildi'));
         box.append(el(
           'p',
           'lede',
@@ -7208,7 +7220,7 @@ export class Ui {
         sending = false;
         send.disabled = false;
         cancel.disabled = false;
-        send.textContent = 'Send';
+        send.textContent = 'Gönder';
         err.textContent = e.message || 'The board could not take that report.';
       }
     };
@@ -7318,7 +7330,7 @@ export class Ui {
     ];
 
     const box = el('div', 'name-dialog-box bug feel');
-    box.append(el('h2', null, 'How does it fly?'));
+    box.append(el('h2', null, 'Uçuş hissi nasıl?'));
     box.append(el(
       'p',
       'lede',
@@ -7534,7 +7546,7 @@ export class Ui {
     const submit = async () => {
       err.textContent = '';
       if (!feel) {
-        err.textContent = 'Pick a word on the first row. One is enough.';
+        err.textContent = 'İlk satırdan bir kelime seçin. Biri yeter.';
         return;
       }
       const feelLabel = FEELS.find((f) => f.id === feel).label.toLowerCase();
@@ -7565,13 +7577,13 @@ export class Ui {
       sending = true;
       send.disabled = true;
       dismiss.disabled = true;
-      send.textContent = 'Sending';
+      send.textContent = 'Gönderiliyor';
       try {
         const posted = await submitBug(payload);
         sending = false;
         sent = true;
         box.textContent = '';
-        box.append(el('h2', null, 'Thanks'));
+    box.append(el('h2', null, 'Teşekkürler'));
         box.append(el(
           'p',
           'lede',
@@ -7587,7 +7599,7 @@ export class Ui {
         sending = false;
         send.disabled = false;
         dismiss.disabled = false;
-        send.textContent = 'Send';
+        send.textContent = 'Gönder';
         err.textContent = e.message || 'The board could not take that report.';
       }
     };
@@ -7720,7 +7732,7 @@ export class Ui {
     }
     const af = airframeById(flight.airframe);
     const box = el('div', 'name-dialog-box bug tune');
-    box.append(el('h2', null, 'Did that feel better than stock?'));
+    box.append(el('h2', null, 'Uçuş hissi varsayılandan daha iyi miydi?'));
     box.append(el(
       'p',
       'lede',
@@ -7766,7 +7778,7 @@ export class Ui {
     });
     const askNegative = () => {
       box.textContent = '';
-      box.append(el('h2', null, 'Thanks, that is useful to know'));
+    box.append(el('h2', null, 'Teşekkürler, bu bilgi işimize yarayacak'));
       box.append(el(
         'p',
         'lede',
@@ -7833,7 +7845,7 @@ export class Ui {
     let feel = null;
 
     const box = el('div', 'name-dialog-box bug tune');
-    box.append(el('h2', null, path === 'worse' ? 'Send this result' : 'Send your tune'));
+    box.append(el('h2', null, path === 'worse' ? 'Bu sonucu gönder' : 'Tune ayarını gönder'));
     box.append(el(
       'p',
       'lede',
@@ -7971,7 +7983,7 @@ export class Ui {
       sending = true;
       send.disabled = true;
       dismiss.disabled = true;
-      send.textContent = 'Sending';
+      send.textContent = 'Gönderiliyor';
       try {
         const posted = await submitBug(payload);
         sending = false;
@@ -7994,7 +8006,7 @@ export class Ui {
         sending = false;
         send.disabled = false;
         dismiss.disabled = false;
-        send.textContent = 'Send';
+        send.textContent = 'Gönder';
         /* A board that has not been updated yet refuses the kind with a 400
          * and a sentence about kinds, which means nothing to a pilot. */
         err.textContent = e && e.status === 400 && /pick a kind/i.test(e.message || '')
@@ -8149,7 +8161,7 @@ export class Ui {
       const modeRow = this.mode === 'freestyle'
         ? {
           label: 'Harita',
-          value: shared ? shared.name : (world ? world.name : 'Not loaded'),
+          value: shared ? shared.name : (world ? world.name : 'Yüklenmedi'),
           action: 'freestyle',
           /*
            * "Map" again, beside the world that is seated. From 30 August it
@@ -8161,18 +8173,18 @@ export class Ui {
            * going to be flown.
            */
           note: shared
-            ? `${shared.name}${shared.author ? `, built by ${shared.author}` : ''}, from the board. Your quad and the physics model are in here.`
+            ? `${shared.name}${shared.author ? `, yapan ${shared.author}` : ''}, panodan. Quadınız ve fizik modeli burada.`
             : (world
-              ? `${world.note} Your quad and the physics model are in here.`
+              ? `${world.note} Quadınız ve fizik modeli burada.`
               : townNote(s, this.loadFailure)),
         }
         : {
           label: 'Pist',
-          value: seat ? seat.name : 'Choose one',
+          value: seat ? seat.name : 'Birini seçin',
           action: 'courses',
           note: seat
-            ? `${seat.name}, and every other track. Gated, against the clock, and a lap flown here can go on the board.`
-            : 'No track is seated yet. Your own tracks, every track the board is offering, and the builder, are in here.',
+            ? `${seat.name}, ve diğer tüm pistler. Kapılı, zamana karşı ve burada uçulan bir tur panoya gönderilebilir.`
+            : 'Henüz seçili pist yok. Kendi pistleriniz, panonun sunduğu tüm pistler ve oluşturucu burada.',
         };
       /*
        * THREE ROOMS AND A VERB, in place of twelve typographic equals.
@@ -8220,8 +8232,8 @@ export class Ui {
           action: 'firstflight',
           primary: true,
           note: seat && seat.name
-            ? `${seat.name}, levelled off, with the sticks drawn on screen and a prompt at each step.`
-            : 'Levelled off, with the sticks drawn on screen and a prompt at each step.',
+            ? `${seat.name}, dengelenmiş halde, çubuklar ekranda çizili ve her adımda bir yönerge.`
+            : 'Dengelenmiş halde, çubuklar ekranda çizili ve her adımda bir yönerge.',
         }
         : {
           label: 'Uç',
@@ -8231,8 +8243,8 @@ export class Ui {
            * launchCardSeen. */
           note: seatIsRace(s) && this.seatMatchesMode()
             ? (launchCardSeen(s)
-              ? `Straight to the starting blocks${seat && seat.name ? ` of ${seat.name}` : ''}, set up as last time. Before you fly is under the track in Tracks.`
-              : 'Before you fly first: the laps, the pack and what this run counts as, then the grid. Once per track each visit.')
+              ? `Doğrudan ${seat && seat.name ? `${seat.name} pistinin ` : ''}başlangıç çizgisine, ayarlar geçen seferki gibi. Uçmadan önce kartı Pistler altında, pistin içindedir.`
+              : 'Önce Uçmadan önce kartı: turlar, pil ve bu uçuşun neye sayıldığı, sonra başlangıç ızgarası. Her ziyarette pist başına bir kez.')
             : undefined,
         };
       return [
@@ -8442,7 +8454,7 @@ export class Ui {
     if (this.screen === 'courses') {
       if (this.coursesLede) {
         const af = airframeById(this.settings.airframe);
-        this.coursesLede.textContent = `Tracks for the ${af.name.toLowerCase()}. Quad changes the aircraft.`;
+        this.coursesLede.textContent = `${af.name.toLowerCase()} için pistler. Quad uçağı değiştirir.`;
       }
       const listing = liveListing('custom');
       const loaded = hasLoadedTrack();
@@ -8458,7 +8470,7 @@ export class Ui {
         const chip = courseChip(listing);
         cards.push({
           label: seat.name,
-          note: `${chip.note} ${seat.gates} gate${seat.gates === 1 ? '' : 's'}. ${CARD_PRESS_NOTE}`,
+          note: `${chip.note} ${seat.gates} kapı. ${CARD_PRESS_NOTE}`,
           course: { kind: 'current', seat },
           action: 'map:custom',
         });
@@ -8504,7 +8516,7 @@ export class Ui {
         }
         cards.push({
           label: t.name,
-          note: `Yours, saved in this browser. ${t.gates} gate${t.gates === 1 ? '' : 's'}. ${CARD_PRESS_NOTE}`,
+          note: `Sizin, bu tarayıcıda kayıtlı. ${t.gates} kapı. ${CARD_PRESS_NOTE}`,
           course: { kind: 'local', track: t },
           action: `local:${t.id}`,
         });
@@ -8711,13 +8723,13 @@ export class Ui {
          * a home elsewhere: freestyle IS the other home.
          */
         choice(
-          'Flight model',
+          'Uçuş modeli',
           s.flightStyle === 'arcade'
-            ? 'Arcade: the ideal quad. No propwash shake, no gyro noise, no build asymmetry. It is a plant flag, so it changes a freestyle flight exactly as much as it changes a race.'
-            : 'Expert: the full physics, propwash, gyro noise and build tolerance included. Arcade turns the imperfections off for a friendlier machine. Takes effect on the next flight.',
+            ? 'Eğlence modeli: pervane girdabı, jiroskop gürültüsü ve yapım asimetrisi gibi gerçekçilik etkileri kapalıdır. Serbest uçuşu da yarış uçuşu kadar etkiler.'
+            : 'Uzman modeli: tam fizik, pervane girdabı, jiroskop gürültüsü ve yapım toleransları kullanılır. Değişiklik sonraki uçuşta geçerli olur.',
           FLIGHT_STYLES,
           s.flightStyle === 'arcade' ? 'arcade' : 'expert',
-          (id) => (id === 'arcade' ? 'Arcade' : 'Expert'),
+          (id) => (id === 'arcade' ? 'Eğlence' : 'Uzman'),
           (id) => { s.flightStyle = id; },
         ),
         /*
@@ -8980,10 +8992,10 @@ export class Ui {
         ),
         ratesItem(s, midRun),
         choice(
-          'Radio link',
+          'Kumanda bağlantısı',
           s.link === 'perfect'
-            ? 'No radio: every frame arrives, exactly on time. Feedforward and RC smoothing read that cadence, so this is sharper than any real link.'
-            : `${LINK_PRESETS[s.link].hz} Hz, ${LINK_PRESETS[s.link].delayMs} ms delay, ${LINK_PRESETS[s.link].jitterMs} ms jitter. Records set on a perfect link are not comparable.`,
+            ? 'Kumanda bağlantısı olmadan tüm paketler tam zamanında ulaşır. Feedforward ve RC yumuşatma bu düzenli aralığı kullandığından uçuş gerçek bağlantıdan daha keskindir.'
+            : `${LINK_PRESETS[s.link].hz} Hz yenileme, ${LINK_PRESETS[s.link].delayMs} ms gecikme, ${LINK_PRESETS[s.link].jitterMs} ms titreşim. Kusursuz bağlantıdaki derecelerle karşılaştırılamaz.`,
           Object.keys(LINK_PRESETS),
           s.link,
           (id) => LINK_PRESETS[id].label,
@@ -9292,15 +9304,16 @@ export class Ui {
     if (this.screen === 'launch') {
       const seat = activeCourseSummary();
       const m = MAPS.find((x) => x.id === s.map) ?? MAPS[0];
-      const trackName = seat && seat.name ? seat.name : m.name;
+      const rawTrackName = seat && seat.name ? seat.name : m.name;
+      const trackName = rawTrackName === 'Untitled track' ? 'Adsız pist' : rawTrackName;
       return [
         {
           label: 'Pist',
           value: trackName,
           info: true,
           note: seat && seat.gates
-            ? `${seat.gates} gates. This is what your time will be measured on.`
-            : 'This is what your time will be measured on.',
+            ? `${seat.gates} kapılı pist. Dereceniz bu pistte ölçülür.`
+            : 'Dereceniz bu pistte ölçülür.',
         },
         /*
          * TUNE, NOT QUAD, because the tune is what a run is filed under and
@@ -9313,38 +9326,38 @@ export class Ui {
         tuneItem(s, false),
         { label: 'Bu uçuşun sayılma koşulları', section: true },
         choice(
-          'Laps',
+          'Tur sayısı',
           s.laps === PRACTICE_LAPS
-            ? 'Practice has no end: fly as many laps as you like, each one called out with its time as you cross the line, and stop from the pause menu. Nothing flown in practice goes to the public board. Latched when you launch, so changing it mid-run does nothing until the next one.'
-            : 'How many laps a run lasts before the result screen. Practice has no end and keeps nothing for the board. Latched when you launch, so changing it mid-run does nothing until the next one.',
+            ? 'Antrenman modunda tur sınırı yoktur. İstediğiniz kadar uçabilir ve duraklatma menüsünden bitirebilirsiniz. Antrenman dereceleri genel tabloya eklenmez.'
+            : 'Sonuç ekranından önce kaç tur uçulacağını belirler. Antrenman sınırsızdır ve derece tablosuna kayıt göndermez.',
           LAP_COUNTS,
           s.laps,
           lapsLabel,
           (n) => { s.laps = n; },
         ),
         choice(
-          'Pack charge',
-          'A tired pack sags harder and gives less punch. Best laps are kept per charge level, so a time set on a fresh pack and a time set on a tired one are two different records.',
+          'Pil doluluğu',
+          'Düşük pil doluluğunda güç azalır. En iyi dereceler her doluluk seviyesi için ayrı tutulur.',
           PACK_VOLTAGES,
           s.packVoltage,
-          (n) => `${n.toFixed(2)} volts per cell`,
+          (n) => `Hücre başına ${n.toFixed(2)} volt`,
           (n) => { s.packVoltage = n; },
         ),
         choice(
-          'Flight model',
+          'Uçuş modeli',
           s.flightStyle === 'arcade'
-            ? 'Arcade: the ideal quad. No propwash shake, no gyro noise, no build asymmetry, so any tune flies glass smooth. Times flown here stay off the public board.'
-            : 'Expert: the full physics, propwash, gyro noise and build tolerance included, which is what every board time is flown on. Arcade turns the imperfections off for a friendlier machine.',
+            ? 'Eğlence modeli: pervane girdabı ve jiroskop gürültüsü gibi gerçekçilik etkileri kapalıdır. Bu moddaki dereceler genel tabloya eklenmez.'
+            : 'Uzman modeli: pervane girdabı, jiroskop gürültüsü ve yapım toleransları dâhil tam fizik kullanılır. Genel tablo dereceleri bu modda uçulur.',
           FLIGHT_STYLES,
           s.flightStyle === 'arcade' ? 'arcade' : 'expert',
-          (id) => (id === 'arcade' ? 'Arcade' : 'Expert'),
+          (id) => (id === 'arcade' ? 'Eğlence' : 'Uzman'),
           (id) => { s.flightStyle = id; },
         ),
         choice(
-          'Radio link',
+          'Kumanda bağlantısı',
           s.link === 'perfect'
-            ? 'A perfect link is sharper than any real radio: every frame arrives, exactly on time. Pick a real link to race on what a real radio feels like. The board is not told which link a time was flown on.'
-            : `${LINK_PRESETS[s.link].hz} Hz, ${LINK_PRESETS[s.link].delayMs} ms delay, ${LINK_PRESETS[s.link].jitterMs} ms jitter.`,
+            ? 'Kusursuz bağlantıda tüm kumanda paketleri tam zamanında ulaşır. Gerçekçi bir uçuş için ELRS veya Crossfire bağlantısını seçin.'
+            : `${LINK_PRESETS[s.link].hz} Hz yenileme, ${LINK_PRESETS[s.link].delayMs} ms gecikme, ${LINK_PRESETS[s.link].jitterMs} ms titreşim.`,
           Object.keys(LINK_PRESETS),
           s.link,
           (id) => LINK_PRESETS[id].label,
@@ -9972,8 +9985,9 @@ export class Ui {
     if (this.screen === 'launch' && this.launchLede) {
       const seat = activeCourseSummary();
       const m = MAPS.find((x) => x.id === this.settings.map) ?? MAPS[0];
-      const name = seat && seat.name ? seat.name : m.name;
-      const gates = seat && seat.gates ? `${seat.gates} gates` : '';
+      const rawName = seat && seat.name ? seat.name : m.name;
+      const name = rawName === 'Untitled track' ? 'Adsız pist' : rawName;
+      const gates = seat && seat.gates ? `${seat.gates} kapı` : '';
       const by = byLine(seat);
       this.launchLede.textContent = [name, gates, by].filter(Boolean).join(' \u00b7 ');
     }
@@ -11744,7 +11758,7 @@ export class Ui {
          */
         const record = el('div', 'map-card-record', '');
         if (fresh) {
-          meta.textContent = 'An empty field in the builder';
+          meta.textContent = 'Oluşturucuda boş bir saha';
         } else if (listed) {
           const t = it.course.track;
           /* The designer where the board knows one, because the author is
@@ -12179,7 +12193,7 @@ export class Ui {
     const found = loadTrack(id);
     const doc = found && found.doc ? found.doc : null;
     if (!doc) {
-      this.boardNote.textContent = 'That track is no longer saved in this browser.';
+      this.boardNote.textContent = 'Bu pist artık bu tarayıcıda kayıtlı değil.';
       this.loadLocalCourses();
       return false;
     }
@@ -12201,7 +12215,7 @@ export class Ui {
      * just chosen and the pilot would fly the wrong one. */
     clearShareImport(cls);
     if (!writeAutosave(doc)) {
-      this.boardNote.textContent = 'This browser would not store that track.';
+      this.boardNote.textContent = 'Bu tarayıcı o pisti saklamadı.';
       return false;
     }
     this.setShare(null);
@@ -12223,7 +12237,7 @@ export class Ui {
       return;
     }
     this.boardLoading = true;
-    this.boardNote.textContent = 'Reading the board';
+    this.boardNote.textContent = 'Pano okunuyor';
     fetchTrackList(this.share && this.share.board ? this.share.board : undefined)
       .then((list) => {
         this.boardLoading = false;
@@ -12281,7 +12295,7 @@ export class Ui {
             ? `No ${name} tracks on the board yet. Build one and publish it, or change aircraft.`
             : '';
         } else {
-          this.boardNote.textContent = 'No published tracks on the board yet. Build one and publish it.';
+          this.boardNote.textContent = 'Panoda henüz yayınlanmış pist yok. Bir tane oluşturup yayınlayın.';
         }
         if (this.screen === 'courses') {
           this.renderMenu();
@@ -12290,7 +12304,7 @@ export class Ui {
       .catch(() => {
         this.boardLoading = false;
         this.boardCourses = [];
-        this.boardNote.textContent = 'The board is not answering, so only your own tracks are listed.';
+        this.boardNote.textContent = 'Pano yanıt vermiyor, bu yüzden yalnızca kendi pistleriniz listeleniyor.';
         if (this.screen === 'courses') {
           this.renderMenu();
         }
@@ -12313,7 +12327,7 @@ export class Ui {
       return;
     }
     this.boardMapsLoading = true;
-    this.boardMapNote.textContent = 'Reading the board';
+    this.boardMapNote.textContent = 'Pano okunuyor';
     fetchMapList()
       .then((list) => {
         this.boardMapsLoading = false;
@@ -12325,7 +12339,7 @@ export class Ui {
       })
       .catch(() => {
         this.boardMapsLoading = false;
-        this.boardMapNote.textContent = 'The board is not answering, so only the town and your own map are listed.';
+        this.boardMapNote.textContent = 'Pano yanıt vermiyor, bu yüzden yalnızca kasaba ve kendi haritanız listeleniyor.';
         this.relistBoardMaps([]);
       });
   }
@@ -12370,11 +12384,11 @@ export class Ui {
       return;
     }
     if (!this.onBoardMap) {
-      this.boardMapNote.textContent = `${m.name} could not be loaded from the board.`;
+      this.boardMapNote.textContent = `${m.name} panodan yüklenemedi.`;
       return;
     }
     this.openingBoardMap = true;
-    this.boardMapNote.textContent = `Loading ${m.name}`;
+    this.boardMapNote.textContent = `${m.name} yükleniyor`;
     this.onBoardMap(m).then((shared) => {
       this.openingBoardMap = false;
       this.boardMapNote.textContent = '';
@@ -12385,7 +12399,7 @@ export class Ui {
       this.seatMap('built');
     }).catch((err) => {
       this.openingBoardMap = false;
-      this.boardMapNote.textContent = `${m.name} could not be loaded. ${err.message ?? err}`;
+      this.boardMapNote.textContent = `${m.name} yüklenemedi. ${err.message ?? err}`;
     });
   }
 
@@ -12513,7 +12527,7 @@ export class Ui {
     const head = el('div', 'standings-row standings-head');
     head.append(el('span', 'standings-rank', ''));
     head.append(el('span', 'standings-pilot', 'Pilot'));
-    head.append(el('span', 'standings-lap', room ? 'Three laps' : 'Lap'));
+    head.append(el('span', 'standings-lap', room ? 'Üç tur' : 'Tur'));
     table.append(head);
     this.standingsTimes.forEach((row, i) => {
       const line = el('div', 'standings-row');
@@ -12804,7 +12818,7 @@ export class Ui {
       if (e && e.noFilm) {
         filmed = false;
       } else {
-        c.still.textContent = 'Preview unavailable.';
+        c.still.textContent = 'Önizleme yok.';
       }
     }
     return filmed;
@@ -12911,7 +12925,7 @@ export class Ui {
       c.wait = null;
       c.waitJoke = null;
       c.shot.replaceChildren();
-      c.still.textContent = 'Preview unavailable.';
+      c.still.textContent = 'Önizleme yok.';
     } finally {
       if (frame.parentNode) {
         frame.remove();
@@ -13544,22 +13558,22 @@ export class Ui {
       return;
     }
     this.openingBoardCourse = true;
-    this.boardNote.textContent = `Loading ${track.name}`;
+    this.boardNote.textContent = `${track.name} yükleniyor`;
     if (!this.onBoardCourse) {
       this.openingBoardCourse = false;
-      this.boardNote.textContent = `${track.name} could not be loaded from the board.`;
+      this.boardNote.textContent = `${track.name} panodan yüklenemedi.`;
       return;
     }
     this.onBoardCourse(track).then((ok) => {
       this.openingBoardCourse = false;
       if (!ok) {
-        this.boardNote.textContent = `${track.name} could not be loaded from the board.`;
+        this.boardNote.textContent = `${track.name} panodan yüklenemedi.`;
         return;
       }
       go();
     }).catch((err) => {
       this.openingBoardCourse = false;
-      this.boardNote.textContent = `${track.name} could not be loaded. ${err.message ?? err}`;
+      this.boardNote.textContent = `${track.name} yüklenemedi. ${err.message ?? err}`;
     });
   }
 
@@ -13585,10 +13599,10 @@ export class Ui {
       return;
     }
     this.openingBoardCourse = true;
-    this.boardNote.textContent = `Loading ${track.name}`;
+    this.boardNote.textContent = `${track.name} yükleniyor`;
     if (!this.onBoardCourse) {
       this.openingBoardCourse = false;
-      this.boardNote.textContent = `${track.name} could not be loaded from the board.`;
+      this.boardNote.textContent = `${track.name} panodan yüklenemedi.`;
       if (failed) {
         failed();
       }
@@ -13597,7 +13611,7 @@ export class Ui {
     this.onBoardCourse(track).then((ok) => {
       this.openingBoardCourse = false;
       if (!ok) {
-        this.boardNote.textContent = `${track.name} could not be loaded from the board.`;
+        this.boardNote.textContent = `${track.name} panodan yüklenemedi.`;
         if (failed) {
           failed();
         }
@@ -13610,7 +13624,7 @@ export class Ui {
       }
     }).catch((err) => {
       this.openingBoardCourse = false;
-      this.boardNote.textContent = `${track.name} could not be loaded. ${err.message ?? err}`;
+      this.boardNote.textContent = `${track.name} yüklenemedi. ${err.message ?? err}`;
       if (failed) {
         failed();
       }
@@ -13919,7 +13933,7 @@ export class Ui {
        * vocabulary. No gates is true in all three positions and is the
        * Freestyle room's own first sentence about the place.
        */
-      this.brandSub.textContent = freestyle ? `${worldName}, no gates` : `${worldName}, time trial`;
+      this.brandSub.textContent = freestyle ? `${worldName}, kapısız` : `${worldName}, süre denemesi`;
     }
     this.titleBest.textContent = '';
     if (freestyle) {
@@ -13945,11 +13959,11 @@ export class Ui {
       return;
     }
     if (ms != null) {
-      this.titleBest.append('Track record ', el('span', 'brand-best-time', formatTime(ms)));
+      this.titleBest.append('Pist rekoru ', el('span', 'brand-best-time', formatTime(ms)));
     } else {
-      this.titleBest.textContent = 'No lap recorded yet';
+      this.titleBest.textContent = 'Henüz tur kaydedilmedi';
     }
-    this.osdBest.textContent = ms != null ? `Record ${formatTime(ms)}` : 'No record yet';
+    this.osdBest.textContent = ms != null ? `Rekor ${formatTime(ms)}` : 'Henüz rekor yok';
   }
 
   /*
@@ -14033,15 +14047,15 @@ export class Ui {
 
     this.resultsKicker.textContent = this.resultsCourseName();
     if (!clean.length) {
-      setHeadingText(this.resultsHead, 'Run ended');
+      setHeadingText(this.resultsHead, 'Uçuş sona erdi');
       this.resultsHeroTime.textContent = '';
       this.resultsHeroMeta.textContent = '';
       this.resultsHeroMeta.className = 'results-hero-meta';
       this.resultsBody.append(el('p', 'results-empty', 'No clean lap this run. Hitting the ground or a gate frame costs the time it takes to get going again. Only an out of sequence gate voids the lap and sends you back to the mint ring.'));
     } else {
       setHeadingText(this.resultsHead, isRecord
-        ? 'New track record'
-        : (matched ? 'Matched the record' : 'Run complete'));
+        ? 'Yeni pist rekoru'
+        : (matched ? 'Rekoru yakaladınız' : 'Uçuş tamamlandı'));
       /*
        * RACEGOW IS SCORED ON THREE CONSECUTIVE LAPS, so on a micro track
        * that total is the headline and the best single lap moves to the
@@ -14057,33 +14071,33 @@ export class Ui {
       const threeUp = opts.trackClass === 'micro' && three != null;
       this.resultsHeroCap.textContent = threeUp
         ? 'Best three laps'
-        : (clean.length === 1 ? 'Lap time' : 'Best lap');
+        : (clean.length === 1 ? 'Tur süresi' : 'En iyi tur');
       this.resultsHeroTime.textContent = formatTime(threeUp ? three : fastest);
       if (threeUp) {
         /* Three consecutive is what the run is scored on, so the lap that
          * carries the record is named here rather than left to the rows. */
-        const lapWord = clean.length === 1 ? 'Lap' : 'Best lap';
+        const lapWord = clean.length === 1 ? 'Tur' : 'En iyi tur';
         if (isRecord) {
-          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, a track record`;
+          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, pist rekoru`;
           this.resultsHeroMeta.className = 'results-hero-meta gain';
         } else if (matched) {
-          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, equals the record`;
+          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, rekora eşit`;
           this.resultsHeroMeta.className = 'results-hero-meta gain';
         } else {
-          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, ${formatDelta(fastest - best)} off ${formatTime(best)}`;
+          this.resultsHeroMeta.textContent = `${lapWord} ${formatTime(fastest)}, ${formatDelta(fastest - best)} fark, rekor ${formatTime(best)}`;
           this.resultsHeroMeta.className = 'results-hero-meta off';
         }
       } else if (isRecord && hadRecord) {
-        this.resultsHeroMeta.textContent = `${formatDelta(fastest - recordAtStart)}  previous ${formatTime(recordAtStart)}`;
+        this.resultsHeroMeta.textContent = `${formatDelta(fastest - recordAtStart)}  Önceki ${formatTime(recordAtStart)}`;
         this.resultsHeroMeta.className = 'results-hero-meta gain';
       } else if (isRecord) {
-        this.resultsHeroMeta.textContent = 'First record on this track';
+        this.resultsHeroMeta.textContent = 'Bu pistteki ilk rekor';
         this.resultsHeroMeta.className = 'results-hero-meta gain';
       } else if (matched) {
-        this.resultsHeroMeta.textContent = `Equals the record  ${formatTime(best)}`;
+        this.resultsHeroMeta.textContent = `Rekora eşit  ${formatTime(best)}`;
         this.resultsHeroMeta.className = 'results-hero-meta gain';
       } else {
-        this.resultsHeroMeta.textContent = `${formatDelta(fastest - best)} off the record  ${formatTime(best)} to beat`;
+        this.resultsHeroMeta.textContent = `${formatDelta(fastest - best)} rekor farkı  ${formatTime(best)} geçilecek`;
         this.resultsHeroMeta.className = 'results-hero-meta off';
       }
     }
@@ -14166,7 +14180,7 @@ export class Ui {
       this.resultsNote.textContent = '';
     } else if (this.share && this.share.id) {
       const by = this.share.author ? ` by ${this.share.author}` : '';
-      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} is on the public board. Post a time under your name to appear on it.`;
+      this.resultsNote.textContent = `${this.share.name || 'This track'}${by} herkese açık panoda. Listede görünmek için adınızla bir süre gönderin.`;
     } else {
       try {
         const listing = inspectCourse();
@@ -14174,9 +14188,9 @@ export class Ui {
           const of = listing.sourceName ? ` of ${listing.sourceName}` : '';
           this.resultsNote.textContent = `${listing.name} is your copy${of}. Publish it under a new name to put it on the board.`;
         } else if (listing && listing.kind === 'local' && listing.canPublishNew) {
-          this.resultsNote.textContent = `${listing.name} lives in this browser. Publish it to put it on the board, then you can post a time.`;
+          this.resultsNote.textContent = `${listing.name} bu tarayıcıda duruyor. Panoya koymak için yayınlayın, sonra süre gönderebilirsiniz.`;
         } else if (listing && listing.kind === 'owned' && listing.layoutDrift) {
-          this.resultsNote.textContent = `${listing.name} has a layout that is not on the board yet. Update the track before posting a time.`;
+          this.resultsNote.textContent = `${listing.name} yerleşimi henüz panoda değil. Süre göndermeden önce pisti güncelleyin.`;
         }
       } catch (e) {
         /* A summary failure must not hide the times. */
@@ -14560,7 +14574,7 @@ export class Ui {
           : (left <= 10_000 ? 'osd-timer is-late' : 'osd-timer'));
       }
     } else {
-      Ui.text(this.osdClockLabel, 'Lap');
+      Ui.text(this.osdClockLabel, 'Tur');
       this.osdClock(running ? formatTime(lapMs) : '0.00', running);
       Ui.klass(this.osdTimer, running ? 'osd-timer' : 'osd-timer waiting');
     }
@@ -15078,9 +15092,9 @@ export class Ui {
       ? `${where}, free flight`
       : where;
     setHeadingText(this.resultsHead, scored
-      ? (clean ? 'Clean run' : 'Run complete')
-      : 'Run ended');
-    this.resultsHeroCap.textContent = 'Score';
+      ? (clean ? 'Temiz uçuş' : 'Uçuş tamamlandı')
+      : 'Uçuş sona erdi');
+    this.resultsHeroCap.textContent = 'Skor';
     this.resultsHeroTime.textContent = formatScore(counter);
     /* A town has no plan drawing, and an empty blueprint plate beside a
      * freestyle score is a picture of nothing. */
@@ -15835,7 +15849,7 @@ export class Ui {
      * learns to stop reading it.
      */
     const stock = v === WEIGHT_STOCK;
-    air.cap.textContent = `Weight ${v}%`;
+    air.cap.textContent = `Ağırlık ${v}%`;
     Ui.klass(air.cap, stock ? 'osd-air-cap is-stock' : 'osd-air-cap');
     /*
      * And the two tuning sliders, when the mode is on. Hidden is the whole
@@ -15953,7 +15967,7 @@ export class Ui {
       return;
     }
     const n = view.stepIndex + 1;
-    this.calKicker.textContent = `Step ${n} of ${view.stepCount}, ${view.title}`;
+    this.calKicker.textContent = `Adım ${n} / ${view.stepCount}, ${view.title}`;
     this.calPrompt.textContent = view.prompt;
     this.calHint.textContent = view.hint;
     this.calCanSave = Boolean(view.canSave);

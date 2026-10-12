@@ -40,6 +40,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   updateCelTime, setCelCloudShadows, CLOUD_SHADOW_GLSL,
@@ -1828,7 +1829,9 @@ function sceneryTexture(type) {
   return texture;
 }
 
-function tree(rng, height, x, z, caps, bigness = 1, hull = true) {
+const FIELD_TREE_PARTS = new WeakMap();
+
+function tree(rng, height, x, z, caps, bigness = 1, hull = true, treeModel = null) {
   const g = new THREE.Group();
   const scale = (0.85 + rng() * 1.5) * bigness;
   const trunkH = (1.5 + rng() * 1.3) * scale;
@@ -1926,6 +1929,41 @@ const blobs = hull
         caps.addSphere('canopy', x + c.position.x, gy + c.position.y, z + c.position.z,
           c.geometry.parameters.radius);
       }
+    }
+  }
+  if (treeModel) {
+    let parts = FIELD_TREE_PARTS.get(treeModel);
+    if (!parts) {
+      treeModel.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(treeModel);
+      const size = bounds.getSize(new THREE.Vector3());
+      const normalize = new THREE.Matrix4()
+        .makeScale(1 / Math.max(0.001, size.x), 1 / Math.max(0.001, size.y), 1 / Math.max(0.001, size.z))
+        .multiply(new THREE.Matrix4().makeTranslation(-bounds.min.x, -bounds.min.y, -bounds.min.z));
+      parts = [];
+      treeModel.traverse((o) => {
+        if (!o.isMesh || !o.geometry || !o.material) return;
+        const geometry = o.geometry.clone();
+        geometry.applyMatrix4(o.matrixWorld).applyMatrix4(normalize);
+        parts.push({ geometry, material: o.material });
+      });
+      FIELD_TREE_PARTS.set(treeModel, parts);
+    }
+    const oldBounds = new THREE.Box3().setFromObject(g);
+    oldBounds.min.sub(g.position);
+    oldBounds.max.sub(g.position);
+    const oldSize = oldBounds.getSize(new THREE.Vector3());
+    for (const child of [...g.children]) {
+      g.remove(child);
+      child.geometry?.dispose();
+    }
+    for (const part of parts) {
+      const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.position.copy(oldBounds.min);
+      mesh.scale.copy(oldSize);
+      mesh.castShadow = true;
+      if (hull) outlineHull(mesh, 1.055);
+      g.add(mesh);
     }
   }
   return g;
@@ -5403,6 +5441,15 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
   const renderer = shell.renderer;
   const camera = shell.camera;
   const progress = onProgress ?? (() => {});
+  let treeModel = null;
+  try {
+    const gltf = await new GLTFLoader().loadAsync(
+      new URL('../../assets/models/CommonTree_5.gltf', import.meta.url).href,
+    );
+    treeModel = gltf.scene;
+  } catch (error) {
+    console.warn('Could not load the experimental tree model; using the built-in trees.', error);
+  }
   const report = async (f) => {
     const r = progress(f);
     if (r && typeof r.then === 'function') {
@@ -6734,7 +6781,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
       || onCarPark(x, z)
       || onTheCourse(x, z);
     const obj = isTree
-      ? tree(rng, height, x, z, cut ? null : colliders, 2.05)
+      ? tree(rng, height, x, z, cut ? null : colliders, 2.05, true, treeModel)
       : rock(rng, height, x, z, cut ? null : colliders);
     if (cut) {
       continue;
@@ -6766,7 +6813,7 @@ export async function buildFieldScene(shell, onProgress, course = null, quality 
     const isTree = rng() < 0.9;
     const cut = siteEdge(x, z) < 25 || onCarPark(x, z);
     const obj = isTree
-      ? tree(rng, height, x, z, cut ? null : colliders, 1.7, false)
+      ? tree(rng, height, x, z, cut ? null : colliders, 1.7, false, treeModel)
       : rock(rng, height, x, z, cut ? null : colliders);
     if (cut) {
       continue;

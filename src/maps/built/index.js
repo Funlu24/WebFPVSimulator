@@ -73,6 +73,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PAL } from '../city/vendored/core/palette.js';
 import { Pipeline } from '../city/vendored/core/post.js';
@@ -1263,7 +1264,19 @@ export async function buildMap(shell, onProgress, options) {
    * hundred draw calls at most and a chunk switched off takes all of its
    * batches with it.
    */
-  const kit = new PropKit(kitLook(look.timeId), { clumps: q.city.leafClumps !== false });
+  let treeModel = null;
+  try {
+    const gltf = await new GLTFLoader().loadAsync(
+      new URL('../../../assets/models/CommonTree_5.gltf', import.meta.url).href,
+    );
+    treeModel = gltf.scene;
+  } catch (error) {
+    console.warn('Could not load the experimental tree model; using the built-in trees.', error);
+  }
+  const kit = new PropKit(kitLook(look.timeId), {
+    clumps: q.city.leafClumps !== false,
+    treeModel,
+  });
   for (const it of placed.items) {
     kit.begin(it.x, it.y, it.z, it.yaw, chunkKeyOf(it));
     kit.element(it.el);

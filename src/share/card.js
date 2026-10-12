@@ -77,9 +77,9 @@ const CARD_QUALITIES = [0.86, 0.8, 0.72, 0.64, 0.56];
 const CARD_WAIT_MS = 120_000;
 
 /* The shell's own tokens, from :root in index.html. */
-const DEEP = '#141c16';
-const CREAM = '#f3ead4';
-const SAKURA = '#e8a8b8';
+const DEEP = '#10284a';
+const CREAM = '#f5f9ff';
+const SAKURA = '#55aaff';
 const UI_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 /*

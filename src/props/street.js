@@ -1973,6 +1973,30 @@ export function treeLayout(el) {
 
 export function treeDraw(el, parts, K) {
   const t = treeSpec(el);
+  if (K.treeModel) {
+    let modelParts = TREE_MODEL_PARTS.get(K.treeModel);
+    if (!modelParts) {
+      K.treeModel.updateMatrixWorld(true);
+      const bounds = new K.THREE.Box3().setFromObject(K.treeModel);
+      const size = bounds.getSize(new K.THREE.Vector3());
+      const center = bounds.getCenter(new K.THREE.Vector3());
+      const unit = 1 / Math.max(0.001, size.y);
+      const fit = new K.THREE.Matrix4().makeScale(unit, unit, unit)
+        .multiply(new K.THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z));
+      modelParts = [];
+      K.treeModel.traverse((o) => {
+        if (!o.isMesh || !o.geometry || !o.material) return;
+        const geometry = o.geometry.clone();
+        geometry.applyMatrix4(o.matrixWorld).applyMatrix4(fit);
+        modelParts.push({ geometry, material: o.material });
+      });
+      TREE_MODEL_PARTS.set(K.treeModel, modelParts);
+    }
+    const height = t.style === 'pine' ? 15.35 : 8.35;
+    const local = new K.THREE.Matrix4().makeScale(height * t.S, height * t.S, height * t.S);
+    for (const p of modelParts) K.add(p.material, p.geometry, local);
+    return;
+  }
   const wood = t.style === 'sakura' ? 'trunk' : t.style === 'pine' ? 'stCedarWood' : 'stGroveWood';
   const tones = t.style === 'sakura'
     ? ['blossom0', 'blossom1', 'blossom2']
@@ -2004,6 +2028,8 @@ export function treeDraw(el, parts, K) {
     K.patch('petals', 0, 0.02, 0, 2.4 * t.S, 7);
   }
 }
+
+const TREE_MODEL_PARTS = new WeakMap();
 
 /* Where a tree's canopy reaches, for the plan view: the blobs' extent. */
 export function treeReach(el) {

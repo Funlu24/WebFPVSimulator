@@ -44,6 +44,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PAL } from './vendored/core/palette.js';
 import { Pipeline } from './vendored/core/post.js';
 import { mangaPipeline } from '../../render/manga.js';
@@ -2388,8 +2389,17 @@ export async function buildMap(shell, onProgress, options) {
   setVehicleModel((o) => townCar(o, townVehicle, makeVehicle, carFit));
   setKeiTruckModel((o) => townCar(o, townKeiTruck, makeKeiTruck, carFit));
   let world;
+  let treeModel = null;
   try {
-    world = buildWorld(scene, { bake: false });
+    try {
+      const gltf = await new GLTFLoader().loadAsync(
+        new URL('../../../assets/models/CommonTree_5.gltf', import.meta.url).href,
+      );
+      treeModel = gltf.scene;
+    } catch (error) {
+      console.warn('Could not load the experimental tree model; using the built-in trees.', error);
+    }
+    world = buildWorld(scene, { bake: false, treeModel });
   } finally {
     setVehicleModel(null);
     setKeiTruckModel(null);
@@ -2484,7 +2494,7 @@ export async function buildMap(shell, onProgress, options) {
   /* `petals` is the same preset flag the town's own field is gated on: the
    * two places get their own field, over their own ground, for the reason in
    * ./places/blossom.js. */
-  const places = buildPlaces(world, { petals: q.city.petals });
+  const places = buildPlaces(world, { petals: q.city.petals, treeModel });
   markCanopies(world.root);
   progress(0.87);
   await yieldToPaint();
@@ -2858,12 +2868,10 @@ export async function buildMap(shell, onProgress, options) {
     /* The parts of the town that move and are solid, for the plant to read
      * every step. See solids in ./animation.js. */
     solids: anim.solids,
-    /* Where the STF mark is painted, on the corner shop at the end of the
-     * spawn's street: see STF_SPOT in ./places/index.js and `egg` in
-     * src/maps/README.md. Paint only; nothing about it is solid. */
+    /* TÜMER sign at the former STF panel; it keeps the same collectible
+     * position and sight direction. Paint only; nothing about it is solid. */
     egg: places.egg,
-    /* Where the partners' marks are painted, one each, by hand: see
-     * PARTNER_SPOTS in ./places/index.js and `marks` in src/maps/README.md. */
+    /* The one TÜMER partner mark in the city. */
     marks: places.marks,
     setNextGate() {},
     /* No gates, so nothing is ever the next one. Present so the shell has

@@ -11,8 +11,8 @@
     option) any later version. It is distributed WITHOUT ANY WARRANTY, see
     <https://www.gnu.org/licenses/> for the full text.
   -->
-  <rect width="32" height="32" rx="7" fill="#141c16"/>
-  <path d="M10.4 10.4L21.6 21.6M21.6 10.4L10.4 21.6" stroke="#e8a8b8" stroke-width="3.6" stroke-linecap="round" opacity="0.52"/>
-  <g fill="#e8a8b8"><circle cx="10.4" cy="10.4" r="4.25"/><circle cx="21.6" cy="10.4" r="4.25"/><circle cx="10.4" cy="21.6" r="4.25"/><circle cx="21.6" cy="21.6" r="4.25"/></g>
-  <rect x="13.3" y="13.3" width="5.4" height="5.4" rx="1.5" fill="#f3ead4"/>
+  <rect width="32" height="32" rx="7" fill="#10284a"/>
+  <path d="M10.4 10.4L21.6 21.6M21.6 10.4L10.4 21.6" stroke="#55aaff" stroke-width="3.6" stroke-linecap="round" opacity="0.52"/>
+  <g fill="#55aaff"><circle cx="10.4" cy="10.4" r="4.25"/><circle cx="21.6" cy="10.4" r="4.25"/><circle cx="10.4" cy="21.6" r="4.25"/><circle cx="21.6" cy="21.6" r="4.25"/></g>
+  <rect x="13.3" y="13.3" width="5.4" height="5.4" rx="1.5" fill="#f5f9ff"/>
 </svg>

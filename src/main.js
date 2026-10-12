@@ -2256,9 +2256,9 @@ export async function boot({ loading, bootStart, mapId }) {
    */
   function ghostRowChoices() {
     const list = [
-      { id: 'off', label: 'Off' },
-      { id: 'best', label: 'Your best lap' },
-      { id: 'previous', label: 'Your previous lap' },
+      { id: 'off', label: 'Kapalı' },
+      { id: 'best', label: 'En iyi turunuz' },
+      { id: 'previous', label: 'Önceki turunuz' },
     ];
     for (const t of ghostBoardTimes || []) {
       list.push({ id: `board:${t.id}`, label: `${t.name}  ${formatTime(t.lapMs)}` });
@@ -2268,29 +2268,29 @@ export async function boot({ loading, bootStart, mapId }) {
 
   function ghostRowNote() {
     if (ghostChoice === 'off') {
-      return 'Nobody to chase. Laps still record, so switching this on later has your session to race.';
+      return 'Takip edilecek hayalet kapalı. Turlarınız kaydedilir; açtığınızda uçuşunuzun derecesini takip edebilirsiniz.';
     }
     if (ghostChoice.startsWith('board:')) {
       if (ghostBoardBusy) {
-        return 'Fetching that lap from the board.';
+        return 'Tur panodan alınıyor.';
       }
       if (!ghostBoardLap) {
-        return 'That lap could not be fetched from the board.';
+        return 'Tur panodan alınamadı.';
       }
       /* A lap flown off 100 was flown on a lighter or heavier quad, and the
        * board says so beside the name; so does this, where there is room. */
       const picked = (ghostBoardTimes || []).find((t) => `board:${t.id}` === ghostChoice);
       const light = picked && picked.weight !== WEIGHT_STOCK
-        ? ` It was flown at Weight ${picked.weight}%.`
+        ? ` %${picked.weight} ağırlıkla uçuldu.`
         : '';
-      return `A recorded lap from the public board flies beside you as a translucent pacer.${light}`;
+      return `Genel tablodan alınan tur, yarı saydam bir hayalet olarak yanınızda uçar.${light}`;
     }
     const key = ghostCourseKey();
     const have = ghostChoice === 'previous' ? ghostBook.previous(key) : ghostBook.best(key);
     if (!have) {
-      return 'No lap on record this session yet. Finish one and it flies beside you as a translucent pacer.';
+      return 'Bu oturumda henüz tur kaydı yok. Bir tur tamamladığınızda hayaletiniz yanınızda uçar.';
     }
-    return `A translucent pacer flying that lap, ${formatTime(have.durationMs)}. The OSD reads your gap at every gate.`;
+    return `${formatTime(have.durationMs)} dereceli turunuzu yarı saydam bir hayalet olarak izleyin. OSD her kapıda aradaki süreyi gösterir.`;
   }
 
   function syncGhostRow() {

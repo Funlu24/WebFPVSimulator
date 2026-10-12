@@ -622,7 +622,7 @@ export function virtualApertureDims(el, seq, cls = TRACK_CLASS_DEFAULT) {
 export const ELEMENTS = {
   gate: {
     id: 'gate',
-    label: 'Gate',
+    label: 'Kapı',
     key: 'G',
     group: 'track',
     kind: KIND.APERTURE,
@@ -643,7 +643,7 @@ export const ELEMENTS = {
   },
   flaggedGate: {
     id: 'flaggedGate',
-    label: 'Flagged gate',
+    label: 'Bayraklı kapı',
     key: 'A',
     group: 'track',
     kind: KIND.APERTURE,
@@ -674,7 +674,7 @@ export const ELEMENTS = {
   },
   doubleStack: {
     id: 'doubleStack',
-    label: 'Double stack',
+    label: 'Çift katlı kapı',
     key: '2',
     group: 'track',
     kind: KIND.APERTURE,
@@ -697,7 +697,7 @@ export const ELEMENTS = {
   },
   flaggedDoubleStack: {
     id: 'flaggedDoubleStack',
-    label: 'Flagged double',
+    label: 'Bayraklı çift kapı',
     key: 'H',
     group: 'track',
     kind: KIND.APERTURE,
@@ -719,7 +719,7 @@ export const ELEMENTS = {
   },
   ladder: {
     id: 'ladder',
-    label: 'Triple stack',
+    label: 'Üç katlı kapı',
     key: 'R',
     group: 'track',
     kind: KIND.APERTURE,
@@ -743,7 +743,7 @@ export const ELEMENTS = {
   },
   tower: {
     id: 'tower',
-    label: 'Tower',
+    label: 'Kule',
     key: 'T',
     group: 'track',
     kind: KIND.APERTURE,
@@ -769,7 +769,7 @@ export const ELEMENTS = {
   },
   diveGate: {
     id: 'diveGate',
-    label: 'Dive gate',
+    label: 'Dalış kapısı',
     key: 'D',
     group: 'track',
     kind: KIND.APERTURE,
@@ -796,7 +796,7 @@ export const ELEMENTS = {
   },
   hoop: {
     id: 'hoop',
-    label: 'Hoop',
+    label: 'Çember',
     group: 'track',
     kind: KIND.APERTURE,
     shape: 'circle',
@@ -817,7 +817,7 @@ export const ELEMENTS = {
   },
   hexGate: {
     id: 'hexGate',
-    label: 'Hex gate',
+    label: 'Altıgen kapı',
     group: 'track',
     kind: KIND.APERTURE,
     shape: 'hex',
@@ -855,7 +855,7 @@ export const ELEMENTS = {
    */
   letter: {
     id: 'letter',
-    label: 'Letter',
+    label: 'Harf',
     /* No key of its own: the free ones on the five inch palette are an asset's on a map (the self test pins that the
      * race palettes' keys are what they were), so the chip is empty and the tool is a click. */
     key: '',
@@ -874,7 +874,7 @@ export const ELEMENTS = {
   },
   barrier: {
     id: 'barrier',
-    label: 'Barrier',
+    label: 'Bariyer',
     key: 'B',
     group: 'track',
     kind: KIND.OBSTACLE,
@@ -905,7 +905,7 @@ export const ELEMENTS = {
    */
   table: {
     id: 'table',
-    label: 'Table',
+    label: 'Masa',
     group: 'track',
     kind: KIND.OBSTACLE,
     turns: 'quarter',
@@ -915,7 +915,7 @@ export const ELEMENTS = {
   },
   chair: {
     id: 'chair',
-    label: 'Chair',
+    label: 'Sandalye',
     group: 'track',
     kind: KIND.OBSTACLE,
     turns: 'quarter',
@@ -925,7 +925,7 @@ export const ELEMENTS = {
   },
   banner: {
     id: 'banner',
-    label: 'Banner',
+    label: 'Afiş',
     group: 'track',
     kind: KIND.OBSTACLE,
     turns: 'quarter',
@@ -935,7 +935,7 @@ export const ELEMENTS = {
   },
   flag: {
     id: 'flag',
-    label: 'Flag',
+    label: 'Bayrak',
     key: 'F',
     group: 'track',
     kind: KIND.MARKER,
@@ -955,7 +955,7 @@ export const ELEMENTS = {
   },
   cone: {
     id: 'cone',
-    label: 'Cone',
+    label: 'Koni',
     key: 'C',
     group: 'track',
     kind: KIND.MARKER,
@@ -982,7 +982,7 @@ export const ELEMENTS = {
   },
   waypoint: {
     id: 'waypoint',
-    label: 'Waypoint',
+    label: 'Ara nokta',
     key: 'W',
     group: 'track',
     kind: KIND.MARKER,
@@ -1052,7 +1052,7 @@ export const ELEMENTS = {
    */
   pole: {
     id: 'pole',
-    label: 'Pole',
+    label: 'Direk',
     /* U for upright, not P. P has been the racing line toggle since before
      * this element existed and the key handler answers it first, so a pole
      * on P was a hotkey the palette advertised and the keyboard never
@@ -1077,7 +1077,7 @@ export const ELEMENTS = {
    */
   horizontalPole: {
     id: 'horizontalPole',
-    label: 'Horizontal pole',
+    label: 'Yatay direk',
     key: 'Z',
     group: 'track',
     kind: KIND.OBSTACLE,
@@ -1098,7 +1098,7 @@ export const ELEMENTS = {
   },
   startPads: {
     id: 'startPads',
-    label: 'Start pads',
+    label: 'Başlangıç pedleri',
     key: 'S',
     group: 'extra',
     kind: KIND.START,
@@ -1121,7 +1121,7 @@ export const ELEMENTS = {
   },
   label: {
     id: 'label',
-    label: 'Label',
+    label: 'Etiket',
     key: 'L',
     group: 'extra',
     kind: KIND.ANNOTATION,
@@ -1132,7 +1132,7 @@ export const ELEMENTS = {
   },
   groundLogo: {
     id: 'groundLogo',
-    label: 'Ground logo',
+    label: 'Zemin logosu',
     key: 'O',
     group: 'extra',
     kind: KIND.DECAL,
@@ -1219,7 +1219,7 @@ for (const [id, t] of Object.entries(PROP_TYPES)) {
  */
 ELEMENTS.road = {
   id: 'road',
-  label: 'Road',
+  label: 'Yol',
   key: '',
   group: 'freestyle',
   propGroup: 'roads',
@@ -1232,7 +1232,7 @@ ELEMENTS.road = {
 };
 ELEMENTS.vehicle = {
   id: 'vehicle',
-  label: 'Vehicle',
+  label: 'Araç',
   key: '',
   group: 'freestyle',
   propGroup: 'roads',
@@ -1298,7 +1298,7 @@ export function levelPitchFor(clearH) {
 export const GATE_PRESETS = [
   {
     id: 'standard',
-    label: 'Standard',
+    label: 'Standart',
     size: '5 x 5 ft',
     published: true,
     hint: 'The MultiGP chapter gate, 5 ft by 5 ft. The size the whole world is scaled against.',
@@ -1307,7 +1307,7 @@ export const GATE_PRESETS = [
   },
   {
     id: 'championship',
-    label: 'Championship',
+    label: 'Şampiyona',
     size: '7 x 6 ft',
     published: true,
     hint: 'MultiGP championship size, 7 ft wide by 6 ft high. What a dive gate and a launch gate are built at.',
@@ -1325,7 +1325,7 @@ export const GATE_PRESETS = [
   },
   {
     id: 'wide',
-    label: 'Wide',
+    label: 'Geniş',
     size: '2 m bay',
     published: false,
     hint: 'Not a MultiGP size. About 2 m between uprights once the world builds it 15 percent larger, which is the bay the Drone Nationals plan draws, so a wall of these stands 2 m a bay.',
@@ -1334,7 +1334,7 @@ export const GATE_PRESETS = [
   },
   {
     id: 'trainer',
-    label: 'Trainer',
+    label: 'Alıştırma',
     size: '10 x 8 ft',
     published: false,
     hint: 'Not a MultiGP size. A deliberately forgiving hole for a first track or a first pilot.',
@@ -1517,7 +1517,7 @@ export const PALETTE_EXTRA = ['startPads', 'label', 'groundLogo'];
  * armed tool (MENUS-PLAN.md 1.23). It carries a key so the hotkey table has
  * one source, and P is never a piece's letter on any canvas.
  */
-export const PATH_TOGGLE = { id: 'path', label: 'Path', key: 'P', note: 'Toggles display of the derived racing line.' };
+export const PATH_TOGGLE = { id: 'path', label: 'Uçuş çizgisi', key: 'P', note: 'Hesaplanan yarış çizgisini gösterir veya gizler.' };
 
 /*
  * Tuning. Every number the tool uses that is a length in metres, or that the
@@ -1693,19 +1693,19 @@ export function pieceLabel(el, cls = TRACK_CLASS_DEFAULT) {
 export const WHOOP_TOOLS = [
   {
     id: 'row',
-    label: 'Side by side',
+    label: 'Yan yana',
     key: 'H',
     note: 'Drag along the floor to lay two or three gates in a row, 30 in apart, sharing their verticals. One click lays a pair.',
   },
   {
     id: 'cube',
-    label: 'Cube',
+    label: 'Küp',
     key: 'K',
     note: 'Click to put a cube down: five gates that share their pipe, in one piece. It is flown straight through, along the way it faces; change the two faces with the Fly order tool. Move it, turn it, copy it and remove it as one.',
   },
   {
     id: 'ruler',
-    label: 'Ruler',
+    label: 'Cetvel',
     key: 'M',
     note: 'Click two points to measure between them, in inches and millimetres. A click near a gate or a pole takes its middle. Nothing is saved with the track.',
   },
@@ -1720,7 +1720,7 @@ export const WHOOP_TOOLS = [
    */
   {
     id: 'route',
-    label: 'Fly order',
+    label: 'Uçuş sırası',
     key: 'N',
     note: 'Click the pieces in the order you fly them. A click on a piece again is another pass through it, which is how a gate is flown twice. Backspace takes the last pass off.',
   },
@@ -1739,7 +1739,7 @@ export const WHOOP_TOOLS = [
 export const FIVE_INCH_PIECES = [
   {
     id: 'invisibleGate',
-    label: 'Invisible gate',
+    label: 'Görünmez kapı',
     /* I for invisible, which is free: E and Q turn, X reverses, V is the view and P the line. */
     key: 'I',
     after: 'gate',
@@ -1747,42 +1747,42 @@ export const FIVE_INCH_PIECES = [
   },
   {
     id: 'wall',
-    label: 'Wall',
+    label: 'Duvar',
     key: 'K',
     after: 'flaggedGate',
     note: 'Drag along the ground to lay a row of gates that share their uprights, two to six. Each bay is a gate of its own in the flying order, so a wall can be flown straight through or as a weave. The wall is one piece: it moves, turns, copies and goes as one.',
   },
   {
     id: 'upGate',
-    label: 'Up gate',
+    label: 'Yükselme kapısı',
     key: '',
     after: 'diveGate',
     note: 'A gate leaning at 45 degrees with its lower edge 1.5 m up, flown up through. It is a dive gate with those numbers, which are the rule the Drone Nationals plan gives its up gate.',
   },
   {
     id: 'launchGate',
-    label: 'Launch gate',
+    label: 'Fırlatma kapısı',
     key: '',
     after: 'diveGate',
     note: 'A horizontal gate 15 ft up, flown UP through from below: the dive gate the other way round. It comes with the line to fly it, a pull up from level to vertical on the way in and a push over on the way out, as waypoints you can drag or take out.',
   },
   {
     id: 'hurdle',
-    label: 'Hurdle',
+    label: 'Engel',
     key: 'U',
     after: 'barrier',
     note: 'A board 4 m long and 1 m high with a flag at each end, flown over. One piece, and not a gate: nothing scores on it, and the lap is pinned over the middle of it.',
   },
   {
     id: 'barHurdle',
-    label: 'Bar hurdle',
+    label: 'Çubuk engel',
     key: '',
     after: 'barrier',
     note: 'A bar 10 ft wide, 5 ft up, on two legs: flown over it, skimming it, or under it between the legs. One piece, and not a gate: the lap is pinned over (or under) the middle of it, and the card says which.',
   },
   {
     id: 'run',
-    label: 'Section',
+    label: 'Bölüm',
     key: 'J',
     /* After the flagged gate, where the wall is, and below it: a piece stands after an element, and the wall is not one. */
     after: 'flaggedGate',

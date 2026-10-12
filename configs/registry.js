@@ -62,8 +62,8 @@ export const TUNES = [
   {
     id: 'betaflight-default',
     airframe: '5inch',
-    name: 'Betaflight default',
-    note: 'Factory 4.5.1 with four settings changed: a quarter more feedforward, and less bounce back after a stop.',
+    name: 'Betaflight varsayılanı',
+    note: 'Fabrika ayarı Betaflight 4.5.1. Dört ayar değiştirilmiştir: biraz daha fazla feedforward ve duruşta daha az geri sıçrama.',
   },
   {
     id: 'whoop-champion',

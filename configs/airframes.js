@@ -76,10 +76,10 @@ export const AIRFRAMES = [
   {
     id: '5inch',
     simId: 0,
-    name: 'Five inch',
-    short: '5 inch',
+    name: 'Beş inç',
+    short: '5 inç',
     /* What a pilot calls it out loud, for a card and for the board. */
-    blurb: 'A 710 gram 6S freestyle and race quad. Eight and a half to one, forty metres a second, and a field big enough to use it.',
+    blurb: '710 gram, 6S bir freestyle ve yarış quadı. Sekiz buçuğa bir, saniyede kırk metre ve onu kullanmaya yetecek büyüklükte bir saha.',
     facts: ['6S', '220 mm', '8.4 : 1'],
     /* Track class. The builder, the world and the board all branch on this
      * rather than on the airframe id, because what changes is the SIZE OF
@@ -251,7 +251,7 @@ export const AIRFRAMES = [
     simId: 0,
     name: '65 mm whoop',
     short: 'Whoop',
-    blurb: 'A 65 mm ducted whoop indoors. The hall and its gates are built to match it, so what you see is a whoop through 28 inch gates.',
+    blurb: 'Kapalı alanda 65 mm kanallı bir whoop. Salon ve kapıları ona göre yapılmıştır, yani gördüğünüz 28 inçlik kapılardan geçen bir whoop.',
     facts: ['1S', '65 mm', 'Indoors'],
     trackClass: 'micro',
     /*

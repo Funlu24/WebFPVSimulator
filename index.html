@@ -44,7 +44,7 @@
          root now carries touch-action: manipulation, which stops the
          double-tap and keeps the pinch. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>WebFPV, a browser FPV racing simulator</title>
+    <title>WebFPV — FPV Yarış Simülatörü</title>
     <!--
       THE SCRIPTS OF THE DEPLOY THIS PAGE CAME FROM, ALWAYS. See src/fresh.js.
 
@@ -81,7 +81,7 @@
         document.write(`<script src="src/fresh.js${stamp ? `?d=${stamp}` : ''}" data-entry="src/boot.js" data-preload="boot"><\/script>`);
       })();
     </script>
-    <meta name="description" content="Fly a five inch quad in a browser, on a real Betaflight control loop compiled to WebAssembly. Build a track, set a lap, put it on the public board." />
+    <meta name="description" content="Gerçek Betaflight kontrol döngüsüyle tarayıcıda FPV uçuşu yapın. Pist oluşturun, tur atın ve derecenizi paylaşın." />
     <!--
       A link to this page posted anywhere renders a 1200 by 630 card, and
       og.png is a frame of the real shell rather than a drawing of one, so it
@@ -97,16 +97,16 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebFPV" />
     <meta property="og:url" content="https://webfpv.org/sim/" />
-    <meta property="og:title" content="WebFPV, fly a quad in your browser" />
-    <meta property="og:description" content="A real Betaflight control loop compiled to WebAssembly, a race track, and a lap timer. Plug in a gamepad and go." />
+    <meta property="og:title" content="WebFPV — Tarayıcıda FPV uçuş simülatörü" />
+    <meta property="og:description" content="WebAssembly üzerinde çalışan gerçek Betaflight kontrol döngüsü, yarış pisti ve tur sayacı. Kumandanızı bağlayıp uçmaya başlayın." />
     <meta property="og:image" content="https://webfpv.org/sim/og.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it, flags and track markers running away under a low sun." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="WebFPV, fly a quad in your browser" />
-    <meta name="twitter:description" content="A real Betaflight control loop compiled to WebAssembly, a race track, and a lap timer. Plug in a gamepad and go." />
+    <meta name="twitter:title" content="WebFPV — Tarayıcıda FPV uçuş simülatörü" />
+    <meta name="twitter:description" content="WebAssembly üzerinde çalışan gerçek Betaflight kontrol döngüsü, yarış pisti ve tur sayacı. Kumandanızı bağlayıp uçmaya başlayın." />
     <meta name="twitter:image" content="https://webfpv.org/sim/og.png" />
     <meta name="twitter:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it, flags and track markers running away under a low sun." />
 
@@ -120,15 +120,15 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="icon" href="favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <meta name="theme-color" content="#141c16" />
+    <meta name="theme-color" content="#10284a" />
     <style>
       :root {
-        --cream: #f3ead4;
-        --sakura: #e8a8b8;
-        --amber: #ffd45c;
-        --mint: #7dffb4;
+        --cream: #f5f9ff;
+        --sakura: #55aaff;
+        --amber: #a8d6ff;
+        --mint: #9ce6ff;
         --slate: #9db3c8;
-        --deep: #141c16;
+        --deep: #10284a;
         /*
          * THE FRAME'S TWO BARS, as tokens rather than as numbers typed into
          * seventeen places.
@@ -144,12 +144,12 @@
         --bar-top: 36px;
         --bar-bot: 44px;
         --bars: calc(var(--bar-top) + var(--bar-bot));
-        --panel: #1a241c;
-        --ink: rgba(12, 18, 14, 0.86);
+        --panel: #18365c;
+        --ink: rgba(8, 24, 48, 0.94);
         /* The town's ink line, the colour the lettering strokes with and the
            results page frames its panels in; the menu panels are framed in
            it too. */
-        --ink-line: #0b1116;
+        --ink-line: #07182e;
         /*
          * THE OSD IS INKED, like the lettering. Its small print was slate at
          * 11 to 13 px with a soft blurred shadow, and over Hibari Yard's
@@ -345,8 +345,8 @@
          looking stencilled. */
       .score-cut {
         text-shadow:
-          -1px -1px 0 rgba(8, 12, 9, 0.92),  1px -1px 0 rgba(8, 12, 9, 0.92),
-          -1px  1px 0 rgba(8, 12, 9, 0.92),  1px  1px 0 rgba(8, 12, 9, 0.92),
+          -1px -1px 0 rgba(8, 24, 48, 0.92),  1px -1px 0 rgba(8, 24, 48, 0.92),
+          -1px  1px 0 rgba(8, 24, 48, 0.92),  1px  1px 0 rgba(8, 24, 48, 0.92),
           0 2px 10px rgba(0, 0, 0, 0.9);
       }
       .score-value {
@@ -561,7 +561,7 @@
            the words are punched out of it. Setting a colour here instead
            was dark ink on a dark chip and read as a black bar. */
         background: currentColor;
-        box-shadow: 0 0 0 2px rgba(8, 12, 9, 0.9);
+        box-shadow: 0 0 0 2px rgba(8, 24, 48, 0.9);
         animation: score-tier-in 420ms cubic-bezier(0.1, 1.4, 0.4, 1);
       }
       .score-tier > span { color: #0b1116; }
@@ -718,7 +718,7 @@
       .skim-meter-bar {
         margin-top: 6px; height: 6px; width: 100%;
         border-radius: 3px; background: rgba(12, 22, 34, 0.7);
-        box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.35), 0 0 0 1px rgba(8, 12, 9, 0.7);
+        box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.35), 0 0 0 1px rgba(8, 24, 48, 0.7);
         overflow: hidden;
       }
       .skim-meter-fill {
@@ -806,8 +806,8 @@
         letter-spacing: 0.18em; text-transform: uppercase;
         color: var(--cream);
         text-shadow:
-          -1px -1px 0 rgba(8, 12, 9, 0.92),  1px -1px 0 rgba(8, 12, 9, 0.92),
-          -1px  1px 0 rgba(8, 12, 9, 0.92),  1px  1px 0 rgba(8, 12, 9, 0.92),
+          -1px -1px 0 rgba(8, 24, 48, 0.92),  1px -1px 0 rgba(8, 24, 48, 0.92),
+          -1px  1px 0 rgba(8, 24, 48, 0.92),  1px  1px 0 rgba(8, 24, 48, 0.92),
           0 2px 10px rgba(0, 0, 0, 0.9);
       }
       /* The speed lines behind the word: an ink fan with a cream fan inside
@@ -934,7 +934,7 @@
       .chase-meter-drift {
         padding: 1px 6px; font-weight: 800; letter-spacing: 0.14em;
         color: #0b1116; background: #ff9f5a; text-shadow: none;
-        box-shadow: 0 0 0 2px rgba(8, 12, 9, 0.9);
+        box-shadow: 0 0 0 2px rgba(8, 24, 48, 0.9);
       }
       .chase-meter-line {
         display: flex; align-items: baseline; gap: 4px; margin-top: 2px;
@@ -946,7 +946,7 @@
       .chase-meter-bar {
         margin-top: 6px; height: 6px; width: 100%;
         border-radius: 3px; background: rgba(12, 22, 34, 0.7);
-        box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.35), 0 0 0 1px rgba(8, 12, 9, 0.7);
+        box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.35), 0 0 0 1px rgba(8, 24, 48, 0.7);
         overflow: hidden;
       }
       /* Fills from the right edge, the side the meter hangs from. */
@@ -991,8 +991,8 @@
         letter-spacing: 0.1em;
         color: var(--mint);
         text-shadow:
-          -1px -1px 0 rgba(8, 12, 9, 0.92),  1px -1px 0 rgba(8, 12, 9, 0.92),
-          -1px  1px 0 rgba(8, 12, 9, 0.92),  1px  1px 0 rgba(8, 12, 9, 0.92),
+          -1px -1px 0 rgba(8, 24, 48, 0.92),  1px -1px 0 rgba(8, 24, 48, 0.92),
+          -1px  1px 0 rgba(8, 24, 48, 0.92),  1px  1px 0 rgba(8, 24, 48, 0.92),
           0 2px 10px rgba(0, 0, 0, 0.9);
       }
       .chase-call.is-drift .chase-call-word { color: #ffc46b; }
@@ -1058,8 +1058,8 @@
       .stf-found.is-clean .stf-call-word {
         font-style: normal; font-weight: 700; transform: none;
         text-shadow:
-          -1px -1px 0 rgba(8, 12, 9, 0.92),  1px -1px 0 rgba(8, 12, 9, 0.92),
-          -1px  1px 0 rgba(8, 12, 9, 0.92),  1px  1px 0 rgba(8, 12, 9, 0.92),
+          -1px -1px 0 rgba(8, 24, 48, 0.92),  1px -1px 0 rgba(8, 24, 48, 0.92),
+          -1px  1px 0 rgba(8, 24, 48, 0.92),  1px  1px 0 rgba(8, 24, 48, 0.92),
           0 2px 10px rgba(0, 0, 0, 0.9);
       }
       /* MANGA AND SCORING OFF (.no-manga on the root, see syncManga in
@@ -1136,8 +1136,8 @@
         width: clamp(64px, 11vw, 88px);
         height: clamp(64px, 11vw, 88px);
         border-radius: 4px;
-        background: rgba(12, 18, 14, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(243, 234, 212, 0.32);
+        background: rgba(8, 24, 48, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.32);
       }
       .osd-cross-x, .osd-cross-y {
         position: absolute;
@@ -1158,7 +1158,7 @@
         width: 11px; height: 11px;
         border-radius: 50%;
         background: var(--amber);
-        box-shadow: 0 0 0 1px rgba(12, 18, 14, 0.55), 0 1px 6px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 0 0 1px rgba(8, 24, 48, 0.55), 0 1px 6px rgba(0, 0, 0, 0.45);
         transform: translate(-50%, -50%);
       }
       .osd-gimbal-cap {
@@ -1237,12 +1237,12 @@
       */
       .osd-air-range { width: clamp(90px, 13vw, 150px); }
       .osd-air .osd-air-range::-webkit-slider-runnable-track {
-        background: rgba(12, 18, 14, 0.55);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.35);
+        background: rgba(8, 24, 48, 0.55);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.35);
       }
       .osd-air .osd-air-range::-moz-range-track {
-        background: rgba(12, 18, 14, 0.55);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.35);
+        background: rgba(8, 24, 48, 0.55);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.35);
       }
       .osd-air .osd-air-range::-webkit-slider-thumb { background: var(--amber); }
       .osd-air .osd-air-range::-moz-range-thumb { background: var(--amber); }
@@ -1272,8 +1272,8 @@
         transform: translateX(-50%);
         width: max-content; max-width: min(78vw, 320px);
         padding: 10px 14px; border-radius: 6px;
-        background: rgba(16, 22, 17, 0.94);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.42), 0 6px 20px rgba(0, 0, 0, 0.5);
+        background: rgba(8, 24, 48, 0.94);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.42), 0 6px 20px rgba(0, 0, 0, 0.5);
         text-align: left; pointer-events: none;
         /* On its own dark card, so not the OSD's edge. */
         text-shadow: none;
@@ -1285,8 +1285,8 @@
         content: ''; position: absolute; left: 50%; bottom: -5px;
         width: 10px; height: 10px; margin-left: -5px;
         transform: rotate(45deg);
-        background: rgba(16, 22, 17, 0.94);
-        box-shadow: inset -1px -1px 0 0 rgba(255, 212, 92, 0.42);
+        background: rgba(8, 24, 48, 0.94);
+        box-shadow: inset -1px -1px 0 0 rgba(168, 214, 255, 0.42);
       }
       .osd-air-hint-title {
         font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
@@ -1329,7 +1329,7 @@
       .osd-tune-reset {
         margin-top: 3px; padding: 3px 10px; font-size: 11px;
         background: transparent; color: var(--amber);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.42);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.42);
         transition: opacity 0.25s ease, visibility 0s linear 0s;
       }
       .osd-air.is-aloft .osd-tune-reset {
@@ -1343,7 +1343,7 @@
       .osd-air-hint.osd-tune-hint { top: auto; bottom: calc(100% + 10px); }
       .osd-air-hint.osd-tune-hint::after {
         top: auto; bottom: -5px;
-        box-shadow: inset -1px -1px 0 0 rgba(255, 212, 92, 0.42);
+        box-shadow: inset -1px -1px 0 0 rgba(168, 214, 255, 0.42);
       }
       /*
        * SHORT SCREEN: THE CARD HANGS BELOW THE SLIDER INSTEAD.
@@ -1363,7 +1363,7 @@
         }
         .osd-air-hint::after {
           bottom: auto; top: -5px;
-          box-shadow: inset 1px 1px 0 0 rgba(255, 212, 92, 0.42);
+          box-shadow: inset 1px 1px 0 0 rgba(168, 214, 255, 0.42);
         }
       }
 
@@ -1405,12 +1405,12 @@
       .touch-plate {
         width: clamp(200px, 60vmin, 300px);
         height: clamp(200px, 60vmin, 300px);
-        background: rgba(12, 18, 14, 0.30);
+        background: rgba(8, 24, 48, 0.30);
         transition: background 0.15s ease, box-shadow 0.15s ease;
       }
       .touch-plate.is-held {
-        background: rgba(12, 18, 14, 0.46);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.55);
+        background: rgba(8, 24, 48, 0.46);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.55);
       }
       .touch-nub { width: 24px; height: 24px; }
       /* The top right corner itself, where the right thumb flicks up to.
@@ -1431,8 +1431,8 @@
         position: absolute; left: 50%; top: 38%;
         transform: translate(-50%, -50%);
         padding: 10px 18px; border-radius: 999px;
-        background: rgba(16, 22, 17, 0.85); color: var(--amber);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.4);
+        background: rgba(8, 24, 48, 0.85); color: var(--amber);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.4);
         font-size: 15px; letter-spacing: 0.06em; white-space: nowrap;
         pointer-events: none;
       }
@@ -1564,7 +1564,7 @@
       }
       .touch-fly-on .osd-air-hint::after {
         top: auto; bottom: -5px;
-        box-shadow: inset -1px -1px 0 0 rgba(255, 212, 92, 0.42);
+        box-shadow: inset -1px -1px 0 0 rgba(168, 214, 255, 0.42);
       }
       /*
        * NOT ON THE PAUSE SCREEN, where the Weight is a row of the menu (see
@@ -1620,8 +1620,8 @@
       :root { --banner-size: clamp(17px, 4.4vw, 30px); }
 
       .banner.panel {
-        background: rgba(16, 22, 17, 0.92); border-radius: 4px;
-        padding: 18px 24px; box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.45);
+        background: rgba(8, 24, 48, 0.92); border-radius: 4px;
+        padding: 18px 24px; box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.45);
         font-size: var(--banner-size); color: var(--cream); line-height: 1.35;
         max-width: min(92vw, 22em); white-space: pre-wrap; transition: none;
       }
@@ -1646,7 +1646,7 @@
         transform: translateX(-50%);
         max-width: min(640px, calc(100vw - 32px));
         padding: 9px 16px 10px; border-radius: 4px;
-        background: rgba(12, 18, 14, 0.95); color: var(--cream);
+        background: rgba(8, 24, 48, 0.95); color: var(--cream);
         border-left: 3px solid var(--amber);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
         font-size: 14px; line-height: 1.45; white-space: pre-line;
@@ -1678,7 +1678,7 @@
         /* Enough scrim to read type over a bright valley, not enough to
            turn a warm afternoon into night. Forest-tinted, not navy. */
         background:
-          radial-gradient(120% 90% at 50% 42%, rgba(18, 26, 18, 0.58), rgba(12, 18, 14, 0.76));
+          radial-gradient(120% 90% at 50% 42%, rgba(18, 26, 18, 0.58), rgba(8, 24, 48, 0.76));
       }
       /* The title is a HUD over the live map. Copy on the left (or top
          and bottom on a phone), the world and the flying airframe fill
@@ -1692,8 +1692,8 @@
         height: 100%;
         padding: 4.5vh 4vw calc(1.5vh + var(--bar-bot));
         background:
-          linear-gradient(90deg, rgba(12, 18, 14, 0.78) 0%, rgba(12, 18, 14, 0.42) 26%, rgba(12, 18, 14, 0.08) 52%, rgba(12, 18, 14, 0.10) 100%),
-          linear-gradient(180deg, rgba(12, 18, 14, 0.32) 0%, transparent 22%, transparent 64%, rgba(12, 18, 14, 0.38) 100%);
+          linear-gradient(90deg, rgba(8, 24, 48, 0.78) 0%, rgba(8, 24, 48, 0.42) 26%, rgba(8, 24, 48, 0.08) 52%, rgba(8, 24, 48, 0.10) 100%),
+          linear-gradient(180deg, rgba(8, 24, 48, 0.32) 0%, transparent 22%, transparent 64%, rgba(8, 24, 48, 0.38) 100%);
       }
       .title-copy {
         display: flex;
@@ -1958,7 +1958,7 @@
         margin: 0; font-size: clamp(44px, 8vw, 104px); font-weight: 800;
         letter-spacing: 0.08em; padding-left: 0.02em; color: var(--cream);
         line-height: 0.92;
-        text-shadow: 3px 3px 0 rgba(20, 28, 20, 0.82), 0 10px 28px rgba(0, 0, 0, 0.32);
+        text-shadow: 3px 3px 0 rgba(16, 40, 74, 0.82), 0 10px 28px rgba(0, 0, 0, 0.32);
       }
       .wordmark .fpv { color: var(--sakura); }
       /* THE HEADINGS, LETTERED (polish item 19, letterHeading in
@@ -2033,8 +2033,8 @@
         display: inline-flex; align-items: center; gap: 8px;
         margin-top: 16px; padding: 7px 14px; border-radius: 3px;
         font-size: 14px; color: var(--cream); letter-spacing: 0.05em;
-        background: rgba(16, 22, 17, 0.62);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.45);
+        background: rgba(8, 24, 48, 0.62);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.45);
       }
       .brand-best-time { color: var(--mint); font-weight: 650; }
       /* The beta notice. Amber, because it is an instrument reading on
@@ -2045,7 +2045,7 @@
         display: flex; align-items: baseline; gap: 10px;
         max-width: 34em; margin: 14px 0 0;
         font-size: 13.5px; line-height: 1.6; letter-spacing: 0.01em;
-        color: rgba(235, 230, 215, 0.78);
+        color: rgba(245, 249, 255, 0.78);
       }
       /* The chip row under the wordmark: Beta, then Patreon. One line where
          the sentence and the link took three. */
@@ -2054,18 +2054,27 @@
         margin-top: 14px;
       }
       .brand-chips .beta-note, .brand-chips .brand-patreon { margin: 0; }
+      .brand-tumer {
+        display: inline-flex; align-items: center; gap: 8px;
+        min-height: 28px; padding: 0 10px;
+        color: var(--slate); background: rgba(8, 24, 48, 0.72);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.16);
+        font: 700 9px/1 var(--ui-font); letter-spacing: 0.16em;
+      }
+      .brand-tumer img { display: block; width: 70px; height: 24px; object-fit: contain; }
+      .screen-title.is-gate .brand-tumer { display: none; }
       .beta-tag { cursor: help; }
       .beta-tag {
         flex: 0 0 auto;
         padding: 3px 9px; border-radius: 3px;
         font-size: 11px; font-weight: 700; letter-spacing: 0.18em;
         text-transform: uppercase; color: var(--amber);
-        background: rgba(16, 22, 17, 0.62);
-        box-shadow: inset 0 0 0 1px rgba(255, 212, 92, 0.45);
+        background: rgba(8, 24, 48, 0.62);
+        box-shadow: inset 0 0 0 1px rgba(168, 214, 255, 0.45);
       }
       .screen-title .beta-note { text-shadow: 0 1px 8px rgba(0, 0, 0, 0.65); }
       .keep-note {
-        max-width: 34em; margin: 14px 0 0; color: rgba(235, 230, 215, 0.72);
+        max-width: 34em; margin: 14px 0 0; color: rgba(245, 249, 255, 0.72);
         font-size: 13.5px; line-height: 1.6; letter-spacing: 0.01em;
       }
       /* First run swaps the storage warning, which is a returning pilot's
@@ -2150,9 +2159,9 @@
         cursor: pointer;
         border-radius: 4px;
         overflow: hidden;
-        background: rgba(16, 22, 17, 0.78);
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        background: rgba(8, 24, 48, 0.78);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
       }
       /* Same lift and the same sakura ring the picker cards use, so a card
@@ -2180,7 +2189,7 @@
       .gate-card-art::after {
         content: "";
         position: absolute; inset: 0;
-        background: linear-gradient(180deg, rgba(12, 18, 14, 0) 52%, rgba(16, 22, 17, 0.85) 100%);
+        background: linear-gradient(180deg, rgba(8, 24, 48, 0) 52%, rgba(8, 24, 48, 0.85) 100%);
       }
       /* Above the gradient the rule before this one lays over the picture,
          which is the only reason this needs a stacking order at all. */
@@ -2199,7 +2208,7 @@
       .gate-card.on .gate-card-name { color: var(--sakura); }
       .gate-card-blurb {
         margin: 0;
-        color: rgba(235, 230, 215, 0.74);
+        color: rgba(245, 249, 255, 0.74);
         font-size: 13.5px; line-height: 1.55; letter-spacing: 0.01em;
       }
       /* What each mode actually gives you, in three words each. Mint is the
@@ -2236,7 +2245,7 @@
         /* Over a lit field and over a dark room, so it carries its own
            ground rather than trusting whatever is behind it. */
         border-radius: 3px;
-        background: radial-gradient(closest-side, rgba(12, 18, 14, 0.72), rgba(12, 18, 14, 0.18));
+        background: radial-gradient(closest-side, rgba(8, 24, 48, 0.72), rgba(8, 24, 48, 0.18));
       }
       .craft-plan { width: 100%; height: 100%; color: var(--cream); }
       .gate-card-race-whoop65 .craft-plan { color: var(--mint); }
@@ -2414,7 +2423,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       /*
        * THE MENU PANEL IS A PANEL (polish item 19), in the results page's
@@ -2434,13 +2443,13 @@
         pointer-events: auto;
         padding: 10px 0 12px;
         border-radius: 0;
-        background: rgba(16, 22, 17, 0.72);
+        background: rgba(8, 24, 48, 0.72);
         box-shadow:
-          inset 0 0 0 1px rgba(244, 236, 214, 0.10),
+          inset 0 0 0 1px rgba(245, 249, 255, 0.10),
           0 0 0 2px var(--ink-line),
           0 0 0 3px rgba(247, 240, 220, 0.32),
           7px 8px 0 1px rgba(11, 17, 22, 0.5);
-        border-top: 2px solid rgba(232, 168, 184, 0.55);
+        border-top: 2px solid rgba(85, 170, 255, 0.55);
       }
       /* MANGA AND SCORING OFF (DEFAULTS.mangaAndScoring in src/ui/ui.js,
          which puts .no-manga on the root): the panel as it was before it was
@@ -2450,9 +2459,9 @@
          this one. */
       .no-manga .menu {
         border-radius: 4px;
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
       }
-      .screen-title .menu { min-width: 0; width: 100%; margin-top: 0; background: rgba(16, 22, 17, 0.55); }
+      .screen-title .menu { min-width: 0; width: 100%; margin-top: 0; background: rgba(8, 24, 48, 0.55); }
       /*
        * THE TITLE'S LIST IS SIZED BY THE COLUMN, NOT BY A VH CAP. It carries
        * .menu-scroll so the phone caps further down apply to it, and that
@@ -2470,18 +2479,18 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       .menu-help {
         grid-column: 3;
         padding: 12px 12px 8px 22px;
         margin-top: 8px;
         max-width: 26em;
-        color: rgba(235, 230, 215, 0.72);
+        color: rgba(245, 249, 255, 0.72);
         font-size: 14px;
         line-height: 1.55;
         overflow-wrap: break-word;
-        border-left: 1px solid rgba(244, 236, 214, 0.16);
+        border-left: 1px solid rgba(245, 249, 255, 0.16);
       }
       .menu-help:empty { border-left-color: transparent; padding: 0; }
       .screen-title .menu-help {
@@ -2515,8 +2524,8 @@
           width: min(21em, 28vw);
           padding: 10px 14px 11px;
           border-radius: 4px;
-          background: rgba(12, 18, 14, 0.8);
-          box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+          background: rgba(8, 24, 48, 0.8);
+          box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         }
         .screen-title .menu-help:empty { display: none; }
       }
@@ -2568,7 +2577,7 @@
         overflow: hidden;
         border-radius: 16px;
         background: #1a241c;
-        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(245, 249, 255, 0.10);
       }
       /* ------------------------------------------------------------------
          THE TRICK LIST. A picture of every trick the town will score, drawn
@@ -2633,7 +2642,7 @@
         background: #1a241c;
         /* The two pixel edge is the board's furniture and the town's ink:
            a cel shaded picture is a fill with a line round it. */
-        box-shadow: 0 0 0 2px rgba(11, 17, 22, 0.9), 0 0 0 3px rgba(243, 234, 212, 0.16);
+        box-shadow: 0 0 0 2px rgba(11, 17, 22, 0.9), 0 0 0 3px rgba(245, 249, 255, 0.16);
       }
       .trick-side { min-width: 0; padding-top: 2px; }
       .trick-name {
@@ -2716,9 +2725,9 @@
         pointer-events: none;
       }
       .frame-top { top: 0; height: var(--bar-top);
-        background: linear-gradient(180deg, rgba(8, 12, 9, 0.86), rgba(8, 12, 9, 0)); }
+        background: linear-gradient(180deg, rgba(8, 24, 48, 0.86), rgba(8, 24, 48, 0)); }
       .frame-bot { bottom: 0; height: var(--bar-bot);
-        background: linear-gradient(0deg, rgba(8, 12, 9, 0.9), rgba(8, 12, 9, 0)); }
+        background: linear-gradient(0deg, rgba(8, 24, 48, 0.9), rgba(8, 24, 48, 0)); }
       .frame-top[hidden], .frame-bot[hidden] { display: none; }
       .frame-gap { flex: 1; }
       .crumb {
@@ -2733,7 +2742,7 @@
         display: flex; align-items: center; gap: 7px;
         height: 26px; padding: 0 11px; border-radius: 3px;
         background: rgba(20, 28, 22, 0.72);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.13);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.13);
         font-size: 12px; color: var(--slate); white-space: nowrap;
       }
       .frame-chip b { color: var(--cream); font-weight: 600; }
@@ -2750,8 +2759,8 @@
       a.patreon {
         display: inline-flex; align-items: center; gap: 7px;
         height: 28px; padding: 0 11px 0 8px; border-radius: 3px;
-        background: rgba(16, 22, 17, 0.72);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.16);
+        background: rgba(8, 24, 48, 0.72);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.16);
         color: var(--cream);
         font: 600 12px/1 var(--ui-font); letter-spacing: 0.02em;
         text-decoration: none; text-transform: none;
@@ -2776,8 +2785,8 @@
         max-width: 420px; width: calc(100% - 40px);
         padding: 24px 48px 24px 24px;
         border-radius: 6px;
-        background: rgba(16, 22, 17, 0.95);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(244, 236, 214, 0.2);
+        background: rgba(8, 24, 48, 0.95);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(245, 249, 255, 0.2);
         backdrop-filter: blur(8px);
       }
       .support-prompt-message {
@@ -2795,13 +2804,13 @@
         font: 600 13px/1 var(--ui-font); letter-spacing: 0.02em;
         text-decoration: none; white-space: nowrap;
         cursor: pointer; transition: all 0.15s ease;
-        background: rgba(244, 236, 214, 0.1);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.2);
+        background: rgba(245, 249, 255, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.2);
         color: var(--cream);
       }
       .support-prompt-btn:hover {
-        background: rgba(244, 236, 214, 0.15);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.3);
+        background: rgba(245, 249, 255, 0.15);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.3);
       }
       .support-prompt-btn-primary {
         background: #FF424D;
@@ -2833,7 +2842,7 @@
         cursor: pointer; border-radius: 3px;
       }
       .support-prompt-close:hover {
-        background: rgba(244, 236, 214, 0.1);
+        background: rgba(245, 249, 255, 0.1);
         color: var(--cream);
       }
       .support-prompt-close:focus-visible {
@@ -2899,13 +2908,21 @@
         padding: 10px 22px 10px 28px; border-left: 4px solid transparent;
         color: rgba(238, 232, 216, 0.78);
         font-size: clamp(16px, 1.9vw, 21px); cursor: pointer;
+        transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+      }
+      .row:not(.on):hover,
+      .row:not(.on):focus-visible {
+        color: var(--cream);
+        border-left-color: rgba(85, 170, 255, 0.55);
+        background: rgba(85, 170, 255, 0.055);
+        outline: none;
       }
       /* The cursor is a bar and a colour, not a slab. Sakura for chrome.
          Amber stays on the flight instruments, where it has to punch through
          whatever the camera is looking at. */
       .row.on {
         color: var(--cream); border-left-color: var(--sakura);
-        background: linear-gradient(90deg, rgba(232, 168, 184, 0.12), rgba(232, 168, 184, 0) 48%);
+        background: linear-gradient(90deg, rgba(85, 170, 255, 0.12), rgba(85, 170, 255, 0) 48%);
       }
       /*
        * THE STANDINGS TABLE. Drawn above the actions, not as menu rows: a
@@ -2919,7 +2936,7 @@
         max-height: min(38vh, 20em); overflow-y: auto;
         pointer-events: auto;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       .standings-row {
         display: grid; grid-template-columns: 2.4em 1fr auto;
@@ -2938,7 +2955,7 @@
       .standings-row.is-record .standings-lap { color: var(--mint); }
       /* The one row a person looks for in a leaderboard is their own. */
       .standings-row.is-me {
-        background: linear-gradient(90deg, rgba(232, 168, 184, 0.14), rgba(232, 168, 184, 0) 70%);
+        background: linear-gradient(90deg, rgba(85, 170, 255, 0.14), rgba(85, 170, 255, 0) 70%);
         box-shadow: inset 3px 0 0 var(--sakura);
       }
       .standings-row.is-me .standings-pilot { color: var(--cream); }
@@ -2953,7 +2970,7 @@
       .standings-weight {
         margin-left: 8px; padding: 1px 6px; border-radius: 2px;
         font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-        background: rgba(255, 212, 92, 0.14); color: var(--amber);
+        background: rgba(168, 214, 255, 0.14); color: var(--amber);
       }
       .standings-note {
         padding: 10px 14px; color: var(--slate); font-size: 14px;
@@ -3030,8 +3047,8 @@
         padding: 12px 18px;
         border-radius: 3px;
         border-left: 3px solid transparent;
-        background: rgba(125, 255, 180, 0.10);
-        box-shadow: inset 0 0 0 1px rgba(125, 255, 180, 0.42);
+        background: rgba(156, 230, 255, 0.10);
+        box-shadow: inset 0 0 0 1px rgba(156, 230, 255, 0.42);
         color: var(--mint);
         font-weight: 700;
         letter-spacing: 0.02em;
@@ -3043,7 +3060,7 @@
         border-left-color: var(--sakura);
         background: var(--mint);
         color: var(--deep);
-        box-shadow: 0 0 0 2px rgba(243, 234, 212, 0.55);
+        box-shadow: 0 0 0 2px rgba(245, 249, 255, 0.55);
       }
       .row-primary.on .row-label { color: var(--deep); }
 
@@ -3058,7 +3075,7 @@
         letter-spacing: 0.16em;
         text-transform: uppercase;
         color: var(--sakura);
-        border-bottom: 1px solid rgba(232, 168, 184, 0.22);
+        border-bottom: 1px solid rgba(85, 170, 255, 0.22);
         pointer-events: none;
       }
       .menu-scroll > .menu-section:first-child { margin-top: 4px; }
@@ -3088,7 +3105,7 @@
       .screen-rates { justify-content: safe center; }
       .rates-lede {
         max-width: 48em; margin: 0 auto;
-        color: rgba(235, 230, 215, 0.78);
+        color: rgba(245, 249, 255, 0.78);
         font-size: 15px; line-height: 1.6; text-align: center;
       }
       /*
@@ -3120,8 +3137,8 @@
       .rates-graph-wrap {
         height: clamp(180px, 26vh, 260px);
         border-radius: 4px;
-        background: rgba(16, 22, 17, 0.72);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        background: rgba(8, 24, 48, 0.72);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         overflow: hidden;
       }
       .rates-graph { display: block; width: 100%; height: 100%; }
@@ -3143,7 +3160,7 @@
       }
       .rates-key-lab {
         font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
-        color: rgba(235, 230, 215, 0.66);
+        color: rgba(245, 249, 255, 0.66);
       }
       .rates-key-val { font-size: 13px; font-weight: 650; color: var(--cream); }
       /* Four small facts under the curve. auto-fit rather than a fixed four
@@ -3176,7 +3193,7 @@
          src/ui/ratespanel.js, so a split reading needs no key. A number the
          same as the one before it is hidden rather than repeated. */
       .rates-num { color: var(--cream); }
-      .rates-num-sep, .rates-num-unit { color: rgba(235, 230, 215, 0.6); font-weight: 500; }
+      .rates-num-sep, .rates-num-unit { color: rgba(245, 249, 255, 0.6); font-weight: 500; }
       .rates-num[hidden], .rates-num-sep[hidden] { display: none; }
       /*
        * THE LIST TAKES THE ROOM THAT IS ACTUALLY THERE.
@@ -3261,7 +3278,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       /* Empty, it is an invisible box the height of the stage over what
          reads as blank space. Nothing sits under it today, and a hit test
@@ -3277,7 +3294,7 @@
        */
       .pids-caption {
         font-size: 12px; letter-spacing: 0.06em;
-        color: rgba(235, 230, 215, 0.66);
+        color: rgba(245, 249, 255, 0.66);
         margin-bottom: 8px;
       }
       /* Three axes of five numbers each: one cell per axis, kept on one
@@ -3338,10 +3355,10 @@
       }
       .step {
         width: 1.35em; height: 1.05em; padding: 0; border: 0; border-radius: 3px;
-        background: rgba(232, 168, 184, 0.16); color: var(--sakura); cursor: pointer;
+        background: rgba(85, 170, 255, 0.16); color: var(--sakura); cursor: pointer;
         font-size: 9px; line-height: 1; display: grid; place-items: center;
       }
-      .step:hover { background: rgba(232, 168, 184, 0.32); }
+      .step:hover { background: rgba(85, 170, 255, 0.32); }
       /*
        * A SWITCH, not a popup listing On and Off. Two segments, the live one
        * lit, both clickable, both labelled, so a mouse can go straight to
@@ -3350,7 +3367,7 @@
        */
       .row-switch {
         gap: 0; border-radius: 4px; overflow: hidden;
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.3);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.3);
       }
       .sw-seg {
         appearance: none; border: 0; margin: 0; cursor: pointer;
@@ -3362,9 +3379,9 @@
            thirty five pixels of list, and the shell check measures it. */
         padding: 2px 11px; line-height: 1.25;
       }
-      .sw-seg:hover { color: var(--cream); background: rgba(232, 168, 184, 0.12); }
+      .sw-seg:hover { color: var(--cream); background: rgba(85, 170, 255, 0.12); }
       .sw-seg.on {
-        background: rgba(232, 168, 184, 0.9); color: #14180f;
+        background: rgba(85, 170, 255, 0.9); color: #14180f;
       }
       /* On the bench the switch wears Betaflight's yellow, like every other
          control there, or it reads as the game's chrome floating on top of
@@ -3373,7 +3390,7 @@
       .screen-fc .sw-seg { color: #b6b6b6; }
       .screen-fc .sw-seg:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
       .screen-fc .sw-seg.on { background: var(--bf-accent); color: var(--bf-ink); }
-      .row-grey .sw-seg.on { background: rgba(232, 168, 184, 0.45); }
+      .row-grey .sw-seg.on { background: rgba(85, 170, 255, 0.45); }
       /*
        * The typed value on the Rates screen.
        *
@@ -3386,13 +3403,13 @@
        */
       .row-num {
         width: 5ch; padding: 3px 6px; border: 0; border-radius: 3px;
-        background: rgba(232, 168, 184, 0.10);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.28);
+        background: rgba(85, 170, 255, 0.10);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.28);
         color: var(--sakura); font: inherit; font-size: 0.86em; font-weight: 600;
         text-align: right; letter-spacing: 0.03em;
       }
       .row-num:focus {
-        outline: none; background: rgba(232, 168, 184, 0.18);
+        outline: none; background: rgba(85, 170, 255, 0.18);
         box-shadow: inset 0 0 0 1px var(--sakura);
         color: var(--cream);
       }
@@ -3418,23 +3435,23 @@
       }
       .row-range::-webkit-slider-runnable-track {
         height: 4px; border-radius: 2px;
-        background: rgba(244, 236, 214, 0.22);
+        background: rgba(245, 249, 255, 0.22);
       }
       .row-range::-moz-range-track {
         height: 4px; border-radius: 2px;
-        background: rgba(244, 236, 214, 0.22);
+        background: rgba(245, 249, 255, 0.22);
       }
       .row-range::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; border-radius: 50%;
         margin-top: -5px;
         background: var(--mint); border: 0;
-        box-shadow: 0 0 0 1px rgba(12, 18, 14, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 0 1px rgba(8, 24, 48, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
       }
       .row-range::-moz-range-thumb {
         width: 14px; height: 14px; border-radius: 50%;
         background: var(--mint); border: 0;
-        box-shadow: 0 0 0 1px rgba(12, 18, 14, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 0 1px rgba(8, 24, 48, 0.6), 0 1px 4px rgba(0, 0, 0, 0.5);
       }
       .row-range:focus-visible { outline: 1px solid var(--mint); outline-offset: 2px; }
       .row-range-num { width: 4ch; }
@@ -3477,10 +3494,10 @@
         position: fixed; z-index: 20; pointer-events: auto;
         max-height: min(280px, calc(46vh - var(--bars))); overflow-y: auto;
         padding: 6px 0; border-radius: 4px;
-        background: rgba(16, 22, 17, 0.97);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.28), 0 14px 32px rgba(0, 0, 0, 0.55);
+        background: rgba(8, 24, 48, 0.97);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.28), 0 14px 32px rgba(0, 0, 0, 0.55);
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       .drop-opt {
         display: block; width: 100%; box-sizing: border-box;
@@ -3488,7 +3505,7 @@
         font: inherit; font-size: 15px; text-align: left;
         padding: 7px 16px; cursor: pointer;
       }
-      .drop-opt:hover, .drop-opt.on { color: var(--cream); background: rgba(232, 168, 184, 0.12); }
+      .drop-opt:hover, .drop-opt.on { color: var(--cream); background: rgba(85, 170, 255, 0.12); }
       /* A narrow window stacks the curve over the rows rather than
          squeezing both. Same breakpoint the rest of the page uses. */
       /* One column: the curve stacks over the rows rather than squeezing
@@ -3609,9 +3626,9 @@
         .frame-bot {
           background: linear-gradient(
             0deg,
-            rgba(8, 12, 9, 0.97) 0%,
-            rgba(8, 12, 9, 0.93) 62%,
-            rgba(8, 12, 9, 0) 100%);
+            rgba(8, 24, 48, 0.97) 0%,
+            rgba(8, 24, 48, 0.93) 62%,
+            rgba(8, 24, 48, 0) 100%);
         }
       }
       /*
@@ -3723,7 +3740,7 @@
       }
       .screen-calibrate .osd-gimbal-plate {
         width: 120px; height: 120px;
-        background: rgba(12, 18, 14, 0.55);
+        background: rgba(8, 24, 48, 0.55);
       }
       /*
        * ONE CELL PER AXIS THE RADIO REPORTS. See setCalAxes in src/ui/ui.js
@@ -3742,27 +3759,27 @@
       .cal-axis { display: flex; align-items: center; gap: 6px; }
       .cal-axis-n {
         font-size: 10px; letter-spacing: 0.08em;
-        color: rgba(235, 230, 215, 0.45); min-width: 0.8em; text-align: right;
+        color: rgba(245, 249, 255, 0.45); min-width: 0.8em; text-align: right;
       }
       .cal-axis-track {
         position: relative; display: block;
         width: 54px; height: 4px; border-radius: 2px;
-        background: rgba(235, 230, 215, 0.14);
+        background: rgba(245, 249, 255, 0.14);
       }
       .cal-axis-span {
         position: absolute; top: 0; height: 100%; border-radius: 2px;
-        background: rgba(232, 168, 184, 0.30);
+        background: rgba(85, 170, 255, 0.30);
       }
       .cal-axis-dot {
         position: absolute; top: 50%; width: 6px; height: 6px;
         margin: -3px 0 0 -3px; border-radius: 50%;
-        background: rgba(235, 230, 215, 0.55);
+        background: rgba(245, 249, 255, 0.55);
       }
       .cal-axis.is-live .cal-axis-n { color: var(--amber); }
       .cal-axis.is-live .cal-axis-dot { background: var(--amber); }
       .cal-axis.is-mapped .cal-axis-n { color: var(--mint); }
       .cal-axis.is-mapped .cal-axis-dot { background: var(--mint); }
-      .cal-axis.is-mapped .cal-axis-span { background: rgba(125, 255, 180, 0.24); }
+      .cal-axis.is-mapped .cal-axis-span { background: rgba(156, 230, 255, 0.24); }
       .cal-steps {
         list-style: none; display: flex; flex-wrap: wrap;
         justify-content: center; gap: 8px 14px;
@@ -3771,7 +3788,7 @@
         /* 0.38 measured 3.1 to 1 against the panel, under the 4.5 floor for
            small text; 0.55 is 5.0 to 1 and still recedes behind the live
            step. */
-        color: rgba(235, 230, 215, 0.55);
+        color: rgba(245, 249, 255, 0.55);
       }
       .cal-steps li.on { color: var(--amber); }
       .cal-steps li.done { color: var(--mint); }
@@ -3801,7 +3818,7 @@
       }
       .cal-axis-ch {
         min-width: 4.4em; font-size: 10px; letter-spacing: 0.06em;
-        color: rgba(235, 230, 215, 0.45);
+        color: rgba(245, 249, 255, 0.45);
       }
       .cal-axis.is-mapped .cal-axis-ch { color: var(--mint); }
       .cal-axis.is-live .cal-axis-ch { color: var(--amber); }
@@ -3812,8 +3829,8 @@
       }
       .stickhelp-steps {
         max-width: 40em; margin: 0 0 16px; padding: 12px 16px;
-        border-radius: 6px; background: rgba(12, 18, 14, 0.62);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.28);
+        border-radius: 6px; background: rgba(8, 24, 48, 0.62);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.28);
         text-align: left;
       }
       .stickhelp-steps-title {
@@ -3837,18 +3854,18 @@
         width: 220px;
         padding: 14px 14px 12px;
         border-radius: 8px;
-        border: 1px solid rgba(243, 234, 212, 0.16);
-        background: rgba(12, 18, 14, 0.62);
+        border: 1px solid rgba(245, 249, 255, 0.16);
+        background: rgba(8, 24, 48, 0.62);
         text-align: center;
         transition: border-color 0.12s linear, box-shadow 0.12s linear;
       }
       .pad-card.is-live {
         border-color: var(--amber);
-        box-shadow: 0 0 0 1px rgba(255, 212, 92, 0.55);
+        box-shadow: 0 0 0 1px rgba(168, 214, 255, 0.55);
       }
       .pad-card.is-on {
         border-color: var(--mint);
-        box-shadow: 0 0 0 2px rgba(125, 255, 180, 0.7);
+        box-shadow: 0 0 0 2px rgba(156, 230, 255, 0.7);
       }
       .pad-card-title {
         font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
@@ -3860,7 +3877,7 @@
       }
       .pad-card .osd-gimbal-plate {
         width: 72px; height: 72px;
-        background: rgba(12, 18, 14, 0.55);
+        background: rgba(8, 24, 48, 0.55);
       }
       /* Shown since bug-9983ae9a. The plates used to draw raw axes, which
        * had no name to give them; they are drawn through the mapping the
@@ -3955,7 +3972,7 @@
         .screen-title {
           padding: 2.6vh 4.5vw 2vh;
           background:
-            linear-gradient(180deg, rgba(12, 18, 14, 0.70) 0%, rgba(12, 18, 14, 0.18) 16%, rgba(12, 18, 14, 0.04) 38%, rgba(12, 18, 14, 0.12) 58%, rgba(12, 18, 14, 0.84) 100%);
+            linear-gradient(180deg, rgba(8, 24, 48, 0.70) 0%, rgba(8, 24, 48, 0.18) 16%, rgba(8, 24, 48, 0.04) 38%, rgba(8, 24, 48, 0.12) 58%, rgba(8, 24, 48, 0.84) 100%);
         }
         .title-copy {
           width: 100%;
@@ -4117,7 +4134,7 @@
           height: clamp(70px, 24vh, 120px); min-height: 0;
         }
         .gate-card-art::after {
-          background: linear-gradient(180deg, rgba(12, 18, 14, 0) 52%, rgba(16, 22, 17, 0.85) 100%);
+          background: linear-gradient(180deg, rgba(8, 24, 48, 0) 52%, rgba(8, 24, 48, 0.85) 100%);
         }
         .gate-card-body { padding: 8px 12px 10px; gap: 4px; }
         .gate-card-blurb { display: none; }
@@ -4142,6 +4159,23 @@
       }
       .screen-maps .menu { grid-column: 2; min-width: min(320px, 86vw); }
       .screen-maps .menu-help { grid-column: 3; max-width: 22em; }
+      /* Keep the launch card's explanation readable on laptop-sized windows.
+         The shared three-column layout gave a 680 px menu only a narrow
+         sliver for its help text, wrapping every word onto a new line. */
+      @media (max-width: 1280px) {
+        .screen-launch .menu-stage {
+          display: flex; flex-direction: column; align-items: stretch;
+          width: 100%; max-width: 680px; margin: 10px auto 0;
+        }
+        .screen-launch .menu-stage > .menu {
+          grid-column: auto; width: 100%; min-width: 0; align-self: center;
+        }
+        .screen-launch .menu-help {
+          position: static; grid-column: auto; max-width: none;
+          padding: 8px 14px; margin: 6px 0 0; border-left: 0;
+          text-align: left;
+        }
+      }
       .screen-courses .menu-scroll { max-height: none; }
       .map-cards {
         display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
@@ -4151,9 +4185,9 @@
       .map-card {
         width: min(340px, 82vw); cursor: pointer; border-radius: 4px;
         overflow: hidden; position: relative;
-        background: rgba(16, 22, 17, 0.72);
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        background: rgba(8, 24, 48, 0.72);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
       }
       .map-card.on {
@@ -4214,7 +4248,7 @@
          cream frontage is not type at all. Cream with a shadow reads on
          both, so it is set once rather than twice. */
       .map-card.has-poster .map-card-still {
-        color: var(--cream); text-shadow: 0 1px 4px rgba(8, 12, 9, 0.9);
+        color: var(--cream); text-shadow: 0 1px 4px rgba(8, 24, 48, 0.9);
       }
       .map-card-still:empty { display: none; }
       /* First-time clip wait. Same copy as the boot screen: "loading"
@@ -4240,9 +4274,9 @@
         background:
           linear-gradient(
             to top,
-            rgba(9, 14, 10, 0.90) 0%,
-            rgba(9, 14, 10, 0.62) 42%,
-            rgba(9, 14, 10, 0.16) 100%
+            rgba(8, 24, 48, 0.90) 0%,
+            rgba(8, 24, 48, 0.62) 42%,
+            rgba(8, 24, 48, 0.16) 100%
           ),
           var(--poster) center / cover no-repeat;
         justify-content: flex-end;
@@ -4253,9 +4287,9 @@
       .map-card .map-reel-wait.map-reel-wait-film {
         background: linear-gradient(
           to top,
-          rgba(9, 14, 10, 0.90) 0%,
-          rgba(9, 14, 10, 0.62) 42%,
-          rgba(9, 14, 10, 0.16) 100%
+          rgba(8, 24, 48, 0.90) 0%,
+          rgba(8, 24, 48, 0.62) 42%,
+          rgba(8, 24, 48, 0.16) 100%
         );
         justify-content: flex-end;
       }
@@ -4315,7 +4349,7 @@
         overscroll-behavior: contain;
         pointer-events: auto;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
         /* The frame is drawn OVER this page, not beside it, so the edge a
            scroll into view stops at is the bar and not the window. Without
            this the cursor's scroll put a chosen card's Fly it at 856 to 900
@@ -4346,8 +4380,8 @@
       .course-card-wait {
         position: absolute; left: 10px; bottom: 8px; z-index: 1;
         padding: 3px 8px 4px; border-radius: 3px;
-        background: rgba(12, 18, 14, 0.86);
-        box-shadow: inset 0 0 0 1px rgba(125, 255, 180, 0.45);
+        background: rgba(8, 24, 48, 0.86);
+        box-shadow: inset 0 0 0 1px rgba(156, 230, 255, 0.45);
         color: var(--mint); font-size: 11px; font-weight: 700;
         letter-spacing: 0.1em; text-transform: uppercase;
       }
@@ -4385,10 +4419,10 @@
       .order-chip {
         font: inherit; font-size: 12px; letter-spacing: 0.03em;
         padding: 3px 11px 4px; border-radius: 999px; cursor: pointer;
-        color: var(--slate); background: rgba(16, 22, 17, 0.72);
-        border: 1px solid rgba(244, 236, 214, 0.18);
+        color: var(--slate); background: rgba(8, 24, 48, 0.72);
+        border: 1px solid rgba(245, 249, 255, 0.18);
       }
-      .order-chip:hover { color: var(--cream); border-color: rgba(232, 168, 184, 0.6); }
+      .order-chip:hover { color: var(--cream); border-color: rgba(85, 170, 255, 0.6); }
       .order-chip.on {
         color: var(--deep); background: var(--sakura); border-color: var(--sakura);
         font-weight: 700;
@@ -4419,7 +4453,7 @@
       .course-card-plus {
         display: flex; align-items: center; justify-content: center;
         width: 64px; height: 64px; border-radius: 50%;
-        border: 2px dashed rgba(125, 255, 180, 0.55);
+        border: 2px dashed rgba(156, 230, 255, 0.55);
         color: var(--mint); font-size: 40px; font-weight: 300; line-height: 1;
       }
       .course-card-new.on .course-card-plus { border-style: solid; }
@@ -4442,15 +4476,15 @@
         margin: 4px calc((100% - min(100%, var(--sheet-w, 100%))) / 2) 8px;
         padding: 2px 0 16px;
         position: relative;
-        border-top: 1px solid rgba(125, 255, 180, 0.5);
-        background: linear-gradient(rgba(125, 255, 180, 0.07), rgba(125, 255, 180, 0) 140px);
+        border-top: 1px solid rgba(156, 230, 255, 0.5);
+        background: linear-gradient(rgba(156, 230, 255, 0.07), rgba(156, 230, 255, 0) 140px);
       }
       .course-cards > .menu-stage.is-sheet::before {
         content: '';
         position: absolute; top: -9px;
         left: calc(var(--notch-x, 50%) - 9px);
         border-left: 9px solid transparent; border-right: 9px solid transparent;
-        border-bottom: 9px solid rgba(125, 255, 180, 0.5);
+        border-bottom: 9px solid rgba(156, 230, 255, 0.5);
       }
       .course-cards > .menu-stage.is-sheet .menu { margin-top: 14px; }
       /* The chosen track's top three, in the sheet's first column, which was
@@ -4465,7 +4499,7 @@
       }
       .sheet-podium-head {
         margin-bottom: 6px; padding-bottom: 6px;
-        border-bottom: 1px solid rgba(232, 168, 184, 0.22);
+        border-bottom: 1px solid rgba(85, 170, 255, 0.22);
         font-size: 11px; font-weight: 700; letter-spacing: 0.16em;
         text-transform: uppercase; color: var(--sakura);
       }
@@ -4496,14 +4530,14 @@
        */
       .howto-lede {
         max-width: 46em; margin: 0 0 18px;
-        color: rgba(235, 230, 215, 0.78);
+        color: rgba(245, 249, 255, 0.78);
         font-size: 15px; line-height: 1.6; text-align: center;
       }
       .howto-tabs { display: flex; gap: 8px; pointer-events: auto; }
       .howto-tab {
         appearance: none; border: 0; border-radius: 3px;
-        background: rgba(16, 22, 17, 0.72);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.14);
+        background: rgba(8, 24, 48, 0.72);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.14);
         color: rgba(238, 232, 216, 0.72);
         font: inherit; font-size: 13px; font-weight: 650;
         letter-spacing: 0.1em; text-transform: uppercase;
@@ -4511,7 +4545,7 @@
       }
       .howto-tab:hover { color: var(--cream); }
       .howto-tab.on {
-        background: rgba(232, 168, 184, 0.16);
+        background: rgba(85, 170, 255, 0.16);
         box-shadow: inset 0 0 0 1px var(--sakura);
         color: var(--cream);
       }
@@ -4525,7 +4559,7 @@
       .screen-howto .osd-gimbal-plate {
         width: clamp(96px, 12vw, 132px);
         height: clamp(96px, 12vw, 132px);
-        background: rgba(12, 18, 14, 0.55);
+        background: rgba(8, 24, 48, 0.55);
       }
       .howto-live {
         margin-top: 12px; font-size: 12px; letter-spacing: 0.08em;
@@ -4550,17 +4584,17 @@
       }
       .howto-mode {
         max-width: 52em; margin: 20px auto 0;
-        color: rgba(235, 230, 215, 0.62);
+        color: rgba(245, 249, 255, 0.62);
         font-size: 13.5px; line-height: 1.6; text-align: center;
       }
       .howto-wiki {
         display: block; margin: 14px auto 0; padding: 8px 14px;
         border: 0; border-radius: 4px; cursor: pointer; pointer-events: auto;
-        background: rgba(232, 168, 184, 0.16); color: var(--cream);
+        background: rgba(85, 170, 255, 0.16); color: var(--cream);
         font: inherit; font-size: 14px;
       }
       .howto-wiki:hover, .howto-wiki:focus-visible {
-        background: rgba(232, 168, 184, 0.28);
+        background: rgba(85, 170, 255, 0.28);
       }
 
       .cols { display: flex; gap: 6vw; flex-wrap: wrap; justify-content: center; }
@@ -4635,7 +4669,7 @@
         content: "";
         flex: 1 1 auto;
         height: 1px;
-        background: linear-gradient(90deg, rgba(232, 168, 184, 0.42), rgba(232, 168, 184, 0));
+        background: linear-gradient(90deg, rgba(85, 170, 255, 0.42), rgba(85, 170, 255, 0));
       }
       .credit-block h3 {
         margin: 0 0 14px;
@@ -4650,10 +4684,10 @@
          card each, because six names on cards reads as an advert and the
          point here is the credit. */
       .credit-rooms {
-        background: rgba(16, 22, 17, 0.72);
+        background: rgba(8, 24, 48, 0.72);
         border-radius: 4px;
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         padding: 14px 16px 16px;
       }
       .credit-room { margin: 0 0 6px; color: var(--cream); }
@@ -4666,10 +4700,10 @@
         gap: 10px;
         padding: 14px 16px 16px;
         margin-bottom: 10px;
-        background: rgba(16, 22, 17, 0.72);
+        background: rgba(8, 24, 48, 0.72);
         border-radius: 4px;
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
       }
       /* A person card puts the face and the slot number in a left rail
          with the copy beside it. A project card keeps its mark across
@@ -4686,7 +4720,7 @@
       .credit.maker {
         grid-template-columns: 84px 1fr;
         padding: 20px;
-        border-top-color: rgba(232, 168, 184, 0.55);
+        border-top-color: rgba(85, 170, 255, 0.55);
       }
       .credit.is-link {
         transition:
@@ -4699,7 +4733,7 @@
         transform: translateY(-2px);
         border-top-color: var(--sakura);
         box-shadow:
-          inset 0 0 0 1px rgba(244, 236, 214, 0.20),
+          inset 0 0 0 1px rgba(245, 249, 255, 0.20),
           0 8px 20px rgba(6, 10, 7, 0.55);
       }
       .credit.is-link:focus-within {
@@ -4728,8 +4762,8 @@
         height: 64px;
         border-radius: 4px;
         overflow: hidden;
-        background: rgba(12, 18, 14, 0.55);
-        box-shadow: 0 0 0 1px rgba(244, 236, 214, 0.16);
+        background: rgba(8, 24, 48, 0.55);
+        box-shadow: 0 0 0 1px rgba(245, 249, 255, 0.16);
         transition: box-shadow 0.16s ease;
       }
       .credit.maker .credit-face { width: 84px; height: 84px; }
@@ -4737,7 +4771,7 @@
       .credit-face.is-blank {
         display: grid;
         place-items: center;
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.45);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.45);
       }
       .credit-face-mark {
         color: var(--sakura);
@@ -4772,6 +4806,18 @@
       @media (min-width: 900px) {
         .credit-row.partners { grid-template-columns: repeat(3, 1fr); }
       }
+      .credit-row.partners.is-featured {
+        grid-template-columns: minmax(0, 1fr);
+        width: min(100%, 720px);
+      }
+      .credit-row.partners.is-featured .credit.partner {
+        padding: 22px 26px;
+        border-top-color: rgba(85, 170, 255, 0.7);
+        background: linear-gradient(115deg, rgba(85, 170, 255, 0.09), rgba(8, 24, 48, 0.72) 52%);
+      }
+      .credit-row.partners.is-featured .credit.partner .credit-logo img,
+      .credit-row.partners.is-featured .credit.partner .credit-logo svg { height: 58px; }
+      .credit-row.partners.is-featured .credit.partner .credit-role { color: var(--mint); }
       .credit.partner .credit-logo img, .credit.partner .credit-logo svg { height: 44px; }
       .credit-copy .credit-role {
         margin: 0 0 6px;
@@ -4785,10 +4831,10 @@
          under one edge say these are the same kind of thing. */
       .credit-row.pilots {
         gap: 0;
-        background: rgba(16, 22, 17, 0.72);
+        background: rgba(8, 24, 48, 0.72);
         border-radius: 4px;
-        border-top: 2px solid rgba(232, 168, 184, 0.28);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        border-top: 2px solid rgba(85, 170, 255, 0.28);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
         overflow: hidden;
       }
       /* A pilot row is a name, a number and a link out. Nothing is
@@ -4805,7 +4851,7 @@
       }
       .credit.pilot .credit-copy h4 { margin-bottom: 0; }
       .credit.pilot .credit-handle { margin-top: 7px; }
-      .credit.pilot + .credit.pilot { border-top: 1px solid rgba(244, 236, 214, 0.09); }
+      .credit.pilot + .credit.pilot { border-top: 1px solid rgba(245, 249, 255, 0.09); }
       /* A row's affordance is a bar down its leading edge, not a lift: a
          row in a list has nowhere to lift to without breaking the rules
          above and below it. */
@@ -4824,8 +4870,8 @@
       .credit.pilot.is-link:hover,
       .credit.pilot.is-link:focus-within {
         transform: none;
-        background: rgba(232, 168, 184, 0.055);
-        border-top-color: rgba(244, 236, 214, 0.09);
+        background: rgba(85, 170, 255, 0.055);
+        border-top-color: rgba(245, 249, 255, 0.09);
         box-shadow: none;
       }
       .credit.pilot.is-link:hover::before,
@@ -4901,7 +4947,7 @@
         letter-spacing: 0.06em;
         color: var(--cream);
         line-height: 1;
-        text-shadow: 2px 2px 0 rgba(20, 28, 20, 0.82);
+        text-shadow: 2px 2px 0 rgba(16, 40, 74, 0.82);
       }
       .maker-mark .fpv { color: var(--sakura); }
       .credit-copy h4 {
@@ -4947,7 +4993,7 @@
       .credit-copy a:hover, .credits-legal a:hover { color: var(--cream); }
       .credits-legal {
         margin: 14px 0 6px;
-        color: rgba(235, 230, 215, 0.55);
+        color: rgba(245, 249, 255, 0.55);
         font-size: 12px;
         line-height: 1.55;
         text-align: center;
@@ -5020,7 +5066,7 @@
         .screen-credits .menu { padding-top: 2px; padding-bottom: 2px; }
       }
 
-      .screen-modal { background: rgba(12, 18, 14, 0.72); }
+      .screen-modal { background: rgba(8, 24, 48, 0.72); }
 
       /* Finish. Same HUD hole as the title: the frozen craft and the
          course sit in the open side, the times own the left (or the
@@ -5037,8 +5083,8 @@
            under the command bar. */
         padding: max(4.5vh, calc(var(--bar-top) + 12px)) 4vw max(3vh, calc(var(--bar-bot) + 6px));
         background:
-          linear-gradient(90deg, rgba(12, 18, 14, 0.84) 0%, rgba(12, 18, 14, 0.50) 28%, rgba(12, 18, 14, 0.10) 54%, rgba(12, 18, 14, 0.12) 100%),
-          linear-gradient(180deg, rgba(12, 18, 14, 0.28) 0%, transparent 22%, transparent 64%, rgba(12, 18, 14, 0.40) 100%);
+          linear-gradient(90deg, rgba(8, 24, 48, 0.84) 0%, rgba(8, 24, 48, 0.50) 28%, rgba(8, 24, 48, 0.10) 54%, rgba(8, 24, 48, 0.12) 100%),
+          linear-gradient(180deg, rgba(8, 24, 48, 0.28) 0%, transparent 22%, transparent 64%, rgba(8, 24, 48, 0.40) 100%);
       }
       .results-copy {
         display: flex;
@@ -5065,7 +5111,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       .screen-results .results { max-height: none; overflow: visible; }
       .result-row.result-more { border-bottom: none; }
@@ -5086,7 +5132,7 @@
       .screen-results .results-head {
         margin: 14px 0 0; font-size: clamp(22px, 3.2vw, 36px); font-weight: 700;
         letter-spacing: 0.04em; color: var(--cream);
-        text-shadow: 2px 2px 0 rgba(20, 28, 20, 0.82), 0 8px 22px rgba(0, 0, 0, 0.32);
+        text-shadow: 2px 2px 0 rgba(16, 40, 74, 0.82), 0 8px 22px rgba(0, 0, 0, 0.32);
       }
       .screen-results.is-record .results-head { color: var(--mint); }
       .results-hero { margin-top: 10px; }
@@ -5099,11 +5145,11 @@
         margin-top: 2px;
         font-size: clamp(56px, 9vw, 112px); font-weight: 800;
         letter-spacing: 0.02em; line-height: 0.92; color: var(--cream);
-        text-shadow: 3px 3px 0 rgba(20, 28, 20, 0.82), 0 10px 28px rgba(0, 0, 0, 0.32);
+        text-shadow: 3px 3px 0 rgba(16, 40, 74, 0.82), 0 10px 28px rgba(0, 0, 0, 0.32);
       }
       .screen-results.is-record .results-hero-time {
         color: var(--mint);
-        text-shadow: 3px 3px 0 rgba(20, 28, 20, 0.82), 0 0 32px rgba(125, 255, 180, 0.28);
+        text-shadow: 3px 3px 0 rgba(16, 40, 74, 0.82), 0 0 32px rgba(156, 230, 255, 0.28);
       }
       .results-hero-meta {
         margin-top: 10px; font-size: 15px; color: var(--slate);
@@ -5119,7 +5165,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
-        scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+        scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
       }
       .results-empty {
         margin: 0; color: var(--slate); font-size: 15px; line-height: 1.55;
@@ -5132,7 +5178,7 @@
       }
       .result-row {
         padding: 8px 0 10px;
-        border-bottom: 1px solid rgba(244, 236, 214, 0.12);
+        border-bottom: 1px solid rgba(245, 249, 255, 0.12);
       }
       .result-main {
         display: flex; align-items: baseline; gap: 12px; font-size: 18px;
@@ -5146,12 +5192,12 @@
       .result-row.total .result-time { color: var(--sakura); }
       .result-bar {
         height: 3px; margin-top: 7px; border-radius: 2px;
-        background: rgba(12, 18, 14, 0.55);
+        background: rgba(8, 24, 48, 0.55);
         box-shadow: inset 0 0 0 1px rgba(157, 179, 200, 0.22);
         overflow: hidden;
       }
       .result-bar-fill {
-        height: 100%; width: 0; background: rgba(243, 234, 212, 0.55);
+        height: 100%; width: 0; background: rgba(245, 249, 255, 0.55);
       }
       .result-row.fastest .result-bar-fill { background: var(--mint); }
       /* The course the lap was flown on. Same drawing as the Courses cards
@@ -5161,7 +5207,7 @@
         width: min(100%, 26em);
         border-radius: 4px;
         overflow: hidden;
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.10);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.10);
       }
       .results-plan[hidden] { display: none; }
       .results-plan canvas.plan {
@@ -5171,7 +5217,7 @@
       }
       @media (max-height: 720px) { .results-plan { display: none; } }
       .results-note {
-        margin: 14px 0 0; color: rgba(235, 230, 215, 0.72);
+        margin: 14px 0 0; color: rgba(245, 249, 255, 0.72);
         font-size: 13.5px; line-height: 1.55; max-width: 34em;
         text-shadow: 0 1px 8px rgba(0, 0, 0, 0.65);
       }
@@ -5195,7 +5241,7 @@
       }
       .screen-results .menu {
         min-width: 0; width: 100%; margin-top: 0;
-        background: rgba(16, 22, 17, 0.55);
+        background: rgba(8, 24, 48, 0.55);
       }
       .screen-results .menu-scroll { max-height: min(calc(34vh - var(--bars)), 16em); }
       .screen-results .menu-help {
@@ -5231,7 +5277,7 @@
         .screen-results .menu {
           max-height: 160px; overflow-y: auto; overscroll-behavior: contain;
           scrollbar-width: thin;
-          scrollbar-color: rgba(232, 168, 184, 0.45) rgba(16, 22, 17, 0.55);
+          scrollbar-color: rgba(85, 170, 255, 0.45) rgba(8, 24, 48, 0.55);
         }
         .screen-results .results-hero-time { font-size: clamp(44px, min(9vw, 11vh), 112px); }
       }
@@ -5249,7 +5295,7 @@
         .screen-results {
           padding: 2.6vh 4.5vw 2vh;
           background:
-            linear-gradient(180deg, rgba(12, 18, 14, 0.28) 0%, rgba(12, 18, 14, 0.08) 18%, rgba(12, 18, 14, 0.10) 42%, rgba(12, 18, 14, 0.88) 100%);
+            linear-gradient(180deg, rgba(8, 24, 48, 0.28) 0%, rgba(8, 24, 48, 0.08) 18%, rgba(8, 24, 48, 0.10) 42%, rgba(8, 24, 48, 0.88) 100%);
         }
         .results-copy { width: 100%; }
         .results-hero-time { font-size: clamp(44px, 16vw, 76px); }
@@ -5382,7 +5428,7 @@
       }
       .loading-help .loading-detail {
         margin-top: 16px; padding-top: 12px;
-        border-top: 1px solid rgba(244, 236, 214, 0.16);
+        border-top: 1px solid rgba(245, 249, 255, 0.16);
         font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
         font-size: 11.5px; color: #7f9188; word-break: break-word;
       }
@@ -5394,7 +5440,7 @@
       }
       .loading-actions button.quiet {
         background: transparent; color: var(--cream); font-weight: 600;
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.3);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.3);
       }
       .loading-actions button:focus-visible {
         outline: 2px solid var(--cream); outline-offset: 2px;
@@ -5432,8 +5478,8 @@
         position: relative;
         width: min(420px, 68vw); height: 6px; border-radius: 3px;
         margin-top: 26px;
-        background: rgba(16, 22, 17, 0.8);
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.28);
+        background: rgba(8, 24, 48, 0.8);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.28);
         overflow: hidden;
       }
       /*
@@ -5471,7 +5517,7 @@
       .loading-sweep {
         position: absolute; inset: 0;
         background: linear-gradient(90deg,
-          transparent, rgba(243, 234, 212, 0.55), transparent);
+          transparent, rgba(245, 249, 255, 0.55), transparent);
         transform: translateX(-100%);
         animation: loading-sweep 1.35s linear infinite;
         will-change: transform;
@@ -5502,7 +5548,7 @@
       .name-dialog {
         position: absolute; inset: 0; z-index: 8;
         display: flex; align-items: center; justify-content: center;
-        background: rgba(12, 18, 14, 0.72);
+        background: rgba(8, 24, 48, 0.72);
         pointer-events: auto;
         user-select: text;
       }
@@ -5510,7 +5556,7 @@
       .name-dialog-box {
         width: min(420px, 86vw); padding: 22px 24px 20px;
         background: var(--panel); border-radius: 4px;
-        box-shadow: inset 0 0 0 1px rgba(232, 168, 184, 0.35), 0 18px 40px rgba(0, 0, 0, 0.55);
+        box-shadow: inset 0 0 0 1px rgba(85, 170, 255, 0.35), 0 18px 40px rgba(0, 0, 0, 0.55);
       }
       .name-dialog-box.bug {
         width: min(520px, 92vw);
@@ -5530,7 +5576,7 @@
       .name-dialog-input {
         display: block; width: 100%; box-sizing: border-box;
         margin: 8px 0 4px; padding: 9px 11px;
-        background: #121a14; border: 1px solid rgba(244, 236, 214, 0.16);
+        background: #121a14; border: 1px solid rgba(245, 249, 255, 0.16);
         border-radius: 4px; color: var(--cream); font: inherit; font-size: 16px;
       }
       .name-dialog-area { min-height: 4.5em; resize: vertical; }
@@ -5563,7 +5609,7 @@
       .name-dialog-door:hover { color: var(--cream); }
       .name-dialog-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .name-dialog-btn {
-        appearance: none; border: 1px solid rgba(244, 236, 214, 0.16);
+        appearance: none; border: 1px solid rgba(245, 249, 255, 0.16);
         background: #121a14; color: var(--slate); font: inherit;
         padding: 7px 14px; border-radius: 4px; cursor: pointer;
       }
@@ -5589,7 +5635,7 @@
         margin: 8px 0 4px;
       }
       .feel-chip {
-        appearance: none; border: 1px solid rgba(244, 236, 214, 0.16);
+        appearance: none; border: 1px solid rgba(245, 249, 255, 0.16);
         background: #121a14; color: var(--cream); font: inherit;
         font-size: 13px; padding: 6px 11px; border-radius: 999px;
         cursor: pointer;
@@ -5634,8 +5680,8 @@
       .bug-chip {
         position: absolute; top: 16px; right: 16px; z-index: 7;
         pointer-events: auto;
-        appearance: none; border: 1px solid rgba(232, 168, 184, 0.45);
-        background: rgba(16, 22, 17, 0.82); color: var(--cream);
+        appearance: none; border: 1px solid rgba(85, 170, 255, 0.45);
+        background: rgba(8, 24, 48, 0.82); color: var(--cream);
         font: 600 12px/1 var(--ui-font); letter-spacing: 0.06em;
         padding: 8px 12px; border-radius: 4px; cursor: pointer;
         box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
@@ -5643,7 +5689,7 @@
       /* Live flight: same corner, a shade quieter so the FPV frame still
          reads, still a real button. */
       .bug-chip.on-flight {
-        background: rgba(16, 22, 17, 0.55);
+        background: rgba(8, 24, 48, 0.55);
         text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
       }
       .bug-chip:hover { border-color: var(--sakura); color: var(--sakura); }
@@ -5663,8 +5709,8 @@
         display: flex; align-items: center; gap: 4px;
         pointer-events: auto;
         padding: 3px 6px 3px 3px; border-radius: 4px;
-        background: rgba(16, 22, 17, 0.50);
-        box-shadow: inset 0 0 0 1px rgba(244, 236, 214, 0.16);
+        background: rgba(8, 24, 48, 0.50);
+        box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.16);
         text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
       }
 
@@ -5714,7 +5760,7 @@
 
       .music-dock.on-flight {
         right: auto; left: 16px; top: 16px;
-        background: rgba(16, 22, 17, 0.38);
+        background: rgba(8, 24, 48, 0.38);
       }
       .music-dock.is-muted { opacity: 0.5; }
       /*
@@ -5743,10 +5789,10 @@
       .music-skip {
         appearance: none; border: 0; border-radius: 3px;
         width: 26px; height: 24px; padding: 0;
-        background: rgba(232, 168, 184, 0.14); color: var(--cream);
+        background: rgba(85, 170, 255, 0.14); color: var(--cream);
         font: 700 16px/1 var(--ui-font); cursor: pointer;
       }
-      .music-skip:hover { background: rgba(232, 168, 184, 0.32); color: var(--sakura); }
+      .music-skip:hover { background: rgba(85, 170, 255, 0.32); color: var(--sakura); }
       /* The name is the mute, so it is a button and has to stop looking
          like one: no border, no fill, the dock's own ground. The padding
          is what makes it a hit box rather than a line of text, and it is
@@ -5759,7 +5805,7 @@
         padding: 4px 6px; cursor: pointer;
         font: 11px/1.2 var(--ui-font); letter-spacing: 0.04em; color: var(--cream);
       }
-      .music-title:hover { background: rgba(232, 168, 184, 0.14); color: var(--sakura); }
+      .music-title:hover { background: rgba(85, 170, 255, 0.14); color: var(--sakura); }
       /* Muted. The dock is already at half opacity, so the line through the
          name is what says this is a state and not a dim screen: a reader
          who cannot see the difference between 0.5 and 1.0 can see a rule
