@@ -85,12 +85,12 @@ export const MEASURED_MS = {
 };
 
 const STAGE_NAMES = {
-  three: 'Renderer',
-  board: 'Board',
-  sim: 'Flight controller',
-  module: 'Map',
-  world: 'World',
-  frame: 'First frame',
+  three: 'grafik motoru',
+  board: 'çevrim içi pano',
+  sim: 'uçuş kontrolcüsü',
+  module: 'harita',
+  world: 'sahne',
+  frame: 'ilk görüntü',
 };
 
 /*
@@ -115,12 +115,12 @@ const STAGE_NAMES = {
  * label on a box.
  */
 const STAGE_DOING = {
-  three: 'Loading the renderer',
-  board: 'Asking the board',
-  sim: 'Starting the flight controller',
-  module: 'Loading the map',
-  world: 'Building the world',
-  frame: 'Drawing the first frame',
+  three: 'Grafik motoru yükleniyor',
+  board: 'Pano kontrol ediliyor',
+  sim: 'Uçuş kontrolcüsü başlatılıyor',
+  module: 'Harita yükleniyor',
+  world: 'Sahne hazırlanıyor',
+  frame: 'İlk görüntü çiziliyor',
 };
 
 /*
@@ -201,43 +201,43 @@ export const JOKE_MS = 4800;
 export const STALL_MS = 6000;
 
 export const LOADING_JOKES = [
-  'I complimented my quad on its propellers. It said thanks for the props.',
-  'My flight controller only eats Greek food. It loves a good gyro.',
-  'My LiPo went to prison. It\'s doing time in six cells.',
-  'My quad is a helicopter parent. It never stops hovering.',
-  'My tiny whoop just won the race. Big whoop.',
-  'Someone snapped my carbon. I\'ve been framed.',
-  'My quad broke an arm, and now it won\'t arm. Poetic.',
-  'Race directors are so exclusive. Pure gatekeeping.',
-  'My racing record is chequered. That\'s the whole point.',
-  'My VTX and I just click. Same wavelength.',
-  'My battery reads the news every morning. It likes to stay current.',
-  'The packs went on strike. It was revolting.',
-  'My old LiPo refuses to change. Too much internal resistance.',
-  'My battery left the army. Honourable discharge.',
-  'Why did the pilot bring soap to the track? Prop wash.',
-  'What does a baby battery call its mum? mAh.',
-  'My quad went low carb. Kept the fibre.',
-  'My quad was on a roll. Then a pitch. Then a yaw.',
-  'My quad asked for a raise, so I upped its rates.',
-  'The start gates are in mint condition. Never been hit. Yet.',
+  'Drone pervanelerine iltifat ettim. "Pervaneler mi?" diye sordu.',
+  'Uçuş kontrolcüm Yunan yemeklerini seviyor; en çok jiroskopu seviyor.',
+  'LiPo pilim altı hücreli bir yere kapatıldı.',
+  'Drone’um helikopter ebeveyn gibi; sürekli havada başımda dönüyor.',
+  'Minik whoop yarışı kazandı. Olay bu kadar büyük.',
+  'Karbon gövdem çatladı; artık çerçevem var.',
+  'Drone’un kolu kırıldı, artık arm olmuyor. Şiir gibi.',
+  'Yarış kapılarından geçmek zor; tam bir kapı meselesi.',
+  'Yarış geçmişim damalı; zaten pistin teması bu.',
+  'VTX’imle aynı frekanstayız; hemen anlaşıyoruz.',
+  'Pil her sabah haber okuyor; akımı takip ediyor.',
+  'Piller greve çıktı; ortam bir anda gerildi.',
+  'Eski LiPo pilim değişmek istemiyor; iç direnci fazla.',
+  'Pil ordudan ayrıldı; onurlu bir deşarj oldu.',
+  'Pilot piste neden sabun getirdi? Pervane rüzgârı için.',
+  'Minik pil annesine ne der? mAh.',
+  'Drone karbonhidratı azalttı; fiberi korudu.',
+  'Drone önce roll yaptı, sonra pitch, en son yaw.',
+  'Drone zam istedi; oranlarını artırdım.',
+  'Başlangıç kapıları yepyeni; henüz kimse çarpmadı.',
   /* 2026-09-24, the owner asked for more after a long first load. At 4.8 s a
    * joke, twenty ran out in 96 s; thirty five last nearly three minutes. */
-  'My antenna got married. The reception was fantastic.',
-  'Never trust a gyro. It\'s always spinning a story.',
-  'My flight controller never loses its temper. Endless PIDience.',
-  'The ESC and the motor had an argument. Things got heated.',
-  'My motors won an award. Outstanding in their field.',
-  'I asked a pilot why they fly so low. They said it keeps them grounded.',
-  'My quad started a band. Mostly drone music.',
-  'My goggles and I broke up. I just couldn\'t see us together.',
-  'My quad is stuck in a tree again. It says it\'s branching out.',
-  'I clipped a hedge on the last lap. Officially, a bush landing.',
-  'My quad is terrible at poker. One crash and it folds.',
-  'I asked my quad to do my taxes. It filed a return to home.',
-  'My pack was feeling flat, so I gave it a pep talk. Now it\'s fully charged.',
-  'The prop shop had a huge sale. Business was really picking up.',
-  'My quad failed its exams. Too many crashes in the finals.',
+  'Antenim evlendi; çekim gücü harikaydı.',
+  'Jiroskopa güvenme; her zaman bir şeyler döndürür.',
+  'Uçuş kontrolcüm sabrını hiç yitirmez; PID’lemesi sonsuz.',
+  'ESC ile motor tartıştı; ortam iyice ısındı.',
+  'Motorlarım ödül aldı; sahalarında çok başarılılar.',
+  'Pilota neden bu kadar alçaktan uçtuğunu sordum. "Yere sağlam basmak için," dedi.',
+  'Drone bir müzik grubu kurdu; çoğunlukla drone müziği çalıyorlar.',
+  'Gözlüğümle yollarımızı ayırdık; birlikte geleceğimizi göremedim.',
+  'Drone yine ağaca takıldı; dallanıp budaklandığını söylüyor.',
+  'Son turda çite sürttüm; resmen çalı inişi yaptım.',
+  'Drone pokerde çok kötü; bir çarpışmada hemen dağılıyor.',
+  'Drone’dan vergilerimi yapmasını istedim; eve dönüş beyannamesi verdi.',
+  'Pilimin morali bozuktu; biraz gaz verdim, şimdi tam dolu.',
+  'Pervane dükkânında büyük indirim var; işler havalanıyor.',
+  'Drone sınavları geçemedi; finalde çok çakıldı.',
 ];
 
 export function quotedJoke(index, offset) {
@@ -450,38 +450,38 @@ export function recoveryAdvice(probe, message) {
   const looksNetwork = /fetch|network|load|import|CDN|cdn|jsdelivr|timeout|Failed to/i.test(text);
 
   if (!probe.wasm) {
-    why = 'This browser cannot run WebAssembly, which is what the flight controller is compiled to.';
-    steps.push('Open the simulator in a <b>current Chrome, Edge or Firefox</b>. Every browser released since about 2017 supports WebAssembly, so a browser that does not is either very old or has it switched off by policy.');
+    why = 'Bu tarayıcı, uçuş kontrolcüsünün çalışması için gereken WebAssembly desteğini sunmuyor.';
+    steps.push('Simülatörü güncel <b>Chrome, Edge veya Firefox</b> ile açın.');
   } else if (!probe.webgl2) {
     why = probe.webgl1
-      ? 'This browser has WebGL 1 but not WebGL 2, and the renderer needs WebGL 2.'
-      : 'This browser is not giving the page a WebGL context at all, so nothing can be drawn.';
-    steps.push('Turn <b>hardware acceleration</b> back on. In Chrome and Edge it is Settings, System, "Use graphics acceleration when available". In Firefox it is Settings, General, Performance.');
-    steps.push('Update your <b>graphics driver</b>, then restart the browser. A blocked driver is the most common reason a working machine has no WebGL 2.');
-    steps.push('Try a different browser: <b>Chrome, Edge or Firefox</b>, all current.');
+      ? 'Bu tarayıcıda WebGL 1 var, ancak görüntü motorunun ihtiyaç duyduğu WebGL 2 yok.'
+      : 'Tarayıcı WebGL bağlantısı kuramadı; bu nedenle görüntü oluşturulamıyor.';
+    steps.push('<b>Donanım hızlandırmayı</b> açın. Chrome ve Edge tarayıcılarında Ayarlar > Sistem, Firefox tarayıcısında Ayarlar > Genel > Performans bölümündedir.');
+    steps.push('<b>Ekran kartı sürücüsünü</b> güncelleyip tarayıcıyı yeniden başlatın.');
+    steps.push('Güncel <b>Chrome, Edge veya Firefox</b> ile tekrar deneyin.');
   } else if (looksNetwork || !probe.online) {
     why = probe.online
-      ? 'Something the page needed did not arrive. The renderer comes from a CDN, so a blocker or a work network can stop it.'
-      : 'This device looks offline.';
-    steps.push('Check the connection, then <b>reload</b>.');
-    steps.push('Turn off <b>ad blockers and script blockers</b> for this site, or allow <b>cdn.jsdelivr.net</b>. That is where the renderer is served from.');
-    steps.push('If you are on a work or school network, a proxy may be blocking the CDN. Try a <b>home network or a phone hotspot</b>.');
+      ? 'Gerekli dosyalardan biri yüklenemedi. İçerik ağı veya engelleyici bağlantıyı kesmiş olabilir.'
+      : 'Cihaz çevrim dışı görünüyor.';
+    steps.push('Bağlantınızı kontrol edip sayfayı <b>yenileyin</b>.');
+    steps.push('Bu site için <b>reklam ve betik engelleyicileri</b> kapatın veya gerekli dosyalara izin verin.');
+    steps.push('İş ya da okul ağı kullanıyorsanız <b>ev ağı veya telefon erişim noktasıyla</b> deneyin.');
   } else {
-    why = 'The page got far enough to start, then stopped. That usually means a resource went missing or an extension interfered.';
-    steps.push('<b>Reload without the cache</b>: Ctrl and Shift and R, or Cmd and Shift and R on a Mac.');
-    steps.push('Try a <b>private window</b>. If it works there, an extension is the cause.');
-    steps.push('Try <b>Chrome, Edge or Firefox</b>, current version.');
+    why = 'Sayfa başlatma sırasında durdu. Bir dosya eksik olabilir veya tarayıcı eklentisi yüklemeyi engelliyor olabilir.';
+    steps.push('<b>Önbelleği atlayarak yenileyin</b>: Ctrl + Shift + R; Mac bilgisayarlarda Cmd + Shift + R.');
+    steps.push('<b>Gizli pencerede</b> deneyin. Orada çalışırsa bir eklenti engelliyor olabilir.');
+    steps.push('Güncel <b>Chrome, Edge veya Firefox</b> ile tekrar deneyin.');
   }
 
   /* Conditions that do not stop the boot on their own but make it fragile,
    * so they are worth saying once the real cause is named. */
   if (probe.softwareRenderer) {
-    steps.push(`Your browser is drawing with the <b>CPU</b> rather than the GPU${probe.renderer ? ` (${probe.renderer})` : ''}. It may load and then run very slowly. Turning hardware acceleration on fixes this too.`);
+    steps.push(`Tarayıcı görüntüyü GPU yerine <b>işlemciyle</b> çiziyor${probe.renderer ? ` (${probe.renderer})` : ''}. Simülatör açılabilir ama yavaş çalışabilir. Donanım hızlandırmayı açın.`);
   }
   if (!probe.storage) {
-    steps.push('This browser is <b>blocking site data</b>, so settings and your times cannot be saved. A private window does this. Allow site data for this page if you want anything kept.');
+    steps.push('Tarayıcı <b>site verilerini engelliyor</b>; ayarlarınız ve dereceleriniz kaydedilemez. Gizli pencere yerine site verilerine izin verin.');
   }
-  steps.push('If none of that works, the <b>Report a bug</b> link on the title screen sends the details, or open the browser console with F12 and copy what is in red.');
+  steps.push('Sorun sürerse ana ekrandaki <b>Hata bildir</b> seçeneğini kullanın veya F12 ile tarayıcı konsolunu açıp kırmızı hata iletisini paylaşın.');
   return { why, steps };
 }
 
@@ -543,7 +543,7 @@ export class Loading {
     this.bar.style.background = '';
     this.jokeEl.classList.remove('is-error');
     this.visible = true;
-    this.stageEl.textContent = 'loading';
+    this.stageEl.textContent = 'Yükleniyor';
     /* Back to nothing, with no transition, or the new load's first aim is a
      * five second slide back from wherever the last one finished. */
     this.aimed = 0;
@@ -819,15 +819,15 @@ export class Loading {
     }
     const stage = this.index >= 0 ? this.stages[this.index] : null;
     const running = this.stageStartedAt ? performance.now() - this.stageStartedAt : 0;
-    let text = 'loading';
+    let text = 'Yükleniyor';
     if (stage && running > STALL_MS) {
       const name = (STAGE_NAMES[stage.id] || stage.id).toLowerCase();
-      text = `still loading the ${name}`;
+      text = `${name} yüklemesi beklenenden uzun sürüyor`;
       if (this.detail) {
-        text += `, ${this.detail}`;
+        text += ` · ${this.detail}`;
       }
     } else if (stage) {
-      text = STAGE_DOING[stage.id] || `Loading the ${(STAGE_NAMES[stage.id] || stage.id).toLowerCase()}`;
+      text = STAGE_DOING[stage.id] || `${(STAGE_NAMES[stage.id] || stage.id)} yükleniyor`;
     }
     if (this.stageEl.textContent !== text) {
       this.stageEl.textContent = text;
@@ -897,13 +897,13 @@ export class Loading {
       probe = {};
       advice = {
         why: '',
-        steps: ['Reload the page. If it keeps failing, try a current <b>Chrome, Edge or Firefox</b>.'],
+        steps: ['Sayfayı yenileyin. Sorun sürerse güncel <b>Chrome, Edge veya Firefox</b> ile deneyin.'],
       };
     }
 
     help.textContent = '';
     const h = document.createElement('h3');
-    h.textContent = 'What to try';
+    h.textContent = 'Şunları deneyin';
     help.append(h);
 
     if (advice.why) {
@@ -939,7 +939,7 @@ export class Loading {
     actions.className = 'loading-actions';
     const retry = document.createElement('button');
     retry.type = 'button';
-    retry.textContent = 'Try again';
+    retry.textContent = 'Yeniden dene';
     retry.addEventListener('click', () => {
       /* A plain reload. The cache-bypassing one needs a keystroke the page
        * cannot send, which is why it is step one in the list above. */
@@ -950,10 +950,10 @@ export class Loading {
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.className = 'quiet';
-    copy.textContent = 'Copy the details';
+    copy.textContent = 'Hata bilgilerini kopyala';
     copy.addEventListener('click', async () => {
       const report = [
-        `WebFPV failed to start: ${message}`,
+        `Tümer Savunma Drone Simülatörü başlatılamadı: ${message}`,
         `browser: ${probe.engine || 'unknown'} ${probe.version || ''}`.trim(),
         `webgl2: ${probe.webgl2} webgl1: ${probe.webgl1} wasm: ${probe.wasm}`,
         `storage: ${probe.storage} online: ${probe.online}`,
@@ -963,11 +963,11 @@ export class Loading {
       ].filter(Boolean).join('\n');
       try {
         await navigator.clipboard.writeText(report);
-        copy.textContent = 'Copied';
+        copy.textContent = 'Kopyalandı';
       } catch (e) {
         /* Clipboard refused, which is common without a secure context. Show
          * the text instead so it can still be selected by hand. */
-        copy.textContent = 'Select and copy';
+        copy.textContent = 'Seçip kopyalayın';
         const pre = document.createElement('div');
         pre.className = 'loading-detail';
         pre.textContent = report;
@@ -981,9 +981,9 @@ export class Loading {
     detail.className = 'loading-detail';
     detail.textContent = [
       probe.engine ? `${probe.engine} ${probe.version}` : '',
-      `WebGL2 ${probe.webgl2 ? 'yes' : 'no'}`,
-      `WebAssembly ${probe.wasm ? 'yes' : 'no'}`,
-      `site data ${probe.storage ? 'yes' : 'blocked'}`,
+      `WebGL 2 ${probe.webgl2 ? 'var' : 'yok'}`,
+      `WebAssembly ${probe.wasm ? 'var' : 'yok'}`,
+      `site verisi ${probe.storage ? 'açık' : 'engelli'}`,
     ].filter(Boolean).join('  .  ');
     help.append(detail);
 

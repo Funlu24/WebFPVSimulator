@@ -51,16 +51,16 @@ import { LINK_PRESETS } from '../input/link.js';
 
 /* Wording for input.js's calibration steps. The order lives there. */
 const CAL_LABELS = {
-  center: 'Centre',
-  sweep: 'Full range',
-  throttle: 'Throttle',
-  roll: 'Roll',
-  pitch: 'Pitch',
-  yaw: 'Yaw',
+  center: 'Merkez',
+  sweep: 'Tam aralık',
+  throttle: 'Gaz',
+  roll: 'Yatış',
+  pitch: 'Öne eğim',
+  yaw: 'Sapma',
   /* Only asked of a radio that reports no buttons. See SELECT_STEP in
    * input.js. */
-  select: 'Menu switch',
-  confirm: 'Check',
+  select: 'Menü anahtarı',
+  confirm: 'Onay',
 };
 import { MENU_TRACKS, trackById, musicIds } from '../render/tracks.js';
 import { CUSTOM_TUNE, TUNES, tuneById, tunesFor } from '../../configs/registry.js';
@@ -360,11 +360,11 @@ const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'laun
  * checks, CSS and saved cursors name rooms by id and a pilot never sees one.
  */
 const SCREEN_TITLES = {
-  title: 'WebFPV',
+  title: 'Tümer Savunma',
   courses: 'Pistler',
   freestyle: 'Haritalar',
   pilot: 'Ayarlar',
-  quad: 'Quad',
+  quad: 'Drone',
   launch: 'Uçmadan önce',
   standings: 'Sıralama',
   rates: 'Oranlar',
@@ -378,7 +378,7 @@ const SCREEN_TITLES = {
   stickhelp: 'Çubuk yardımı',
   advanced: 'Gelişmiş',
   calibrate: 'Çubukları kalibre et',
-  padpick: 'Joystick seç',
+  padpick: 'Kumanda seçimi',
 };
 /*
  * The crumb's trail, as the room is reached from its home. crumbTrail()
@@ -390,12 +390,12 @@ const CRUMBS = {
   courses: ['Pistler'],
   freestyle: ['Haritalar'],
   pilot: ['Ayarlar'],
-  quad: ['Quad'],
+  quad: ['Drone'],
   launch: ['Uçmadan önce'],
   standings: ['Pistler', 'Sıralama'],
   rates: ['Ayarlar', 'Oranlar'],
-  pids: ['Quad', 'Tune'],
-  fc: ['Quad', 'Firmware tezgâhı'],
+  pids: ['Drone', 'PID ayarları'],
+  fc: ['Drone', 'Firmware tezgâhı'],
   paused: ['Duraklatıldı'],
   results: ['Uçuş tamamlandı'],
   howto: ['Nasıl uçulur'],
@@ -404,8 +404,8 @@ const CRUMBS = {
   stickhelp: ['Ayarlar', 'Çubuk yardımı'],
   advanced: ['Ayarlar', 'Gelişmiş'],
   calibrate: ['Ayarlar', 'Çubukları kalibre et'],
-  padpick: ['Ayarlar', 'Joystick seç'],
-  title: ['WebFPV'],
+  padpick: ['Ayarlar', 'Kumanda seçimi'],
+  title: ['Tümer Savunma'],
 };
 
 /*
@@ -443,7 +443,7 @@ function townNote(s, failure) {
   if (world && failure && failure.map === world.id) {
     return `${world.name} did not load. Fly reloads the page and tries again.`;
   }
-  return 'The town, a map of your own, or one from the board. No gates. Open it and fly.';
+  return 'Kasaba, kendi haritanız veya panodaki pistler. Kapı yok; seçin ve uçun.';
 }
 
 /*
@@ -577,7 +577,7 @@ export function pacingTimerOn(s) {
  * Each is one class on .osd-cross in index.html; see syncCrosshair.
  */
 export const CROSSHAIRS = ['off', 'wings', 'cross', 'dot'];
-const CROSSHAIR_LABEL = { off: 'Off', wings: 'Wings', cross: 'Cross', dot: 'Dot' };
+const CROSSHAIR_LABEL = { off: 'Kapalı', wings: 'Kanatlar', cross: 'Artı', dot: 'Nokta' };
 
 /*
  * WEIGHT: the pilot's answer to "floaty", as a percentage of the weight the
@@ -820,7 +820,7 @@ function counterBestSentence(s) {
  * and wrong with a freestyle map seated. The builder's strip says the same. */
 /* The orders the Tracks room offers for the board's half: the same three
  * the board's own Order menu leads with, in its words. */
-const COURSE_ORDERS = [['flown', 'Most flown'], ['newest', 'Newest'], ['name', 'A to Z']];
+const COURSE_ORDERS = [['flown', 'En çok uçulan'], ['newest', 'En yeni'], ['name', 'Ada göre']];
 const COURSE_ORDER_IDS = COURSE_ORDERS.map(([id]) => id);
 
 const KEEP_NOTE = 'Oluşturduğunuz pistler bu tarayıcıda kalır. Tarayıcı verisini silmek ya da başka bir cihaz kullanmak sıfırdan başlatır. Herkese açık panoya koymak için bir pist yayınlayın.';
@@ -2288,16 +2288,16 @@ function makeTuneGroup() {
     min: AIR_GRIP_MIN,
     max: AIR_GRIP_MAX,
     step: AIR_GRIP_STEP,
-    left: 'Carries',
-    right: 'Grips',
+    left: 'Süzülür',
+    right: 'Tutar',
     label: 'Air grip, how far the quad carries',
   });
   const power = makeTuneRow({
     min: MOTOR_KV_MIN,
     max: MOTOR_KV_MAX,
     step: MOTOR_KV_STEP,
-    left: 'Softer',
-    right: 'Punchier',
+    left: 'Yumuşak',
+    right: 'Güçlü',
     label: 'Motor power, how hard the motors pull',
   });
   const reset = btn('osd-air-hint-btn osd-tune-reset', 'Reset to stock');
@@ -2462,13 +2462,109 @@ function placeSticks(left, right, ch, mode = DEFAULT_STICK_MODE) {
   }
 }
 
+/* Keep short interface labels in one place so labels supplied by settings,
+ * buttons and menu rows use the same Turkish wording. */
+const UI_TRANSLATIONS = new Map([
+  ['Quad', 'Drone'],
+  ['FPV wiki', 'FPV rehberi'],
+  ['Roll', 'Yatış'],
+  ['Pitch', 'Öne eğim'],
+  ['Yaw', 'Sapma'],
+  ['Throttle', 'Gaz'],
+  ['Crosshairs', 'Nişangâh'],
+  ['Fly', 'Uç'],
+  ['Track', 'Pist'],
+  ['Tracks', 'Pistler'],
+  ['Courses', 'Pistler'],
+  ['Settings', 'Ayarlar'],
+  ['Tune', 'PID ayarı'],
+  ['Keyboard', 'Klavye'],
+  ['Touch', 'Dokunmatik'],
+  ['Radio or gamepad', 'Kumanda veya oyun kolu'],
+  ['Launch control', 'Kalkış kontrolü'],
+  ['Flight controller', 'Uçuş kontrolcüsü'],
+  ['Renderer', 'Grafik motoru'],
+  ['World', 'Sahne'],
+  ['First frame', 'İlk görüntü'],
+  ['On', 'Açık'],
+  ['Off', 'Kapalı'],
+  ['Auto', 'Otomatik'],
+  ['Low', 'Düşük'],
+  ['Medium', 'Orta'],
+  ['High', 'Yüksek'],
+  ['Back', 'Geri'],
+  ['Save', 'Kaydet'],
+  ['Cancel', 'İptal'],
+  ['Close', 'Kapat'],
+  ['Exit', 'Çık'],
+  ['Resume', 'Devam et'],
+  ['Restart', 'Yeniden başlat'],
+  ['Pause', 'Duraklat'],
+  ['Reset', 'Sıfırla'],
+  ['Apply', 'Uygula'],
+  ['Delete', 'Sil'],
+  ['Share', 'Paylaş'],
+  ['Download', 'İndir'],
+  ['Upload', 'Yükle'],
+  ['Yes', 'Evet'],
+  ['No', 'Hayır'],
+  ['Got it', 'Anladım'],
+  ['Reset to stock', 'Varsayılanı sıfırla'],
+  ['Save and exit', 'Kaydet ve çık'],
+  ['Exit without saving', 'Kaydetmeden çık'],
+  ['No switch, skip', 'Anahtar yok, geç'],
+  ['Throttle zero is here', 'Gazın sıfır noktası burada'],
+  ['Reverse', 'Ters çevir'],
+  ['Swap stick mode', 'Çubuk düzenini değiştir'],
+  ['Save mapping', 'Eşlemeyi kaydet'],
+  ['Yes, use this', 'Evet, bunu kullan'],
+  ['No, not this one', 'Hayır, bu değil'],
+  ['Use keyboard instead', 'Klavyeyi kullan'],
+  ['Report bug, give feedback', 'Hata bildir / geri bildirim gönder'],
+  ['Send it', 'Gönder'],
+  ['Keep editing', 'Düzenlemeye devam et'],
+  ['Discard', 'Vazgeç'],
+  ['Send this result', 'Sonucu gönder'],
+  ['Don\'t send', 'Gönderme'],
+  ['Not now', 'Şimdi değil'],
+  ['Better than stock', 'Varsayılandan daha iyi'],
+  ['Same or worse', 'Aynı veya daha kötü'],
+  ['Stop asking', 'Bir daha sorma'],
+  ['Turn on flight feel tuning', 'Uçuş hissi ayarını aç'],
+  ['Tune sent', 'Ayar gönderildi'],
+  ['Share this tune', 'Bu ayarı paylaş'],
+  ['Your best still stands', 'Rekorun hâlâ geçerli'],
+  ['Run posted', 'Uçuş panoda yayımlandı'],
+  ['Share card saved', 'Paylaşım görseli kaydedildi'],
+  ['Save share card', 'Paylaşım görselini kaydet'],
+  ['Air grip, how far the quad carries', 'Havadaki tutuş, dronun ne kadar süzüldüğü'],
+  ['Motor power, how hard the motors pull', 'Motor gücü, motorların itiş kuvveti'],
+  ['Time posted', 'Süre gönderildi'],
+  ['Your name', 'Pilot adı'],
+  ['What it is', 'Nedir?'],
+  ['Turn it on', 'Açma'],
+  ['Set the angle', 'Açıyı ayarlama'],
+  ['Go', 'Kalkış'],
+  ['Left stick', 'Sol çubuk'],
+  ['Right stick', 'Sağ çubuk'],
+  ['Before you fly', 'Uçuştan önce'],
+  ['In the menus', 'Menülerde'],
+  ['Landscape', 'Yatay tutuş'],
+  ['The whole corner', 'Köşenin tamamı'],
+  ['Gates', 'Kapılar'],
+]);
+
+function uiText(text) {
+  return typeof text === 'string' ? (UI_TRANSLATIONS.get(text) ?? text) : text;
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) {
     n.className = cls;
   }
   if (text != null) {
-    n.textContent = text;
+    n.textContent = uiText(text);
   }
   return n;
 }
@@ -2481,7 +2577,7 @@ function btn(cls, text) {
 
 function wordmark() {
   const h = el('h1', 'wordmark');
-  h.append(document.createTextNode('WEB'), el('span', 'fpv', 'FPV'));
+  h.append(document.createTextNode('TÜMER '), el('span', 'fpv', 'SAVUNMA'));
   return h;
 }
 
@@ -5176,7 +5272,7 @@ export class Ui {
     const copy = el('div', 'title-copy');
     const brand = el('div', 'brand');
     this.brandSub = el('div', 'brand-sub', '');
-    brand.append(wordmark(), this.brandSub);
+    brand.append(wordmark(), el('div', 'brand-tagline', 'FPV DRONE SİMÜLATÖRÜ'), this.brandSub);
     /* Beta notice. The only line on this screen that is about the
      * software rather than about flying, so it wears the amber an
      * instrument wears rather than the mint a record does, and it sits
@@ -5191,9 +5287,9 @@ export class Ui {
      * title and a screen reader's text instead. It shares a row with
      * Patreon, so both keep their place under the wordmark and the menu
      * gets the lines back. */
-    const betaLine = 'Expect bugs and rough edges. It is still being built, and it will improve.';
+    const betaLine = 'Deneme sürümündesiniz. Geliştirme devam ediyor; karşılaştığınız hataları bize bildirebilirsiniz.';
     const beta = el('p', 'beta-note');
-    const betaTag = el('span', 'beta-tag', 'Beta');
+    const betaTag = el('span', 'beta-tag', 'Deneme sürümü');
     betaTag.title = betaLine;
     beta.append(betaTag, el('span', 'sr-only', ` ${betaLine}`));
     const chips = el('div', 'brand-chips');
@@ -5232,9 +5328,9 @@ export class Ui {
      * the builder's own strip, which already said it.
      */
     /* First run only. */
-    this.firstNote = el('p', 'keep-note first-note', 'Quadın freni ve kanadı yok. Gitmek istediğiniz yöne çevirip gaz verin. Birkaç dakika içinde kapılardan geçmeye başlayacaksınız.');
+    this.firstNote = el('p', 'keep-note first-note', 'Dronun freni yoktur. Burnunu çevirdiğiniz yöne doğru gaz verin; birkaç dakika içinde kapılardan geçmeye başlayacaksınız.');
     brand.append(this.firstNote);
-    this.wikiTeaser = btn('wiki-teaser', 'Simulating FPV, for nerds');
+    this.wikiTeaser = btn('wiki-teaser', 'FPV uçuşunun fiziği');
     this.wikiTeaser.setAttribute('aria-label', 'FPV rehberini aç');
     this.wikiTeaser.addEventListener('click', () => this.act('wiki'));
     brand.append(this.wikiTeaser);
@@ -5293,7 +5389,7 @@ export class Ui {
     howto.append(el('h2', null, 'Nasıl uçulur'));
     /* ONE LINE (MENUS-PLAN.md 2.5). The gate colours went to the line under
      * the keys, with the rest of what a first run needs (see renderHowto). */
-    howto.append(el('p', 'howto-lede', 'Freni ve kanadı yoktur. Yavaşlamak veya dönmek için quadı başka yöne çevirip gaz verin.'));
+    howto.append(el('p', 'howto-lede', 'Dronun freni yoktur. Yön değiştirmek için burnunu çevirin; hızınızı gazla kontrol edin.'));
 
     const howtoTabs = el('div', 'howto-tabs');
     this.howtoTabs = {};
@@ -5301,8 +5397,8 @@ export class Ui {
      * the row because on that device it is the way this page's reader is
      * most likely holding the machine. */
     const tabList = [
-      ...(touchWanted() ? [['touch', 'Touch']] : []),
-      ['keyboard', 'Keyboard'], ['radio', 'Radio or gamepad'], ['launch', 'Launch control'],
+      ...(touchWanted() ? [['touch', 'Dokunmatik']] : []),
+      ['keyboard', 'Klavye'], ['radio', 'Kumanda'], ['launch', 'Yarış kalkış kontrolü'],
     ];
     for (const [id, label] of tabList) {
       const b = btn('howto-tab', label);
@@ -5314,8 +5410,8 @@ export class Ui {
 
     const howtoBody = el('div', 'howto-body');
     const rig = el('div', 'howto-rig');
-    this.howtoStickLeft = makeGimbal('Yaw, throttle');
-    this.howtoStickRight = makeGimbal('Roll, pitch');
+    this.howtoStickLeft = makeGimbal('Sapma, gaz');
+    this.howtoStickRight = makeGimbal('Yatış, eğim');
     const sticksRow = el('div', 'howto-sticks');
     sticksRow.append(this.howtoStickLeft.box, this.howtoStickRight.box);
     this.howtoLive = el('div', 'howto-live', '');
@@ -5326,7 +5422,7 @@ export class Ui {
 
     this.howtoMode = el('p', 'howto-mode', '');
     howto.append(this.howtoMode);
-    const howtoWiki = btn('howto-wiki', 'Why this works: the FPV wiki');
+    const howtoWiki = btn('howto-wiki', 'FPV uçuş rehberi');
     howtoWiki.addEventListener('click', () => this.act('wiki'));
     howto.append(howtoWiki);
 
@@ -8454,7 +8550,7 @@ export class Ui {
     if (this.screen === 'courses') {
       if (this.coursesLede) {
         const af = airframeById(this.settings.airframe);
-        this.coursesLede.textContent = `${af.name.toLowerCase()} için pistler. Quad uçağı değiştirir.`;
+        this.coursesLede.textContent = `${af.name.toLowerCase()} için pistler. Drone modelini buradan değiştirebilirsiniz.`;
       }
       const listing = liveListing('custom');
       const loaded = hasLoadedTrack();
@@ -11562,9 +11658,9 @@ export class Ui {
          * world this card flies. See the update below. */
         const stamp = stfLettering('map-card-stamp');
         stamp.hidden = true;
-        stamp.title = 'You found the STF mark here';
+        stamp.title = 'STF işaretini burada buldunuz';
         stamp.setAttribute('role', 'img');
-        stamp.setAttribute('aria-label', 'You found the STF mark here');
+        stamp.setAttribute('aria-label', 'STF işaretini burada buldunuz');
         body.append(name, tag);
         card.append(shot, still, stamp, body);
         card.addEventListener('mousemove', (e) => this.hoverCursor(e, i));
@@ -11584,7 +11680,7 @@ export class Ui {
       /* A map from the board flies in the built world too, and then it is
        * that map's card that says so, not Your map's. */
       const flying = c.id === this.settings.map && !(c.id === 'built' && this.sharedMap);
-      c.tag.textContent = flying ? 'Flying now' : '';
+      c.tag.textContent = flying ? 'Şu an uçuluyor' : '';
       /*
        * THE STAMP IS FOR THE WORLD THE CARD WOULD FLY, asked every render,
        * because Your map is whatever the builder's freestyle seat holds and
@@ -11657,9 +11753,9 @@ export class Ui {
         c.tag = el('div', 'map-card-tag', '');
         c.stamp = stfLettering('map-card-stamp');
         c.stamp.hidden = true;
-        c.stamp.title = 'You found the STF mark here';
+        c.stamp.title = 'STF işaretini burada buldunuz';
         c.stamp.setAttribute('role', 'img');
-        c.stamp.setAttribute('aria-label', 'You found the STF mark here');
+        c.stamp.setAttribute('aria-label', 'STF işaretini burada buldunuz');
         /* Dotted rather than spaced, as the standings lede is: the page
          * folds two spaces into one, and "by Mat 51 pieces 5 named gaps"
          * reads as one run of words. */
@@ -11682,7 +11778,7 @@ export class Ui {
     const flying = this.settings.map === 'built' && this.sharedMap ? this.sharedMap.id : null;
     this.boardMapCards.forEach((c, k) => {
       c.card.classList.toggle('on', k + offset === this.cursor);
-      c.tag.textContent = c.id === flying ? 'Flying now' : '';
+      c.tag.textContent = c.id === flying ? 'Şu an uçuluyor' : '';
       /* A plan drawn while the room was hidden had no size to draw at, so
        * it is drawn again the first time the room is up. */
       if (c.canvas && !c.painted) {
@@ -11764,17 +11860,17 @@ export class Ui {
           /* The designer where the board knows one, because the author is
            * whoever published it and on a track brought over from a series
            * those are two different people. */
-          meta.textContent = [byLine(t), `${t.gates} gate${t.gates === 1 ? '' : 's'}`]
+          meta.textContent = [byLine(t), `${t.gates} kapı`]
             .filter(Boolean)
             .join(' \u00b7 ');
           if (t.recordMs != null) {
             record.textContent = t.recordThree
-              ? `Record, three laps: ${formatTime(t.recordMs)}`
-              : `Record lap: ${formatTime(t.recordMs)}`;
+              ? `Üç tur rekoru: ${formatTime(t.recordMs)}`
+              : `Tur rekoru: ${formatTime(t.recordMs)}`;
           }
         } else {
           const size = fieldSize(plan);
-          meta.textContent = [`${it.course.seat.gates} gate${it.course.seat.gates === 1 ? '' : 's'}`, size]
+        meta.textContent = [`${it.course.seat.gates} kapı`, size]
             .filter(Boolean)
             .join(' \u00b7 ');
         }
@@ -11833,7 +11929,7 @@ export class Ui {
       if (c.wait.hidden === loading) {
         c.wait.hidden = !loading;
       }
-      c.tag.textContent = c.kind === 'current' && this.settings.map === 'custom' ? 'Flying now' : '';
+      c.tag.textContent = c.kind === 'current' && this.settings.map === 'custom' ? 'Şu an uçuluyor' : '';
     });
     this.placeCourseSheet();
   }
@@ -13654,63 +13750,63 @@ export class Ui {
     this.howtoKeys.textContent = '';
     const rows = source === 'touch'
       ? [
-        ['Left thumb', `${stickCaption(this.settings.stickMode, 'left')}.${thrNote(this.settings.stickMode, 'left')}`],
-        ['Right thumb', `${stickCaption(this.settings.stickMode, 'right')}.${thrNote(this.settings.stickMode, 'right')}`],
-        ['The whole corner', 'The pad is bigger than the drawing: the stick is wherever your thumb lands in the lower corner, and deflection is the drag from there.'],
-        ['Landscape', 'Turn the phone sideways. The pads sit under both thumbs, the way a radio sits in both hands.'],
-        ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll on the right pad to flip over. You do not have to time it. Let go, then take off.'],
-        ['Pause', 'The Pause chip, top right. Hits bounce. Time is the penalty. Resume, then pitch or roll if you are inverted.'],
-        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
+        ['Sol başparmak', `${stickCaption(this.settings.stickMode, 'left')}.${thrNote(this.settings.stickMode, 'left')}`],
+        ['Sağ başparmak', `${stickCaption(this.settings.stickMode, 'right')}.${thrNote(this.settings.stickMode, 'right')}`],
+        ['Köşenin tamamı', 'Ekrandaki çizimden daha geniş bir alan çalışır. Başparmağınızı alt köşeye koyun; çubuk, parmağınızı sürüklediğiniz yöne hareket eder.'],
+        ['Yatay tutuş', 'Telefonu yan çevirin. Kumanda tutar gibi iki başparmağınız da ekranın alt köşelerinde kalır.'],
+        ['Ters uçuş', 'Drone yere ters düşerse ekranda ters düzeltme uyarısı çıkar. Sağ çubukla yatış veya eğim vererek düzeltin. Zamanlamanız gerekmez. Çubuğu bırakıp yeniden havalanın.'],
+        ['Duraklatma', 'Sağ üstteki Duraklat düğmesini kullanın. Kapıya çarpınca geri sekersiniz ve süre cezası alırsınız. Devam ettikten sonra ters durumdaysanız çubuğu kullanarak düzeltin.'],
+        ['Kapılar', 'Yanıp sönen kapıdan geçin. Yeşil taraf doğru geçiş yönünü, kırmızı taraf ters yönü gösterir.'],
       ]
       : source === 'radio'
       ? [
-        [`Left stick (Mode ${normaliseStickMode(this.settings.stickMode)})`, `${stickCaption(this.settings.stickMode, 'left')}. Set the mode on the radio; this page follows it in Settings.`],
-        ['Right stick', `${stickCaption(this.settings.stickMode, 'right')}.`],
-        ['Before you fly', this.radioBlind
+        [`Sol çubuk (Mod ${normaliseStickMode(this.settings.stickMode)})`, `${stickCaption(this.settings.stickMode, 'left')}. Kumandanızın modunu Ayarlar'da seçin; bu sayfa seçiminizi izler.`],
+        ['Sağ çubuk', `${stickCaption(this.settings.stickMode, 'right')}.`],
+        ['Uçuştan önce', this.radioBlind
           ? this.radioBlind.howto
-          : 'Put the radio in joystick mode before loading this page, then run Calibrate sticks in Settings.'],
-        ['In the menus', 'Pitch moves the cursor, roll right selects, roll left goes back. After a pause or a finish, wait a moment with the sticks at rest and hold the roll a beat.'],
-        ['Restart', 'R on the keyboard, or a switch on the radio: Settings, Restart switch, then flip it.'],
-        ['Acro', 'Hands off holds the attitude you left it in. Every turn has to be flown back out again.'],
-        ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll with the right stick to flip over. You do not have to time it. Centre the stick, then take off.'],
-        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
+          : 'Sayfayı açmadan önce kumandanızı USB oyun kolu moduna alın, sonra Ayarlar bölümünden çubukları kalibre edin.'],
+        ['Menülerde', 'Eğim imleci hareket ettirir; çubuğu sağa yatırmak seçer, sola yatırmak geri götürür. Duraklatma veya uçuş sonrasında çubukları bir an bırakın, ardından seçmek için sağa yatırın.'],
+        ['Yeniden başlatma', 'Klavyede R tuşuna basın veya kumandadaki anahtarı kullanın: Ayarlar bölümünde Yeniden başlatma anahtarını seçip anahtarı çevirin.'],
+        ['Acro modu', 'Çubukları bıraktığınızda drone o anki açısını korur. Dönüşü bitirmek için ters yönde kumanda verin.'],
+        ['Ters uçuş', 'Drone yere ters düşerse ters düzeltme uyarısı çıkar. Sağ çubukla yatış veya eğim vererek düzeltin. Zamanlamanız gerekmez. Çubuğu ortalayıp havalanın.'],
+        ['Kapılar', 'Yanıp sönen kapıdan geçin. Yeşil taraf doğru geçiş yönünü, kırmızı taraf ters yönü gösterir.'],
       ]
       : source === 'launch'
         ? [
-          ['What it is', 'Betaflight race start. Pitch the quad, let go of the stick, and it holds that angle at idle until you punch throttle. No looping off the blocks.'],
-          ['Turn it on', 'Quad, Launch control, On. It stays off until you do. Then press L on the start line, before you raise throttle.'],
-          ['Set the angle', 'Throttle at idle. Pitch forward until the OSD reads around 30 to 40 degrees. Centre the stick. The motors hold it.'],
-          ['Go', 'Punch throttle past about 20 percent. The hold dumps, the props bite, and you are flying. L again resets it after a launch.'],
-          ['Keyboard', 'Up arrow is pitch forward. W is throttle. Launch control switches you to Acro for the hold, then your own mode comes back after you go.'],
-          ['Radio', 'Same sequence as a real board. L is the mode switch. Fine-tune launch_angle_limit and launch_trigger_throttle_percent on the Firmware bench, under Quad.'],
-          ['Turtle', 'If you tip over on the blocks, TURTLE MODE takes over. Pitch or roll to flip. You do not have to time it. Centre the stick, then press L and launch again.'],
+          ['Nedir?', 'Betaflight yarış kalkış modu. Dronun burnunu öne eğin ve çubuğu bırakın; gaz verene kadar bu açıyı rölantide korur.'],
+          ['Açma', 'Drone ayarlarından Kalkış kontrolünü açın. Başlangıç çizgisindeyken, gaz vermeden önce L tuşuna basın.'],
+          ['Açıyı ayarlama', 'Gazı rölantide tutun. Ekrandaki gösterge 30–40 derece olana kadar burnu öne eğin, sonra çubuğu ortalayın. Motorlar açıyı korur.'],
+          ['Kalkış', 'Gazı yaklaşık yüzde 20 sınırının üzerine çıkarın. Kilit açılır, pervaneler hızlanır ve drone havalanır. Kalkıştan sonra L tuşu modu sıfırlar.'],
+          ['Klavye', 'Yukarı ok burnu öne eğer, W gaz verir. Kalkış kontrolü kalkış sırasında Acro moduna geçer; sonrasında önceki moda döner.'],
+          ['Kumanda', 'Gerçek uçuş kontrolcüsündeki sıra aynıdır. L mod anahtarıdır. Kalkış açısı ve gaz eşiğini Drone ayarları > Uçuş yazılımı tezgâhı bölümünden düzenleyebilirsiniz.'],
+          ['Ters düştüyseniz', 'Başlangıç çizgisinde ters dönerseniz ters düzeltme modu devreye girer. Çubuğu ortalayıp L tuşuna basın ve yeniden kalkış yapın.'],
         ]
       : [
         ...keyHowtoRows(this.settings.stickMode, this.settings.keyThrottle),
-        ['L', 'Launch control, if you turned it on in Quad. Pitch, centre, punch.'],
-        ['M', 'Switches Angle and Acro in flight, and keeps the choice.'],
-        ['R, then Escape', 'Back to the start line, and pause.'],
-        ['Turtle', 'If you end up inverted on the ground, a TURTLE MODE prompt appears. Pitch or roll with the arrow keys to flip over. You do not have to time it. Let go, then take off.'],
-        ['F8', 'Report a bug or give feedback. Pauses if you are in the air, then opens the form.'],
-        ['Gates', 'Fly the one that pulses. Green is the way through, red is its wrong face.'],
+        ['L', 'Drone ayarlarında açtıysanız yarış kalkış kontrolünü kullanır. Burnu eğin, çubuğu ortalayın ve gaz verin.'],
+        ['M', 'Uçuş sırasında Açılı ve Acro modları arasında geçiş yapar; seçiminizi kaydeder.'],
+        ['R, ardından Escape', 'Başlangıç çizgisine döner ve uçuşu duraklatır.'],
+        ['Ters uçuş', 'Drone yere ters düşerse ters düzeltme uyarısı çıkar. Ok tuşlarıyla yatış veya eğim vererek düzeltin. Çubuğu bırakıp havalanın.'],
+        ['F8', 'Hata veya geri bildirim formunu açar. Havadaysanız önce uçuşu duraklatır.'],
+        ['Kapılar', 'Yanıp sönen kapıdan geçin. Yeşil taraf doğru geçiş yönünü, kırmızı taraf ters yönü gösterir.'],
       ];
     for (const [k, v] of rows) {
       this.howtoKeys.append(el('dt', null, k), el('dd', null, v));
     }
     this.howtoLive.textContent = source === 'touch'
-      ? 'The pads appear in flight, under your thumbs.'
+      ? 'Uçuş sırasında ekranda iki başparmak çubuğu görünür.'
       : source === 'radio'
-        ? 'Move your sticks. These follow the radio.'
+        ? 'Çubukları hareket ettirin; ekrandaki göstergeler kumandanızı izler.'
         : source === 'launch'
-          ? 'L arms it. Pitch, centre, punch. The gimbals still follow your hands.'
-          : 'Press the keys. These follow your hands.';
+          ? 'L modu hazırlar. Burnu eğin, çubuğu ortalayın ve gaz verin. Göstergeler hareketinizi izler.'
+          : 'Tuşlara basın; göstergeler hareketinizi izler.';
     this.howtoMode.textContent = source === 'touch'
-      ? 'Thumb sticks are a real proportional stick, so they fly whichever Flight mode is set in Quad: Acro, like a radio, by default. Angle is gentler while you learn: let go of the right pad and the quad levels itself.'
+      ? 'Ekran çubukları orantılı kumanda sağlar. Drone ayarlarında seçili uçuş modunu kullanır; varsayılan mod Acro modudur. Alışana kadar daha yumuşak olan Açılı modu deneyin: sağ çubuğu bırakınca drone kendini dengeler.'
       : source === 'radio'
-        ? 'A radio flies Acro by default: the sticks ask for a rate of rotation, and letting go asks for none, which holds whatever attitude the quad is in. Change it under Flight mode in Quad, or with M in flight.'
+        ? 'Kumanda varsayılan olarak Acro modunda uçar. Çubuklar dönüş hızını belirler; bıraktığınızda drone mevcut açısını korur. Modu Drone ayarlarından veya uçuş sırasında M tuşuyla değiştirebilirsiniz.'
         : source === 'launch'
-          ? 'Off by default, because a punch from a hold is violent and not everyone wants it. Turn it on in Quad, then L on the pad. The green LAUNCH readout is the pitch angle. It blinks when throttle is close to firing.'
-          : 'Keys are on or off, so hold time is the analog: a tap moves the stick a little, a hold sits at a flyable amount, a long hold goes to full. Races on keys start in Angle, so letting go levels the quad.';
+          ? 'Varsayılan olarak kapalıdır. Drone ayarlarından açıp başlangıç çizgisinde L tuşuna basın. Yeşil KALKIŞ göstergesi burun açısını gösterir; gaz eşiğine yaklaştığınızda yanıp söner.'
+          : 'Tuşlar basılı veya bırakılmış durumdadır; basılı tutma süresi kumanda miktarını belirler. Kısa basış az, uzun basış tam hareket verir. Klavyeyle yarış Açılı modda başlar; tuşları bırakınca drone dengelenir.';
   }
 
   /* Live channels for the tutorial's gimbals, fed by the shell's loop. */
@@ -14461,7 +14557,8 @@ export class Ui {
     if (!el) {
       return;
     }
-    const v = value == null ? '' : String(value);
+    const raw = value == null ? '' : String(value);
+    const v = uiText(raw);
     if (el.__wfText !== v) {
       el.__wfText = v;
       el.textContent = v;

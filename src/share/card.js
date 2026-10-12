@@ -83,8 +83,8 @@ const SAKURA = '#55aaff';
 const UI_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 /*
- * The wordmark, drawn the way .wordmark in index.html draws it: 800
- * weight, 0.08em of letter spacing, WEB in cream and FPV in sakura, a hard
+ * The product wordmark, drawn the way .wordmark in index.html draws it: 800
+ * weight, 0.08em of letter spacing, TÜMER in cream and SAVUNMA in sakura, a hard
  * dark shadow three pixels down and right and a soft one ten pixels under.
  * 96 px is what the title's clamp comes to at 1200 wide, which is what it
  * was when scripts/og.js took og.png, so the two cards carry one mark at
@@ -101,8 +101,8 @@ const MARK_BASELINE = 108;
  * src/ui/mangapage.js), which carries the same mark in the same place. */
 export function drawWordmark(ctx) {
   const glyphs = [
-    ...[...'WEB'].map((ch) => [ch, CREAM]),
-    ...[...'FPV'].map((ch) => [ch, SAKURA]),
+    ...[...'TÜMER '].map((ch) => [ch, CREAM]),
+    ...[...'SAVUNMA'].map((ch) => [ch, SAKURA]),
   ];
   ctx.font = `800 ${MARK_SIZE}px ${UI_FONT}`;
   ctx.textBaseline = 'alphabetic';

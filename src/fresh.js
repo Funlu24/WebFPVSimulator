@@ -549,7 +549,7 @@
       const say = document.querySelector('#loading .loading-help') || document.getElementById('status');
       if (say) {
         say.hidden = false;
-        say.textContent = 'This page could not load its scripts. Reload it to try again.';
+        say.textContent = 'Sayfanın betikleri yüklenemedi. Yeniden yükleyip tekrar deneyin.';
       }
     });
   };

@@ -44,7 +44,7 @@
          root now carries touch-action: manipulation, which stops the
          double-tap and keeps the pinch. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>WebFPV — FPV Yarış Simülatörü</title>
+    <title>Tümer Savunma — FPV Drone Simülatörü</title>
     <!--
       THE SCRIPTS OF THE DEPLOY THIS PAGE CAME FROM, ALWAYS. See src/fresh.js.
 
@@ -81,7 +81,7 @@
         document.write(`<script src="src/fresh.js${stamp ? `?d=${stamp}` : ''}" data-entry="src/boot.js" data-preload="boot"><\/script>`);
       })();
     </script>
-    <meta name="description" content="Gerçek Betaflight kontrol döngüsüyle tarayıcıda FPV uçuşu yapın. Pist oluşturun, tur atın ve derecenizi paylaşın." />
+    <meta name="description" content="Tümer Savunma FPV drone simülatörü. Gerçek Betaflight kontrol döngüsüyle uçun, pist oluşturun ve derecenizi paylaşın." />
     <!--
       A link to this page posted anywhere renders a 1200 by 630 card, and
       og.png is a frame of the real shell rather than a drawing of one, so it
@@ -95,20 +95,20 @@
     -->
     <link rel="canonical" href="https://webfpv.org/sim/" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="WebFPV" />
+    <meta property="og:site_name" content="Tümer Savunma Drone Simülatörü" />
     <meta property="og:url" content="https://webfpv.org/sim/" />
-    <meta property="og:title" content="WebFPV — Tarayıcıda FPV uçuş simülatörü" />
-    <meta property="og:description" content="WebAssembly üzerinde çalışan gerçek Betaflight kontrol döngüsü, yarış pisti ve tur sayacı. Kumandanızı bağlayıp uçmaya başlayın." />
+    <meta property="og:title" content="Tümer Savunma — FPV Drone Simülatörü" />
+    <meta property="og:description" content="WebAssembly üzerinde çalışan Betaflight uçuş kontrolüyle kumandanızı bağlayın ve uçuşa başlayın." />
     <meta property="og:image" content="https://webfpv.org/sim/og.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it, flags and track markers running away under a low sun." />
+    <meta property="og:image:alt" content="Tümer Savunma FPV drone simülatöründe çim pist, başlangıç kapısı ve yarış dronu." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="WebFPV — Tarayıcıda FPV uçuş simülatörü" />
-    <meta name="twitter:description" content="WebAssembly üzerinde çalışan gerçek Betaflight kontrol döngüsü, yarış pisti ve tur sayacı. Kumandanızı bağlayıp uçmaya başlayın." />
+    <meta name="twitter:title" content="Tümer Savunma — FPV Drone Simülatörü" />
+    <meta name="twitter:description" content="WebAssembly üzerinde çalışan Betaflight uçuş kontrolüyle kumandanızı bağlayın ve uçuşa başlayın." />
     <meta name="twitter:image" content="https://webfpv.org/sim/og.png" />
-    <meta name="twitter:image:alt" content="The WebFPV simulator: a lit start gate on mown grass, a five inch quad parked beside it, flags and track markers running away under a low sun." />
+    <meta name="twitter:image:alt" content="Tümer Savunma FPV drone simülatöründe çim pist, başlangıç kapısı ve yarış dronu." />
 
     <!--
       The mark is four propellers, an X frame and the stack in the middle, one
@@ -1960,6 +1960,7 @@
         line-height: 0.92;
         text-shadow: 3px 3px 0 rgba(16, 40, 74, 0.82), 0 10px 28px rgba(0, 0, 0, 0.32);
       }
+      .wordmark { font-size: clamp(30px, 7vw, 82px); letter-spacing: 0.055em; }
       .wordmark .fpv { color: var(--sakura); }
       /* THE HEADINGS, LETTERED (polish item 19, letterHeading in
          src/ui/ui.js). The wordmark and the rooms' titles are drawn in the
@@ -2022,6 +2023,11 @@
         display: flex; align-items: center; gap: 12px;
         margin-top: 12px; font-size: clamp(13px, 1.4vw, 16px); color: #d8d2c0;
         letter-spacing: 0.28em; text-transform: uppercase;
+      }
+      .brand-tagline {
+        margin-top: 8px; color: var(--mint);
+        font-size: clamp(11px, 1.2vw, 14px); font-weight: 750;
+        letter-spacing: 0.22em;
       }
       .brand-sub:empty, .brand-best:empty { display: none; }
       .brand-sub::before {
@@ -5889,8 +5895,8 @@
     <canvas id="view"></canvas>
     <div id="ui"></div>
     <div id="loading">
-      <div class="loading-stage">loading</div>
-      <div class="loading-joke">"I complimented my quad on its propellers. It said thanks for the props."</div>
+      <div class="loading-stage">Yükleniyor</div>
+      <div class="loading-joke">"Drone pervanelerine iltifat ettim. ‘Pervaneler mi?’ diye sordu."</div>
       <div class="loading-track"><div class="loading-fill"></div><div class="loading-sweep"></div></div>
       <div class="loading-meta"><span class="loading-step"></span><span class="loading-elapsed"></span></div>
       <!-- Empty until something fails. See fail() in src/ui/loading.js: a
@@ -5902,7 +5908,7 @@
            only here and the credits. Low priority, so it never queues
            ahead of the renderer the stage above is waiting on. -->
       <div class="loading-powered">
-        <span>Powered by</span>
+        <span>Betaflight altyapısıyla</span>
         <img src="assets/credits/betaflight-mono.svg" width="861" height="167" alt="Betaflight" decoding="async" fetchpriority="low" />
       </div>
     </div>

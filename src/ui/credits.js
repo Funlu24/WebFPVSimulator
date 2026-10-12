@@ -361,10 +361,10 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   const src = (name) => new URL(`${assetBase}/${name}`, document.baseURI).href;
   host.textContent = '';
 
-  const lede = el('p', 'credits-lede', 'A browser FPV racing simulator. The controller is Betaflight. The track language comes from Track Draw. The rest is one pilot and the people who flew it until it felt right.');
+  const lede = el('p', 'credits-lede', 'Tarayıcıda çalışan bir FPV yarış simülatörü. Uçuş kontrolcüsü Betaflight, pist oluşturma yaklaşımı Track Draw kaynaklı. Geri kalanı, uçuş hissi doğru olana kadar deneyen pilotların katkısıyla geliştirildi.');
   host.append(lede);
 
-  const made = section('Made by', '');
+  const made = section('Geliştiren', '');
   const makerMark = el('span', 'maker-mark');
   makerMark.append(document.createTextNode('andAgain'), el('span', 'fpv', 'FPV'));
   made.append(personCard({
@@ -372,13 +372,13 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
     src: src('andagain.jpg'),
     name: 'andAgainFPV',
     nameNode: makerMark,
-    note: 'Built this simulator, the builder, and the public board. Orchestrated a horde of Grok and Claude along the way.',
+    note: 'Simülatörü, pist oluşturucuyu ve çevrim içi panoyu geliştirdi. Grok ve Claude araçlarından da yararlandı.',
     channel: 'https://www.youtube.com/@andAgainFPV',
     handle: 'youtube.com/@andAgainFPV',
   }));
   host.append(made);
 
-  const partners = section('Partners', 'They back WebFPV.');
+  const partners = section('Sponsor', 'Tümer Savunma desteğiyle.');
   const partnerRow = el('div', 'credit-row partners');
   partnerRow.classList.toggle('is-featured', PARTNERS.length === 1);
   for (const p of PARTNERS) {
@@ -387,7 +387,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   partners.append(partnerRow);
   host.append(partners);
 
-  const pilots = section('Beta test pilots', 'They flew it until it felt like a quad.');
+  const pilots = section('Deneme pilotları', 'Uçuş hissi doğru olana kadar denediler.');
   const row = el('div', 'credit-row pilots');
   for (const p of PILOTS) {
     row.append(personCard({
@@ -402,14 +402,14 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   pilots.append(row);
   host.append(pilots);
 
-  const controller = section('The controller', '');
+  const controller = section('Uçuş kontrolcüsü', '');
   const bfBody = el('p');
   bfBody.append(
-    document.createTextNode('The rates, the PID loop, the filters, feedforward, TPA, iterm relax, airmode, anti-gravity. Compiled into this page, not rewritten. '),
+    document.createTextNode('Rates, PID döngüsü, filtreler, feedforward, TPA, iterm relax, airmode ve anti-gravity: yeniden yazılmadan bu sayfaya derlenmiştir. '),
     link('https://github.com/betaflight/betaflight', 'Betaflight'),
-    document.createTextNode(' is GPLv3, so this is too. The flight-controller screen is a homage of '),
+    document.createTextNode(' GPLv3 lisanslıdır; bu simülatör de aynı lisansı kullanır. Uçuş kontrolcüsü ekranı '),
     link('https://github.com/betaflight/betaflight-configurator', 'Betaflight Configurator'),
-    document.createTextNode(' 10.10: tab names, 4.5.1 fields, and the classic dark grey and orange. It is not that app. No Vue, no MSP, no iframe. With thanks to the Betaflight developers.'),
+    document.createTextNode(' 10.10 sürümünden esinlenmiştir: sekme adları, 4.5.1 alanları ve klasik koyu gri-turuncu görünüm. Betaflight Configurator uygulamasının kendisi değildir. Betaflight geliştiricilerine teşekkürler.'),
   );
   controller.append(projectCard({
     src: src('betaflight.svg'),
@@ -420,14 +420,14 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   }));
   host.append(controller);
 
-  const tracks = section('The track language', '');
+  const tracks = section('Pist oluşturma altyapısı', '');
   const tdBody = el('p');
   tdBody.append(
-    document.createTextNode('The builder is inspired by '),
+    document.createTextNode('Pist oluşturucu, '),
     link('https://trackdraw.app/', 'Track Draw'),
-    document.createTextNode(', from the Dutch drone gods at '),
+    document.createTextNode(' yaklaşımından ve '),
     link('https://dutchdronesquad.nl/', 'Dutch Drone Squad'),
-    document.createTextNode('. Real field scale, real obstacles, a plan you can hand to a crew.'),
+    document.createTextNode(' ekibinin çalışmalarından esinlenmiştir. Gerçek saha ölçeği ve engeller, ekiplerin uygulayabileceği bir planla buluşur.'),
   );
   tracks.append(projectCard({
     src: src('trackdraw.svg'),
@@ -443,7 +443,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
    * A track is somebody's afternoon with a pipe cutter; the reconstruction
    * is not the design.
    */
-  const rooms = section('The RaceGOW5 rooms', 'Eight tracks, six builders, read off the official animations.');
+  const rooms = section('RaceGOW5 pistleri', 'Resmî animasyonlardan oluşturulan sekiz pist ve altı tasarımcı.');
   const roomList = el('div', 'credit-rooms');
   for (const r of RACEGOW) {
     const line = el('p', 'credit-room');
@@ -452,22 +452,22 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
     roomList.append(line);
   }
   const roomNote = el('p', 'credit-room-note');
-  roomNote.append(document.createTextNode('Series and animations by '));
+  roomNote.append(document.createTextNode('Seri ve animasyonların sahibi: '));
   roomNote.append(link('https://racegow.com/tracks', 'RaceGOW'));
-  roomNote.append(document.createTextNode('. Brought into this simulator by andAgainFPV.'));
+  roomNote.append(document.createTextNode('. Bu simülatöre andAgainFPV tarafından aktarıldı.'));
   roomList.append(roomNote);
   rooms.append(roomList);
   host.append(rooms);
 
-  const horde = section('The horde', 'Written with Grok. Built with Claude.');
+  const horde = section('Yapay zekâ araçları', 'Grok ve Claude desteğiyle geliştirildi.');
   const ai = el('div', 'credit-row pair');
   const grokBody = el('p');
   grokBody.append(
-    document.createTextNode('xAI\'s Grok. A lot of the lines, a lot of the arguments, and a lot of the stubbornness about flight feel.'),
+    document.createTextNode('xAI Grok; arayüz metinleri, fikir alışverişi ve uçuş hissi üzerine çalışmalarda kullanıldı.'),
   );
   const claudeBody = el('p');
   claudeBody.append(
-    document.createTextNode('Anthropic\'s Claude. The other half of the horde. Same human holding the sticks.'),
+    document.createTextNode('Anthropic Claude; kodlama ve inceleme sürecinde yardımcı oldu. Kumandayı kullanan yine pilot.'),
   );
   ai.append(
     projectCard({
@@ -492,7 +492,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
 
   const legal = el('p', 'credits-legal');
   legal.append(
-    document.createTextNode('Betaflight, Track Draw, Grok, Claude, Dutch Drone Squad, and their marks belong to their owners. The channel pictures belong to the pilots. Using them here is credit, not a claim they endorse this page. The partners\' marks belong to the partners, shown with their agreement. WebFPV is free software under '),
+    document.createTextNode('Betaflight, Track Draw, Grok, Claude, Dutch Drone Squad ve logoları ilgili sahiplerine aittir. Kanal görselleri pilotların mülkiyetindedir. Burada kaynak gösterme amacıyla kullanılır; bu kişi ve kuruluşların sayfayı onayladığı anlamına gelmez. Sponsor logoları izinleri doğrultusunda gösterilir. Simülatörün lisansı: '),
     link('https://www.gnu.org/licenses/gpl-3.0.html', 'GPLv3'),
     document.createTextNode('.'),
   );
