@@ -11,6 +11,8 @@ import { FBXLoader } from './fbxloader.js';
 import { buildMap as buildYard } from './built/index.js';
 import { starterMap } from './built/starter.js';
 import { yieldToPaint } from '../ui/loading.js';
+import { makePartnerMark, signAspect } from '../art/partnermark.js';
+import { PARTNERS } from '../partners/roster.js';
 
 const MODEL_ROOT = 'Assets/FreshCan3D/MilitaryAirport/Art/Meshes/';
 const SCENE_URL = new URL('../../assets/models/military-airbase/scene.json', import.meta.url);
@@ -19,6 +21,7 @@ const NEUTRAL_NORMAL_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEA
 const FIELD = Object.freeze({ width: 960, depth: 480 });
 const SPAWN = Object.freeze({ x: -320, z: -84, yaw: 0 });
 const FBX_CENTIMETERS_PER_METER = 100;
+const TUMER = PARTNERS.find((partner) => partner.slug === 'tumer');
 
 /* The Fab package extraction contains the FBX files, but not their external
  * base-colour images. Keep the field readable with restrained material tints
@@ -139,6 +142,7 @@ function airportDocument() {
   const doc = starterMap();
   doc.id = 'fab-military-airbase';
   doc.name = 'Askerî Hava Üssü';
+  doc.scene = { time: 'noon', ground: 'tarmac' };
   doc.field = { ...FIELD, gridSize: 1 };
   doc.elements = [{
     id: 'el-1',
@@ -351,6 +355,70 @@ function placeModels(scene, colliders, manifest, templates) {
   return { group: instances, meshes: meshCount, types: byModel.size };
 }
 
+/* Roadside sponsor boards use the same supplied partner artwork as the
+ * simulator's other freestyle worlds, framed in weathered steel and given
+ * shallow piers so they read as airport infrastructure rather than HUD art. */
+function placeTumerBillboards(scene, colliders) {
+  if (!TUMER) return 0;
+  const width = 8;
+  const height = width / signAspect(TUMER);
+  const centreY = 5.15;
+  const steel = new THREE.MeshStandardMaterial({
+    color: 0x37424c,
+    metalness: 0.62,
+    roughness: 0.58,
+  });
+  const concrete = new THREE.MeshStandardMaterial({
+    color: 0x77756d,
+    roughness: 0.96,
+  });
+  const frameGeometry = new THREE.BoxGeometry(width + 0.42, 0.16, 0.28);
+  const postGeometry = new THREE.BoxGeometry(0.2, 5.8, 0.24);
+  const footingGeometry = new THREE.BoxGeometry(0.7, 0.42, 0.7);
+  const locations = [
+    { x: -300, z: -60, yaw: Math.PI },
+    { x: -350, z: -108, yaw: 0 },
+  ];
+  for (const [index, location] of locations.entries()) {
+    const board = new THREE.Group();
+    board.name = `Tumer Savunma airbase billboard ${index + 1}`;
+    board.position.set(location.x, 0, location.z);
+    board.rotation.y = location.yaw;
+    for (const x of [-width / 2 + 0.2, width / 2 - 0.2]) {
+      const pier = new THREE.Mesh(postGeometry, steel);
+      pier.position.set(x, 3.15, -0.08);
+      pier.castShadow = true;
+      board.add(pier);
+      const footing = new THREE.Mesh(footingGeometry, concrete);
+      footing.position.set(x, 0.21, 0);
+      footing.castShadow = true;
+      footing.receiveShadow = true;
+      board.add(footing);
+    }
+    for (const y of [centreY - height / 2, centreY + height / 2]) {
+      const rail = new THREE.Mesh(frameGeometry, steel);
+      rail.position.set(0, y, -0.08);
+      rail.castShadow = true;
+      board.add(rail);
+    }
+    const mark = makePartnerMark(THREE, TUMER, { width, height, shade: false });
+    mark.position.set(0, centreY, 0.12);
+    board.add(mark);
+    scene.add(board);
+    /* The large, flat sign face sits across X for both inward-facing boards. */
+    colliders.addBox(
+      'obstacle',
+      location.x - width / 2,
+      centreY - height / 2,
+      location.z - 0.22,
+      location.x + width / 2,
+      centreY + height / 2,
+      location.z + 0.22,
+    );
+  }
+  return locations.length;
+}
+
 export async function buildMap(shell, onProgress, options) {
   const progress = onProgress ?? (() => {});
   const doc = airportDocument();
@@ -359,6 +427,17 @@ export async function buildMap(shell, onProgress, options) {
     progress(fraction * 0.48);
     await yieldToPaint();
   }, { ...opts, document: doc, deferColliderBuild: true });
+
+  /* A large, open runway reads better in clear noon air than inside the
+   * yard's close sunset haze. Keep atmospheric falloff at distance, while
+   * leaving the hangar line visible across the whole airfield. */
+  if (base.scene.fog) {
+    base.scene.fog.near = 170;
+    base.scene.fog.far = 820;
+  }
+  base.scene.traverse((object) => {
+    if (object.userData?.comicPaint) object.visible = false;
+  });
 
   try {
     const response = await fetch(SCENE_URL);
@@ -387,17 +466,20 @@ export async function buildMap(shell, onProgress, options) {
     }
 
     const placed = placeModels(base.scene, base.colliders, manifest, templates);
+    const sponsorBillboards = placeTumerBillboards(base.scene, base.colliders);
     base.colliders.build();
     base.id = 'airbase';
     base.name = doc.name;
     base.spawn = { ...SPAWN };
-    base.setCullRadius(540);
+    base.setCullRadius(820);
     const stats = base.stats;
     base.stats = () => ({
       ...stats(),
+      fog: base.scene.fog ? { near: base.scene.fog.near, far: base.scene.fog.far } : stats().fog,
       airbaseInstances: manifest.instances.length,
       airbaseModelTypes: placed.types,
       airbaseBatches: placed.meshes,
+      airbaseSponsorBillboards: sponsorBillboards,
       missingAirbaseModels: uniqueModels.length - templates.size,
     });
     progress(1);

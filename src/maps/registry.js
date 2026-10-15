@@ -76,7 +76,8 @@ export const MAPS = [
     name: 'Askerî Hava Üssü',
     mode: 'freestyle',
     note: 'Fab hava üssü sahnesinden uyarlanan geniş bir serbest uçuş haritası.',
-    buildMs: MAP_BUILD_MS.built,
+    buildMs: MAP_BUILD_MS.airbase,
+    poster: 'assets/posters/airbase.jpg',
     load: () => import('./airbase.js'),
   },
   {

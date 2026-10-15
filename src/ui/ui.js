@@ -4582,18 +4582,19 @@ const WAYS = [
     id: 'freestyle-5inch',
     airframe: '5inch',
     mode: 'freestyle',
-    label: 'Serbest uçuş',
+    world: 'city',
+    label: 'Kasaba',
     art: 'assets/gate/freestyle.jpg',
     /* No clock and no score in the line, because neither is on until a
      * pilot asks for them. See DEFAULTS.freestyleScoring. The aircraft is
      * named because this card seats one: the town is five hundred metres
      * across and it is the five inch's. */
-    blurb: 'Beş inç quad ile kasabada ya da kendi haritanızda serbestçe uçun. Çatılar, ara sokaklar ve hemzemin geçitler sizi bekliyor. Tur saati ve kapılar yok; akrobasi puanlamasını içeriden açabilirsiniz.',
+    blurb: 'Beş inç quad ile kasabanın çatıları, ara sokakları ve hemzemin geçitleri arasında serbestçe uçun. Tur saati ve kapılar yok.',
     /* The mode's three, not the machine's, and the machine is on the card
      * anyway: the plan mark over the picture is the five inch's. Three
      * words that fit one line on a landscape phone, where the blurb is
      * hidden and these are the whole of the card. */
-    facts: ['Kapı yok', 'Saat yok', 'Harita oluştur'],
+    facts: ['Kasaba', 'Kapı yok', '5 inç'],
   },
 ].map((w) => ({ ...w, action: `way-${w.id}` }));
 

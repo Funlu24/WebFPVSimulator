@@ -41,6 +41,8 @@ export const MAP_BUILD_MS = {
    * have. */
   custom: 2964,
   city: 7994,
+  /* Measured on the local runway: 79 FBX models and 2,319 instances. */
+  airbase: 6000,
   /* Your map, measured on the starter yard (src/maps/built/starter.js, 47
    * placed assets) at 1280 by 720 on High, as the loading screen's world
    * stage: 1305, 1565 and 1190 ms, and 1209 on Low. A pilot's own map is

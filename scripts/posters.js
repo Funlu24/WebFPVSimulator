@@ -78,6 +78,9 @@ const CAMERAS = {
    * and the wires over it and the crossing closing the far end.
    */
   city: [2.6, 4.2, 26, 0, 3.0, 4],
+  /* Open runway and hangar line from the south west, with the sponsor board
+   * in the foreground and enough height to read the airfield layout. */
+  airbase: [-205, 110, 210, -25, 6, -20],
   /*
    * The works from the south east, over the forecourt. Far enough out that
    * the stack, the preheater and the length of the pack hall are all in one
