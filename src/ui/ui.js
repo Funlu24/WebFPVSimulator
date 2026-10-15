@@ -5122,6 +5122,7 @@ export class Ui {
     this.osdHits = el('div', 'osd-sub osd-hits', '');
     packBlock.append(this.osdHits);
     this.osdSpeed = el('div', 'osd-value', '');
+    this.osdLoad = el('div', 'osd-sub osd-load', '');
     this.osdFlight = el('div', 'osd-sub osd-mode', '');
     this.osdLaunch = el('div', 'osd-launch is-off', '');
     /* The height as a number and two tails: the desk's "above the ground"
@@ -5134,7 +5135,7 @@ export class Ui {
     const thrBar = el('div', 'bar');
     thrBar.append(this.osdThrBar);
     const flightBlock = el('div', 'osd-corner osd-right');
-    flightBlock.append(this.osdSpeed, this.osdFlight, this.osdAlt, el('div', 'osd-label', 'Gaz'), thrBar);
+    flightBlock.append(this.osdSpeed, this.osdLoad, this.osdFlight, this.osdAlt, el('div', 'osd-label', 'Gaz'), thrBar);
     const sticks = el('div', 'osd-sticks is-off');
     this.osdStickLeft = makeGimbal('Yaw, throttle');
     this.osdStickRight = makeGimbal('Roll, pitch');
@@ -14628,7 +14629,7 @@ export class Ui {
     }
   }
 
-  setOsd({ mode, lapMs, lastLapMs, gate, gateCount, gateCue, volts, packFrac, altitude, speedKph, throttle, flightMode, bounces, launchState, launchPitch, ghostGapMs, ghostFinal, runState, runRemainMs, runTimed, runScored }) {
+  setOsd({ mode, lapMs, lastLapMs, gate, gateCount, gateCue, volts, packFrac, altitude, speedKph, loadG, throttle, flightMode, bounces, launchState, launchPitch, ghostGapMs, ghostFinal, runState, runRemainMs, runTimed, runScored }) {
     const freestyle = mode === 'freestyle';
     this.countFps();
     /* Whether the continuous readouts are due this frame: see
@@ -14729,6 +14730,12 @@ export class Ui {
       Ui.text(this.osdSpeed, '');
     } else if (numbersDue || this.osdSpeed.__wfText === '') {
       Ui.text(this.osdSpeed, `${speedKph.toFixed(0)} km/h`);
+    }
+    if (numbersDue || this.osdLoad.__wfText === '') {
+      const g = Number.isFinite(loadG) ? loadG : 0;
+      Ui.text(this.osdLoad, `${g.toFixed(1)} G`);
+      Ui.klass(this.osdLoad, 'osd-sub osd-load'
+        + (g >= 3 ? ' is-heavy' : (g < -0.2 ? ' is-negative' : '')));
     }
     if (this.osdFlight) {
       const modeText = flightMode === 'turtle'

@@ -2955,6 +2955,7 @@ export async function boot({ loading, bootStart, mapId }) {
   let takingOff = false;
   let statePrev = null;
   let stateCurr = null;
+  let osdLoadG = 1;
   /* Ground sweep state. groundPrev is where the craft was last frame, so the
    * terrain test can be a segment rather than a point. */
   const groundPrev = new THREE.Vector3();
@@ -3978,6 +3979,7 @@ export async function boot({ loading, bootStart, mapId }) {
     groundHasPrev = false;
     statePrev = readState();
     stateCurr = statePrev;
+    osdLoadG = runGravityScale;
   }
 
   /*
@@ -9567,6 +9569,32 @@ export async function boot({ loading, bootStart, mapId }) {
       }
       const p = shell.quad.position;
       const nextGt = view.gates && view.gates[race.nextSceneIndex()];
+      /* The OSD's load factor is the acceleration the frame feels along its
+       * own thrust axis. Subtract world gravity, rotate into the body frame,
+       * and divide by one Earth g: free fall reads 0 G and an inverted load
+       * goes negative. At rest the floor carries the configured weight, so
+       * that value is the current gravity scale. The plant advances on fixed
+       * 1 ms steps, making this an average over physics steps, not render dt. */
+      if (landed) {
+        osdLoadG = runGravityScale;
+      } else if (statePrev && stateCurr) {
+        const simDt = stateCurr[0] - statePrev[0];
+        if (simDt > 0) {
+          const gx = (stateCurr[4] - statePrev[4]) / simDt;
+          const gy = (stateCurr[5] - statePrev[5]) / simDt;
+          const gz = (stateCurr[6] - statePrev[6]) / simDt + 9.80665 * runGravityScale;
+          const qw = stateCurr[7];
+          const qx = stateCurr[8];
+          const qy = stateCurr[9];
+          const qz = stateCurr[10];
+          const bodyUp = 2 * (qx * qz + qw * qy) * gx
+            + 2 * (qy * qz - qw * qx) * gy
+            + (1 - 2 * (qx * qx + qy * qy)) * gz;
+          const targetG = bodyUp / 9.80665;
+          const blend = 1 - Math.exp(-Math.min(simDt, 0.1) / 0.12);
+          osdLoadG += (targetG - osdLoadG) * blend;
+        }
+      }
       ui.setOsd({
         mode: view.mode,
         /* No airtime yet reads a dimmed 0.00, like a lap before its gate. */
@@ -9600,6 +9628,7 @@ export async function boot({ loading, bootStart, mapId }) {
         /* Null on an airframe whose OSD has no speed, and the readout goes.
          * See osdSpeed in configs/airframes.js. */
         speedKph: airframeById(runAirframe).osdSpeed ? speed * 3.6 : null,
+        loadG: osdLoadG,
         throttle: input.channels.throttle,
         flightMode: (turtleWait || turtleFlip.active) ? 'turtle' : (angleModeOn ? 'angle' : 'acro'),
         /* No damage model, so nothing to count down. How much this run has
