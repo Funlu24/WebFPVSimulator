@@ -85,12 +85,21 @@ const MAP_LIST = join(ROOT, 'src/maps/preload.js');
  * three, then main.js, and main.js loads the boot map, the Track. */
 const BOOT_ROOTS = ['src/boot.js', 'three', 'src/main.js', 'src/maps/custom.js'];
 /* Each lazily loaded map, by the id registry.js gives it. */
-const MAP_ROOTS = { city: 'src/maps/city/index.js', built: 'src/maps/built/index.js' };
+const MAP_ROOTS = {
+  city: 'src/maps/city/index.js',
+  built: 'src/maps/built/index.js',
+  airbase: 'src/maps/airbase.js',
+};
 
 /* three@0.160.0's add-ons, and what each imports besides 'three'. Read off
  * the CDN files for exactly this version. */
 const THREE_VERSION = '0.160.0';
 const THREE_ADDON_DEPS = {
+  'loaders/GLTFLoader.js': ['utils/BufferGeometryUtils.js'],
+  'loaders/FBXLoader.js': ['libs/fflate.module.js', 'curves/NURBSCurve.js'],
+  'libs/fflate.module.js': [],
+  'curves/NURBSCurve.js': ['curves/NURBSUtils.js'],
+  'curves/NURBSUtils.js': [],
   'postprocessing/EffectComposer.js': ['shaders/CopyShader.js', 'postprocessing/ShaderPass.js', 'postprocessing/MaskPass.js'],
   'postprocessing/RenderPass.js': ['postprocessing/Pass.js'],
   'postprocessing/ShaderPass.js': ['postprocessing/Pass.js'],
@@ -256,7 +265,9 @@ function main() {
   }
   const nextFresh = fresh.slice(0, at) + block + fresh.slice(end + END.length);
 
-  const rel = (id) => relative(join(ROOT, 'src'), join(ROOT, id)).split('\\').join('/');
+  const rel = (id) => /^https?:/.test(id)
+    ? id
+    : relative(join(ROOT, 'src'), join(ROOT, id)).split('\\').join('/');
   const body = Object.entries(maps).map(([id, list]) => `  ${id}: [\n${list.map((p) => `    '${rel(p)}',`).join('\n')}\n  ],`).join('\n');
   const nextList = `${readFileSync(MAP_LIST, 'utf8').split('// GENERATED BELOW')[0]}// GENERATED BELOW\nexport const MAP_PRELOAD = {\n${body}\n};\n`;
 

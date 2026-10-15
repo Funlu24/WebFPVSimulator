@@ -1102,11 +1102,19 @@ function trianglesOf(root) {
 }
 
 export async function buildMap(shell, onProgress, options) {
+  const progress = onProgress ?? (() => {});
+  const opts = options || {};
+  const chosen = chooseDocument(opts);
+  /* A pilot with no freestyle map used to get Hibari Yard here. The military
+   * airbase now takes that starter seat. The import stays lazy, and airbase
+   * calls this builder with an injected document, so it cannot recurse. */
+  if (chosen.source === 'starter') {
+    const { buildMap: buildAirbase } = await import('../airbase.js');
+    return buildAirbase(shell, progress, opts);
+  }
   const t0 = performance.now();
   const renderer = shell.renderer;
   const camera = shell.camera;
-  const progress = onProgress ?? (() => {});
-  const opts = options || {};
   const q = qualityFor(opts.quality);
 
   /* The document, repaired the way every read of one is, then placed, with
@@ -1114,7 +1122,6 @@ export async function buildMap(shell, onProgress, options) {
    * built before the builder stopped letting an asset hang in the air still
    * flies with its assets on the ground or on a roof (src/trackbuilder/seat.js).
    * Silent, and what is stored is not touched. */
-  const chosen = chooseDocument(opts);
   const { doc, repairs } = normalize(chosen.raw);
   const { placed } = seatDocument(doc);
   /* Its roads and the cars on them (./traffic.js), worked out once: the
@@ -1362,7 +1369,11 @@ export async function buildMap(shell, onProgress, options) {
    * shell uploads to the plant. */
   const colliders = new Colliders();
   const solidCount = addSolids(colliders, placed.solids);
-  colliders.build();
+  /* A composite world can add its own solids after this yard is built. Keep
+   * the mutable collider rows until that outer builder has finished. */
+  if (!opts.deferColliderBuild) {
+    colliders.build();
+  }
   progress(0.9);
 
   setComicQuality(q, { edges: true, grime: true });

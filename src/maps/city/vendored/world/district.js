@@ -759,18 +759,12 @@ function dressHousing(ctx, houses) {
      * prop placed at `y` is buried or in the air by that much. */
     const gy = (x, z) => ctx.groundAt(x, z);
 
-    // name plate and post box beside the door
+    // Post box beside the door. The old Japanese name-plate texture is omitted
+    // now that detached homes use an Anatolian facade.
     {
       const t = Math.min(sideHalf - 0.5, 1.5);
       const nx = h.x + fx * (frontHalf + 0.045) + lx * t;
       const nz = h.z + fz * (frontHalf + 0.045) + lz * t;
-      if (clear(nx, nz)) {
-        const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.16),
-          flat({ color: 0xffffff, map: namePlate(rng.int(0, 5)), cache: false }));
-        plate.position.set(nx, y + 1.42, nz);
-        plate.rotation.y = frontIsX ? fx * Math.PI / 2 : (fz > 0 ? 0 : Math.PI);
-        ctx.add(plate);
-      }
       const [bx, bz] = at(
         -Math.min(sideHalf - 0.6, 1.7) + (h.postBoxAlong ?? 0),
         h.postBoxOut ?? 0,

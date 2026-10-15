@@ -441,7 +441,8 @@ function freestyleWorldToSeat(s) {
 function townNote(s, failure) {
   const world = freestyleWorldToSeat(s);
   if (world && failure && failure.map === world.id) {
-    return `${world.name} did not load. Fly reloads the page and tries again.`;
+    const detail = String(failure.message || '').trim();
+    return `${world.name} did not load${detail ? `: ${detail}` : ''}. Fly reloads the page and tries again.`;
   }
   return 'Kasaba, kendi haritanız veya panodaki pistler. Kapı yok; seçin ve uçun.';
 }
@@ -913,13 +914,18 @@ function mapFacts(m) {
 }
 
 const DEFAULTS = {
-  /* Which world. 'custom' is a track from the board or the builder, and
-   * 'city' is the freestyle town. It is a string so loadSettings' typeof
+  /* Which world. The military airbase is the starting world; 'custom' is a
+   * track from the board or the builder, and 'city' is the freestyle town.
+   * It is a string so loadSettings' typeof
    * gate accepts it, and an unknown value falls back to the track in
    * src/maps/registry.js rather than throwing, because a stale localStorage
    * entry must not be able to stop the page booting. A stored 'field' from
    * before the race field was removed is the track world. */
-  map: 'custom',
+  map: 'airbase',
+  /* One-time move from the old race-track start to the military airbase.
+   * Existing profiles otherwise keep their saved Tarmac Pulse/custom seat
+   * forever and never see the new default. Explicit ?map= links still win. */
+  airbaseStartVersion: 1,
   /*
    * The freestyle world the pilot last chose, or '' if they never have.
    *
@@ -1571,6 +1577,12 @@ export function loadSettings() {
       s[k] = stored[k];
     }
   }
+  const moveToAirbase = stored.airbaseStartVersion !== DEFAULTS.airbaseStartVersion;
+  if (moveToAirbase) {
+    s.map = 'airbase';
+    s.freestyleMap = 'airbase';
+    s.airbaseStartVersion = DEFAULTS.airbaseStartVersion;
+  }
   if (s.flightMode !== 'angle') {
     s.flightMode = 'acro';
   }
@@ -1816,6 +1828,9 @@ export function loadSettings() {
     s.graphics = detectDefaultGraphics();
   } else {
     s.graphics = normalizeGraphics(s.graphics);
+  }
+  if (moveToAirbase) {
+    saveSettings(s);
   }
   return s;
 }
@@ -2472,6 +2487,9 @@ const UI_TRANSLATIONS = new Map([
   ['Yaw', 'Sapma'],
   ['Throttle', 'Gaz'],
   ['Crosshairs', 'Nişangâh'],
+  ['Air grip', 'Hava sürüklemesi'],
+  ['Motor power', 'Motor gücü'],
+  ['Flight feel tuning', 'Uçuş hissi ayarı'],
   ['Fly', 'Uç'],
   ['Track', 'Pist'],
   ['Tracks', 'Pistler'],
@@ -4515,13 +4533,11 @@ function craftSvg(a) {
  * the whoop had not been asked. The owner reported exactly that, and it is
  * the report this table answers.
  *
- * Between the two questions there are three legal answers and no more. The
- * whoop has no freestyle, so the pairs are five inch racing, whoop racing,
- * and freestyle, which is the five inch. One screen, three cards, one press.
- * The objection the old aircraft gate wrote down was that a third card
- * beside Race and Freestyle would pretend racing on a whoop was not a real
- * answer; it is answered by racing on a whoop being one of the three cards
- * rather than by asking twice.
+ * Between the two questions there are three legal answers and no more:
+ * five inch racing, the military airbase, and five inch freestyle. The
+ * second card seats the airbase directly in the freestyle world.
+ * The second card replaces the indoor whoop race with the airbase, and
+ * chooses the five inch aircraft for that large outdoor world.
  *
  * A card carries both halves of the answer, so act() seats the aircraft and
  * sets the mode in one go. The AIRCRAFT is remembered in settings and the
@@ -4548,18 +4564,14 @@ const WAYS = [
     facts: ['6S', '220 mm', 'Derece tablosu'],
   },
   {
-    id: 'race-whoop65',
-    airframe: 'whoop65',
-    mode: 'race',
-    label: 'Whoop yarışı',
-    art: 'assets/gate/whoop.jpg',
-    /* Says what configs/airframes.js says, in the same words: the machine
-     * flies the five inch's model and the room is built to match, so the
-     * picture is a whoop's and the hands get the five inch. The old line
-     * promised three times the angular acceleration, which was true of a
-     * plant nothing selects now. */
-    blurb: 'Aynı heyecan, bu kez kapalı alanda. 65 mm korumalı pervaneli whoop ile salonunuza sığan pistte, 28 inç kapılardan uçun.',
-    facts: ['1S', '65 mm', 'Kapalı alan'],
+    id: 'airbase',
+    airframe: '5inch',
+    mode: 'freestyle',
+    world: 'airbase',
+    label: 'Askerî Hava Üssü',
+    art: 'assets/gate/airbase.svg',
+    blurb: 'Askerî hava üssünde serbest uçuş. Pist, hangarlar, kontrol noktaları ve üs yapıları arasında uçun.',
+    facts: ['Serbest uçuş', 'Askerî üs', '5 inç'],
   },
   {
     id: 'freestyle-5inch',
@@ -4610,7 +4622,9 @@ const BUILDER_CARD = {
  * only set once the gate has been answered, so before that the racing card
  * of the seated aircraft is the standing answer. */
 function seatedWay(settings, mode) {
-  return WAYS.find((w) => w.airframe === settings.airframe && w.mode === (mode || 'race'))
+  return WAYS.find((w) => w.airframe === settings.airframe
+      && w.mode === (mode || 'race')
+      && (!w.world || w.world === settings.map))
     || WAYS.find((w) => w.airframe === settings.airframe)
     || WAYS[0];
 }
@@ -8203,10 +8217,11 @@ export class Ui {
             label: w.label,
             card: w.id,
             art: w.art,
-            svg: craftSvg(airframeById(w.airframe)),
+            svg: w.world ? null : craftSvg(airframeById(w.airframe)),
             blurb: w.blurb,
             facts: w.facts,
             action: w.action,
+            world: w.world,
           })),
           /* Last of the cards and before the trouble row, which has to
            * come after every card: see the offset note above. */
@@ -8450,7 +8465,7 @@ export class Ui {
          * game, and a pilot looking for the other mode or the other machine
          * is looking for the screen that offers both.
          */
-        { label: this.gateLabel(), action: 'mode-gate', note: 'Kartlar: beş inç yarış, whoop yarışı, freestyle ve oluşturucu. Fikrinizi değiştirirseniz buradan başlarsınız.' },
+        { label: this.gateLabel(), action: 'mode-gate', note: 'Kartlar: beş inç yarışı, Askerî Hava Üssü, serbest uçuş ve oluşturucu. Başka bir seçim için buraya dönün.' },
       ];
     }
     if (this.screen === 'howto') {
@@ -17805,6 +17820,15 @@ export class Ui {
       this.craftGate = false;
       this.mode = way.mode;
       saveSettings(this.settings);
+      if (way.world) {
+        const world = MAPS.find((m) => m.id === way.world && m.mode === 'freestyle');
+        if (world) {
+          this.returnTo = 'title';
+          this.roomFrom = null;
+          this.seatWorld(world);
+          return;
+        }
+      }
       /* The shell has to hear this before anything is flown: it is the
        * call that swaps the plant in the compiled module and reloads the
        * tune. main.js applies it between runs, which the title is. */

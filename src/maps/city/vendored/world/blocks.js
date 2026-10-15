@@ -6,6 +6,7 @@ import {
 } from '../core/textures.js';
 import { box, cyl, bake, trs, rngKit } from '../core/util.js';
 import { hullOutline } from '../core/outline.js';
+import { makeAnatolianHouse } from './buildings.js';
 
 /* ------------------------------------------------------------------ *
  * Four more residential types.
@@ -219,7 +220,7 @@ function collideGarageHouse(ctx, o) {
   }
 }
 
-export function makeGarageHouse(o = {}) {
+function makeOriginalGarageHouse(o = {}) {
   /* o.w, o.d: frontage. 4.6-5.6 is the type.
    * o.floors: living storeys above the garage, 1 or 2.
    * o.garage: 0 shutter up .. 1 shut. ~0.25 is the useful state.
@@ -463,7 +464,7 @@ export function makeGarageHouse(o = {}) {
  * @param o.plaster   true for a 漆喰 upper storey over boarding, which is the
  *                    older reading; false for boarding all the way up
  */
-export function makeTimberHouse(o = {}) {
+function makeOriginalTimberHouse(o = {}) {
   const m = mats();
   const rng = rngKit(o.seed ?? 101);
   const g = new THREE.Group();
@@ -697,7 +698,7 @@ export function makeTimberHouse(o = {}) {
  * same roof, same window, different door colour, different clutter, one unit
  * with its screen shut.
  */
-export function makeNagaya(o = {}) {
+function makeOriginalNagaya(o = {}) {
   const m = mats();
   const rng = rngKit(o.seed ?? 111);
   const g = new THREE.Group();
@@ -1028,4 +1029,34 @@ export function makeHall(o = {}) {
   g.userData.porch = { x: px, w: PORCH_W, d: PORCH_D };
   g.userData.doorAt = px;                 // in the unit's frame -- see makeGarageHouse
   return g;
+}
+
+/* Private homes across every district use the same Turkish vernacular model;
+ * retain the old plot dimensions, unit count and doorway coordinates. */
+export function makeTimberHouse(o = {}) {
+  return makeAnatolianHouse({ ...o, floors: o.floors ?? 1 });
+}
+
+export function makeNagaya(o = {}) {
+  const units = o.units ?? 4;
+  const unitW = o.unitW ?? 2.7;
+  return makeAnatolianHouse({
+    ...o,
+    w: o.w ?? unitW * units,
+    d: o.d ?? 5.2,
+    units,
+    floors: o.floors ?? 2,
+  });
+}
+
+export function makeGarageHouse(o = {}) {
+  const livingFloors = o.floors ?? 2;
+  const house = makeAnatolianHouse({
+    ...o,
+    floors: livingFloors + 1,
+    garageBay: true,
+  });
+  house.name = 'anatolianGarageHouse';
+  collideGarageHouse(o.ctx, o);
+  return house;
 }

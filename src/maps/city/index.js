@@ -54,6 +54,7 @@ import { clumpBlob } from '../../render/clump.js';
 import { buildSky } from './vendored/core/sky.js';
 import { setOutlineResolution } from './vendored/core/outline.js';
 import { buildWorld } from './vendored/world/index.js';
+import { setAnatolianHouseModel } from './vendored/world/buildings.js';
 /* The town's cars are drawn by our model (src/art/cars.js); the vendored
  * builders place them and hand the drawing over through these two hooks,
  * ./vendored/PATCH-world-vehicles.diff and PATCH-world-props.diff. Both
@@ -2402,8 +2403,18 @@ export async function buildMap(shell, onProgress, options) {
     } catch (error) {
       console.warn('Could not load the experimental tree model; using the built-in trees.', error);
     }
+    try {
+      const gltf = await new GLTFLoader().loadAsync(
+        new URL('../../../assets/models/low-poly-medieval-house.glb', import.meta.url).href,
+      );
+      setAnatolianHouseModel(gltf.scene);
+    } catch (error) {
+      setAnatolianHouseModel(null);
+      console.warn('Could not load the imported house model; using the built-in houses.', error);
+    }
     world = buildWorld(scene, { bake: false, treeModel });
   } finally {
+    setAnatolianHouseModel(null);
     setVehicleModel(null);
     setKeiTruckModel(null);
   }

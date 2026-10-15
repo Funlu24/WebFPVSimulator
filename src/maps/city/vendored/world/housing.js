@@ -6,6 +6,7 @@ import {
 } from '../core/textures.js';
 import { box, cyl, bake, trs, rngKit } from '../core/util.js';
 import { hullOutline } from '../core/outline.js';
+import { makeAnatolianHouse } from './buildings.js';
 
 /* ------------------------------------------------------------------ *
  * Three more residential types.
@@ -86,7 +87,7 @@ function slider(push, g, { x, y, z, w, h, lit = false, curtain = false, variant 
  * 二階半の木造 -- the attic house.
  * ------------------------------------------------------------------ */
 
-export function makeAtticHouse(o = {}) {
+function makeOriginalAtticHouse(o = {}) {
   const m = mats();
   const rng = rngKit(o.seed ?? 41);
   const g = new THREE.Group();
@@ -377,7 +378,7 @@ function collideWalkup(ctx, o) {
   }
 }
 
-export function makeWalkup(o = {}) {
+function makeOriginalWalkup(o = {}) {
   const m = mats();
   const rng = rngKit(o.seed ?? 61);
   const g = new THREE.Group();
@@ -547,7 +548,7 @@ export function makeWalkup(o = {}) {
  * The terrace.
  * ------------------------------------------------------------------ */
 
-export function makeTerrace(o = {}) {
+function makeOriginalTerrace(o = {}) {
   const m = mats();
   const rng = rngKit(o.seed ?? 71);
   const g = new THREE.Group();
@@ -794,4 +795,28 @@ export function makeBikeShelter(o = {}) {
   g.rotation.y = o.ry ?? 0;
   collideLeanTo(o.ctx, o, w, d, h, fall);
   return g;
+}
+
+/* The old Japanese housing silhouettes remain private above as reference
+ * geometry.  Public residential builders preserve each plot's footprint and
+ * occupancy while using the shared Anatolian timber-frame architecture. */
+export function makeAtticHouse(o = {}) {
+  return makeAnatolianHouse({ ...o, floors: o.floors ?? 2 });
+}
+
+export function makeWalkup(o = {}) {
+  const house = makeAnatolianHouse({ ...o, floors: o.floors ?? 3, units: o.units ?? 4 });
+  if (o.ctx) collideWalkup(o.ctx, o);
+  return house;
+}
+
+export function makeTerrace(o = {}) {
+  const units = o.units ?? 3;
+  const unitW = o.unitW ?? 2.9;
+  return makeAnatolianHouse({
+    ...o,
+    w: o.w ?? unitW * units,
+    units,
+    floors: o.floors ?? 2,
+  });
 }

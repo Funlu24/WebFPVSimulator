@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" role="img" aria-label="Military airbase">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#15283a"/>
+      <stop offset="1" stop-color="#718078"/>
+    </linearGradient>
+    <linearGradient id="runway" x2="0" y2="1">
+      <stop stop-color="#59636a"/>
+      <stop offset="1" stop-color="#252d32"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="280" fill="url(#sky)"/>
+  <path d="M0 150 80 123l45 21 63-39 50 30 64-35 56 28 60-24 62 22v50H0Z" fill="#293a35"/>
+  <rect y="166" width="480" height="114" fill="#3d4a43"/>
+  <path d="M212 280 236 155h28l26 125Z" fill="url(#runway)"/>
+  <path d="m238 184 9-1-3 20-10 1Zm-8 40 12-1-4 24-13 1Zm-10 48 15-1-4 9h-13Z" fill="#e0d6a9"/>
+  <path d="M18 205h126v-48H18Z" fill="#9b7450" stroke="#18252a" stroke-width="5"/>
+  <path d="M31 205v-27l50-31 50 31v27Z" fill="#35464a"/>
+  <path d="M38 179h88v26H38Z" fill="#b9a780"/>
+  <path d="M43 183h78v22H43Z" fill="#52696b"/>
+  <path d="M361 208h94v-36h-94Z" fill="#81684b" stroke="#1b282b" stroke-width="5"/>
+  <path d="M370 179h76v29h-76Z" fill="#53656a"/>
+  <path d="M395 208v-19a14 14 0 0 1 28 0v19Z" fill="#27383d"/>
+  <path d="M333 166v-46h14v46m-21-46h28l-14-19Z" fill="#b8aa82" stroke="#253238" stroke-width="4"/>
+  <path d="M339 136h9" stroke="#e7c96f" stroke-width="4"/>
+  <path d="M26 228h134m172 0h122" stroke="#b4ad89" stroke-width="4" stroke-dasharray="18 12" opacity=".85"/>
+  <circle cx="180" cy="218" r="4" fill="#e7c96f"/><circle cx="302" cy="218" r="4" fill="#e7c96f"/>
+  <path d="M0 248h480" stroke="#1a2428" stroke-width="3" opacity=".7"/>
+</svg>

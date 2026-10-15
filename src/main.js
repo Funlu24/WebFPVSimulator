@@ -462,7 +462,7 @@ const AXIS_X = new THREE.Vector3(1, 0, 0);
  * alone. The entry is written out because it has moved with the directory:
  * it was three before looks.js came and four before egg.js, and with no
  * entry then the bar sat at 75 percent until the import resolved. */
-const MAP_MODULE_COUNT = { field: 1, city: 72, custom: 1, built: 5 };
+const MAP_MODULE_COUNT = { field: 1, city: 72, custom: 1, built: 5, airbase: 1 };
 /* Where a map's modules live, so the loading bar can count them. Data, not a
  * ternary: the ternary read "field or else city", so a third map counted its
  * modules under the city's prefix and the bar sat at zero.
@@ -476,6 +476,7 @@ const MAP_MODULE_PREFIX = {
   city: '/src/maps/city/',
   custom: '/src/maps/custom',
   built: '/src/maps/built/',
+  airbase: '/src/maps/airbase.js',
 };
 
 /*
@@ -1327,10 +1328,11 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     console.error(e);
     const failed = mapById(ui.settings.map).name;
+    const failureMessage = String((e && e.message) || e).slice(0, 300);
     /* The same record the swap keeps: see loadFailure in ui.bugSnapshot. */
     ui.loadFailure = {
       map: mapById(ui.settings.map).id,
-      message: String((e && e.message) || e).slice(0, 300),
+      message: failureMessage,
       atUtc: new Date().toISOString(),
     };
     ui.settings.map = 'custom';
@@ -1343,7 +1345,7 @@ export async function boot({ loading, bootStart, mapId }) {
     /* The banner, not `notice`: that is declared with the frame loop's own
      * state further down and does not exist yet. This is the same way the
      * share adoption above reports a boot failure. */
-    ui.setBanner(`${failed} could not be loaded.\nThe track was loaded instead.`, true);
+    ui.setBanner(`${failed} could not be loaded.\n${failureMessage}\nThe track was loaded instead.`, true);
   }
   /* A world whose pipeline scales its own targets (the town, a built map)
    * took the render scale there, so the canvas goes back to the preset's
@@ -4820,11 +4822,12 @@ export async function boot({ loading, bootStart, mapId }) {
        * behind it used to leave mapReady false forever.
        */
       console.error(e);
+      const failureMessage = String((e && e.message) || e).slice(0, 240);
       /* For the next bug report, which is the only way this reaches us:
        * see loadFailure in ui.bugSnapshot. bug-850375dc. */
       ui.loadFailure = {
         map: entry.id,
-        message: String((e && e.message) || e).slice(0, 300),
+        message: failureMessage,
         atUtc: new Date().toISOString(),
       };
       ui.settings.map = previous;
@@ -4850,9 +4853,7 @@ export async function boot({ loading, bootStart, mapId }) {
         notice = {
           text: wantShared
             ? `${wantShared.name} could not be loaded.`
-            : (entry.mode === 'freestyle'
-              ? `${entry.name} could not be loaded. Fly reloads the page and tries again.`
-              : `${entry.name} could not be loaded.`),
+            : `${entry.name} could not be loaded: ${failureMessage}`,
           untilMs: performance.now() + 4200,
         };
       } catch (e2) {

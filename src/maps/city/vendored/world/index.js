@@ -9,7 +9,7 @@ import {
 import { buildRailway } from './railway.js';
 import { buildTrain } from './train.js';
 import { buildShop } from './shop.js';
-import { makeHouse, makeWall, makeTimberFence, makeBlockFence } from './buildings.js';
+import { makeHouse, makeAnatolianHouse, makeWall, makeTimberFence, makeBlockFence } from './buildings.js';
 import { buildSakura, buildShrubs, buildGrove, buildBamboo, buildCedar, thinSpots, TREE_KEEP, SHRUB_KEEP, BAMBOO_KEEP } from './trees.js';
 import { buildPlanet, bakeToPlanet, wrapX, reliefAt, CIRCUMFERENCE } from './planet.js';
 /* The hills are a *third* ground surface, over both the graded terrain grid and
@@ -202,10 +202,10 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
     // Near side, left of the street.  These are held back deliberately: any
     // frontage closer than this walls off the sight line along the railway,
     // and the receding track is what gives the shot its depth.
-    { x: -13.6, z: 12.6, w: 7.0, d: 7.0, face: 'x+', floors: 2, seed: 21, wall: 0, roof: 1, roofKind: 'gable' },
+    { x: -13.6, z: 12.6, w: 7.0, d: 7.0, face: 'x+', floors: 2, seed: 21, style: 'anatolian', wall: 0, roof: 1, roofKind: 'gable' },
     {
       x: -9.4, z: 23.2, w: 7.0, d: 8.0, face: 'x+', floors: 2, seed: 22,
-      wall: 2, roof: 0, roofKind: 'hip', postBoxOut: 0.55,
+      style: 'anatolian', wall: 2, roof: 0, roofKind: 'hip', postBoxOut: 0.55,
       postBoxSink: 0.02, gomiSink: 0.02,
     },
     {
@@ -222,7 +222,7 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
      * length of the shopping street's west row (`alleys.js`).  Its frontage stays
      * at x = 6.6 and its front-door clutter with it, so nothing about the street
      * elevation changes -- the whole move happens behind the house. */
-    { x: 9.4, z: 20.4, w: 5.6, d: 7.8, face: 'x-', floors: 2, seed: 25, wall: 3, roof: 0, roofKind: 'gable', postBoxAlong: -0.6, gomiOut: -0.2, gomiSignAlong: -1.6 },
+    { x: 9.4, z: 20.4, w: 5.6, d: 7.8, face: 'x-', floors: 2, seed: 25, style: 'anatolian', wall: 3, roof: 0, roofKind: 'gable', postBoxAlong: -0.6, gomiOut: -0.2, gomiSignAlong: -1.6 },
     { x: 8.9, z: 29.6, w: 6.6, d: 7.4, face: 'x-', floors: 2, seed: 26, wall: 5, roof: 3, roofKind: 'hip', bikeOut: 0.85, postBoxAlong: -0.2 },
     /* `planterAlong: 1.2` because `dressHousing` has no slot allocator.  The
      * planters' offset along the frontage is random and the umbrella stand's is
@@ -233,7 +233,7 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
     { x: 7.4, z: 38.5, w: 6.8, d: 7.0, face: 'x-', floors: 1, seed: 27, wall: 0, roof: 2, roofKind: 'gable', planterAlong: 1.2 },
     // Far side of the crossing.  These sit hard up against the lineside so the
     // view down the street is closed off instead of opening into pale haze.
-    { x: -8.7, z: -7.6, w: 6.8, d: 6.2, face: 'x+', floors: 2, seed: 28, wall: 1, roof: 0, roofKind: 'gable', postBoxAlong: -0.15 },
+    { x: -8.7, z: -7.6, w: 6.8, d: 6.2, face: 'x+', floors: 2, seed: 28, style: 'anatolian', wall: 1, roof: 0, roofKind: 'gable', postBoxAlong: -0.15 },
     /* **The two planters move out and south**, and it takes both because at
      * their old place on this frontage there is no legal position at all.
      *
@@ -252,7 +252,7 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
      * of the post box at -18.1, and `planterOut: 0.30` stands them on the back
      * of the footway with their leaves just under the wall's coping -- which is
      * where a house with no front garden actually keeps them. */
-    { x: -8.2, z: -16.4, w: 6.6, d: 7.0, face: 'x+', floors: 2, seed: 29, wall: 4, roof: 1, roofKind: 'hip', postBoxOut: 0.35, planterAlong: -2.8, planterOut: 0.30 },
+    { x: -8.2, z: -16.4, w: 6.6, d: 7.0, face: 'x+', floors: 2, seed: 29, style: 'anatolian', wall: 4, roof: 1, roofKind: 'hip', postBoxOut: 0.35, planterAlong: -2.8, planterOut: 0.30 },
     /* The two plots at z ~ -26 are gone: the drainage channel runs the whole
      * way round the planet now, and at z = -24 that puts twelve metres of made
      * ground straight through both of them.  The gap they leave in each column
@@ -264,8 +264,8 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
     // this one turns to face back up the street, closing off the far view
     { x: -5.4, z: -33.5, w: 8.0, d: 7.4, face: 'z+', floors: 2, seed: 44, wall: 0, roof: 1, roofKind: 'gable', bikeLift: 0.03 },
     // far side of the crossing, right
-    { x: 8.5, z: -7.4, w: 6.6, d: 6.0, face: 'x-', floors: 1, seed: 31, wall: 0, roof: 3, roofKind: 'gable' },
-    { x: 10.0, z: -16.2, w: 6.8, d: 7.2, face: 'x-', floors: 2, seed: 32, wall: 3, roof: 1, roofKind: 'hip' },
+    { x: 8.5, z: -7.4, w: 6.6, d: 6.0, face: 'x-', floors: 1, seed: 31, style: 'anatolian', wall: 0, roof: 3, roofKind: 'gable' },
+    { x: 10.0, z: -16.2, w: 6.8, d: 7.2, face: 'x-', floors: 2, seed: 32, style: 'anatolian', wall: 3, roof: 1, roofKind: 'hip' },
     { x: 14.4, z: -35.5, w: 7.0, d: 7.4, face: 'x-', floors: 1, seed: 45, wall: 1, roof: 3, roofKind: 'hip', skipBike: true },
     // background rows across the tracks, seen over the fence
     { x: -18.0, z: -13.0, w: 8.0, d: 8.0, face: 'z+', floors: 2, seed: 34, wall: 1, roof: 1, roofKind: 'gable' },
@@ -289,7 +289,9 @@ export function* buildWorldSteps(scene, { bake = true, treeModel = null } = {}) 
   ];
   for (const d of houseDefs) {
     const y = groundY(d.z);
-    const h = makeHouse({ ...d, y });
+    const h = d.style === 'anatolian'
+      ? makeAnatolianHouse({ ...d, y })
+      : makeHouse({ ...d, y });
     ctx.add(h);
     ctx.collide(d.x - d.w / 2, d.z - d.d / 2, d.x + d.w / 2, d.z + d.d / 2,
       y + (h.userData.top ?? 2.72 * d.floors));

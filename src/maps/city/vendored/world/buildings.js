@@ -24,6 +24,25 @@ const WALLS = [
 const ROOFS = [PAL.roofSlate, PAL.roofBlue, PAL.roofBrown, PAL.roofTeal];
 
 const M = {};
+let ANATOLIAN_MATSETS;
+let ANATOLIAN_HOUSE_MODEL = null;
+let ANATOLIAN_HOUSE_BOUNDS = null;
+
+/* The imported low-poly cottage is configured before the city is assembled,
+ * then cloned by makeAnatolianHouse. Clearing the prototype after assembly
+ * keeps later maps and rebuilds on their own house generators. */
+export function setAnatolianHouseModel(model = null) {
+  ANATOLIAN_HOUSE_MODEL = null;
+  ANATOLIAN_HOUSE_BOUNDS = null;
+  if (!model) return;
+
+  model.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(model);
+  if (bounds.isEmpty()) return;
+  ANATOLIAN_HOUSE_MODEL = model;
+  ANATOLIAN_HOUSE_BOUNDS = bounds;
+}
+
 function mats() {
   if (M.roofs) return M;
   M.walls = WALLS.map((c) => cel({ color: c, bands: 3, tint: 0x6f6790, roughness: 0.9 }));
@@ -48,7 +67,7 @@ function mats() {
  * @param o.floors     1 or 2
  * @param o.seed       determinism
  */
-export function makeHouse(o) {
+function makeOriginalHouse(o) {
   const m = mats();
   const rng = rngKit(o.seed ?? 7);
   const g = new THREE.Group();
@@ -358,6 +377,222 @@ export function makeHouse(o) {
   g.userData.footprint = { w, d, H };
   g.userData.top = H + roofRise;
   return g;
+}
+
+/* A compact Anatolian timber-frame house for the town centre: pale lime
+ * plaster between dark exposed beams, a projecting cumba, stone ground floor
+ * and a red tiled hipped roof.  The parts are merged by material just like
+ * makeHouse, so these landmarks do not add a draw call for every beam. */
+export function makeAnatolianHouse(o = {}) {
+  const plotW = o.w ?? 7;
+  const plotD = o.d ?? 7;
+  const frontIsX = o.face === 'x+' || o.face === 'x-';
+  const w = frontIsX ? plotD : plotW;
+  const d = frontIsX ? plotW : plotD;
+
+  if (ANATOLIAN_HOUSE_MODEL && ANATOLIAN_HOUSE_BOUNDS) {
+    const modelSize = ANATOLIAN_HOUSE_BOUNDS.getSize(new THREE.Vector3());
+    const scale = Math.min(w / modelSize.x, d / modelSize.z);
+    const g = ANATOLIAN_HOUSE_MODEL.clone(true);
+    g.name = 'anatolianHouseImported';
+    g.scale.setScalar(scale);
+    const rotations = { 'z+': 0, 'z-': Math.PI, 'x+': Math.PI / 2, 'x-': -Math.PI / 2 };
+    g.rotation.y = rotations[o.face ?? 'x-'];
+    g.position.set(
+      o.x ?? 0,
+      (o.y ?? 0) - ANATOLIAN_HOUSE_BOUNDS.min.y * scale,
+      o.z ?? 0,
+    );
+    g.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      child.receiveShadow = true;
+    });
+    const H = modelSize.y * scale;
+    const doorAt = o.doorAt ?? -0.16 * w;
+    g.userData.footprint = { w: plotW, d: plotD, H };
+    g.userData.width = w;
+    g.userData.doorAt = doorAt;
+    g.userData.doors = [doorAt];
+    g.userData.eave = 0.35 * scale;
+    g.userData.top = H;
+    return g;
+  }
+
+  const g = new THREE.Group();
+  g.name = 'anatolianHouse';
+  const floors = Math.max(1, Math.min(3, Math.round(o.floors ?? 2)));
+  const firstH = 2.65;
+  const upperH = 2.55;
+  const upperY = 0.44 + firstH;
+  const upperLevels = floors - 1;
+  const H = upperY + upperLevels * upperH;
+  const eave = 0.55;
+  const roofRise = o.garageBay ? 0.55 : 1.0;
+  const front = d / 2;
+  const bayW = Math.min(2.8, w * 0.46);
+  const bayD = 0.68;
+  const units = Math.max(1, Math.round(o.units ?? 1));
+  const garage = o.garageBay === true;
+  const garageSide = (o.doorSide ?? -1) < 0 ? -1 : 1;
+  const entryW = Math.min(1.85, w * 0.42);
+  const garageW = w - entryW;
+  const garageDepth = Math.min(d - 1.6, 4.6);
+  const garageX = -garageSide * (w / 2 - garageW / 2);
+  const entryX = garageSide * (w / 2 - entryW / 2);
+  ANATOLIAN_MATSETS ??= [
+    [0xf2e5ca, 0x704a36, 0x9b4938],
+    [0xe8dcc5, 0x5f4232, 0x874737],
+    [0xf5e9d1, 0x654c3c, 0xa4523c],
+    [0xe4d4ba, 0x493b31, 0x774333],
+  ].map(([wall, wood, roof]) => ({
+    darkWood: cel({ color: 0x493329, bands: 3, tint: 0x3b304b, roughness: 0.88 }),
+    timber: cel({ color: wood, bands: 3, tint: 0x49364a, roughness: 0.85 }),
+    plaster: cel({ color: wall, bands: 3, tint: 0x756881, roughness: 0.94 }),
+    stone: cel({ color: 0x9a8876, bands: 3, tint: 0x62596c, roughness: 0.96 }),
+    tile: cel({ color: roof, bands: 3, tint: 0x5b4050, roughness: 0.88 }),
+    glass: cel({ color: 0x758da0, bands: 3, tint: 0x4f536c, roughness: 0.38 }),
+  }));
+  const variant = Math.abs(Math.round(o.seed ?? 0)) % ANATOLIAN_MATSETS.length;
+  const materials = ANATOLIAN_MATSETS[variant];
+  const { darkWood, timber } = materials;
+  const parts = { stone: [], plaster: [], timber: [], darkWood: [], tile: [], glass: [] };
+  const push = (key, geo, matrix) => parts[key].push({ geometry: geo, matrix });
+  const beam = (x, y, z, bw, bh, bd, key = 'timber') =>
+    push(key, new THREE.BoxGeometry(bw, bh, bd), trs(x, y, z));
+  const wallW = floors === 1 ? w : w + 0.34;
+  const wallD = floors === 1 ? d : d + 0.2;
+
+  push('stone', new THREE.BoxGeometry(w + 0.2, 0.46, d + 0.2), trs(0, 0.23, 0));
+  if (garage) {
+    // Keep the street-facing bay open, with its stone side jambs, timber head
+    // and a shadowed back wall so the characteristic opening reads at a glance.
+    push('plaster', new THREE.BoxGeometry(entryW, firstH, d), trs(entryX, 0.46 + firstH / 2, 0));
+    push('plaster', new THREE.BoxGeometry(garageW, firstH, d - garageDepth),
+      trs(garageX, 0.46 + firstH / 2, -garageDepth / 2));
+    beam(garageX - garageW / 2 + 0.09, firstH / 2 + 0.46, front + 0.04, 0.18, firstH, 0.18, 'darkWood');
+    beam(garageX + garageW / 2 - 0.09, firstH / 2 + 0.46, front + 0.04, 0.18, firstH, 0.18, 'darkWood');
+    beam(garageX, 2.48, front + 0.04, garageW, 0.32, 0.2, 'darkWood');
+    push('darkWood', new THREE.BoxGeometry(garageW - 0.35, 1.9, 0.08),
+      trs(garageX, 1.4, front - garageDepth + 0.08));
+  } else {
+    push('plaster', new THREE.BoxGeometry(w, firstH, d), trs(0, 0.46 + firstH / 2, 0));
+  }
+  beam(0, 0.51, front + 0.035, w + 0.04, 0.12, 0.11, 'darkWood');
+  // Two shaded lower windows and a deep timber entrance.
+  const lowerWindow = (x, width = 1.18) => {
+    const glassW = Math.max(0.46, width - 0.24);
+    beam(x, 1.62, front + 0.045, width, 1.22, 0.14, 'darkWood');
+    push('glass', new THREE.BoxGeometry(glassW, 0.98, 0.05), trs(x, 1.62, front + 0.13));
+    beam(x, 1.62, front + 0.18, 0.07, 1.02, 0.04, 'timber');
+    beam(x, 1.62, front + 0.18, glassW, 0.07, 0.04, 'timber');
+    beam(x, 1.08, front + 0.13, width + 0.16, 0.12, 0.36, 'darkWood');
+  };
+  const doorXs = garage
+    ? [entryX]
+    : units > 1
+    ? Array.from({ length: units }, (_, i) => -w / 2 + (w * (i + 0.5)) / units)
+    : [0];
+  if (garage) {
+    beam(entryX, 2.35, front + 0.09, 0.68, 0.28, 0.14, 'darkWood');
+    push('glass', new THREE.BoxGeometry(0.48, 0.16, 0.04), trs(entryX, 2.35, front + 0.18));
+  } else if (units === 1) {
+    lowerWindow(-w * 0.29);
+    lowerWindow(w * 0.29);
+  } else {
+    for (const doorX of doorXs) lowerWindow(doorX - w / units * 0.32, Math.min(0.9, w / units * 0.34));
+  }
+  for (const doorX of doorXs) {
+    const doorW = garage ? Math.min(0.86, entryW * 0.54) : Math.min(0.91, w / units * 0.38);
+    beam(doorX, 1.48, front + 0.08, doorW + 0.24, 2.02, 0.2, 'darkWood');
+    beam(doorX, 1.47, front + 0.19, doorW, 1.78, 0.05, 'timber');
+    for (const y of [0.72, 0.96, 1.2, 1.44, 1.68, 1.92, 2.16]) {
+      beam(doorX, y, front + 0.23, doorW - 0.05, 0.035, 0.035, 'darkWood');
+    }
+  }
+  beam(0, upperY, 0, w + 0.42, 0.16, d + 0.32, 'darkWood');
+
+  if (floors > 1) {
+    push('plaster', new THREE.BoxGeometry(wallW, H - upperY, wallD),
+      trs(0, upperY + (H - upperY) / 2, 0.12));
+    // The upper floor projects over the street as a traditional cumba.
+    push('plaster', new THREE.BoxGeometry(bayW, (H - upperY) * 0.88, bayD),
+      trs(0, upperY + (H - upperY) * 0.52, front + bayD / 2 - 0.04));
+    for (const x of [-w / 2 + 0.12, 0, w / 2 - 0.12]) {
+      beam(x, upperY + (H - upperY) / 2, front + 0.25, 0.16, H - upperY + 0.08, 0.17, 'darkWood');
+    }
+    for (let level = 0; level <= upperLevels; level++) {
+      const y = upperY + level * upperH + 0.12;
+      beam(0, y, front + 0.25, w + 0.18, 0.16, 0.18, 'darkWood');
+    }
+    // Exposed infill framing on the front and both visible flanks.
+    for (const x of [-w * 0.34, -w * 0.17, w * 0.17, w * 0.34]) {
+      beam(x, upperY + (H - upperY) / 2, front + 0.245, 0.09, H - upperY - 0.18, 0.12);
+    }
+    for (const z of [-d * 0.28, 0, d * 0.28]) {
+      beam(w / 2 + 0.13, upperY + (H - upperY) / 2, z, 0.12, H - upperY - 0.18, 0.09);
+    }
+    const upperWindow = (x, y, z = front + 0.38, width = 0.86) => {
+      beam(x, y, z, width + 0.18, 1.08, 0.15, 'darkWood');
+      push('glass', new THREE.BoxGeometry(width, 0.9, 0.05), trs(x, y, z + 0.09));
+      beam(x, y, z + 0.14, 0.055, 0.94, 0.035);
+      beam(x, y, z + 0.14, width, 0.055, 0.035);
+    };
+    for (let level = 0; level < upperLevels; level++) {
+      const wy = upperY + level * upperH + 1.42;
+      if (units > 1) {
+        for (const x of doorXs) upperWindow(x, wy, front + 0.38, Math.min(0.78, w / units * 0.34));
+      } else {
+        upperWindow(-w * 0.32, wy);
+        upperWindow(w * 0.32, wy);
+      }
+      upperWindow(0, wy, front + bayD + 0.08, bayW * 0.72);
+    }
+    // Bay window sill and its two carved-looking timber brackets.
+    beam(0, upperY + 0.55, front + bayD / 2, bayW + 0.22, 0.16, bayD + 0.2, 'darkWood');
+    for (const x of [-bayW * 0.38, bayW * 0.38]) {
+      const bracket = new THREE.BoxGeometry(0.14, 0.54, 0.56);
+      push('timber', bracket, trs(x, upperY + 0.28, front + 0.28, -0.45));
+    }
+    // Deep eaves and a four-sided tiled roof.
+    push('tile', new THREE.BoxGeometry(w + eave * 2, 0.16, d + eave * 2), trs(0, H + 0.11, 0));
+    const hip = new THREE.ConeGeometry(Math.SQRT1_2, roofRise, 4, 1);
+    hip.rotateY(Math.PI / 4);
+    push('tile', hip, trs(0, H + roofRise / 2 + 0.05, 0, 0, 0, 0, w + eave * 2, roofRise, d + eave * 2));
+    hip.dispose();
+    beam(0, H + 0.15, front + eave * 0.68, w + eave, 0.15, 0.16, 'darkWood');
+  } else {
+    push('tile', new THREE.BoxGeometry(w + eave * 2, 0.16, d + eave * 2), trs(0, H + 0.09, 0));
+    const hip = new THREE.ConeGeometry(Math.SQRT1_2, 0.82, 4, 1);
+    hip.rotateY(Math.PI / 4);
+    push('tile', hip, trs(0, H + 0.46, 0, 0, 0, 0, w + eave * 2, 0.82, d + eave * 2));
+    hip.dispose();
+  }
+
+  for (const [key, list] of Object.entries(parts)) {
+    if (!list.length) continue;
+    const mesh = new THREE.Mesh(bake(list), materials[key]);
+    mesh.castShadow = mesh.receiveShadow = true;
+    if (key !== 'glass') hullOutline(mesh, { thickness: 0.0032 });
+    g.add(mesh);
+  }
+  const rotations = { 'z+': 0, 'z-': Math.PI, 'x+': Math.PI / 2, 'x-': -Math.PI / 2 };
+  g.position.set(o.x, o.y ?? 0, o.z);
+  g.rotation.y = rotations[o.face ?? 'x-'];
+  g.userData.footprint = { w: plotW, d: plotD, H };
+  g.userData.width = w;
+  g.userData.doorAt = doorXs[0];
+  g.userData.doors = doorXs;
+  g.userData.eave = eave;
+  if (garage) g.userData.bay = { x: garageX, w: garageW, d: garageDepth };
+  g.userData.top = H + (floors > 1 ? roofRise + 0.3 : 0.82);
+  return g;
+}
+
+/* Every detached home in the city now uses the same Turkish vernacular
+ * construction; districts still control their own footprint, height and face. */
+export function makeHouse(o = {}) {
+  return makeAnatolianHouse(o);
 }
 
 /* ------------------------------------------------------------------ *
