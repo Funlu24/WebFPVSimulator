@@ -6,7 +6,8 @@ import { box, cyl, bake, trs, rngKit } from '../core/util.js';
 import { hullOutline } from '../core/outline.js';
 
 /* ------------------------------------------------------------------ *
- * Low-rise Japanese houses.
+ * Earlier low-rise modular house generator, kept here for reference. All
+ * detached homes use the Anatolian timber-frame generator below.
  *
  * One generator, driven by a seed, producing modular but never identical
  * volumes: gable / hip / flat roofs, two wall tones, balconies, sliding
@@ -25,22 +26,84 @@ const ROOFS = [PAL.roofSlate, PAL.roofBlue, PAL.roofBrown, PAL.roofTeal];
 
 const M = {};
 let ANATOLIAN_MATSETS;
-let ANATOLIAN_HOUSE_MODEL = null;
-let ANATOLIAN_HOUSE_BOUNDS = null;
+let ANATOLIAN_SURFACES;
 
-/* The imported low-poly cottage is configured before the city is assembled,
- * then cloned by makeAnatolianHouse. Clearing the prototype after assembly
- * keeps later maps and rebuilds on their own house generators. */
-export function setAnatolianHouseModel(model = null) {
-  ANATOLIAN_HOUSE_MODEL = null;
-  ANATOLIAN_HOUSE_BOUNDS = null;
-  if (!model) return;
+/* Small, seamless surface maps shared by the whole housing district. They
+ * add limewash grain, timber grain, stone joints and clay roof courses while
+ * keeping each facade in the existing per-material batches. */
+function surfaceHash(x, y, seed) {
+  let h = Math.imul((x + seed) | 0, 0x45d9f3b) ^ Math.imul((y - seed) | 0, 0x119de1f3);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
 
-  model.updateMatrixWorld(true);
-  const bounds = new THREE.Box3().setFromObject(model);
-  if (bounds.isEmpty()) return;
-  ANATOLIAN_HOUSE_MODEL = model;
-  ANATOLIAN_HOUSE_BOUNDS = bounds;
+function makeHouseSurface(kind, seed) {
+  const size = 128;
+  const color = new Uint8Array(size * size * 4);
+  const height = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const fine = surfaceHash(x, y, seed);
+      const coarse = surfaceHash(x >> 3, y >> 3, seed + 31);
+      let value;
+      let relief;
+      if (kind === 'plaster') {
+        value = 235 + (coarse - 0.5) * 14 + (fine - 0.5) * 10;
+        relief = 128 + (coarse - 0.5) * 18 + (fine - 0.5) * 8;
+      } else if (kind === 'timber') {
+        const grain = Math.sin((x + Math.sin(y * 0.09) * 2.4) * 0.78 + y * 0.025);
+        value = 222 + grain * 9 + (coarse - 0.5) * 16 + (fine - 0.5) * 8;
+        relief = 128 + grain * 18 + (coarse - 0.5) * 14;
+      } else if (kind === 'stone') {
+        const row = Math.floor(y / 32);
+        const u = (x + (row % 2) * 16) % 32;
+        const joint = u < 1.5 || y % 32 < 1.5;
+        value = joint ? 150 : 203 + (coarse - 0.5) * 22 + (fine - 0.5) * 10;
+        relief = joint ? 92 : 154 + (coarse - 0.5) * 22 + (fine - 0.5) * 8;
+      } else {
+        const course = Math.floor(y / 16);
+        const u = (x + (course % 2) * 8) % 16;
+        const joint = u < 1.25 || y % 16 < 1.25;
+        const crown = Math.max(0, 1 - Math.abs(u - 8) / 7);
+        value = joint ? 145 : 220 + crown * 13 + (coarse - 0.5) * 14 + (fine - 0.5) * 8;
+        relief = joint ? 88 : 148 + crown * 30 + (coarse - 0.5) * 16;
+      }
+      const i = (y * size + x) * 4;
+      const c = Math.max(0, Math.min(255, Math.round(value)));
+      const h = Math.max(0, Math.min(255, Math.round(relief)));
+      color[i] = color[i + 1] = color[i + 2] = c;
+      color[i + 3] = 255;
+      height[i] = height[i + 1] = height[i + 2] = h;
+      height[i + 3] = 255;
+    }
+  }
+  const makeTexture = (data, colorSpace) => {
+    const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    texture.colorSpace = colorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    const repeat = kind === 'tile' ? 8 : (kind === 'stone' ? 3 : 1);
+    texture.repeat.set(repeat, repeat);
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+    return texture;
+  };
+  return {
+    map: makeTexture(color, THREE.SRGBColorSpace),
+    bumpMap: makeTexture(height, THREE.NoColorSpace),
+  };
+}
+
+function houseSurfaces() {
+  ANATOLIAN_SURFACES ??= {
+    plaster: makeHouseSurface('plaster', 17),
+    timber: makeHouseSurface('timber', 29),
+    stone: makeHouseSurface('stone', 43),
+    tile: makeHouseSurface('tile', 59),
+  };
+  return ANATOLIAN_SURFACES;
 }
 
 function mats() {
@@ -390,35 +453,6 @@ export function makeAnatolianHouse(o = {}) {
   const w = frontIsX ? plotD : plotW;
   const d = frontIsX ? plotW : plotD;
 
-  if (ANATOLIAN_HOUSE_MODEL && ANATOLIAN_HOUSE_BOUNDS) {
-    const modelSize = ANATOLIAN_HOUSE_BOUNDS.getSize(new THREE.Vector3());
-    const scale = Math.min(w / modelSize.x, d / modelSize.z);
-    const g = ANATOLIAN_HOUSE_MODEL.clone(true);
-    g.name = 'anatolianHouseImported';
-    g.scale.setScalar(scale);
-    const rotations = { 'z+': 0, 'z-': Math.PI, 'x+': Math.PI / 2, 'x-': -Math.PI / 2 };
-    g.rotation.y = rotations[o.face ?? 'x-'];
-    g.position.set(
-      o.x ?? 0,
-      (o.y ?? 0) - ANATOLIAN_HOUSE_BOUNDS.min.y * scale,
-      o.z ?? 0,
-    );
-    g.traverse((child) => {
-      if (!child.isMesh) return;
-      child.castShadow = true;
-      child.receiveShadow = true;
-    });
-    const H = modelSize.y * scale;
-    const doorAt = o.doorAt ?? -0.16 * w;
-    g.userData.footprint = { w: plotW, d: plotD, H };
-    g.userData.width = w;
-    g.userData.doorAt = doorAt;
-    g.userData.doors = [doorAt];
-    g.userData.eave = 0.35 * scale;
-    g.userData.top = H;
-    return g;
-  }
-
   const g = new THREE.Group();
   g.name = 'anatolianHouse';
   const floors = Math.max(1, Math.min(3, Math.round(o.floors ?? 2)));
@@ -440,18 +474,19 @@ export function makeAnatolianHouse(o = {}) {
   const garageDepth = Math.min(d - 1.6, 4.6);
   const garageX = -garageSide * (w / 2 - garageW / 2);
   const entryX = garageSide * (w / 2 - entryW / 2);
+  const surfaces = houseSurfaces();
   ANATOLIAN_MATSETS ??= [
     [0xf2e5ca, 0x704a36, 0x9b4938],
     [0xe8dcc5, 0x5f4232, 0x874737],
     [0xf5e9d1, 0x654c3c, 0xa4523c],
     [0xe4d4ba, 0x493b31, 0x774333],
   ].map(([wall, wood, roof]) => ({
-    darkWood: cel({ color: 0x493329, bands: 3, tint: 0x3b304b, roughness: 0.88 }),
-    timber: cel({ color: wood, bands: 3, tint: 0x49364a, roughness: 0.85 }),
-    plaster: cel({ color: wall, bands: 3, tint: 0x756881, roughness: 0.94 }),
-    stone: cel({ color: 0x9a8876, bands: 3, tint: 0x62596c, roughness: 0.96 }),
-    tile: cel({ color: roof, bands: 3, tint: 0x5b4050, roughness: 0.88 }),
-    glass: cel({ color: 0x758da0, bands: 3, tint: 0x4f536c, roughness: 0.38 }),
+    darkWood: cel({ color: 0x493329, map: surfaces.timber.map, bumpMap: surfaces.timber.bumpMap, bumpScale: 0.01, roughness: 0.9 }),
+    timber: cel({ color: wood, map: surfaces.timber.map, bumpMap: surfaces.timber.bumpMap, bumpScale: 0.01, roughness: 0.84 }),
+    plaster: cel({ color: wall, map: surfaces.plaster.map, bumpMap: surfaces.plaster.bumpMap, bumpScale: 0.008, roughness: 0.96 }),
+    stone: cel({ color: 0x9a8876, map: surfaces.stone.map, bumpMap: surfaces.stone.bumpMap, bumpScale: 0.025, roughness: 0.98 }),
+    tile: cel({ color: roof, map: surfaces.tile.map, bumpMap: surfaces.tile.bumpMap, bumpScale: 0.018, roughness: 0.9 }),
+    glass: cel({ color: 0x758da0, bands: 3, tint: 0x4f536c, roughness: 0.34, metalness: 0.08 }),
   }));
   const variant = Math.abs(Math.round(o.seed ?? 0)) % ANATOLIAN_MATSETS.length;
   const materials = ANATOLIAN_MATSETS[variant];
@@ -486,6 +521,12 @@ export function makeAnatolianHouse(o = {}) {
     push('glass', new THREE.BoxGeometry(glassW, 0.98, 0.05), trs(x, 1.62, front + 0.13));
     beam(x, 1.62, front + 0.18, 0.07, 1.02, 0.04, 'timber');
     beam(x, 1.62, front + 0.18, glassW, 0.07, 0.04, 'timber');
+    for (const dx of [-glassW / 3, glassW / 3]) {
+      beam(x + dx, 1.62, front + 0.18, 0.045, 1.0, 0.04, 'timber');
+    }
+    for (const dy of [-0.27, 0.27]) {
+      beam(x, 1.62 + dy, front + 0.18, glassW, 0.045, 0.04, 'timber');
+    }
     beam(x, 1.08, front + 0.13, width + 0.16, 0.12, 0.36, 'darkWood');
   };
   const doorXs = garage
@@ -537,6 +578,12 @@ export function makeAnatolianHouse(o = {}) {
       push('glass', new THREE.BoxGeometry(width, 0.9, 0.05), trs(x, y, z + 0.09));
       beam(x, y, z + 0.14, 0.055, 0.94, 0.035);
       beam(x, y, z + 0.14, width, 0.055, 0.035);
+      for (const dx of [-width / 3, width / 3]) {
+        beam(x + dx, y, z + 0.14, 0.04, 0.9, 0.035);
+      }
+      for (const dy of [-0.24, 0.24]) {
+        beam(x, y + dy, z + 0.14, width, 0.04, 0.035);
+      }
     };
     for (let level = 0; level < upperLevels; level++) {
       const wy = upperY + level * upperH + 1.42;
@@ -573,7 +620,6 @@ export function makeAnatolianHouse(o = {}) {
     if (!list.length) continue;
     const mesh = new THREE.Mesh(bake(list), materials[key]);
     mesh.castShadow = mesh.receiveShadow = true;
-    if (key !== 'glass') hullOutline(mesh, { thickness: 0.0032 });
     g.add(mesh);
   }
   const rotations = { 'z+': 0, 'z-': Math.PI, 'x+': Math.PI / 2, 'x-': -Math.PI / 2 };

@@ -1864,15 +1864,16 @@ export async function boot({ loading, bootStart, mapId }) {
    * ui.manga is false.
    *
    * THE INK LINES ARE SET HERE TOO, though they are not the manga layer's
-   * strokes: Manga and scoring off takes the black outline off every world
-   * on Medium and High, as Low has it (setInkLines in src/render/quality.js).
+   * strokes: Clean FPV and Manga and scoring off take the black outline off
+   * every world on Medium and High, as Low has it (setInkLines in
+   * src/render/quality.js).
    * Here because this runs once a frame for whichever world is live, the
    * title's included, so a world swapped in is given the switch without a
    * call of its own. Not while the Freestyle room's cards are being filmed:
    * a clip is cached in this browser for good, and one recorded with the
    * switch off would keep no outline after it was turned back on. */
   function mangaFrame(dt) {
-    setInkLines(view.post, filmNow || ui.settings.mangaAndScoring !== false);
+    setInkLines(view.post, filmNow || (ui.settings.mangaAndScoring !== false && !ui.settings.cleanFpv));
     const on = Boolean(ui.manga) && view.mode === 'freestyle';
     const fpv = on && mode === 'flight' && introMs < 0 && !replayMode && Boolean(stateCurr);
     let speed = 0;

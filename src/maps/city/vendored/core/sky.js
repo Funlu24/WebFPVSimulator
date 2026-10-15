@@ -5,9 +5,7 @@ import { cloudTex } from './textures.js';
 import { rngKit } from './util.js';
 
 /**
- * A three-stop painted gradient dome plus a handful of flat cel clouds.
- * Slight banding is intentional -- it reads as airbrushed background art
- * rather than a physical sky.
+ * A smooth three-stop sky dome plus a handful of soft distant clouds.
  */
 export function buildSky(scene, radius = 500) {
   const geo = new THREE.SphereGeometry(radius, 32, 20);
@@ -36,10 +34,10 @@ export function buildSky(scene, radius = 500) {
 
       void main() {
         float h = normalize( vWorld ).y;
-        // soft quantisation: mostly smooth, with a faint painted step
+        // Keep the horizon blend smooth; only a trace of quantisation remains.
         float t = clamp( h * 1.15 + 0.02, 0.0, 1.0 );
         float q = floor( t * uBands ) / uBands;
-        t = mix( t, q, 0.35 );
+        t = mix( t, q, 0.06 );
 
         vec3 col = mix( uHaze, uMid, smoothstep( 0.0, 0.30, t ) );
         col = mix( col, uTop, smoothstep( 0.26, 0.92, t ) );

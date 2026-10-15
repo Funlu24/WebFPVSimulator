@@ -49,6 +49,92 @@ const MATERIAL_TINTS = [
   [/props[_\s-]*3/i, 0x85847a],
 ];
 
+let AIRBASE_SURFACES;
+
+function surfaceHash(x, y, seed) {
+  let h = Math.imul((x + seed) | 0, 0x45d9f3b) ^ Math.imul((y - seed) | 0, 0x119de1f3);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
+function makeSurfaceTexture(kind, seed) {
+  const size = 128;
+  const color = new Uint8Array(size * size * 4);
+  const height = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const fine = surfaceHash(x, y, seed);
+      const coarse = surfaceHash(x >> 3, y >> 3, seed + 37);
+      let value;
+      let relief;
+      if (kind === 'grass') {
+        value = 224 + (coarse - 0.5) * 20 + (fine - 0.5) * 12;
+        relief = 128 + (coarse - 0.5) * 16 + (fine - 0.5) * 8;
+      } else if (kind === 'metal') {
+        const corrugation = Math.sin(x * Math.PI / 4);
+        value = 226 + corrugation * 12 + (coarse - 0.5) * 10 + (fine - 0.5) * 7;
+        relief = 128 + corrugation * 24 + (coarse - 0.5) * 10;
+      } else if (kind === 'wood') {
+        const grain = Math.sin((x + Math.sin(y * 0.08) * 2) * 0.72 + y * 0.02);
+        value = 222 + grain * 11 + (coarse - 0.5) * 14 + (fine - 0.5) * 9;
+        relief = 128 + grain * 18 + (coarse - 0.5) * 12;
+      } else {
+        /* Aggregate grain for runway asphalt and poured concrete, with a
+         * little more roughness on asphalt than on building panels. */
+        const grain = kind === 'asphalt' ? 20 : 12;
+        value = 232 + (coarse - 0.5) * grain + (fine - 0.5) * grain * 0.65;
+        relief = 128 + (coarse - 0.5) * grain * 1.4 + (fine - 0.5) * grain;
+      }
+      const i = (y * size + x) * 4;
+      const c = Math.max(0, Math.min(255, Math.round(value)));
+      const h = Math.max(0, Math.min(255, Math.round(relief)));
+      color[i] = color[i + 1] = color[i + 2] = c;
+      color[i + 3] = 255;
+      height[i] = height[i + 1] = height[i + 2] = h;
+      height[i + 3] = 255;
+    }
+  }
+  const texture = (data, colorSpace) => {
+    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    tex.colorSpace = colorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(kind === 'metal' ? 4 : 8, kind === 'wood' ? 12 : 8);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  };
+  return {
+    map: texture(color, THREE.SRGBColorSpace),
+    bumpMap: texture(height, THREE.NoColorSpace),
+  };
+}
+
+function airbaseSurface(name) {
+  const n = name.toLowerCase();
+  if (/grass|helideckfelt/.test(n)) return 'grass';
+  if (/runway|roads|pavement|carpark|rubber/.test(n)) return 'asphalt';
+  if (/planks/.test(n)) return 'wood';
+  if (/corrugated|metal|fence/.test(n)) return 'metal';
+  return 'concrete';
+}
+
+function surfaceMaps(kind) {
+  AIRBASE_SURFACES ??= {};
+  AIRBASE_SURFACES[kind] ??= makeSurfaceTexture(kind, 71 + ['asphalt', 'concrete', 'grass', 'metal', 'wood'].indexOf(kind) * 13);
+  return AIRBASE_SURFACES[kind];
+}
+
+function hasImageDetail(texture) {
+  const image = texture?.image;
+  const width = Number(image?.naturalWidth || image?.width || 0);
+  const height = Number(image?.naturalHeight || image?.height || 0);
+  return width > 1 || height > 1;
+}
+
 function airportDocument() {
   const doc = starterMap();
   doc.id = 'fab-military-airbase';
@@ -113,6 +199,17 @@ function tintMissingTextureMaterials(material) {
       if (item.emissive) {
         item.emissive.copy(item.color).multiplyScalar(0.16);
       }
+    }
+    if (!/glass|emissive/i.test(name)) {
+      const maps = surfaceMaps(airbaseSurface(name));
+      if (!hasImageDetail(item.map)) {
+        item.map = maps.map;
+      }
+      if (!hasImageDetail(item.bumpMap)) {
+        item.bumpMap = maps.bumpMap;
+        item.bumpScale = /grass|planks|corrugated|runway/i.test(name) ? 0.018 : 0.01;
+      }
+      item.needsUpdate = true;
     }
   }
 }

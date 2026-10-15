@@ -1194,14 +1194,14 @@ const DEFAULTS = {
   mangaAndScoring: true,
   /*
    * CLEAN FPV: the manga layer off (FREESTYLE-MAPS-PLAN.md sections 3.2 and
-   * 3.3, decision 4). Off by default, because the layer is for freestyle
-   * maps and on there unless the pilot turns it off; a race track is clean
-   * whatever this says. It takes the lettered callouts, their sound effects
-   * and the manga results page back to plain HUD text, and the speed lines,
-   * the impact frame and the screentone out of the picture (src/main.js,
-   * mangaFrame, reads ui.manga). See syncManga.
+   * 3.3, decision 4). On by default for a clean, natural world; race tracks
+   * are clean whatever this says. It keeps the score in plain HUD text and
+   * takes the speed lines, impact frame, screentone and world contours out
+   * of the picture. See syncManga and mangaFrame.
    */
-  cleanFpv: false,
+  cleanFpv: true,
+  /* One-time migration so saved profiles adopt the new natural default too. */
+  visualStyleVersion: 1,
   /*
    * THE IMPACT FRAME'S OWN SWITCH (the plan, section 3.2 item 4): a crash
    * holds the moment for a beat, re-inked, then lets go. On by default on a
@@ -1577,6 +1577,11 @@ export function loadSettings() {
       s[k] = stored[k];
     }
   }
+  const migrateVisualStyle = stored.visualStyleVersion !== DEFAULTS.visualStyleVersion;
+  if (migrateVisualStyle) {
+    s.cleanFpv = true;
+    s.visualStyleVersion = DEFAULTS.visualStyleVersion;
+  }
   const moveToAirbase = stored.airbaseStartVersion !== DEFAULTS.airbaseStartVersion;
   if (moveToAirbase) {
     s.map = 'airbase';
@@ -1829,7 +1834,7 @@ export function loadSettings() {
   } else {
     s.graphics = normalizeGraphics(s.graphics);
   }
-  if (moveToAirbase) {
+  if (moveToAirbase || migrateVisualStyle) {
     saveSettings(s);
   }
   return s;
@@ -9154,7 +9159,7 @@ export class Ui {
         toggle(
           'Manga and scoring',
           s.mangaAndScoring
-            ? 'On: the game\'s manga look and its score. The menus\' titles are lettered in the manga hand, Medium and High draw black outlines round the world, and on a freestyle map the score, its combos and the chase are drawn as you fly them. Clean FPV and the Impact frame below trim parts of it.'
+            ? `On: the score, combos and chase are available. ${s.cleanFpv ? 'Clean FPV keeps flight natural, with plain score text and no world outlines.' : 'The manga look adds speed lines, impact frames and world outlines.'} The Impact frame below is a separate switch.`
             : 'Off: no manga look anywhere, and no score while you fly. No black outlines round the world on Medium and High, as on Low, no speed lines, impact frame or lettering, menus in plain type, and no score, combo or chase meter over the picture. The counting goes on underneath, so a scored run still runs its two minutes and ends on its results.',
           s.mangaAndScoring,
           (v) => { s.mangaAndScoring = v; },
@@ -9170,7 +9175,7 @@ export class Ui {
           !s.mangaAndScoring
             ? 'Nothing to do while Manga and scoring is off: every map is already clean. Turn that on and this keeps the score and the chase as plain words and numbers, with no manga look in flight.'
             : (s.cleanFpv
-              ? 'On: freestyle maps look and read the way a race track does. No speed lines and no impact frame; callouts are words and numbers, and the results are a list.'
+              ? 'On: freestyle maps look and read the way a race track does. No world outlines, speed lines or impact frame; callouts are words and numbers, and the results are a list.'
               : 'Off: on a freestyle map, ink speed lines gather at the edges of the picture above about 20 m/s, a crash lands as an impact frame, tricks, gaps and combos are hand lettered like a manga with a small katakana sound effect beside the big ones, and the results come back as a page of panels. Race tracks are always clean.'),
           s.cleanFpv,
           (v) => { s.cleanFpv = v; },

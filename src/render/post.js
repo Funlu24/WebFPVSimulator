@@ -691,6 +691,7 @@ export function buildComposer(renderer, scene, camera, quality) {
    * budget.js, which has to read the real targets to answer P5. Nothing in
    * the shell touches them. */
   return {
+    scene,
     render() {
       renderNormals();
       composer.render();

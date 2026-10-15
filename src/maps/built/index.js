@@ -354,7 +354,7 @@ export class BuiltPipeline extends Pipeline {
     this.fxaa.mat.uniforms.uTexel.value.copy(texel);
     this.ink.mat.uniforms.uNear.value = this.camera.near;
     this.ink.mat.uniforms.uFar.value = this.camera.far;
-    /* Times the comic layer's heavier pen (src/render/comic.js). */
+    /* Times the render style's contour width (src/render/comic.js). */
     this.ink.mat.uniforms.uThickness.value = (1.05 + 0.55 * scale) * (this.inkWeight || 1);
 
     this.renderer.setPixelRatio(shellPr);
@@ -1240,9 +1240,8 @@ export async function buildMap(shell, onProgress, options) {
   const BOUNCE_OFFSET = new THREE.Vector3(...T.bounce.at);
 
   const sky = buildSky(scene, skyRadius);
-  /* Heaped cumulus in place of the vendored cards, and the streak cloud on
-   * Medium and High, in the time's colours: src/render/comicsky.js. */
-  comicSky(sky, skyLook(T), { streaks: q.id !== 'low' });
+  /* Soft, shaped cumulus in the time's colours: src/render/comicsky.js. */
+  comicSky(sky, skyLook(T), { streaks: false });
   paintSky(sky, T);
   const backdrop = buildBackdrop(scene, hillScale, T.hills);
   progress(0.1);

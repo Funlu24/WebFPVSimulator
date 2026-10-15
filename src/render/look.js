@@ -43,21 +43,21 @@ import * as THREE from 'three';
 
 export const GEM = {
   /* Tone and hue variation per vertex, as a fraction. */
-  jitter: 0.09,
-  hueJitter: 0.016,
+  jitter: 0.035,
+  hueJitter: 0.006,
   /* Darkening at a wall's foot (full under 0.2 m, gone by 3.2 m) and under an overhang. */
-  wallFoot: 0.14,
-  underside: 0.9,
+  wallFoot: 0.08,
+  underside: 0.72,
   /* A lift on faces that look up. */
-  topLift: 0.07,
+  topLift: 0.035,
   /* The sky's colour fullness, and its zenith's lightness. */
-  skySat: 1.25,
-  skyTop: 0.96,
+  skySat: 1.06,
+  skyTop: 1,
   /* The fog's colour fullness, and how far it moves toward the sky's horizon. */
-  fogSat: 1.1,
-  fogToHorizon: 0.2,
+  fogSat: 1.02,
+  fogToHorizon: 0.12,
   /* Multiplies the key light's colour. */
-  keyLight: [1.0, 0.95, 0.85],
+  keyLight: [1.0, 0.98, 0.94],
 };
 
 function hash(x, y, z) {

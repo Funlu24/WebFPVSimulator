@@ -442,6 +442,7 @@ export function outlineHull(mesh, thickness = 1.05, color = 0x141a24) {
   hull.scale.multiplyScalar(thickness);
   hull.castShadow = false;
   hull.receiveShadow = false;
+  hull.userData.isOutline = true;
   mesh.add(hull);
   return mesh;
 }

@@ -8,5 +8,7 @@ with `InstancedMesh`.
 
 The Unity terrain heightmap and source texture set are not part of this
 extraction. The simulator supplies a flat flight surface, neutral fallbacks
-for missing normal maps, and subdued colours derived from FBX material names
-for the missing base-colour images.
+for missing normal maps, subdued colours derived from FBX material names,
+and small tiled surface maps for asphalt, concrete, grass, metal and wood.
+These maps restore surface variation where the package's base-colour images
+are absent, without changing the original geometry or instance layout.

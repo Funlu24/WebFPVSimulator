@@ -512,7 +512,7 @@ function buildDetailMap() {
 /* The heavier pen for the ink passes, as a factor on each pipeline's own
  * line width. 1 is the line before this file. Was 1.55 until the eased pen
  * (HATCH_DEPTH, above). */
-export const INK_WEIGHT = 1.25;
+export const INK_WEIGHT = 0.72;
 /* The ink itself: near black with a breath of blue, so it reads as ink on
  * paper rather than as a hole in the frame. */
 export const INK_COLOR = 0x0d0f16;
@@ -1304,15 +1304,15 @@ if (!P[INSTALLED]) {
 }
 
 /*
- * The freestyle maps' vendored pipeline: the heavier, darker pen and a
- * harder grade, on the pipeline's own copies of its materials, the way
+ * The freestyle maps' vendored pipeline: a restrained contour and a
+ * surface-faithful grade, on the pipeline's own copies of its materials, the way
  * manga.js edits them. Nothing under vendored/ changes. The pipelines'
  * setSize multiplies its own line width by pipeline.inkWeight.
  */
 export function comicPipeline(pipeline, {
   blobs = false,
   inkWeight = INK_WEIGHT,
-  saturation = 1.26,
+  saturation = 1.04,
   neutralGrade = false,
 } = {}) {
   /* The pen and the grade below are uniforms and draw on WebGL 1 as they
@@ -1352,13 +1352,12 @@ export function comicPipeline(pipeline, {
   }
   const g = pipeline.grade && pipeline.grade.mat && pipeline.grade.mat.uniforms;
   if (g) {
-    /* More colour and deeper darks: the pastel town moves toward the
-     * saturated, high contrast palette the ask names, keeping its hues. */
+    /* Keep the palette close to the authored surface colours. */
     if (g.uSaturation) {
       g.uSaturation.value = neutralGrade ? 1 : saturation;
     }
     if (g.uLift) {
-      g.uLift.value = neutralGrade ? 0 : 0.014;
+      g.uLift.value = neutralGrade ? 0 : 0.004;
     }
     if (neutralGrade) {
       if (g.uShadowTint) g.uShadowTint.value.setRGB(1, 1, 1);

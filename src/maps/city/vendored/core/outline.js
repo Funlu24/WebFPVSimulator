@@ -103,6 +103,7 @@ export function hullOutline(mesh, { thickness = 0.0038, color = PAL.ink, opacity
   shell.receiveShadow = false;
   shell.renderOrder = (mesh.renderOrder || 0) - 1;
   shell.frustumCulled = mesh.frustumCulled;
+  shell.userData.isOutline = true;
   mesh.add(shell);
   return shell;
 }

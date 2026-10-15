@@ -92,6 +92,8 @@ export function cel(opts = {}) {
     tint = 0x6c5f8c,
     flat = true,
     map = null,
+    bumpMap = null,
+    bumpScale = 0.04,
     emissive = null,
     emissiveIntensity = 1,
     roughness = 0.84,
@@ -107,7 +109,7 @@ export function cel(opts = {}) {
     cache = true,
   } = opts;
 
-  const key = cache && !map && !alphaMap
+  const key = cache && !map && !alphaMap && !bumpMap
     ? [color, emissive, emissiveIntensity, transparent,
        opacity, roughness, metalness, side, alphaTest, depthWrite, fog, vertexColors].join('|')
     : null;
@@ -116,6 +118,8 @@ export function cel(opts = {}) {
   const mat = new THREE.MeshStandardMaterial({
     color,
     map,
+    bumpMap,
+    bumpScale,
     alphaMap,
     roughness,
     metalness,

@@ -541,12 +541,10 @@ export function internalScale(w, h, mapQ, forceScale, userScale) {
  * THE INK LINES, AND THE PILOT'S HAND ON THEM. The black outline round the
  * edges of the world, in the town, on a built map and on the race field
  * alike, is a screen space pass that Low leaves out and Medium and High
- * draw (city.ink and field.outline above). The pilot's Manga and scoring
- * switch (src/ui/ui.js, DEFAULTS.mangaAndScoring) takes it away on Medium
- * and High too, so the picture is Low's without giving up anything else
- * those presets pay for. It can only narrow what the preset gave: on Low
- * the switch has nothing to take, and turning it on never adds a pass the
- * preset left out.
+ * draw (city.ink and field.outline above). A few props also carry a thin
+ * inverted-hull contour. Clean FPV and Manga and scoring turn off both kinds
+ * so every map uses the same natural finish. On Low there is no screen-space
+ * pass to toggle, and turning ink on never adds one the preset left out.
  *
  * There are two post chains, and they hold the ink differently:
  *
@@ -568,16 +566,25 @@ export function internalScale(w, h, mapQ, forceScale, userScale) {
  * write is guarded on a change. Render only: nothing here is read by the
  * physics, the scorer or the plant.
  *
- * What it does NOT touch is the inverted hull outline on a few props (a
- * gate post, a trunk, a vending machine: outlineHull in celmat.js and
- * hullOutline in the vendored core/outline.js). Those are geometry, every
- * preset draws them, and Low does, which is the picture this matches.
+ * The screen-space pass is kept where the composer needs it for antialiasing;
+ * its strength goes to zero. Attached contour meshes follow the same switch
+ * through post.scene, once per map or whenever the pilot changes the setting.
  */
 export function setInkLines(post, on) {
   if (!post) {
     return;
   }
   const want = on !== false;
+  /* A few hero props carry an inverted-hull contour as geometry. Keep those
+   * in step with the screen-space ink so Clean FPV removes every world outline. */
+  if (post.scene && post.hullOutlinesOn !== want) {
+    post.scene.traverse((object) => {
+      if (object.userData && object.userData.isOutline) {
+        object.visible = want;
+      }
+    });
+    post.hullOutlinesOn = want;
+  }
   if (post.enabled && post.ink) {
     /* A pipeline built by something that never said what its preset gave
      * is left as it is: narrowing needs the thing it narrows. */

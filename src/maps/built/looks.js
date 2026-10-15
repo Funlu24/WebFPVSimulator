@@ -11,13 +11,9 @@
  * (src/trackbuilder/view3d.js) follows it, and so does the asset gallery,
  * so all three agree about what dusk is.
  *
- * GOLDEN IS THE TOWN'S OWN, NUMBER FOR NUMBER. Every golden value below is
- * the one the built map used before times existed (the town's palette, its
- * four lights at its offsets, post.js's grade), so a map that never chose a
- * scene looks exactly as it did. The others are built round it by the same
- * rules the town's palette keeps: shadows go violet rather than grey, no
- * value crushes to black, and the sky and the fog agree about the colour of
- * the horizon, since the fog is what the land fades into as it meets it.
+ * GOLDEN IS THE NEUTRAL DAYLIGHT BASELINE. The other times use the same
+ * restrained surface-first grade: shadows keep a little colour, highlights
+ * stay soft, and the sky and fog meet without a hard painted horizon.
  *
  * Pure data and plain assignments, no Three.js import: the functions below
  * set colours on objects the caller built, so this loads in Node and a check
@@ -65,7 +61,7 @@ import { sceneOf } from '../../trackbuilder/model.js';
  *                      heapShade, where a time has it, the shade its heaped
  *                      clouds take in place of cloudShade (skyLook).
  *   hills              the painted ridges, far and near.
- *   ink, grade         the post pipeline's ink colour and anime grade.
+ *   ink, grade         the post pipeline's contour colour and natural grade.
  *   flats              what the kit multiplies every unlit material that is
  *                      not a light by (src/props/kit.js): about what the
  *                      time's lights do to a pale wall against golden hour,
@@ -88,7 +84,7 @@ export const TIMES = {
     /* post.js's own, written out so a page that switches back to golden
      * (the builder's preview) puts them back. */
     ink: PAL.ink,
-    grade: { shadowTint: 0xb4b4bc, lightTint: 0xfffaf2, saturation: 0.85, lift: 0.02, vignette: 0.15, warmth: 0.02 }, 
+    grade: { shadowTint: 0xb8b7b8, lightTint: 0xfffaf5, saturation: 0.98, lift: 0.005, vignette: 0.06, warmth: 0.01 },
     flats: null,
     night: false,
     wire: 0x4c4658,
@@ -114,7 +110,7 @@ export const TIMES = {
     },
     hills: { far: 0xd0dbee, near: 0xb9c8e4 },
     ink: PAL.ink,
-    grade: { shadowTint: 0xa0a5d6, lightTint: 0xfffbf2, saturation: 1.18, lift: 0.022, vignette: 0.12, warmth: 0.015 },
+    grade: { shadowTint: 0xaeb7c2, lightTint: 0xfffcf7, saturation: 1.03, lift: 0.005, vignette: 0.04, warmth: 0.005 },
     flats: null,
     night: false,
     wire: 0x4c4658,
@@ -146,7 +142,7 @@ export const TIMES = {
     },
     hills: { far: 0x958bb8, near: 0x6c6597 },
     ink: 0x28223f,
-    grade: { shadowTint: 0x8783cc, lightTint: 0xffe6cc, saturation: 1.14, lift: 0.03, vignette: 0.24, warmth: 0.07 },
+    grade: { shadowTint: 0x8992b0, lightTint: 0xffe8d3, saturation: 1.04, lift: 0.008, vignette: 0.08, warmth: 0.04 },
     flats: [0.4, 0.36, 0.52],
     night: true,
     wire: 0x2e2a3c,
@@ -191,7 +187,7 @@ export const TIMES = {
     },
     hills: { far: 0xc6c3d6, near: 0xb8b5cb },
     ink: 0x3d3953,
-    grade: { shadowTint: 0xb0aecc, lightTint: 0xf3f2f6, saturation: 0.95, lift: 0.03, vignette: 0.14, warmth: 0 },
+    grade: { shadowTint: 0xb8b8c2, lightTint: 0xf5f4f2, saturation: 0.99, lift: 0.006, vignette: 0.05, warmth: 0 },
     flats: [0.86, 0.86, 0.9],
     night: false,
     wire: 0x4a4658,
