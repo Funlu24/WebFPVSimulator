@@ -7,5 +7,6 @@ loads the FBX files with Three.js `FBXLoader` and batches repeated placements
 with `InstancedMesh`.
 
 The Unity terrain heightmap and source texture set are not part of this
-extraction. The simulator supplies a flat flight surface and a neutral texture
-fallback while retaining the FBX material colours.
+extraction. The simulator supplies a flat flight surface, neutral fallbacks
+for missing normal maps, and subdued colours derived from FBX material names
+for the missing base-colour images.

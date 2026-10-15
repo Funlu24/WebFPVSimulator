@@ -15,8 +15,39 @@ import { yieldToPaint } from '../ui/loading.js';
 const MODEL_ROOT = 'Assets/FreshCan3D/MilitaryAirport/Art/Meshes/';
 const SCENE_URL = new URL('../../assets/models/military-airbase/scene.json', import.meta.url);
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/iVQAAAAASUVORK5CYII=';
+const NEUTRAL_NORMAL_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNoaPj/HwAGggL/s75RMwAAAABJRU5ErkJggg==';
 const FIELD = Object.freeze({ width: 960, depth: 480 });
 const SPAWN = Object.freeze({ x: -320, z: -84, yaw: 0 });
+const FBX_CENTIMETERS_PER_METER = 100;
+
+/* The Fab package extraction contains the FBX files, but not their external
+ * base-colour images. Keep the field readable with restrained material tints
+ * instead of rendering every white texture fallback as the same gray. */
+const MATERIAL_TINTS = [
+  [/emissive[_\s-]*red/i, 0xd85a48],
+  [/^mi[_\s-]*emissive/i, 0xd6c674],
+  [/grass|helideckfelt/i, 0x71824f],
+  [/glass/i, 0x76a9c3],
+  [/container[_\s-]*1/i, 0x727e5c],
+  [/container[_\s-]*2/i, 0x93764f],
+  [/planks[_\s-]*1/i, 0x8d7451],
+  [/planks[_\s-]*2/i, 0xa18a62],
+  [/rubber/i, 0x454844],
+  [/runway[_\s-]*threshold/i, 0xb7a979],
+  [/runway[_\s-]*center|runway[_\s-]*stopway/i, 0x777b75],
+  [/roads|pavement|carpark/i, 0x74756c],
+  [/concrete/i, 0x999487],
+  [/corrugated/i, 0x92977f],
+  [/fence|metalrope/i, 0x73776e],
+  [/metal[_\s-]*1/i, 0x778367],
+  [/metal[_\s-]*2/i, 0x828984],
+  [/metal[_\s-]*3/i, 0x6f7771],
+  [/metal[_\s-]*4/i, 0x827858],
+  [/metal[_\s-]*plate/i, 0x85877f],
+  [/props[_\s-]*1/i, 0x9b825e],
+  [/props[_\s-]*2/i, 0x75815d],
+  [/props[_\s-]*3/i, 0x85847a],
+];
 
 function airportDocument() {
   const doc = starterMap();
@@ -51,6 +82,13 @@ function managerWithoutSourceTextures() {
   const manager = new THREE.LoadingManager();
   manager.setURLModifier((url) => {
     if (/\.(?:png|jpe?g|tga|tif|tiff|bmp|dds)(?:[?#].*)?$/i.test(url)) {
+      /* An all-white normal map points light diagonally instead of along the
+       * surface. Use encoded (128, 128, 255) for missing _N textures; white
+       * remains the neutral fallback for diffuse/base-colour maps. */
+      const path = url.split(/[?#]/, 1)[0];
+      if (/(?:^|[._-])(?:n|normal|normalmap)(?:[._-]|$)/i.test(path)) {
+        return NEUTRAL_NORMAL_PIXEL;
+      }
       return WHITE_PIXEL;
     }
     return url;
@@ -58,25 +96,81 @@ function managerWithoutSourceTextures() {
   return manager;
 }
 
+function tintMissingTextureMaterials(material) {
+  const materials = Array.isArray(material) ? material : [material];
+  for (const item of materials) {
+    if (!item?.color) {
+      continue;
+    }
+    const name = String(item.name || item.map?.name || '');
+    const tint = MATERIAL_TINTS.find(([pattern]) => pattern.test(name));
+    if (tint) {
+      item.color.setHex(tint[1]);
+      /* The albedo maps are missing, so these imported Phong materials can
+       * otherwise fall almost to black under the freestyle map's shadow and
+       * ink passes. A small tinted emissive floor keeps their fallback hues
+       * readable without flattening the direct lighting. */
+      if (item.emissive) {
+        item.emissive.copy(item.color).multiplyScalar(0.16);
+      }
+    }
+  }
+}
+
 function meshTemplates(root) {
+  /* Unity's scene.json placements use metres and Y-up coordinates. These
+   * source FBX files use centimetres and Z-up coordinates; FBXLoader exposes
+   * the unit scale but leaves both conversions to the caller. Convert before
+   * collecting mesh matrices and bounds, so the drawn instances and their
+   * collision boxes agree with the Unity scene. */
+  const centimetersPerUnit = Number(root.userData?.unitScaleFactor);
+  const unitsToMeters = Number.isFinite(centimetersPerUnit) && centimetersPerUnit > 0
+    ? centimetersPerUnit / FBX_CENTIMETERS_PER_METER
+    : 1 / FBX_CENTIMETERS_PER_METER;
+  const modelToSimulator = new THREE.Matrix4()
+    .makeRotationX(-Math.PI / 2)
+    .multiply(new THREE.Matrix4().makeScale(unitsToMeters, unitsToMeters, unitsToMeters));
   root.updateMatrixWorld(true);
-  const meshes = [];
-  const bounds = new THREE.Box3();
+  const candidates = [];
+  const lodNumbers = [];
   root.traverse((node) => {
     if (!node.isMesh || !node.geometry?.attributes?.position) {
       return;
     }
+    const name = String(node.name || node.userData?.originalName || '');
+    if (/convex.?hull|collision|collider|physics/i.test(name)) {
+      return;
+    }
+    const lodMatch = name.match(/lod[_\s-]?(\d+)/i);
+    const lod = lodMatch ? Number(lodMatch[1]) : null;
+    if (lod !== null) {
+      lodNumbers.push(lod);
+    }
+    candidates.push({ node, lod });
+  });
+
+  /* Unreal exports every LOD as separate FBX geometry. The previous loader
+   * instanced all of them at once, so their nearly coplanar surfaces fought
+   * in the depth buffer. Keep the highest-detail LOD (usually LOD0), and any
+   * shared non-LOD pieces; collision hulls were excluded above. */
+  const selectedLod = lodNumbers.length ? Math.min(...lodNumbers) : null;
+  const visibleMeshes = candidates.filter(({ lod }) => lod === null || lod === selectedLod);
+  const meshes = [];
+  const bounds = new THREE.Box3();
+  for (const { node } of visibleMeshes) {
+    const matrix = modelToSimulator.clone().multiply(node.matrixWorld);
     if (!node.geometry.attributes.normal) {
       node.geometry.computeVertexNormals();
     }
     node.geometry.computeBoundingBox();
     if (node.geometry.boundingBox) {
-      bounds.union(node.geometry.boundingBox.clone().applyMatrix4(node.matrixWorld));
+      bounds.union(node.geometry.boundingBox.clone().applyMatrix4(matrix));
     }
+    tintMissingTextureMaterials(node.material);
     node.castShadow = true;
     node.receiveShadow = true;
-    meshes.push({ geometry: node.geometry, material: node.material, matrix: node.matrixWorld.clone() });
-  });
+    meshes.push({ geometry: node.geometry, material: node.material, matrix });
+  }
   return { meshes, bounds };
 }
 
