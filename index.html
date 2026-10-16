@@ -2070,7 +2070,12 @@
         box-shadow: inset 0 0 0 1px rgba(245, 249, 255, 0.16);
         font: 700 9px/1 var(--ui-font); letter-spacing: 0.16em;
       }
-      .brand-tumer img { display: block; width: 70px; height: 24px; object-fit: contain; }
+      .brand-tumer-mark {
+        display: flex; flex-direction: column; justify-content: center;
+        min-width: 70px; color: #f3ead4; letter-spacing: 0.08em;
+      }
+      .brand-tumer-mark strong { font-size: 13px; line-height: 1; }
+      .brand-tumer-mark small { margin-top: 3px; font-size: 7px; line-height: 1; letter-spacing: 0.28em; }
       .screen-title.is-gate .brand-tumer { display: none; }
       .beta-tag { cursor: help; }
       .beta-tag {
@@ -5884,6 +5889,134 @@
         font-size: 12px; font-weight: 600; letter-spacing: 0.1em;
         color: currentColor; white-space: nowrap;
         text-shadow: var(--osd-edge);
+      }
+      /* Main menu: a compact cockpit panel inspired by the reference UI. */
+      .screen-title .menu {
+        border: 1px solid rgba(210, 228, 242, 0.34);
+        border-top: 3px solid #16a9e7;
+        border-radius: 3px;
+        padding: 8px 0;
+        background: rgba(10, 20, 29, 0.82);
+        -webkit-backdrop-filter: blur(16px) saturate(110%);
+        backdrop-filter: blur(16px) saturate(110%);
+        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .screen-title .menu::before {
+        content: "ANA MENÜ";
+        display: block;
+        padding: 5px 20px 9px;
+        color: rgba(235, 243, 249, 0.8);
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.1em;
+        border-bottom: 1px solid rgba(225, 238, 250, 0.14);
+      }
+      .screen-title .menu .row {
+        min-height: 34px;
+        padding: 6px 16px 6px 20px;
+        border-left-width: 4px;
+        border-bottom: 1px solid rgba(225, 238, 250, 0.08);
+        border-radius: 0;
+        color: rgba(239, 244, 248, 0.86);
+        font-size: clamp(14px, 1.35vw, 17px);
+        letter-spacing: 0.015em;
+      }
+      .screen-title .menu .row:last-child { border-bottom: 0; }
+      .screen-title .menu .row.on {
+        color: #fff;
+        border-left-color: #12b8f3;
+        background: linear-gradient(90deg, rgba(0, 163, 224, 0.88), rgba(0, 145, 204, 0.64));
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
+      }
+      .screen-title .menu .row:not(.on):hover,
+      .screen-title .menu .row:not(.on):focus-visible {
+        color: #fff;
+        border-left-color: rgba(18, 184, 243, 0.8);
+        background: rgba(0, 163, 224, 0.18);
+      }
+      .screen-title .menu .row.on .row-value { color: #fff; }
+      @media (max-width: 600px) {
+        .screen-title .menu .row { min-height: 40px; font-size: 14px; }
+      }
+      /* The seated map becomes the title screen's full-bleed backdrop. */
+      .screen-title:not(.is-gate)::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(90deg, rgba(5, 12, 19, 0.84) 0%, rgba(5, 12, 19, 0.66) 38%, rgba(5, 12, 19, 0.24) 100%),
+          linear-gradient(0deg, rgba(5, 12, 19, 0.48), transparent 42%),
+          var(--title-map-image, url("assets/posters/city.jpg"));
+        background-position: center, center, center;
+        background-size: cover;
+        filter: saturate(0.88) contrast(1.04);
+      }
+      .screen-title:not(.is-gate) {
+        background: transparent;
+      }
+      .screen-title:not(.is-gate) .title-copy {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(310px, 390px);
+        align-items: center;
+        justify-content: initial;
+        gap: clamp(28px, 6vw, 92px);
+        width: min(1260px, 94vw);
+        margin: 0 auto;
+      }
+      .screen-title:not(.is-gate) .brand {
+        max-width: 48em;
+        padding: 0 0 0 clamp(16px, 2vw, 26px);
+        border-left: 2px solid rgba(22, 185, 243, 0.86);
+        background: transparent;
+        box-shadow: none;
+      }
+      .screen-title:not(.is-gate) .wordmark { font-size: clamp(32px, 5.2vw, 68px); }
+      .screen-title:not(.is-gate) .menu-help { display: none; }
+      .screen-title:not(.is-gate) .title-foot {
+        width: 100%;
+        max-width: 390px;
+        margin: 0;
+        justify-content: center;
+      }
+      .screen-title:not(.is-gate) .menu-stage {
+        width: 100%;
+        margin: 0;
+      }
+      .screen-title:not(.is-gate) .menu {
+        max-height: min(76vh, 690px);
+      }
+      @media (max-width: 860px) {
+        .screen-title:not(.is-gate)::before {
+          background-image:
+            linear-gradient(180deg, rgba(5, 12, 19, 0.60), rgba(5, 12, 19, 0.56) 42%, rgba(5, 12, 19, 0.91)),
+            var(--title-map-image, url("assets/posters/city.jpg"));
+          background-position: center, 62% center;
+        }
+        .screen-title:not(.is-gate) .title-copy {
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          gap: 12px;
+          width: 100%;
+          max-width: 620px;
+          margin: 0 auto;
+        }
+        .screen-title:not(.is-gate) .brand {
+          max-width: 100%;
+          padding: 12px 16px;
+          border-left-width: 2px;
+          background: rgba(7, 17, 27, 0.55);
+        }
+        .screen-title:not(.is-gate) .title-foot {
+          width: 100%;
+          max-width: none;
+          margin-top: auto;
+        }
+        .screen-title:not(.is-gate) .menu {
+          max-height: min(calc(52vh - var(--bars)), 26em);
+        }
       }
     </style>
   </head>

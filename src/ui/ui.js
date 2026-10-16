@@ -2486,7 +2486,7 @@ function placeSticks(left, right, ch, mode = DEFAULT_STICK_MODE) {
  * buttons and menu rows use the same Turkish wording. */
 const UI_TRANSLATIONS = new Map([
   ['Quad', 'Drone'],
-  ['FPV wiki', 'FPV rehberi'],
+  ['FPV wiki', 'FPV Bilgi Bankası'],
   ['Roll', 'Yatış'],
   ['Pitch', 'Öne eğim'],
   ['Yaw', 'Sapma'],
@@ -4574,7 +4574,7 @@ const WAYS = [
     mode: 'freestyle',
     world: 'airbase',
     label: 'Askerî Hava Üssü',
-    art: 'assets/gate/airbase.svg',
+    art: 'assets/posters/airbase.jpg',
     blurb: 'Askerî hava üssünde serbest uçuş. Pist, hangarlar, kontrol noktaları ve üs yapıları arasında uçun.',
     facts: ['Serbest uçuş', 'Askerî üs', '5 inç'],
   },
@@ -5293,7 +5293,7 @@ export class Ui {
     const copy = el('div', 'title-copy');
     const brand = el('div', 'brand');
     this.brandSub = el('div', 'brand-sub', '');
-    brand.append(wordmark(), el('div', 'brand-tagline', 'FPV DRONE SİMÜLATÖRÜ'), this.brandSub);
+    brand.append(wordmark(), el('div', 'brand-tagline', 'FPV UÇUŞ SİMÜLATÖRÜ'), this.brandSub);
     /* Beta notice. The only line on this screen that is about the
      * software rather than about flying, so it wears the amber an
      * instrument wears rather than the mint a record does, and it sits
@@ -5320,10 +5320,8 @@ export class Ui {
       const sponsor = el('span', 'brand-tumer');
       sponsor.setAttribute('role', 'img');
       sponsor.setAttribute('aria-label', `Destekçi: ${tumer.name}`);
-      const mark = el('img');
-      mark.src = `assets/partners/${tumer.logo.mono}`;
-      mark.alt = '';
-      mark.setAttribute('aria-hidden', 'true');
+      const mark = el('span', 'brand-tumer-mark');
+      mark.append(el('strong', null, 'TÜMER'), el('small', null, 'SAVUNMA'));
       sponsor.append(mark, el('span', null, 'DESTEKÇİ'));
       chips.append(sponsor);
     }
@@ -5351,10 +5349,6 @@ export class Ui {
     /* First run only. */
     this.firstNote = el('p', 'keep-note first-note', 'Dronun freni yoktur. Burnunu çevirdiğiniz yöne doğru gaz verin; birkaç dakika içinde kapılardan geçmeye başlayacaksınız.');
     brand.append(this.firstNote);
-    this.wikiTeaser = btn('wiki-teaser', 'FPV uçuşunun fiziği');
-    this.wikiTeaser.setAttribute('aria-label', 'FPV rehberini aç');
-    this.wikiTeaser.addEventListener('click', () => this.act('wiki'));
-    brand.append(this.wikiTeaser);
     const titleBlock = wrapMenu();
     this.titleMenu = titleBlock.menu;
     /*
@@ -8354,7 +8348,7 @@ export class Ui {
             : 'Dengelenmiş halde, çubuklar ekranda çizili ve her adımda bir yönerge.',
         }
         : {
-          label: 'Uç',
+          label: 'Uçuşa Başla',
           action: 'fly',
           primary: true,
           /* Which of the two Fly does, said before it is pressed: see
@@ -8432,9 +8426,9 @@ export class Ui {
           action: 'pilot',
           note: 'Siz ve kumandanız. Adınız, joystick seçimi, çubukların kalibrasyonu, oranlar, grafik ve ses.',
         },
-        { label: 'Nasıl uçulur', action: 'howto', note: 'Çubuklar canlı ve tuşların ne yaptığı.' },
+        { label: 'Uçuş Rehberi', action: 'howto', note: 'Kumanda çubukları ve temel uçuş kontrolleri.' },
         {
-          label: 'Pistler ve süreler',
+          label: 'Uçuş Kayıtları',
           action: 'leaderboard',
           note: 'Yayınlanmış her pist ve harita, üzerlerinde uçulan süreler ve kimlerin uçtuğu. Yeni sekmede açılır.',
         },
@@ -8448,7 +8442,7 @@ export class Ui {
         {
           label: 'Hakkında',
           action: 'credits',
-          note: 'Bunu kimin yaptığı ve kimlerin çalışmasına dayandığı, destekçiler, FPV wiki ve hata bildirme.',
+          note: 'Simülatörün yapımı, destekçileri, FPV Bilgi Bankası ve hata bildirimi.',
         },
         /*
          * THE WAY BACK TO THE GATE, AND IT IS A ROW NOW.
@@ -8536,9 +8530,9 @@ export class Ui {
         
         { label: 'Instagram', action: 'instagram', note: INSTAGRAM_NOTE },
         {
-          label: 'FPV wiki',
+          label: 'FPV Bilgi Bankası',
           action: 'wiki',
-          note: 'Kapalı döngü, plant ve her Betaflight 4.5.1 anahtarı. Wiki webfpv.org adresinde açılır.',
+          note: 'FPV uçuşu ve Betaflight ayarları hakkında bilgi. Webfpv.org adresinde açılır.',
         },
         /*
          * A REPORT FROM THE FRONT DOOR, for the one pilot who had none. The
@@ -10157,6 +10151,19 @@ export class Ui {
       /* The gate is one question, so the lines that describe a seat the
        * pilot has not chosen to fly yet come off the screen behind it. */
       this.screens.title.classList.toggle('is-gate', gate);
+      const titleImage = this.mode === 'freestyle'
+        ? this.settings.map === 'city'
+          ? 'assets/posters/city.jpg'
+          : this.settings.map === 'airbase'
+            ? 'assets/posters/airbase.jpg'
+            : 'assets/gate/builder.jpg'
+        : this.settings.airframe === 'whoop65'
+          ? 'assets/gate/whoop.jpg'
+          : 'assets/gate/race.jpg';
+      if (this.titleImage !== titleImage) {
+        this.titleImage = titleImage;
+        this.screens.title.style.setProperty('--title-map-image', `url("${titleImage}")`);
+      }
     }
     const host = {
       title: this.titleMenu,
@@ -13971,7 +13978,7 @@ export class Ui {
    * destination rather than saying Back is deliberate, see legendFor, and
    * "what to fly" is what the three cards between them ask. */
   gateLabel() {
-    return 'What to fly';
+    return 'Uçuş Seçimi';
   }
 
   onGate() {
@@ -14040,7 +14047,8 @@ export class Ui {
     const seat = this.settings.map === 'custom' ? activeCourseSummary() : null;
     /* A map from the board is flown in the built world, and is not Your map. */
     const shared = this.settings.map === 'built' ? this.sharedMap : null;
-    const worldName = (seat && seat.name) || (shared && shared.name) || m.name;
+    const rawWorldName = (seat && seat.name) || (shared && shared.name) || m.name;
+    const worldName = rawWorldName === 'Untitled track' ? 'Adsız pist' : rawWorldName;
     if (this.brandSub) {
       /*
        * "no gates" rather than "free flight", which was the strapline and
@@ -14071,8 +14079,8 @@ export class Ui {
        * the same trap.
        */
       this.titleBest.textContent = this.settings.freestyleScoring === 'scored'
-        ? 'No gates, no lap, two minutes'
-        : 'No gates, no lap, no clock';
+        ? 'Kapı yok · tur yok · 2 dakikalık puanlı uçuş'
+        : 'Kapı yok · tur yok · süre sınırı yok';
       this.osdBest.textContent = '';
       return;
     }

@@ -39,7 +39,10 @@ function surfaceHash(x, y, seed) {
 }
 
 function makeHouseSurface(kind, seed) {
-  const size = 128;
+  /* The same small tile is shared by every Anatolian house, so a little
+   * extra resolution stays cheap while keeping plaster, timber and roof
+   * detail crisp at the close FPV camera distance. */
+  const size = 256;
   const color = new Uint8Array(size * size * 4);
   const height = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y += 1) {
@@ -87,6 +90,7 @@ function makeHouseSurface(kind, seed) {
     texture.magFilter = THREE.LinearFilter;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.generateMipmaps = true;
+    texture.anisotropy = 8;
     texture.needsUpdate = true;
     return texture;
   };

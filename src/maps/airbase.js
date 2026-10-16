@@ -62,18 +62,23 @@ function surfaceHash(x, y, seed) {
 }
 
 function makeSurfaceTexture(kind, seed) {
-  const size = 128;
+  /* The source FBX pack omits its original image maps. A 128 px substitute
+   * repeated across the imported airport made concrete and grass break into
+   * visible blocks when seen from above. Use a full-size, mipmapped tile for
+   * the shared fallback surfaces. */
+  const size = 512;
   const color = new Uint8Array(size * size * 4);
   const height = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const fine = surfaceHash(x, y, seed);
       const coarse = surfaceHash(x >> 3, y >> 3, seed + 37);
+      const medium = surfaceHash(x >> 5, y >> 5, seed + 73);
       let value;
       let relief;
       if (kind === 'grass') {
-        value = 224 + (coarse - 0.5) * 20 + (fine - 0.5) * 12;
-        relief = 128 + (coarse - 0.5) * 16 + (fine - 0.5) * 8;
+        value = 221 + (medium - 0.5) * 24 + (coarse - 0.5) * 16 + (fine - 0.5) * 10;
+        relief = 128 + (medium - 0.5) * 18 + (coarse - 0.5) * 13 + (fine - 0.5) * 7;
       } else if (kind === 'metal') {
         const corrugation = Math.sin(x * Math.PI / 4);
         value = 226 + corrugation * 12 + (coarse - 0.5) * 10 + (fine - 0.5) * 7;
@@ -86,8 +91,14 @@ function makeSurfaceTexture(kind, seed) {
         /* Aggregate grain for runway asphalt and poured concrete, with a
          * little more roughness on asphalt than on building panels. */
         const grain = kind === 'asphalt' ? 20 : 12;
-        value = 232 + (coarse - 0.5) * grain + (fine - 0.5) * grain * 0.65;
-        relief = 128 + (coarse - 0.5) * grain * 1.4 + (fine - 0.5) * grain;
+        value = 232
+          + (medium - 0.5) * grain * 1.2
+          + (coarse - 0.5) * grain * 0.75
+          + (fine - 0.5) * grain * 0.45;
+        relief = 128
+          + (medium - 0.5) * grain * 1.25
+          + (coarse - 0.5) * grain
+          + (fine - 0.5) * grain * 0.55;
       }
       const i = (y * size + x) * 4;
       const c = Math.max(0, Math.min(255, Math.round(value)));
@@ -191,6 +202,16 @@ function tintMissingTextureMaterials(material) {
   for (const item of materials) {
     if (!item?.color) {
       continue;
+    }
+    /* The supplied FBX pack has no image maps. URL replacement gives those
+     * references neutral one-pixel placeholders; discard unused lighting
+     * channels after loading so WebGL never samples them as real detail. */
+    for (const slot of ['normalMap', 'specularMap', 'emissiveMap', 'displacementMap', 'roughnessMap', 'metalnessMap', 'envMap']) {
+      const texture = item[slot];
+      if (texture && !hasImageDetail(texture)) {
+        texture.dispose();
+        item[slot] = null;
+      }
     }
     const name = String(item.name || item.map?.name || '');
     const tint = MATERIAL_TINTS.find(([pattern]) => pattern.test(name));

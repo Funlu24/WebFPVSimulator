@@ -58,9 +58,6 @@ import { paintGroundLogo } from '../../art/banners.js';
 const PHOTO_GROUND = true;
 const PHOTOS = {
   grass: 'assets/ground/grass.jpg',
-  tarmac: 'assets/ground/asphalt.jpg',
-  dirt: 'assets/ground/dirt.jpg',
-  yard: 'assets/ground/concrete.jpg',
 };
 
 function photoTexture(url, repeatX, repeatY) {
@@ -818,20 +815,28 @@ export function buildGround(placed, doc, look, cover) {
    * height the plant flies over, painted with the map's ground. Whatever
    * it is painted as, it is the same flat plane: a ground is paint. */
   const painter = { tarmac: tarmacTexture, grass: grassTexture, dirt: dirtTexture }[groundId];
-const tile = painter ? GROUND_TILE[groundId] : SLAB * TILE_SLABS;
-const yard = PHOTO_GROUND
-  ? photoTexture(PHOTOS[painter ? groundId : 'yard'], W / tile, D / tile)
-  : canvasTexture(painter ? painter() : yardTexture(), W / tile, D / tile);
-const plotMat = PHOTO_GROUND
-  ? new THREE.MeshStandardMaterial({ map: yard, roughness: 0.95, metalness: 0 })
-  : cel({ color: 0xffffff, map: yard, bands: 3, tint: G.tint, vertexColors: Boolean(painter), cache: false });
-const plot = new THREE.Mesh(
-  painter ? plotGeometry(W, D, groundId, hashString(doc.id)) : new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2),
-  plotMat,
-);
-plot.receiveShadow = true;
-plot.name = 'plot';
-group.add(plot);
+  const tile = painter ? GROUND_TILE[groundId] : SLAB * TILE_SLABS;
+  /* Grass has a shipped photographic tile. The asphalt, dirt and concrete
+   * photos this map used to request are not in the distribution, which left
+   * their planes with a failed 1x1 texture precisely when viewed from above.
+   * Paint those surfaces from the detailed local canvases instead. */
+  const yard = PHOTO_GROUND && groundId === 'grass'
+    ? photoTexture(PHOTOS.grass, W / tile, D / tile)
+    : canvasTexture(painter ? painter() : yardTexture(), W / tile, D / tile);
+  const plotMat = PHOTO_GROUND
+    ? new THREE.MeshStandardMaterial({
+      map: yard,
+      roughness: groundId === 'tarmac' ? 0.88 : 0.96,
+      metalness: 0,
+    })
+    : cel({ color: 0xffffff, map: yard, bands: 3, tint: G.tint, vertexColors: Boolean(painter), cache: false });
+  const plot = new THREE.Mesh(
+    painter ? plotGeometry(W, D, groundId, hashString(doc.id)) : new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2),
+    plotMat,
+  );
+  plot.receiveShadow = true;
+  plot.name = 'plot';
+  group.add(plot);
  
 
   /* The kerb, one box a side, so the ink draws the plot's edge. Paint, not
@@ -889,15 +894,18 @@ group.add(plot);
    */
   const TERRAIN = 2000;
   const TERRAIN_CELLS = 50;
+  /* The far terrain is viewed as a broad landscape from the air. A ten
+   * metre photo repeat made the 2 km apron look like a tiled carpet during
+   * climbs; a wider tile keeps close detail while breaking up that grid. */
   const terrainTex = PHOTO_GROUND
-  ? photoTexture(PHOTOS.grass, TERRAIN / 10, TERRAIN / 10)
-  : canvasTexture(terrainTexture(G.terrain), TERRAIN / 40, TERRAIN / 40);
-const terrain = new THREE.Mesh(
-  new THREE.PlaneGeometry(TERRAIN, TERRAIN, TERRAIN_CELLS, TERRAIN_CELLS).rotateX(-Math.PI / 2),
-  PHOTO_GROUND
-    ? new THREE.MeshStandardMaterial({ map: terrainTex, roughness: 1, metalness: 0 })
-    : cel({ color: 0xffffff, map: terrainTex, bands: 3, tint: 0x7a7396, cache: false }),
-);
+    ? photoTexture(PHOTOS.grass, TERRAIN / 32, TERRAIN / 32)
+    : canvasTexture(terrainTexture(G.terrain), TERRAIN / 40, TERRAIN / 40);
+  const terrain = new THREE.Mesh(
+    new THREE.PlaneGeometry(TERRAIN, TERRAIN, TERRAIN_CELLS, TERRAIN_CELLS).rotateX(-Math.PI / 2),
+    PHOTO_GROUND
+      ? new THREE.MeshStandardMaterial({ map: terrainTex, roughness: 1, metalness: 0 })
+      : cel({ color: 0xffffff, map: terrainTex, bands: 3, tint: 0x7a7396, cache: false }),
+  );
   terrain.position.y = -0.05;
   terrain.receiveShadow = true;
   terrain.name = 'terrain';

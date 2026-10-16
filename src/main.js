@@ -6504,19 +6504,19 @@ export async function boot({ loading, bootStart, mapId }) {
   const guidedWords = () => {
     if (input.isTouchPrimary()) {
       return {
-        nose: 'Push the right plate up, then throttle on the left',
-        again: 'Pause, then Restart puts you back on the line',
+        nose: 'Sağ çubuğu öne itin, ardından soldan gaz verin',
+        again: 'Duraklatın; Yeniden Başlat sizi kalkış çizgisine döndürür',
       };
     }
     if (input.firstGamepad()) {
       return {
-        nose: 'Ease the right stick forward, then throttle',
-        again: 'R puts you back on the line. Escape pauses',
+        nose: 'Sağ çubuğu öne itin, ardından gaz verin',
+        again: 'R ile kalkış çizgisine dönün. Esc duraklatır',
       };
     }
     return {
-      nose: 'Tip forward with the up arrow, then throttle',
-      again: 'R puts you back on the line. Escape pauses',
+      nose: 'Yukarı okla burnu öne yatırın, ardından gaz verin',
+      again: 'R ile kalkış çizgisine dönün. Esc duraklatır',
     };
   };
   const guidedPrompt = (race) => {
@@ -6526,12 +6526,12 @@ export async function boot({ loading, bootStart, mapId }) {
     }
     const words = guidedWords();
     if (race.next === 0) {
-      return `${words.nose}\nThe green gate starts your lap`;
+      return `${words.nose}\nYeşil kapı turunuzu başlatır`;
     }
     if (race.next === 1) {
-      return 'Through. The next gate turns green\nRed is the same gate, wrong side';
+      return 'Geçtiniz. Sıradaki kapı yeşil yanar\nKırmızı kapı, ters yönde olduğunuzu gösterir';
     }
-    return `Gate by gate. ${words.again}`;
+    return `Kapı kapı ilerleyin. ${words.again}`;
   };
   /*
    * A published course chosen from the Courses grid. This is exactly what a
@@ -9836,13 +9836,13 @@ export async function boot({ loading, bootStart, mapId }) {
        * minutes, from the first thing scored, whatever kind it is.
        */
       const start = ui.settings.launchControl
-        ? 'L for launch control, or throttle up'
-        : 'Throttle up to take off';
+        ? 'Kalkış desteği için L\'ye, doğrudan kalkış için gaz verin'
+        : 'Kalkış için gaz verin';
       /* Practice is the one race that does not end, so it says so on the
        * line that promises what starts. See PRACTICE_LAPS. */
       let second = runLaps === PRACTICE_LAPS
-        ? '\nPractice: no lap limit. The green gate starts your lap'
-        : '\nThe green gate starts your lap';
+        ? '\nAntrenmanda tur sınırı yok. Yeşil kapı turunuzu başlatır'
+        : '\nYeşil kapı turunuzu başlatır';
       if (race.freestyle) {
         /* The counter counts the lines in every position (decision 2), so
          * even Lines only has something to promise now. With Manga and
@@ -9850,13 +9850,13 @@ export async function boot({ loading, bootStart, mapId }) {
          * none of it; a scored run's clock is in the OSD, which stays, so
          * its sentence stands. See DEFAULTS.mangaAndScoring in ui.js. */
         if (scoredRun()) {
-          second = '\nTwo minutes. The clock starts on the first thing you score.';
+          second = '\nİki dakika. Sayaç, ilk puanınızı aldığınızda başlar.';
         } else if (!ui.settings.mangaAndScoring) {
-          second = '\nNo clock and no gates.';
+          second = '\nSüre sınırı ve kapı yok.';
         } else {
           second = scoringWanted()
-            ? '\nNo clock and no gates. Lines and tricks count as you fly them.'
-            : '\nNo clock and no gates. Gaps and close calls count as you fly them.';
+            ? '\nSüre sınırı ve kapı yok. Çizgiler ve hareketler uçuş boyunca sayılır.'
+            : '\nSüre sınırı ve kapı yok. Boşluk geçişleri ve yakın uçuşlar sayılır.';
         }
       }
       ui.setBanner(`${start}${second}`);
