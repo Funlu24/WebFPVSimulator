@@ -1,8 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 200" role="img" aria-labelledby="title">
-  <title id="title">TÜMER Savunma sponsor mark, WebFPV-made lockup</title>
-  <path fill="#ffffff" d="M25 100 78 18h88l-53 82 53 82H78z"/>
-  <path fill="#ffffff" d="m105 100 42-64h28l-42 64 42 64h-28z"/>
-  <text x="205" y="111" fill="#ffffff" font-family="Arial, sans-serif" font-size="65" font-weight="800" letter-spacing="3">TÜMER</text>
-  <path fill="#ffffff" d="M208 131h350v3H208z"/>
-  <text x="210" y="166" fill="#ffffff" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="10">SAVUNMA</text>
+  <title id="title">TÜMER Savunma ve Havacılık sponsor mark</title>
+  <!-- Tümer Logo Icon: White square with internal origami arrow cutout -->
+  <path fill="#ffffff" fill-rule="evenodd" d="M35 35h130v130H35z M54 51h94L100 145V78z"/>
+  <!-- TÜMER Wordmark -->
+  <text x="195" y="112" fill="#ffffff" font-family="'Segoe UI', Arial, Helvetica, sans-serif" font-size="68" font-weight="900" letter-spacing="2">TÜMER</text>
+  <!-- Separator Line -->
+  <path fill="#ffffff" d="M197 127h368v3H197z"/>
+  <!-- Subtitle: SAVUNMA VE HAVACILIK -->
+  <text x="198" y="157" fill="#ffffff" font-family="'Segoe UI', Arial, Helvetica, sans-serif" font-size="19" font-weight="700" textLength="366" lengthAdjust="spacing">SAVUNMA VE HAVACILIK</text>
+  <!-- Türkiye & Flag Accent -->
+  <g transform="translate(472, 172)">
+    <text x="0" y="14" fill="#ffffff" font-family="'Segoe UI', Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1">TÜRKİYE</text>
+    <rect x="58" y="2" width="24" height="16" rx="2" fill="#e30a17"/>
+    <circle cx="68" cy="10" r="5" fill="#ffffff"/>
+    <circle cx="69.5" cy="10" r="4" fill="#e30a17"/>
+    <polygon points="73,10 75,7 74,9.5 76.5,8.5 74.5,10.5 76.5,12 74,11 74.5,13.5 73,11.5" fill="#ffffff"/>
+  </g>
 </svg>

@@ -402,7 +402,7 @@ function placeTumerBillboards(scene, colliders) {
   ];
   for (const [index, location] of locations.entries()) {
     const board = new THREE.Group();
-    board.name = `Tumer Savunma airbase billboard ${index + 1}`;
+    board.name = `Tumer Savunma ve Havacilik airbase billboard ${index + 1}`;
     board.position.set(location.x, 0, location.z);
     board.rotation.y = location.yaw;
     for (const x of [-width / 2 + 0.2, width / 2 - 0.2]) {

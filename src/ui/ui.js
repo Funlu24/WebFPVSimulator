@@ -360,7 +360,7 @@ const FIT_SCREENS = new Set(['pilot', 'advanced', 'quad', 'rates', 'pids', 'laun
  * checks, CSS and saved cursors name rooms by id and a pilot never sees one.
  */
 const SCREEN_TITLES = {
-  title: 'Tümer Savunma',
+  title: 'Tümer Savunma ve Havacılık',
   courses: 'Pistler',
   freestyle: 'Haritalar',
   pilot: 'Ayarlar',
@@ -405,7 +405,7 @@ const CRUMBS = {
   advanced: ['Ayarlar', 'Gelişmiş'],
   calibrate: ['Ayarlar', 'Çubukları kalibre et'],
   padpick: ['Ayarlar', 'Kumanda seçimi'],
-  title: ['Tümer Savunma'],
+  title: ['Tümer Savunma ve Havacılık'],
 };
 
 /*
@@ -2600,7 +2600,7 @@ function btn(cls, text) {
 
 function wordmark() {
   const h = el('h1', 'wordmark');
-  h.append(document.createTextNode('TÜMER '), el('span', 'fpv', 'SAVUNMA'));
+  h.append(document.createTextNode('TÜMER '), el('span', 'fpv', 'SAVUNMA VE HAVACILIK'));
   return h;
 }
 
@@ -5321,8 +5321,13 @@ export class Ui {
       sponsor.setAttribute('role', 'img');
       sponsor.setAttribute('aria-label', `Destekçi: ${tumer.name}`);
       const mark = el('span', 'brand-tumer-mark');
-      mark.append(el('strong', null, 'TÜMER'), el('small', null, 'SAVUNMA'));
-      sponsor.append(mark, el('span', null, 'DESTEKÇİ'));
+      mark.append(el('strong', null, 'TÜMER'), el('small', null, 'SAVUNMA VE HAVACILIK'));
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('class', 'brand-tumer-icon');
+      icon.setAttribute('viewBox', '0 0 60 60');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = '<path fill="#f3ead4" fill-rule="evenodd" d="M0 0h60v60H0z M9 7h43L30 51V20z"/>';
+      sponsor.append(icon, mark, el('span', null, 'DESTEKÇİ'));
       chips.append(sponsor);
     }
     brand.append(chips);

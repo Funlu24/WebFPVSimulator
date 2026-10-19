@@ -378,7 +378,7 @@ export function fillCredits(host, { assetBase = 'assets/credits' } = {}) {
   }));
   host.append(made);
 
-  const partners = section('Sponsor', 'Tümer Savunma desteğiyle.');
+  const partners = section('Sponsor', 'Tümer Savunma ve Havacılık desteğiyle.');
   const partnerRow = el('div', 'credit-row partners');
   partnerRow.classList.toggle('is-featured', PARTNERS.length === 1);
   for (const p of PARTNERS) {

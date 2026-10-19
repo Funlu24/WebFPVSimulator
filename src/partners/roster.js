@@ -103,18 +103,17 @@ const partner = (p) => Object.freeze({
 });
 
 /*
- * TÜMER's lockup is a WebFPV-made sponsor mark based on the supplied name,
- * not an official corporate logo file.
+ * TÜMER's official sponsor mark for TÜMER Savunma ve Havacılık.
  */
 export const PARTNERS = Object.freeze([
   partner({
     slug: 'tumer',
-    name: 'TÜMER Savunma',
+    name: 'TÜMER Savunma ve Havacılık',
     short: 'TÜMER',
     role: 'sponsor',
-    about: "TÜMER Savunma, WebFPV'nin sponsorudur.",
+    about: "TÜMER Savunma ve Havacılık, WebFPV'nin sponsorudur.",
     links: [
-      { kind: 'site', label: 'TÜMER Savunma', href: 'https://www.tumer.com/Yeteneklerimiz%C3%87%C3%B6z%C3%BCmlerimiz/SavunmaSanayi.html' },
+      { kind: 'site', label: 'TÜMER Savunma ve Havacılık', href: 'https://www.tumer.com/Yeteneklerimiz%C3%87%C3%B6z%C3%BCmlerimiz/SavunmaSanayi.html' },
     ],
     logo: { colour: 'tumer/colour.svg', mono: 'tumer/mono.svg', aspect: 3 },
     mark: { field: '#1557a6' },

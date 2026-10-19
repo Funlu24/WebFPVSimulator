@@ -953,7 +953,7 @@ export class Loading {
     copy.textContent = 'Hata bilgilerini kopyala';
     copy.addEventListener('click', async () => {
       const report = [
-        `Tümer Savunma Drone Simülatörü başlatılamadı: ${message}`,
+        `Tümer Savunma ve Havacılık Drone Simülatörü başlatılamadı: ${message}`,
         `browser: ${probe.engine || 'unknown'} ${probe.version || ''}`.trim(),
         `webgl2: ${probe.webgl2} webgl1: ${probe.webgl1} wasm: ${probe.wasm}`,
         `storage: ${probe.storage} online: ${probe.online}`,
