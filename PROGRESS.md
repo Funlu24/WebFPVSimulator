@@ -70114,3 +70114,11 @@ Not on main. No physics, plant, module ABI or build change here, so `npm run ver
 - Loaded the real shell in Chromium into flight on the built starter (`window.__map`: id `built`, name `Hibari Yard`, mode `freestyle`, source `canvas`) and toggled C to third person. The capture showed the quad clearly in frame and `window.__egg()` returned null. Console output had one refused external request and browser audio/fullscreen warnings; harness faults were zero.
 - Checks: `node --check` on `src/main.js` and `src/maps/built/index.js`, `node scripts/props-check.js`, and `git diff --check` passed. No physics or build code changed.
 - What went wrong: the first headless launch omitted `craft=5inch` and stayed on the title screen. Adding the required craft parameter reached active flight; the capture still emitted browser gesture warnings in the headless environment.
+
+## 2026-10-20 | render | Keep the third-person drone framed during turns
+
+- Brought the third-person camera closer: 0.9 m for the regular quad and 0.54 m for micro, with proportionate camera height. The airframe model itself is unchanged.
+- Removed the lagging camera aim and arm interpolation. The camera now uses the current rendered craft pose each frame, so yaw turns do not leave the aircraft behind the camera target.
+- Drove the airbase flight in Chromium, toggled third person, then held D with throttle. At 94 km/h the craft remained visible in the frame during the turn. The measured projected craft box was 220 by 110 px in the 1088 by 612 game viewport; its centre stayed within the frame.
+- Checks: `node --check src/main.js`, `git diff --check`, and the active-flight camera capture completed. No harness faults or JavaScript errors. The restricted capture environment refused two external requests and logged browser audio/fullscreen gesture warnings. Full verification was not run because this changes only render-camera behavior.
+- What went wrong: initial captures taken before the linked flight reached the active screen showed launch staging, not a valid flight camera. Waiting for the flight screen produced the usable D-turn capture.

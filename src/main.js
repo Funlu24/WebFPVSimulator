@@ -4507,7 +4507,6 @@ export async function boot({ loading, bootStart, mapId }) {
   }
 
   function reset() {
-    tpvInitialized = false;
     /* A reset is the pilot taking the offer the fault banner made, so the
      * next fault is a new one and deserves to be reported in its turn. See
      * the frame boundary. */
@@ -7202,11 +7201,8 @@ export async function boot({ loading, bootStart, mapId }) {
     const fpvQuat = new THREE.Quaternion();
     const finishFpvPos = new THREE.Vector3();
     const finishFpvQuat = new THREE.Quaternion();
-    const tpvCamPos = new THREE.Vector3();
-    const tpvCamLook = new THREE.Vector3();
     const tpvScratchDir = new THREE.Vector3();
     const tpvScratchUp = new THREE.Vector3();
-    let tpvInitialized = false;
     /* -1: not on the finish shot. 0+: milliseconds into the pull-out. */
     let finishCamMs = -1;
   /* Eased toward PARKED_LIFT while the craft is down, so the view rises off
@@ -9216,26 +9212,24 @@ export async function boot({ loading, bootStart, mapId }) {
             tpvScratchDir.normalize();
           }
           const micro = CRAFT_R < 0.15;
-          const back = micro ? 0.58 : 1.65;
-          const lift = micro ? 0.28 : 0.72;
+          /* Frame the aircraft as the subject, not a speck in the map.
+           * The old 1.65 m arm put a 5-inch quad at only a few percent of
+           * the viewport width. Keep a modest clearance for the props and
+           * let the ground clamp below handle low flight. */
+          const back = micro ? 0.54 : 0.9;
+          const lift = micro ? 0.2 : 0.35;
           tpvScratchUp.set(0, lift, 0);
           tpvScratchDir.multiplyScalar(-back);
           const wantedPos = tpvScratchDir.add(pCurr).add(tpvScratchUp);
           const floor = view.height(wantedPos.x, wantedPos.z, wantedPos.y - 0.5, wantedPos.y);
           wantedPos.y = Math.max(wantedPos.y, floor + 0.5);
-          const wantedLook = tpvScratchUp.set(0, micro ? 0.08 : 0.18, 0).add(pCurr);
-          if (!tpvInitialized) {
-            tpvCamPos.copy(wantedPos);
-            tpvCamLook.copy(wantedLook);
-            tpvInitialized = true;
-          } else {
-            const follow = 1 - Math.exp(-7 * Math.max(0, dt) / 1000);
-            tpvCamPos.lerp(wantedPos, follow);
-            tpvCamLook.lerp(wantedLook, follow);
-          }
+          const wantedLook = tpvScratchUp.set(0, micro ? 0.05 : 0.1, 0).add(pCurr);
+          /* Use the solved arm and the current rendered body position each
+           * frame. Easing from the old FPV camera left the aircraft extremely
+           * close or out of frame for the first part of a turn. */
           shell.camera.up.set(0, 1, 0);
-          shell.camera.position.copy(tpvCamPos);
-          shell.camera.lookAt(tpvCamLook);
+          shell.camera.position.copy(wantedPos);
+          shell.camera.lookAt(wantedLook);
           predictCam = false;
           setCameraNear(CAMERA_NEAR_OPEN);
           const fov = ui.settings.cameraFov;
