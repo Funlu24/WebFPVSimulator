@@ -95,40 +95,22 @@ step count is the physics clock, so a collision is reproducible from a
 recorded input stream. See `city/animation.js` for the worked example: a level
 crossing whose booms were an integrator over raw frame time.
 
-### `egg` is where the STF mark is painted, and a map without one has none
+### `egg` is an optional painted mark
 
-Every freestyle map carries the STF mark, painted by `src/art/stf.js`
-(FREESTYLE-MAPS-PLAN.md section 9). `egg` tells the shell where it is, so it
-can tell when a pilot has found it:
+`egg` tells the shell where a map-specific mark is painted, when that map has
+one, so it can tell when a pilot has found it:
 
     egg = { key, p: [x, y, z], n: [nx, ny, nz], up: [ux, uy, uz], w, h }
 
-    key   the map's identity, for the found stamp this browser keeps:
-          'city' for the town; on a built map 'built:' and its document's
-          id, or 'built:starter' for the starter (stfKey in built/egg.js)
+    key   the map's identity, for the found stamp this browser keeps
     p     the centre of the painted face, world metres, Three.js frame
     n     the unit normal the paint faces, out of the surface it is on
     up    the unit direction the lettering reads up, lying in the face
     w, h  the painted plane's size in metres, along up x n and along up
 
-The mark is paint: it is drawn and never solid, nothing in `colliders`
-stands for it, and `p` is a centimetre or two off the solid face behind it,
-or off whatever relief is drawn on that face (a built map lifts it clear of
-a container's door leaves, see `drawnRelief` in `built/index.js`). So a
-clear line to it has to stop short of that face, or it meets the face
-first. A map that paints no mark leaves `egg` out or null, and there is
-nothing on it to find.
-
-It is painted to be SEEN from the spawn, big, and in the first frame where
-the map allows (FREESTYLE-MAPS-PLAN.md section 12, decision 10: the owner
-found the hidden one too hard to find). The town's is a 4 by 2 m mural on
-the side of the corner shop that closes the street the pilot starts in, one
-constant, `STF_SPOT` in `city/places/index.js`. A built map's is chosen
-from the placed map by `built/egg.js`: the wall that looks biggest from the
-pads with nothing between, weighed by how far the pilot turns to see it,
-and flat on the paving ahead of the pads when the map has no such wall. It
-is painted by `built/index.js`, and the builder imports neither, so it never
-shows where the mark will be.
+The mark is paint: it is drawn and never solid, and a map with no painted
+mark leaves `egg` out or null. Built maps currently omit the STF wordmark.
+The city may return its own map-specific mark position.
 
 The shell asks `seesMark` in `src/game/egg.js` whether the FPV camera has
 found it (within its range, 4 m for a mark up to 1.8 m wide and further for
@@ -150,15 +132,15 @@ partner's or patron's slug:
     key       the found stamp's key: the map's `egg` key, '#' and the slug
     findable  false for patrons (no stamps, achievements or found panel), omitted or true for partners
 
-They are paint like the STF mark, found by the same `seesMark`, and
+They are paint, found by the same `seesMark`, and
 finding one is an achievement: a callout with the partner's name, a stamp,
 the combo's bonus once a run, a row on the results and a count on the
 partner's own dashboard on the board. The town's are three constants,
 `PARTNER_SPOTS` in `city/places/index.js`, measured by hand: Mantis FPV
 over the street the pilot starts in, Global Drone Solutions and the club
 on the practice field's tap wall, front and back. A built map's are chosen
-by `built/egg.js` after the STF mark's, one wall each and never the STF
-mark's, by the same rules with three more (rules 8 to 10 there). A map
+by `built/egg.js` after reserving the former STF spot, one wall each and
+never on the same wall, by the same rules with three more (rules 8 to 10 there). A map
 that paints none leaves `marks` out or empty.
 
 Which patrons a map shows is `src/partners/patrons.js`: all of them up to

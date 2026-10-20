@@ -184,17 +184,11 @@ const CHUNK = 48;
 const POLE_REACH = 45;
 const PYLON_REACH = 150;
 
-/* How far the STF mark stands off a wall it is sprayed on, in metres:
- * the town's own lift (STF_SPOT.off in src/maps/city/places/works.js), so
- * paint reads the same in both worlds. Enough that the depth buffer never
- * mixes the paint with the steel at the range a pilot finds it from, and
- * little enough that it reads as sprayed on, not hung in front. */
-const STF_LIFT = 0.015;
-/* A ground mark can sit over a road mesh lifted 12 mm above the plot. The
- * wall lift left only 3 mm between those coplanar surfaces, which let the
- * road win the depth test at a shallow viewing angle and made the letters
- * flicker or disappear. Keep ground paint clearly above the road surface. */
-const STF_GROUND_LIFT = 0.045;
+/* How far a sign stands off the drawn surface, in metres. */
+const MARK_LIFT = 0.015;
+/* Ground signs can sit over a road mesh lifted 12 mm above the plot. This
+ * leaves enough separation to keep the road from hiding the lettering. */
+const MARK_GROUND_LIFT = 0.045;
 
 /*
  * THE DRAWN SKIN IS NOT THE SOLID. ./egg.js chooses a face of a solid box,
@@ -922,10 +916,10 @@ function paintMark(props, placed, spot, look, make, share = STF_PROBE_SHARE) {
   const name = `props:${chunkKeyOf(item || { x: spot.p[0], z: spot.p[2] })}`;
   let chunk = props.children.find((g) => g.name === name);
   const lift = drawnRelief(chunk, spot, right, share)
-    + (spot.kind === 'ground' ? STF_GROUND_LIFT : STF_LIFT);
+    + (spot.kind === 'ground' ? MARK_GROUND_LIFT : MARK_LIFT);
   const p = spot.p.map((v, k) => v + spot.n[k] * lift);
   /* In shade when the face is turned away from the look's sun: no direct
-   * light reaches it at this time of day (see makeStfMark). */
+   * light reaches it at this time of day. */
   const sun = look.time && look.time.sun ? look.time.sun.at : null;
   const shade = Boolean(sun) && spot.n[0] * sun[0] + spot.n[1] * sun[1] + spot.n[2] * sun[2] <= 0;
   const mark = make({
