@@ -1173,6 +1173,7 @@ const DEFAULTS = {
   ghost: 'best',
   cameraAngle: CAMERA_ANGLE_DEFAULT,
   cameraFov: CAMERA_FOV_DEFAULT,
+  cameraView: 'fpv',
   renderScale: 100,
   fpsCap: 0,
   /*
@@ -8905,6 +8906,14 @@ export class Ui {
           note: `Every Betaflight 4.5.1 key the module compiles, tab by tab, in Configurator’s own colours. Opens as a tool, in its own frame. Save becomes Your edits and the Tune row above starts naming it; the picker that puts you back on stock is in ${SCREEN_TITLES.pids}. There is no CLI paste.`,
         },
         { label: 'Kamera', section: true },
+        choice(
+          'Bakış açısı',
+          'FPV: Dronun kokpit kamerası (1. şahıs). 3. Şahıs: Dronu arkadan ve yukarıdan takip eden kamera modu (uçuş sırasında C tuşu ile anında geçiş yapabilirsiniz).',
+          ['fpv', 'third'],
+          s.cameraView === 'third' ? 'third' : 'fpv',
+          (id) => (id === 'third' ? '3. Şahıs (Dıştan Takip)' : 'FPV (1. Şahıs Kokpit)'),
+          (id) => { s.cameraView = id; },
+        ),
         this.cameraAngleRow(s),
         choice(
           'Field of view',

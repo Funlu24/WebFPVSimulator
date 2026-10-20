@@ -4501,6 +4501,7 @@ export async function boot({ loading, bootStart, mapId }) {
   }
 
   function reset() {
+    tpvInitialized = false;
     /* A reset is the pilot taking the offer the fault banner made, so the
      * next fault is a new one and deserves to be reported in its turn. See
      * the frame boundary. */
@@ -7080,6 +7081,16 @@ export async function boot({ loading, bootStart, mapId }) {
       flipFlightMode();
       return;
     }
+    /* Camera view toggle: FPV (1st person) vs Chase (3rd person) */
+    if ((code === 'KeyC' || code === 'KeyV') && ui.screen === 'flight') {
+      ui.settings.cameraView = ui.settings.cameraView === 'third' ? 'fpv' : 'third';
+      const isThird = ui.settings.cameraView === 'third';
+      notice = {
+        text: isThird ? 'Kamera: 3. Şahıs (Dıştan Takip)' : 'Kamera: FPV (1. Şahıs Kokpit)',
+        untilMs: performance.now() + 1800,
+      };
+      return;
+    }
     if (code === 'KeyL' && ui.screen === 'flight') {
       if (!ui.settings.launchControl) {
         notice = {
@@ -7185,6 +7196,11 @@ export async function boot({ loading, bootStart, mapId }) {
     const fpvQuat = new THREE.Quaternion();
     const finishFpvPos = new THREE.Vector3();
     const finishFpvQuat = new THREE.Quaternion();
+    const tpvCamPos = new THREE.Vector3();
+    const tpvCamLook = new THREE.Vector3();
+    const tpvScratchDir = new THREE.Vector3();
+    const tpvScratchUp = new THREE.Vector3();
+    let tpvInitialized = false;
     /* -1: not on the finish shot. 0+: milliseconds into the pull-out. */
     let finishCamMs = -1;
   /* Eased toward PARKED_LIFT while the craft is down, so the view rises off
