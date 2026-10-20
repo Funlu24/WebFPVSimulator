@@ -70106,3 +70106,11 @@ Not on main. No physics, plant, module ABI or build change here, so `npm run ver
 - Confirmed the city's old sphere/road overlap fix is already active (`RELIEF = 0` in `planet.js`). The screenshot capture for this turn stayed on the menu and logged a refused external request, so it did not verify these materials in active flight.
 - Checks: `node --check` on the two changed JS files, `git diff --check`, `node scripts/roads-check.js`, and `node scripts/props-check.js` passed. No physics or build code changed.
 - What went wrong: the headless map capture did not enter the map, so the visual result still needs a pilot flight check.
+
+## 2026-10-20 | render | Remove the in-world STF mark and tighten the chase view
+
+- Removed the built-map STF mesh entirely and return `egg: null`, so it is neither visible nor silently findable. Partner signs remain. Updated the map contract to describe the optional mark.
+- Shortened the third-person camera arm from 2.65 m to 1.65 m for regular quads and from 0.95 m to 0.58 m for micro quads, lowering the camera lift proportionally. The airframe mesh scale is unchanged.
+- Loaded the real shell in Chromium into flight on the built starter (`window.__map`: id `built`, name `Hibari Yard`, mode `freestyle`, source `canvas`) and toggled C to third person. The capture showed the quad clearly in frame and `window.__egg()` returned null. Console output had one refused external request and browser audio/fullscreen warnings; harness faults were zero.
+- Checks: `node --check` on `src/main.js` and `src/maps/built/index.js`, `node scripts/props-check.js`, and `git diff --check` passed. No physics or build code changed.
+- What went wrong: the first headless launch omitted `craft=5inch` and stayed on the title screen. Adding the required craft parameter reached active flight; the capture still emitted browser gesture warnings in the headless environment.
