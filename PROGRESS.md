@@ -70057,3 +70057,52 @@ Not on main. No physics, plant, module ABI or build change here, so `npm run ver
 - Still open with the owner, not decided by this push: whether the trail should be only as strict as RaceGOW's Rule 7
   (never backward), and not also refuse an opening out of turn. The check card of 2026-10-08 never got an answer.
 - What went wrong: nothing new.
+## 2026-10-20 | render | Complete the realistic material pipeline
+
+- Checked the current renderer before adding changes. The shared cel material factory already selects `MeshStandardMaterial`, the city and prop material factories already create standard PBR materials, `ACESFilmicToneMapping` was enabled, hull outlines were disabled, and the post shader retained edge antialiasing while forcing ink to zero. These parts were already present in the working tree.
+- The missing connection was the environment map: it was generated but never assigned. `loadMap` now assigns one session PMREM to each loaded map scene. The environment is a small procedural outdoor panorama generated with Three.js `DataTexture`, so this does not add a CDN module dependency. The source texture and PMREM generator are disposed after baking.
+- Softened the field and city post grades by reducing saturation boost, vignette, blue shadow lift, and warmth.
+- Visual captures: `scripts/shots.js` opened the field, city and airbase at High with no harness faults or JavaScript errors. External requests were refused by the capture environment (two on the field, one on city and airbase); the airbase capture also reported nine `texSubImage2D: bad image data` WebGL warnings, which remain to investigate.
+- Checks run: `node --check` on the five changed JavaScript files; `git diff --check`. The full verification suite was not run.
+- Remaining visual scope: this does not replace every low-poly mesh or flat surface with photogrammetry-quality assets, add SSAO, or replace each map's custom sky. AO would add render work beyond the current post budget, and the shown renders confirm geometry and source assets still set much of the stylized look. Real texture assets would need to be selected, licensed and integrated per material.
+- What went wrong: the first visual attempt could not import `RoomEnvironment` from the CDN in this environment and failed app startup. That dependency was removed; the next capture booted the map successfully using the procedural panorama.
+## 2026-10-20 | render | Fix the airbase's invalid fallback texture
+
+- Investigated the nine WebGL `texSubImage2D: bad image data` warnings from the prior airbase capture. The white one-pixel PNG used when an FBX image is absent had an invalid IDAT CRC. Replaced it with a valid one-pixel PNG; the normal-map placeholder was already valid.
+- Re-captured the High quality airbase in Chromium: map loaded, zero warnings and zero harness faults. One external request was refused by the capture environment.
+- Checks run: `node --check` on `src/maps/airbase.js`, `git diff --check`, and the airbase browser capture. Full `npm run verify` was not run because these are render and asset changes.
+- Still open: no AO pass, no CC0 PBR asset set on every material, and the custom low-poly meshes/skies remain. Those are beyond this narrow warning fix and require visual decisions plus a performance check.
+- What went wrong: the earlier post-processing capture exposed the invalid PNG that was hidden by discarding missing source maps after load.
+## 2026-10-20 | render | Add High-only contact occlusion
+
+- Added a small screen-space contact-occlusion term to the field, city and built-map grade passes. It reads the depth the colour pass already writes, runs only on High, and adds no scene render, pass or colour target. City and airbase use the built-map depth pipeline; the field uses a depth texture on its existing composer target.
+- Visual captures at High for the field, city and airbase: all three loaded with zero harness faults and zero WebGL warnings. The capture environment refused external requests (two field, one city, one airbase), but map content rendered.
+- Checks run: `node --check` on changed JavaScript files, `git diff --check`, and the three-map browser captures. `npm run verify` was not run because this changes no physics, plant, ABI or build.
+- Remaining requested scope: replace or rebuild the low-poly models and custom skies for a genuinely photorealistic look, and integrate a consistent licensed PBR texture set. Current maps have a mixture of photographic ground and generated detail textures, not a complete CC0 albedo/normal/roughness library.
+- What went wrong: nothing in the AO shader or map loads. The headless browser logged only refused external requests from this environment.
+
+## 2026-10-20 | render | Wire the chase camera and extend High lighting
+
+- The UI already exposed `cameraView` and C/V already toggled it, but the live flight camera never read that setting. Connected it to a smoothed external chase view that keeps world-up through flips, raises the quad into view, and keeps the camera above the terrain. FPV remains the default; replays retain their existing camera selection.
+- Added a restrained thresholded glow to the existing city/built grade shader, High only, with no added render pass or full-resolution target. Since the airbase uses the built pipeline, it receives the same treatment. High city and built maps now use PCF soft shadows; lower presets keep their cheaper PCF shadows.
+- Still open: integrate a reviewed CC0 texture set and replace low-poly map assets/skies for the full realism request. No image-generation tool is available in this session, and external texture downloads are unavailable in the restricted network environment.
+- Checks run: `node --check` on `src/main.js`, `src/maps/city/vendored/core/post.js`, `src/maps/city/index.js`, and `src/maps/built/index.js`; `git diff --check` passed. High-quality captures of the field, city and airbase all rendered with zero WebGL warnings and zero harness faults on the completed captures. The city capture reports no race target, as expected for a freestyle map. The capture environment refused external network requests, which made `shots.js` return exit code 1 even though the maps rendered.
+- `npm run verify` was not run because this changes no physics, plant, ABI or build. The chase camera was not captured in an active flight, so its visual framing still needs a pilot check.
+- What went wrong: the third-person UI setting had been present without being connected to the live camera, so the earlier camera toggle only changed its label/state.
+
+## 2026-10-20 | render | Neutralize the runway fallback and bring the chase view closer
+
+- Changed the airport runway-threshold fallback from ochre to neutral asphalt grey. The source FBX set has no base-colour images, so the tint had been inventing a brown strip.
+- Probed the source manifest and scene geometry at the spawn: runway and taxiway FBXs were translated to roughly 0.35 to 0.41 m while the simulator ground and physics query are at y=0. Align those pavement instances so their top face sits 6 mm above the shared ground plane. The runway no longer floats as a second surface at takeoff.
+- Reduced the live third-person camera arm from 4.2 m to 2.65 m for the regular quad, and from 1.55 m to 0.95 m for micro craft, with lower camera height to keep the aircraft prominent.
+- Converted airbase FBX Phong materials to `MeshStandardMaterial` at import, preserving their maps and material properties. Road/concrete stay matte; metal parts get controlled metalness. Spread the generated airport texture detail across the broad meshes and softened its coarse variation to avoid visible square/triangle patches.
+- Checks: `node --check` on `src/main.js` and `src/maps/airbase.js`; `git diff --check`; High airbase capture from a low camera near the runway after aligning pavement. It rendered with zero WebGL warnings and zero harness faults. The capture environment refused one external request. The capture does not exercise the third-person mode during active flight.
+- What went wrong: the first material conversion passed undefined optional texture slots to Three.js and raised 310 console warnings. Removed undefined parameters, recaptured with zero warnings, then reduced broad texture noise after inspection showed large color islands on runway UVs.
+
+## 2026-10-20 | render | Keep the STF ground mark above roads and neutralize built asphalt
+
+- Raised only ground fallback STF marks to 45 mm. The old 15 mm height left just 3 mm over the built road mesh at 12 mm, which allowed the road to win depth testing at grazing angles and made the lettering flicker or disappear. Wall marks keep their existing offset.
+- Darkened the built-map asphalt from the brighter city lavender to a neutral grey close to the yard's tarmac, addressing the green-grey rectangular strip in the supplied image.
+- Confirmed the city's old sphere/road overlap fix is already active (`RELIEF = 0` in `planet.js`). The screenshot capture for this turn stayed on the menu and logged a refused external request, so it did not verify these materials in active flight.
+- Checks: `node --check` on the two changed JS files, `git diff --check`, `node scripts/roads-check.js`, and `node scripts/props-check.js` passed. No physics or build code changed.
+- What went wrong: the headless map capture did not enter the map, so the visual result still needs a pilot flight check.

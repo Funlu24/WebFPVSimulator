@@ -244,11 +244,60 @@ export function buildShell(canvas, opts) {
     : Math.min(window.devicePixelRatio, 2);
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  /* No filmic tone curve: it desaturates exactly the flat saturated colour
-   * both of these styles are built on. Each map's last pass does the colour
-   * space conversion itself. */
-  renderer.toneMapping = THREE.NoToneMapping;
+
+  /*
+   * Değişiklik 3. Madde: Toon Shader'dan PBR'a geçerken düz,
+   * ToneMapping olmayan görünüm PBR malzemelerini cansız, oyuncak gibi veya karanlık yapar.
+   * Bu sebeple ACESFilmicToneMapping ile renklerin patlamasını önleyip fiziksel
+   * temelli aydınlatmayı açıyoruz.
+   */
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
+
+  /* One procedural outdoor panorama supplies the shared PBR reflection fill. */
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+  const environmentWidth = 128;
+  const environmentHeight = 64;
+  const environmentPixels = new Uint8Array(environmentWidth * environmentHeight * 4);
+  const mixChannel = (a, b, t) => Math.round(a + (b - a) * t);
+  for (let y = 0; y < environmentHeight; y += 1) {
+    const v = y / (environmentHeight - 1);
+    const belowHorizon = v >= 0.5;
+    const t = belowHorizon ? (v - 0.5) * 2 : (0.5 - v) * 2;
+    const top = belowHorizon ? [73, 69, 62] : [68, 91, 116];
+    const horizon = belowHorizon ? [173, 165, 148] : [191, 205, 215];
+    for (let x = 0; x < environmentWidth; x += 1) {
+      const u = x / environmentWidth;
+      const sunDx = Math.min(Math.abs(u - 0.72), 1 - Math.abs(u - 0.72));
+      const sunDy = v - 0.47;
+      const sunGlow = Math.exp(-(sunDx * sunDx / 0.006 + sunDy * sunDy / 0.003)) * 0.18;
+      const i = (y * environmentWidth + x) * 4;
+      environmentPixels[i] = mixChannel(top[0], horizon[0], t);
+      environmentPixels[i + 1] = mixChannel(top[1], horizon[1], t);
+      environmentPixels[i + 2] = mixChannel(top[2], horizon[2], t);
+      environmentPixels[i + 3] = 255;
+      if (sunGlow > 0) {
+        environmentPixels[i] = Math.min(255, environmentPixels[i] + sunGlow * 255);
+        environmentPixels[i + 1] = Math.min(255, environmentPixels[i + 1] + sunGlow * 245);
+        environmentPixels[i + 2] = Math.min(255, environmentPixels[i + 2] + sunGlow * 220);
+      }
+    }
+  }
+  const environmentSource = new THREE.DataTexture(
+    environmentPixels, environmentWidth, environmentHeight, THREE.RGBAFormat,
+  );
+  environmentSource.mapping = THREE.EquirectangularReflectionMapping;
+  environmentSource.colorSpace = THREE.SRGBColorSpace;
+  environmentSource.magFilter = THREE.LinearFilter;
+  environmentSource.minFilter = THREE.LinearFilter;
+  environmentSource.generateMipmaps = false;
+  environmentSource.needsUpdate = true;
+  const environmentTarget = pmremGenerator.fromEquirectangular(environmentSource);
+  const pmremEnvMap = environmentTarget.texture;
+  environmentSource.dispose();
+  pmremGenerator.dispose();
 
   /*
    * Near plane at 0.2 m, not 0.04. The camera sits inside a 150 mm airframe,
@@ -258,7 +307,7 @@ export function buildShell(canvas, opts) {
    * The far plane is a map's business, not the session's: 2600 m is the race
    * field's valley and the city needs a fraction of it, so a map sets
    * camera.far and calls updateProjectionMatrix in its own build. The value
-   * here is the field's, because the field is what boots.
+   * here is the field's, because the field is setups.
    */
   /* The boot lens, replaced by the pilot's own on the first settings pass.
    * lens.js is where the number is argued. */
@@ -403,6 +452,7 @@ export function buildShell(canvas, opts) {
 
   const api = {
     renderer,
+    pmremEnvMap, // Değişiklik: Ortam yansımasını haritaların sahneye (scene.environment) basabilmesi için api ile dışarı açtık.
     camera,
     canvas,
     cssSize,

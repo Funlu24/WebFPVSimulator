@@ -536,6 +536,12 @@ async function loadMap(shell, id, loading, options) {
   loading.start('world');
   await yieldToPaint();
   const map = await mod.buildMap(shell, (f) => loading.progress('world', f), options);
+  /* The session owns one PMREM environment so every map's PBR surfaces use
+   * the same indirect light. Assign it after construction here because the
+   * built-in field, city and airbase each create their own scene. */
+  if (map.scene && shell.pmremEnvMap) {
+    map.scene.environment = shell.pmremEnvMap;
+  }
   map.graphics = normalizeGraphics(options && options.quality);
   /* The Gem look, once a world is built: colours and vertex tones only, nothing per frame (look.js). */
   applyLook(map.scene, shell.quad);
@@ -742,7 +748,7 @@ export async function boot({ loading, bootStart, mapId }) {
       })(),
     }),
   });
-  
+
   /* Track total session flight time for the support prompt trigger at 20 minutes */
   let sessionFlightTimeMs = 0;
   let lastFlightTick = 0;
@@ -7855,7 +7861,7 @@ export async function boot({ loading, bootStart, mapId }) {
         flying: flownThisRun && !landed && !turtleWait && !turtleRecover,
         laps: race.laps.length,
       });
-      
+
       /* Track session flight time for support prompt at 20 minutes. In
        * flight: a pause holds the craft in the air, and was counted. */
       if (flownThisRun && !landed && !turtleWait && !turtleRecover && ui.screen === 'flight') {
@@ -9196,17 +9202,59 @@ export async function boot({ loading, bootStart, mapId }) {
          * you fly looking at the inside of its own outline hull. For one
          * beat after a crash it holds the moment of the hit instead: the
          * impact frame (src/render/manga.js). */
-        shell.quad.visible = false;
         const held = manga.holding();
-        shell.camera.position.copy(held ? manga.holdPos : fpvPos);
-        shell.camera.quaternion.copy(held ? manga.holdQuat : fpvQuat);
-        /* The mount, not the held impact frame, is what the predicted view
-         * moves: see predictView before the draw. */
-        predictCam = !held;
-        setCameraNear(fpvNear(held ? manga.holdPos : fpvPos));
-        if (shell.camera.fov !== ui.settings.cameraFov) {
-          shell.camera.fov = ui.settings.cameraFov;
-          shell.camera.updateProjectionMatrix();
+        const thirdPerson = ui.settings.cameraView === 'third' && !held;
+        if (thirdPerson) {
+          shell.quad.visible = true;
+          /* Keep the chase arm level through rolls and flips. Its heading
+           * follows the craft's ground-plane course, while the camera looks
+           * at the rendered body rather than at the FPV lens. */
+          tpvScratchDir.set(camFwd.x, 0, camFwd.z);
+          if (tpvScratchDir.lengthSq() < 1e-5) {
+            tpvScratchDir.set(0, 0, -1);
+          } else {
+            tpvScratchDir.normalize();
+          }
+          const micro = CRAFT_R < 0.15;
+          const back = micro ? 0.58 : 1.65;
+          const lift = micro ? 0.28 : 0.72;
+          tpvScratchUp.set(0, lift, 0);
+          tpvScratchDir.multiplyScalar(-back);
+          const wantedPos = tpvScratchDir.add(pCurr).add(tpvScratchUp);
+          const floor = view.height(wantedPos.x, wantedPos.z, wantedPos.y - 0.5, wantedPos.y);
+          wantedPos.y = Math.max(wantedPos.y, floor + 0.5);
+          const wantedLook = tpvScratchUp.set(0, micro ? 0.08 : 0.18, 0).add(pCurr);
+          if (!tpvInitialized) {
+            tpvCamPos.copy(wantedPos);
+            tpvCamLook.copy(wantedLook);
+            tpvInitialized = true;
+          } else {
+            const follow = 1 - Math.exp(-7 * Math.max(0, dt) / 1000);
+            tpvCamPos.lerp(wantedPos, follow);
+            tpvCamLook.lerp(wantedLook, follow);
+          }
+          shell.camera.up.set(0, 1, 0);
+          shell.camera.position.copy(tpvCamPos);
+          shell.camera.lookAt(tpvCamLook);
+          predictCam = false;
+          setCameraNear(CAMERA_NEAR_OPEN);
+          const fov = ui.settings.cameraFov;
+          if (shell.camera.fov !== fov) {
+            shell.camera.fov = fov;
+            shell.camera.updateProjectionMatrix();
+          }
+        } else {
+          shell.quad.visible = false;
+          shell.camera.position.copy(held ? manga.holdPos : fpvPos);
+          shell.camera.quaternion.copy(held ? manga.holdQuat : fpvQuat);
+          /* The mount, not the held impact frame, is what the predicted view
+           * moves: see predictView before the draw. */
+          predictCam = !held;
+          setCameraNear(fpvNear(held ? manga.holdPos : fpvPos));
+          if (shell.camera.fov !== ui.settings.cameraFov) {
+            shell.camera.fov = ui.settings.cameraFov;
+            shell.camera.updateProjectionMatrix();
+          }
         }
       }
     }

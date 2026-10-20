@@ -16,7 +16,7 @@ import { PARTNERS } from '../partners/roster.js';
 
 const MODEL_ROOT = 'Assets/FreshCan3D/MilitaryAirport/Art/Meshes/';
 const SCENE_URL = new URL('../../assets/models/military-airbase/scene.json', import.meta.url);
-const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/iVQAAAAASUVORK5CYII=';
+const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const NEUTRAL_NORMAL_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNoaPj/HwAGggL/s75RMwAAAABJRU5ErkJggg==';
 const FIELD = Object.freeze({ width: 960, depth: 480 });
 const SPAWN = Object.freeze({ x: -320, z: -84, yaw: 0 });
@@ -36,7 +36,11 @@ const MATERIAL_TINTS = [
   [/planks[_\s-]*1/i, 0x8d7451],
   [/planks[_\s-]*2/i, 0xa18a62],
   [/rubber/i, 0x454844],
-  [/runway[_\s-]*threshold/i, 0xb7a979],
+  /* The FBX package has no runway albedo image. This surface used to fall
+   * back to an ochre tint, so the threshold looked like a separate brown
+   * strip against the grey taxiway after takeoff. Keep the fallback in the
+   * same neutral asphalt family as the connected runway pieces. */
+  [/runway[_\s-]*threshold/i, 0x7e827e],
   [/runway[_\s-]*center|runway[_\s-]*stopway/i, 0x777b75],
   [/roads|pavement|carpark/i, 0x74756c],
   [/concrete/i, 0x999487],
@@ -53,12 +57,31 @@ const MATERIAL_TINTS = [
 ];
 
 let AIRBASE_SURFACES;
+const AIRBASE_PBR_MATERIALS = new WeakMap();
 
 function surfaceHash(x, y, seed) {
   let h = Math.imul((x + seed) | 0, 0x45d9f3b) ^ Math.imul((y - seed) | 0, 0x119de1f3);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
+function surfaceNoise(x, y, cell, seed) {
+  const gx = x / cell;
+  const gy = y / cell;
+  const ix = Math.floor(gx);
+  const iy = Math.floor(gy);
+  const fx0 = gx - ix;
+  const fy0 = gy - iy;
+  const fx = fx0 * fx0 * (3 - 2 * fx0);
+  const fy = fy0 * fy0 * (3 - 2 * fy0);
+  const a = surfaceHash(ix, iy, seed);
+  const b = surfaceHash(ix + 1, iy, seed);
+  const c = surfaceHash(ix, iy + 1, seed);
+  const d = surfaceHash(ix + 1, iy + 1, seed);
+  const top = a + (b - a) * fx;
+  const bottom = c + (d - c) * fx;
+  return top + (bottom - top) * fy;
 }
 
 function makeSurfaceTexture(kind, seed) {
@@ -72,8 +95,10 @@ function makeSurfaceTexture(kind, seed) {
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const fine = surfaceHash(x, y, seed);
-      const coarse = surfaceHash(x >> 3, y >> 3, seed + 37);
-      const medium = surfaceHash(x >> 5, y >> 5, seed + 73);
+      /* Interpolated value noise avoids the hard square cells that a
+       * nearest-cell hash left visible across the wide runway from altitude. */
+      const coarse = surfaceNoise(x, y, 8, seed + 37);
+      const medium = surfaceNoise(x, y, 32, seed + 73);
       let value;
       let relief;
       if (kind === 'grass') {
@@ -90,7 +115,11 @@ function makeSurfaceTexture(kind, seed) {
       } else {
         /* Aggregate grain for runway asphalt and poured concrete, with a
          * little more roughness on asphalt than on building panels. */
-        const grain = kind === 'asphalt' ? 20 : 12;
+        /* The imported runway UVs stretch a whole apron panel into one
+         * texture island, so broad noise becomes a giant triangle on the
+         * ground. Keep the low-frequency albedo variation subtle and let the
+         * fine aggregate and bump do the close-up work. */
+        const grain = kind === 'asphalt' ? 8 : 6;
         value = 232
           + (medium - 0.5) * grain * 1.2
           + (coarse - 0.5) * grain * 0.75
@@ -113,7 +142,11 @@ function makeSurfaceTexture(kind, seed) {
     const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
     tex.colorSpace = colorSpace;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(kind === 'metal' ? 4 : 8, kind === 'wood' ? 12 : 8);
+    /* A high repeat made the broad FBX apron resolve as a grid from the
+     * chase camera. Keep aggregate variation subtle and spread it over each
+     * runway/road mesh; corrugated metal still needs tighter ribs. */
+    const repeat = kind === 'metal' ? 4 : (kind === 'wood' ? 8 : 2);
+    tex.repeat.set(repeat, repeat);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.generateMipmaps = true;
@@ -199,8 +232,15 @@ function managerWithoutSourceTextures() {
 
 function tintMissingTextureMaterials(material) {
   const materials = Array.isArray(material) ? material : [material];
+  const converted = [];
   for (const item of materials) {
     if (!item?.color) {
+      converted.push(item);
+      continue;
+    }
+    const cached = AIRBASE_PBR_MATERIALS.get(item);
+    if (cached) {
+      converted.push(cached);
       continue;
     }
     /* The supplied FBX pack has no image maps. URL replacement gives those
@@ -232,11 +272,56 @@ function tintMissingTextureMaterials(material) {
       }
       if (!hasImageDetail(item.bumpMap)) {
         item.bumpMap = maps.bumpMap;
-        item.bumpScale = /grass|planks|corrugated|runway/i.test(name) ? 0.018 : 0.01;
+        item.bumpScale = /corrugated/i.test(name) ? 0.012
+          : (/grass/i.test(name) ? 0.006
+            : (/planks/i.test(name) ? 0.005 : 0.0025));
       }
       item.needsUpdate = true;
     }
+
+    /* The supplied FBXs use Phong materials. Convert them at the import
+     * boundary so ACES, the PMREM environment and the generated surface
+     * detail all affect them through the same physical response as the rest
+     * of the scene. Asphalt and concrete stay matte; actual metal names get
+     * a modest metalness instead of the old broad Phong highlight. */
+    const metal = /metal|steel|aluminium|aluminum|fence|metalrope/i.test(name);
+    const parameters = {
+      name: item.name,
+      color: item.color,
+      map: item.map,
+      normalMap: item.normalMap,
+      roughnessMap: item.roughnessMap,
+      metalnessMap: item.metalnessMap,
+      bumpMap: item.bumpMap,
+      bumpScale: item.bumpScale,
+      alphaMap: item.alphaMap,
+      emissive: item.emissive || 0x000000,
+      emissiveMap: item.emissiveMap,
+      emissiveIntensity: item.emissiveIntensity ?? 1,
+      roughness: metal ? 0.58 : (/glass/i.test(name) ? 0.28 : 0.9),
+      metalness: metal ? 0.42 : 0.02,
+      transparent: item.transparent,
+      opacity: item.opacity,
+      alphaTest: item.alphaTest,
+      side: item.side,
+      depthWrite: item.depthWrite,
+      depthTest: item.depthTest,
+      vertexColors: item.vertexColors,
+      flatShading: item.flatShading,
+      wireframe: item.wireframe,
+    };
+    for (const key of Object.keys(parameters)) {
+      if (parameters[key] === undefined) {
+        delete parameters[key];
+      }
+    }
+    const standard = new THREE.MeshStandardMaterial(parameters);
+    standard.userData.sourceMaterial = item.name;
+    item.dispose();
+    AIRBASE_PBR_MATERIALS.set(item, standard);
+    converted.push(standard);
   }
+  return Array.isArray(material) ? converted : converted[0];
 }
 
 function meshTemplates(root) {
@@ -288,7 +373,7 @@ function meshTemplates(root) {
     if (node.geometry.boundingBox) {
       bounds.union(node.geometry.boundingBox.clone().applyMatrix4(matrix));
     }
-    tintMissingTextureMaterials(node.material);
+    node.material = tintMissingTextureMaterials(node.material);
     node.castShadow = true;
     node.receiveShadow = true;
     meshes.push({ geometry: node.geometry, material: node.material, matrix });
@@ -323,6 +408,8 @@ function placeModels(scene, colliders, manifest, templates) {
     if (!template || template.meshes.length === 0) {
       continue;
     }
+    const stem = model.slice(model.lastIndexOf('/') + 1).toLowerCase();
+    const pavement = /sm_(?:runway_|road_|road_corner_|road_connection_|carpark_asphalt)/.test(stem);
 
     for (const mesh of template.meshes) {
       const instanced = new THREE.InstancedMesh(mesh.geometry, mesh.material, placements.length);
@@ -335,6 +422,15 @@ function placeModels(scene, colliders, manifest, templates) {
         position.set(item.x, item.y, item.z);
         rotation.set(item.q[0], item.q[1], item.q[2], item.q[3]).normalize();
         scale.set(item.s[0], item.s[1], item.s[2]);
+        if (pavement && template.bounds && !template.bounds.isEmpty()) {
+          /* The Unity FBXs place their runway and taxiway tops roughly
+           * 0.35 to 0.41 m above this simulator's flat plant ground. Keep
+           * their visible upper face just above y=0, otherwise the runway
+           * floats as a second brown/grey sheet over the actual takeoff
+           * surface. The source geometry stays untouched; only its airport
+           * scene-instance translation is reconciled with the ground plane. */
+          position.y = 0.006 - template.bounds.max.y * scale.y;
+        }
         dummy.position.copy(position);
         dummy.quaternion.copy(rotation);
         dummy.scale.copy(scale);
@@ -347,7 +443,6 @@ function placeModels(scene, colliders, manifest, templates) {
       meshCount += 1;
     }
 
-    const stem = model.slice(model.lastIndexOf('/') + 1).toLowerCase();
     const isWalkableSurface = /(?:road|runway|ground|sidecap|cone|bollard|fence|barrier|roadblock|carpark_block)/.test(stem);
     if (!isWalkableSurface && template.bounds && !template.bounds.isEmpty()) {
       for (const item of placements) {

@@ -100,27 +100,75 @@ const INK_SHADER = {
 const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
-    uShadowTint: { value: new THREE.Color(0xb7c1cf) },
-    uLightTint: { value: new THREE.Color(0xfff7e8) },
-    uSaturation: { value: 1.02 },
-    uLift: { value: 0.018 },
-    uVignette: { value: 0.06 },
-    uWarmth: { value: 0.025 },
+    tDepth: { value: null },
+    uAoTexel: { value: new THREE.Vector2(1, 1) },
+    uBloomTexel: { value: new THREE.Vector2(1, 1) },
+    uBloomStrength: { value: 0 },
+    uNear: { value: 0.25 },
+    uFar: { value: 600 },
+    uAoStrength: { value: 0 },
+    uShadowTint: { value: new THREE.Color(0xbfc2c5) },
+    uLightTint: { value: new THREE.Color(0xfffaf4) },
+    uSaturation: { value: 0.99 },
+    uLift: { value: 0.006 },
+    uVignette: { value: 0.03 },
+    uWarmth: { value: 0.008 },
   },
   vertexShader: INK_SHADER.vertexShader,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
+    uniform sampler2D tDiffuse, tDepth;
     uniform vec3 uShadowTint, uLightTint;
     uniform float uSaturation, uLift, uVignette, uWarmth;
+    uniform vec2 uAoTexel, uBloomTexel;
+    uniform float uNear, uFar, uAoStrength, uBloomStrength;
     varying vec2 vUv;
+
+    float linearDepth(vec2 uv) {
+      float d = texture2D(tDepth, clamp(uv, vec2(0.001), vec2(0.999))).x;
+      return (uNear * uFar) / max(uFar - d * (uFar - uNear), 0.0001);
+    }
 
     vec3 linearToSRGB( vec3 c ) {
       return mix( c * 12.92, 1.055 * pow( max( c, vec3( 0.0031308 ) ), vec3( 1.0 / 2.4 ) ) - 0.055,
                   step( 0.0031308, c ) );
     }
 
+    vec3 bloomSource(vec2 uv) {
+      vec3 s = texture2D(tDiffuse, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+      float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
+      return s * smoothstep(0.72, 1.05, l);
+    }
+
     void main() {
       vec3 c = texture2D( tDiffuse, vUv ).rgb;
+      if (uAoStrength > 0.0 && texture2D(tDepth, vUv).x < 0.9999) {
+        float centre = linearDepth(vUv);
+        float radius = max(0.18, centre * 0.012);
+        float bias = max(0.025, centre * 0.0015);
+        vec2 step1 = uAoTexel * 2.0;
+        vec2 step2 = uAoTexel * 4.0;
+        float occlusion = 0.0;
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv + vec2(step1.x, 0.0)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv - vec2(step1.x, 0.0)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv + vec2(0.0, step1.y)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv - vec2(0.0, step1.y)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv + vec2(step2.x, 0.0)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv - vec2(step2.x, 0.0)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv + vec2(0.0, step2.y)));
+        occlusion += smoothstep(bias, bias + radius, centre - linearDepth(vUv - vec2(0.0, step2.y)));
+        c *= 1.0 - min(0.16, occlusion * 0.02) * uAoStrength;
+      }
+      /* A restrained, high-only highlight halo. Four diagonal taps keep it
+       * inside this existing grade pass, so city and airbase gain glow
+       * without another full-resolution target or render pass. */
+      if (uBloomStrength > 0.0) {
+        vec2 b = uBloomTexel * 6.0;
+        vec3 glow = bloomSource(vUv + vec2( b.x,  b.y))
+                  + bloomSource(vUv + vec2(-b.x,  b.y))
+                  + bloomSource(vUv + vec2( b.x, -b.y))
+                  + bloomSource(vUv + vec2(-b.x, -b.y));
+        c += glow * (uBloomStrength * 0.25);
+      }
       float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
 
       // split-tone: cool violet in the darks, warm paper white in the lights
@@ -201,7 +249,7 @@ function makeQuad(def) {
 }
 
 export class Pipeline {
-  constructor(renderer, scene, camera, { pixelBudget = 4.6e6 } = {}) {
+  constructor(renderer, scene, camera, { pixelBudget = 4.6e6, bloomStrength = 0 } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
@@ -230,12 +278,14 @@ export class Pipeline {
 
     const ink = makeQuad(INK_SHADER);
     const grade = makeQuad(GRADE_SHADER);
+    grade.mat.uniforms.uBloomStrength.value = bloomStrength;
     const fxaa = makeQuad(FXAA_SHADER);
     this.ink = ink;
     this.grade = grade;
     this.fxaa = fxaa;
 
     ink.mat.uniforms.tDepth.value = this.rtScene.depthTexture;
+    grade.mat.uniforms.tDepth.value = this.rtScene.depthTexture;
     this.enabled = { ink: true, grade: true, fxaa: true };
   }
 
@@ -259,6 +309,10 @@ export class Pipeline {
     this.rtB.setSize(rw, rh);
 
     const texel = new THREE.Vector2(1 / rw, 1 / rh);
+    this.grade.mat.uniforms.uAoTexel.value.copy(texel);
+    this.grade.mat.uniforms.uBloomTexel.value.copy(texel);
+    this.grade.mat.uniforms.uNear.value = this.camera.near;
+    this.grade.mat.uniforms.uFar.value = this.camera.far;
     this.ink.mat.uniforms.uTexel.value.copy(texel);
     this.fxaa.mat.uniforms.uTexel.value.copy(texel);
     this.ink.mat.uniforms.uNear.value = this.camera.near;

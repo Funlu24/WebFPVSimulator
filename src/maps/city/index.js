@@ -2315,7 +2315,7 @@ export async function buildMap(shell, onProgress, options) {
    * post's shadow into a smudge. The field sets its own. Low turns the
    * map off. */
   renderer.shadowMap.enabled = q.shadows;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = q.id === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
   renderer.setClearColor(new THREE.Color(PAL.fog), 1);
 
   const scene = new THREE.Scene();
@@ -2641,6 +2641,7 @@ export async function buildMap(shell, onProgress, options) {
    * cannot be marked material by material (render/comic.js, GROUND). */
   setComicQuality(q, { groundAuto: true, edges: true });
   const pipeline = new CityPipeline(renderer, scene, camera, {
+    bloomStrength: q.id === 'high' ? 0.11 : 0,
     /*
      * 2.6e6 on High, not the town's own 4.6e6.
      *
@@ -2661,6 +2662,7 @@ export async function buildMap(shell, onProgress, options) {
     /* The Render scale slider and Auto's factor: see userScale there. */
     userScale: options && options.renderScale,
   });
+  pipeline.grade.mat.uniforms.uAoStrength.value = q.id === 'high' ? 1 : 0;
   pipeline.enabled.ink = q.city.ink;
   /* What the preset gave, which the pilot's Manga and scoring switch may
    * only narrow: see setInkLines in src/render/quality.js. */

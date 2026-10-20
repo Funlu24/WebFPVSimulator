@@ -91,6 +91,10 @@ export const KERB_W = 0.25;
 const LINE_W = 0.15;
 const EDGE_INSET = 0.3;
 const DASH = 3;
+/* Keep the built road close to the tarmac ground's dark neutral asphalt.
+ * PAL.road is the brighter lavender city-road colour; on this flat PBR strip
+ * it read as a pale green-grey slab against the textured yard. */
+const ASPHALT = 0x74727a;
 
 /* How far each layer is lifted off the ground, m, and how hard it is pushed
  * toward the eye: over the paving's paint (4 to 10 mm), the paint over the
@@ -345,7 +349,7 @@ export function buildRoadMesh(THREE, look, traffic, opts = {}) {
   }
   const stone = KERB_STONE[look && look.groundId] ?? PAL.curb;
   const layers = [
-    [asphalt, paintMaterial(PAL.road, 3, 0x6a608f, ASPHALT_OFFSET), 'roadAsphalt'],
+    [asphalt, paintMaterial(ASPHALT, 3, 0x6a608f, ASPHALT_OFFSET), 'roadAsphalt'],
     [kerb, paintMaterial(stone, 3, 0x6f6790, ASPHALT_OFFSET), 'roadKerb'],
     [paint, paintMaterial(PAL.lineWhite, 2, 0x8e86ad, PAINT_OFFSET), 'roadPaint'],
   ];
